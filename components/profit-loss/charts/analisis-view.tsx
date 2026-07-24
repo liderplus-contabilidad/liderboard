@@ -1,8 +1,6 @@
 "use client";
 
-import { FileSpreadsheet } from "lucide-react";
 import { useMemo } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { periodLabel } from "@/lib/profit-loss/analytics/period";
@@ -55,6 +53,7 @@ import {
 } from "@/lib/profit-loss/charts/selection";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
+import { PygEmptyState } from "../pyg-empty-state";
 import { ChartCard } from "./chart-card";
 import { entryColor } from "./graficos-view";
 
@@ -144,13 +143,7 @@ export function AnalisisView() {
     : "Sin movimiento";
 
   if (!dataset) {
-    return (
-      <div className="px-7 py-5">
-        <EmptyState icon={<FileSpreadsheet size={22} />} className="py-20">
-          Carga un Excel para ver el estado de resultados.
-        </EmptyState>
-      </div>
-    );
+    return <PygEmptyState />;
   }
 
   return (
