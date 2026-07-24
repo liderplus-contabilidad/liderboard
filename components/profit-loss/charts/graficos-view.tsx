@@ -159,14 +159,6 @@ export function GraficosView() {
         />
       </div>
 
-      {/* Primero la historia completa —de dónde salió el ingreso y en qué se fue—, y recién
-          después la evolución, que responde una pregunta más fina. */}
-      <WaterfallCard
-        source={source}
-        frequency={context.frequency}
-        periods={filters.periods.length > 0 ? filters.periods : undefined}
-      />
-
       <ChartCard
         title={filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos"}
         subtitle={`${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`}
@@ -222,6 +214,14 @@ export function GraficosView() {
           height={280}
         />
       </div>
+
+      {/* Primero la historia completa —de dónde salió el ingreso y en qué se fue—, y recién
+          después la evolución, que responde una pregunta más fina. */}
+      <WaterfallCard
+        source={source}
+        frequency={context.frequency}
+        periods={filters.periods.length > 0 ? filters.periods : undefined}
+      />
     </div>
   );
 }
