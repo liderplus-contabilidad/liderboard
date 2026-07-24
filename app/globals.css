@@ -31,6 +31,17 @@
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }
 
+/* The app is a fixed shell: the document itself never scrolls, only the panels
+   inside it do. Locking html/body and disabling overscroll stops an inner
+   scroller's momentum from chaining up and rubber-banding the whole shell
+   (sidebar included) on trackpad/macOS. */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

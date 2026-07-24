@@ -6,7 +6,9 @@ import {
   deepestLevel,
   focusAccounts,
   matchExpandLevel,
+  visibleAccountOptions,
 } from "./filter";
+import type { AccountRow } from "./types";
 import { MONTHLY_ACCOUNTS } from "./parse.fixtures";
 
 /** Minimal DatosRow builder for tree-shape tests. */
@@ -55,7 +57,7 @@ describe("deepestLevel", () => {
 describe("accountOptions", () => {
   it("lists every account (parents included) in file order", () => {
     const options = accountOptions(MONTHLY_ACCOUNTS);
-    expect(options[0]).toEqual({ code: "4", name: "Ingresos" });
+    expect(options[0]).toEqual({ code: "4", name: "Ingresos", level: 1, hasChildren: true });
     expect(options.map((o) => o.code)).toEqual([
       "4",
       "4.1",
@@ -69,6 +71,78 @@ describe("accountOptions", () => {
       "5.1.2",
       "5.1.2.1",
     ]);
+  });
+
+  it("derives level from the code depth", () => {
+    const byCode = new Map(accountOptions(MONTHLY_ACCOUNTS).map((o) => [o.code, o]));
+    expect(byCode.get("4")?.level).toBe(1);
+    expect(byCode.get("4.1")?.level).toBe(2);
+    expect(byCode.get("5.1.2.1")?.level).toBe(4);
+  });
+
+  it("flags a node as hasChildren when any account nests under it", () => {
+    const byCode = new Map(accountOptions(MONTHLY_ACCOUNTS).map((o) => [o.code, o]));
+    const withChildren = [...byCode.values()].filter((o) => o.hasChildren).map((o) => o.code);
+    expect(new Set(withChildren)).toEqual(new Set(["4", "4.1", "5", "5.1", "5.1.2"]));
+    expect(byCode.get("4.1.1")?.hasChildren).toBe(false); // leaf
+    expect(byCode.get("4.2")?.hasChildren).toBe(false); // leaf
+    expect(byCode.get("5.1.2.1")?.hasChildren).toBe(false); // leaf
+  });
+});
+
+describe("visibleAccountOptions", () => {
+  const account = (code: string): AccountRow => ({ code, name: code, values: [] });
+  const visibleCodes = (accounts: AccountRow[], collapsed: Set<string>) =>
+    visibleAccountOptions(accountOptions(accounts), collapsed).map((o) => o.code);
+
+  it("returns the same reference when nothing is collapsed", () => {
+    const options = accountOptions(MONTHLY_ACCOUNTS);
+    expect(visibleAccountOptions(options, new Set())).toBe(options);
+  });
+
+  it("hides the descendants of a collapsed node but keeps the node itself", () => {
+    expect(visibleCodes(MONTHLY_ACCOUNTS, new Set(["4.1"]))).toEqual([
+      "4",
+      "4.1",
+      "4.2",
+      "5",
+      "5.1",
+      "5.1.1",
+      "5.1.2",
+      "5.1.2.1",
+    ]);
+  });
+
+  it("hides an entire subtree when a top node is collapsed", () => {
+    expect(visibleCodes(MONTHLY_ACCOUNTS, new Set(["4"]))).toEqual([
+      "4",
+      "5",
+      "5.1",
+      "5.1.1",
+      "5.1.2",
+      "5.1.2.1",
+    ]);
+  });
+
+  it("does nothing when a leaf is collapsed", () => {
+    expect(visibleCodes(MONTHLY_ACCOUNTS, new Set(["4.2"]))).toEqual(
+      accountOptions(MONTHLY_ACCOUNTS).map((o) => o.code),
+    );
+  });
+
+  it("applies several collapsed nodes at once", () => {
+    expect(visibleCodes(MONTHLY_ACCOUNTS, new Set(["4.1", "5.1"]))).toEqual([
+      "4",
+      "4.1",
+      "4.2",
+      "5",
+      "5.1",
+    ]);
+  });
+
+  it("hides descendants that nest under a collapsed node through a missing ancestor", () => {
+    // 4.1 is absent, so 4.1.1 nests under 4 in the tree; collapsing 4 must still hide it.
+    expect(visibleCodes([account("4"), account("4.1.1")], new Set(["4"]))).toEqual(["4"]);
   });
 });
 

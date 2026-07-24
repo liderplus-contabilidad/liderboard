@@ -13,6 +13,10 @@ import type { AccountRow } from "./types";
 export interface AccountOption {
   code: string;
   name: string;
+  /** Code segment count: "4.1.1" → 3. Drives the tree indent. */
+  level: number;
+  /** True when some account nests under this one (gets an expand/collapse chevron). */
+  hasChildren: boolean;
 }
 
 /** Depth of the deepest movement (leaf) account; the deepest code is always a leaf. */
@@ -22,7 +26,50 @@ export function deepestLevel(accounts: AccountRow[]): number {
 
 /** Every account (parents included) as a filter option, in file order. */
 export function accountOptions(accounts: AccountRow[]): AccountOption[] {
-  return accounts.map((account) => ({ code: account.code, name: account.name }));
+  // A code is a parent iff some account nests under it — by dot-prefix, matching how
+  // `buildAccountTree` re-parents orphans onto their nearest existing ancestor.
+  const withChildren = new Set<string>();
+  for (const account of accounts) {
+    for (let prefix = parentPrefix(account.code); prefix !== null; prefix = parentPrefix(prefix)) {
+      withChildren.add(prefix);
+    }
+  }
+  return accounts.map((account) => ({
+    code: account.code,
+    name: account.name,
+    level: account.code.split(".").length,
+    hasChildren: withChildren.has(account.code),
+  }));
+}
+
+/**
+ * The filter's visible rows for a collapse state: drops any option that has a collapsed
+ * ancestor (its subtree is folded). Order preserved; an empty set is a no-op (same reference).
+ * Collapse is view-only — a collapsed node stays visible, only its descendants hide.
+ */
+export function visibleAccountOptions(
+  options: AccountOption[],
+  collapsed: ReadonlySet<string>,
+): AccountOption[] {
+  if (collapsed.size === 0) {
+    return options;
+  }
+  return options.filter((option) => !hasCollapsedAncestor(option.code, collapsed));
+}
+
+function hasCollapsedAncestor(code: string, collapsed: ReadonlySet<string>): boolean {
+  for (let prefix = parentPrefix(code); prefix !== null; prefix = parentPrefix(prefix)) {
+    if (collapsed.has(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Strips the last dotted segment: "4.1.1" → "4.1"; a root ("4") has no parent. */
+function parentPrefix(code: string): string | null {
+  const cut = code.lastIndexOf(".");
+  return cut === -1 ? null : code.slice(0, cut);
 }
 
 /**
