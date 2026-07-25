@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { OccupancyDatosView } from "@/components/occupancy/occupancy-datos-view";
+import { OccupancyDownloadButton } from "@/components/occupancy/occupancy-download-button";
+import { OccupancyUploadButton } from "@/components/occupancy/occupancy-upload-button";
 import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
 import { GraficosView } from "@/components/profit-loss/charts/graficos-view";
 import { DatosToolbar } from "@/components/profit-loss/datos-toolbar";
@@ -10,6 +13,54 @@ import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
 import { Semaforo } from "@/components/profit-loss/semaforo";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
+
+/**
+ * Per-module pieces of the tab shell. Modules not listed here render `ComingSoon` for
+ * every tab — that is the default, so adding one is purely additive.
+ *
+ * Module state does NOT live here: each module's data provider is mounted in the dashboard
+ * layout, so the header and the panel read the same thing.
+ */
+interface ModuleViews {
+  /** Rendered at the right end of the tab bar. */
+  rightSlot?: ReactNode;
+  /** Rendered between the tab bar and the panel. */
+  toolbar?: (tab: ModuleTabId) => ReactNode;
+  /** Panel body; return null to fall back to ComingSoon. */
+  panel?: (tab: ModuleTabId) => ReactNode;
+}
+
+const MODULE_VIEWS: Record<string, ModuleViews> = {
+  "profit-loss": {
+    rightSlot: <Semaforo />,
+    toolbar: (tab) => (
+      <>
+        <PygToolbar />
+        {tab === "datos" && <DatosToolbar />}
+      </>
+    ),
+    // PyG covers its three tabs, so nothing here falls through to ComingSoon.
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <DatosView />;
+        case "graficos":
+          return <GraficosView />;
+        case "analisis":
+          return <AnalisisView />;
+      }
+    },
+  },
+  occupancy: {
+    rightSlot: (
+      <div className="flex items-center gap-2.5">
+        <OccupancyDownloadButton />
+        <OccupancyUploadButton />
+      </div>
+    ),
+    panel: (tab) => (tab === "datos" ? <OccupancyDatosView /> : null),
+  },
+};
 
 export function ModuleTabs({ slug }: { slug: string }) {
   const mod = findModuleBySlug(slug);
@@ -20,7 +71,8 @@ export function ModuleTabs({ slug }: { slug: string }) {
   }
 
   const activeTab = mod.tabs.find((tab) => tab.id === activeId) ?? mod.tabs[0];
-  const isPyg = mod.slug === "profit-loss";
+  const views = MODULE_VIEWS[mod.slug] ?? {};
+  const panel = views.panel?.(activeTab.id) ?? <ComingSoon mod={mod} tab={activeTab} />;
 
   return (
     <div className="flex h-full flex-col">
@@ -54,11 +106,11 @@ export function ModuleTabs({ slug }: { slug: string }) {
           })}
         </div>
 
-        {isPyg && <Semaforo />}
+        {/* Bare: each slot owns its own bottom padding so it aligns with the tab underline. */}
+        {views.rightSlot}
       </div>
 
-      {isPyg && <PygToolbar />}
-      {isPyg && activeTab.id === "datos" && <DatosToolbar />}
+      {views.toolbar?.(activeTab.id)}
 
       <div
         id={`panel-${mod.slug}`}
@@ -66,15 +118,7 @@ export function ModuleTabs({ slug }: { slug: string }) {
         aria-labelledby={`tab-${mod.slug}-${activeTab.id}`}
         className="flex-1 overflow-auto bg-canvas"
       >
-        {isPyg && activeTab.id === "datos" ? (
-          <DatosView />
-        ) : isPyg && activeTab.id === "graficos" ? (
-          <GraficosView />
-        ) : isPyg && activeTab.id === "analisis" ? (
-          <AnalisisView />
-        ) : (
-          <ComingSoon mod={mod} tab={activeTab} />
-        )}
+        {panel}
       </div>
     </div>
   );

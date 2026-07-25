@@ -46,12 +46,14 @@ components/ui/           primitivas reutilizables (Button, Dropdown, SegmentedCo
 components/dashboard/    shell: sidebar, header, tabs de módulo
 components/profit-loss/  composiciones específicas de Pérdidas y Ganancias
   └ charts/              tarjetas y vistas de Gráficos y Análisis
+components/occupancy/    composiciones específicas de Ocupaciones (tabs y grilla diaria/anual)
 lib/modules.ts           registro de módulos (única fuente de verdad de la navegación)
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
 lib/charts/              paleta categórica y sistema de marcas, comunes a toda la app
 lib/profit-loss/analytics/  motor analítico puro (series, transformaciones, Pareto, pastel)
 lib/profit-loss/charts/  traducción pura: selección → consulta → opción de ECharts
+lib/occupancy/           capa pura de Ocupaciones (parse, derive, consolidate, export) + Dexie
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
 
@@ -82,24 +84,25 @@ token y una primitiva de `components/ui/`; no escribas hex sueltos ni estilos en
 
 ### Color
 
-| Token                          | Valor                             | Uso                                                              |
-| ------------------------------ | --------------------------------- | ---------------------------------------------------------------- |
-| `brand`                        | `#1e3a5f`                         | Azul de marca: acción primaria, textos activos, código de cuenta |
-| `brand-hover`                  | `#16324f`                         | Hover de la acción primaria                                      |
-| `brand-soft`                   | `rgba(30,58,95,.08)`              | Fondo tenue de un control/fila activos                           |
-| `canvas`                       | `#f4f6f8`                         | Fondo de la app (detrás de las tarjetas)                         |
-| `surface`                      | `#ffffff`                         | Fondo de tarjeta, tabla, panel                                   |
-| `surface-header`               | `#fafbfc`                         | Cabeceras y pies de tarjeta/tabla                                |
-| `surface-muted`                | `#f8fafc`                         | Hover de fila, franja de descanso                                |
-| `surface-sunken`               | `#f3f6f9`                         | Barra hundida (toolbar `tone="sunken"`)                          |
-| `border`                       | `#e5e9ee`                         | Borde estándar de tarjeta/control                                |
-| `border-soft` / `border-faint` | `#edf1f5` / `#f1f4f7`             | Separadores internos de tabla, cada vez más tenues               |
-| `ink` / `ink-soft`             | `#1e293b` / `#334155`             | Texto principal y su variante suave                              |
-| `muted` / `faint` / `faintest` | `#64748b` / `#94a3b8` / `#b4bec9` | Texto secundario → terciario → placeholder                       |
-| `positive` / `negative`        | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
-| `warning`                      | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
-| `zero`                         | `#c2cbd5`                         | El `–` de una celda en cero                                      |
-| `chip` / `chip-border`         | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
+| Token                           | Valor                             | Uso                                                              |
+| ------------------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| `brand`                         | `#1e3a5f`                         | Azul de marca: acción primaria, textos activos, código de cuenta |
+| `brand-hover`                   | `#16324f`                         | Hover de la acción primaria                                      |
+| `brand-soft`                    | `rgba(30,58,95,.08)`              | Fondo tenue de un control/fila activos                           |
+| `canvas`                        | `#f4f6f8`                         | Fondo de la app (detrás de las tarjetas)                         |
+| `surface`                       | `#ffffff`                         | Fondo de tarjeta, tabla, panel                                   |
+| `surface-header`                | `#fafbfc`                         | Cabeceras y pies de tarjeta/tabla                                |
+| `surface-muted`                 | `#f8fafc`                         | Hover de fila, franja de descanso                                |
+| `surface-sunken`                | `#f3f6f9`                         | Barra hundida (toolbar `tone="sunken"`)                          |
+| `surface-calc` / `-calc-strong` | `#f2f6fa` / `#eaf0f6`             | Relleno azulado de una fila **calculada** (Ocupaciones)          |
+| `border`                        | `#e5e9ee`                         | Borde estándar de tarjeta/control                                |
+| `border-soft` / `border-faint`  | `#edf1f5` / `#f1f4f7`             | Separadores internos de tabla, cada vez más tenues               |
+| `ink` / `ink-soft`              | `#1e293b` / `#334155`             | Texto principal y su variante suave                              |
+| `muted` / `faint` / `faintest`  | `#64748b` / `#94a3b8` / `#b4bec9` | Texto secundario → terciario → placeholder                       |
+| `positive` / `negative`         | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
+| `warning`                       | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
+| `zero`                          | `#c2cbd5`                         | El `–` de una celda en cero                                      |
+| `chip` / `chip-border`          | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
 
 **Verde y rojo son señal de signo, no colores de serie.** Nunca pintan una categoría, y nunca
 viajan solos: siempre acompañados de flecha (`▲`/`▼`) y del valor con signo, porque el color
@@ -149,7 +152,15 @@ propio. (Ver "Gráficos y Análisis" para las reglas de cobertura y doble eje.)
 ## Estado actual
 
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
-**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**.
+**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Dos módulos
+tienen datos reales hoy: **PyG** (Datos, Gráficos y Análisis) y **Ocupaciones** (Datos; su
+pestaña Gráficos sigue en "próximamente").
+
+Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
+`ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
+"próximamente", así que añadir uno es puramente aditivo. **El estado no vive ahí**: cada
+proveedor de datos se monta en el layout del dashboard, porque el header lee lo mismo que el
+panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
 
 **Pérdidas y Ganancias (PyG)** tiene su capa de filtros conectada a los datos:
 
@@ -329,3 +340,75 @@ completo ronda el megabyte y el chunk de `/profit-loss` entero pesa menos que es
   parsea la prosa de las notas. Los value-edits no se "reviven": los valores editados quedan
   como nueva base.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
+
+## Ocupaciones (análisis hotelero)
+
+La pestaña **Datos** carga los `OCUPACION_*.xlsx` reales del contador y los deja navegables por
+**Sucursal → Año → Mes**. La capa pura vive en `lib/occupancy/` (parse, derive, consolidate,
+export + persistencia Dexie) y está cubierta por vitest; los componentes solo montan.
+
+### Cómo se clasifican los datos
+
+- **La unidad de guardado es la sucursal-año**, con clave compuesta `[centerId+year]` en
+  IndexedDB: el contador exporta **un Excel por sucursal y por año**, así que ese par es lo que
+  se escribe, se fusiona y se borra.
+- El archivo **se declara a sí mismo**: bajo el título lleva dos líneas, el **hotel** y el
+  **centro de costo** (sucursal). Se leen **por posición**, no por etiqueta. Un archivo sin
+  línea de centro cae en la sucursal reservada `principal`, rotulada con el nombre del hotel;
+  así un hotel de una sola propiedad no es un caso especial en ningún otro sitio.
+- El **hotel activo** se muestra en el header (`ActiveClient`), con el año y la sucursal debajo.
+- El espacio de trabajo es de **un hotel**. Subir archivos de otro pide confirmación y
+  **reemplaza todo** — mezclar dos empresas en un mismo juego de pestañas no se avisaría solo.
+
+### Carga
+
+- **Varios Excel a la vez**, mezclando sucursales y años; cada uno cae en su propio registro.
+- Se **parsea todo antes de escribir nada**: así la verificación de "todos los archivos son del
+  mismo hotel" no puede dejar la base a medias. Si los archivos discrepan entre sí, no se
+  guarda ninguno; si el archivo falla al leerse, se reporta por su nombre y los demás entran.
+- Recargar una sucursal-año **fusiona mes a mes**: los meses que el archivo trae se reemplazan y
+  los escritos a mano sobreviven. El catálogo de canales guardado gana en el nombre (un canal
+  renombrado lo conserva) y los canales nuevos del archivo se añaden.
+- Solo se leen **insumos crudos**. ADR, ocupación, RevPAR, PAX y todos los totales se
+  **recalculan**: en los archivos originales son fórmulas sin resultado cacheado y sus
+  agregados mezclan "promedio de ratios" con "ratio de sumas".
+
+### Grilla diaria
+
+- Conceptos a la izquierda, días arriba, **Total / prom.** fijo a la derecha; la columna de
+  concepto y la de total son _sticky_. **Todas las columnas de día se ven igual**: intentos
+  previos de marcar el fin de semana se leían como "esos días están deshabilitados".
+- El **relleno azulado** (`surface-calc`) significa una sola cosa: **esta fila es calculada**.
+- Un mes importado se muestra **tal cual del Excel** —con su insignia— hasta la primera edición;
+  esa edición pasa **el mes entero** a calculado de golpe, para que nunca se mezclen las dos
+  procedencias en una misma tabla.
+- **Edición en sitio** con navegación de hoja de cálculo (flechas entre celdas, Enter baja,
+  Escape descarta). Los canales de venta son **por mes**: se dan de alta y de baja en el mes que
+  se está viendo, sin tocar los demás.
+- Avisos de **cuadre** (la suma de canales o de tipos de habitación no coincide con vendidas +
+  complementarias) y de **PAX declarado a mano**, en un `NoticeBanner` expandible.
+
+### Consolidado y vista anual
+
+Son dos ejes distintos que se combinan libremente: el año de una sucursal, el consolidado de un
+mes, o el año consolidado de todas.
+
+- **Consolidado** (aparece con dos o más sucursales): suma los **insumos crudos** de todas y
+  deja que `derive.ts` recalcule los indicadores como **ratio de sumas** — la única definición
+  bajo la que `ADR × Ocupación = RevPAR` sigue siendo cierta al sumar. No se guarda: se deriva
+  al leer, así que ninguna edición puede dejarlo obsoleto. Es de solo lectura.
+- **Vista anual** (botón «Año» al final de la tira de MES): las mismas filas con **un mes por
+  columna** y **Total año**. Siempre calculada y de solo lectura — una celda de mes es un
+  agregado de días, no hay dónde escribirla. Volver a un mes es tan simple como pulsarlo.
+- En la vista anual, **«Habitaciones disponibles» suma habitaciones-noche** (682 en enero) en
+  vez del promedio redondeado que muestra la mensual (22): es el denominador real de la
+  ocupación de ese mes. Es la única fila que agrega distinto según el alcance, y lo declara en
+  su propio subtítulo.
+
+### Descarga
+
+- Exporta la **sucursal-año activa** en el mismo formato de bloques que el parser lee, con las
+  dos líneas de cabecera, de modo que el archivo descargado **vuelve a entrar en su misma
+  sucursal** sin crear una nueva ni pedir confirmación.
+- En el **Consolidado** el botón se deshabilita y explica por qué: es un cálculo de la app, y
+  devolverlo como Excel invitaría a re-subirlo como una sucursal fantasma.
