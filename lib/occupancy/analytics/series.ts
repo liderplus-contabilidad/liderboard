@@ -8,6 +8,7 @@
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { CHART_MAX_SERIES } from "@/lib/charts/palette";
+import { bucketLabel, bucketMonths } from "@/lib/period";
 import { daysInMonth, ROOM_ROW_IDS } from "../derive";
 import type { OccupancyDataset, OccupancyMonth } from "../types";
 import {
@@ -17,6 +18,7 @@ import {
   type OccupancyBundle,
   type OccupancyQuery,
   type OccupancySeries,
+  type PointFacts,
 } from "./types";
 
 const ROOM_PAX = { simples: 1, dobles: 2, triples: 3 } as const;
@@ -54,31 +56,46 @@ function paxOf(month: OccupancyMonth, day: number): number {
   return month.inputs.pax[day] ?? fromRooms;
 }
 
-/** Numerator and denominator of a metric over a month, or over one of its days. */
-function amounts(metric: MetricSpec, month: OccupancyMonth, day?: number): [number, number] {
+/** The raw inputs of a month, or of one of its days — what every metric is then built from. */
+function rawInputs(
+  month: OccupancyMonth,
+  day?: number,
+): Pick<PointFacts, "revenue" | "sold" | "available" | "pax"> {
   const at = (series: number[] | undefined) =>
     day === undefined ? sum(series, month.days) : (series?.[day] ?? 0);
-  const revenue = at(month.inputs.revenue);
-  const sold = at(month.inputs.sold);
-  const available = at(month.inputs.available);
-  const pax =
-    day === undefined
-      ? Array.from({ length: month.days }, (_, d) => paxOf(month, d)).reduce((a, b) => a + b, 0)
-      : paxOf(month, day);
+  return {
+    revenue: at(month.inputs.revenue),
+    sold: at(month.inputs.sold),
+    available: at(month.inputs.available),
+    pax:
+      day === undefined
+        ? Array.from({ length: month.days }, (_, d) => paxOf(month, d)).reduce((a, b) => a + b, 0)
+        : paxOf(month, day),
+  };
+}
 
+/**
+ * The metric's two operands over already-summed inputs. A "total" metric divides by a literal 1,
+ * which is what keeps a period from turning into the AVERAGE of its months: the 1 is not summed
+ * with the others, it is read off the total once.
+ */
+function amounts(
+  metric: MetricSpec,
+  inputs: Pick<PointFacts, "revenue" | "sold" | "available" | "pax">,
+): [number, number] {
   switch (metric.id) {
     case "occupancy":
-      return [sold, available];
+      return [inputs.sold, inputs.available];
     case "adr":
-      return [revenue, sold];
+      return [inputs.revenue, inputs.sold];
     case "revpar":
-      return [revenue, available];
+      return [inputs.revenue, inputs.available];
     case "revenue":
-      return [revenue, 1];
+      return [inputs.revenue, 1];
     case "sold":
-      return [sold, 1];
+      return [inputs.sold, 1];
     case "pax":
-      return [pax, 1];
+      return [inputs.pax, 1];
   }
 }
 
@@ -91,11 +108,25 @@ function monthsOf(query: OccupancyQuery): number[] {
 /**
  * The X axis. Its daily columns are sized by the LONGEST of the compared years, so a leap
  * February still has its 29th and the years that lack it simply leave that column empty.
+ *
+ * Above the month the columns are periods: the marked months folded into quarters, semesters or
+ * the year. A period that only holds SOME of its months is still drawn — the user marked them —
+ * but it is labelled by those months rather than called "T1".
  */
 function buildAxis(query: OccupancyQuery, years: number[]): AxisPoint[] {
   const months = monthsOf(query);
-  if (query.scope === "mes") {
-    return months.map((monthIndex) => ({ label: MONTHS_SHORT_ES[monthIndex], monthIndex }));
+  const scope = query.scope;
+  if (scope === "mensual") {
+    return months.map((monthIndex) => ({
+      label: MONTHS_SHORT_ES[monthIndex],
+      monthIndexes: [monthIndex],
+    }));
+  }
+  if (scope !== "dia") {
+    return bucketMonths(scope, months).map((bucket) => ({
+      label: bucketLabel(scope, bucket),
+      monthIndexes: bucket.months,
+    }));
   }
   // Marked days narrow the axis the same way marked months do: «el 5» of every marked month.
   const marked = [...new Set(query.days)].filter((d) => d >= 0 && d < 31).sort((a, b) => a - b);
@@ -107,7 +138,7 @@ function buildAxis(query: OccupancyQuery, years: number[]): AxisPoint[] {
       if (day < length) {
         axis.push({
           label: `${day + 1} ${MONTHS_SHORT_ES[monthIndex].toLowerCase()}`,
-          monthIndex,
+          monthIndexes: [monthIndex],
           day,
         });
       }
@@ -147,21 +178,48 @@ export function buildOccupancySeries(
   // With a single year on screen the year adds nothing to every legend entry.
   const multiYear = new Set(wanted.map((d) => d.year)).size > 1;
 
-  const series: OccupancySeries[] = wanted.slice(0, limit).map((dataset) => ({
-    key: { centerId: dataset.centerId, year: dataset.year },
-    label: multiYear ? `${dataset.centerName} · ${dataset.year}` : dataset.centerName,
-    values: axis.map((point) => {
-      const month = dataset.months[point.monthIndex];
+  /**
+   * A column adds up the RAW INPUTS of the months it covers and only then applies the metric —
+   * the ratio of the sums, the same rule the Datos grid and the Consolidado follow. It is covered
+   * when at least ONE of its months is, so a T1 loaded only to enero is drawn from enero instead
+   * of vanishing.
+   */
+  const factsAt = (dataset: OccupancyDataset, point: AxisPoint): PointFacts | null => {
+    const totals = { revenue: 0, sold: 0, available: 0, pax: 0 };
+    let covered = false;
+    for (const monthIndex of point.monthIndexes) {
+      const month = dataset.months[monthIndex];
       if (!monthHasData(month)) {
-        return null;
+        continue;
       }
       if (point.day !== undefined && point.day >= month.days) {
-        return null;
+        continue;
       }
-      const [numerator, denominator] = amounts(metric, month, point.day);
-      return denominator === 0 ? null : numerator / denominator;
-    }),
-  }));
+      covered = true;
+      const inputs = rawInputs(month, point.day);
+      totals.revenue += inputs.revenue;
+      totals.sold += inputs.sold;
+      totals.available += inputs.available;
+      totals.pax += inputs.pax;
+    }
+    if (!covered) {
+      return null;
+    }
+    const [numerator, denominator] = amounts(metric, totals);
+    return { ...totals, numerator, denominator };
+  };
+
+  const series: OccupancySeries[] = wanted.slice(0, limit).map((dataset) => {
+    const facts = axis.map((point) => factsAt(dataset, point));
+    return {
+      key: { centerId: dataset.centerId, year: dataset.year },
+      label: multiYear ? `${dataset.centerName} · ${dataset.year}` : dataset.centerName,
+      values: facts.map((fact) =>
+        fact === null || fact.denominator === 0 ? null : fact.numerator / fact.denominator,
+      ),
+      facts,
+    };
+  });
 
   return { axis, series, metric, truncated, warnings };
 }

@@ -8,7 +8,7 @@
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { ROOM_ROW_IDS } from "../derive";
 import type { OccupancyDataset, OccupancyMonth } from "../types";
-import { metricSpec, type MetricUnit, type OccupancyQuery } from "./types";
+import { metricSpec, type MetricUnit, type OccupancyQuery, type OccupancySeriesKey } from "./types";
 
 const ROOM_PAX = { simples: 1, dobles: 2, triples: 3 } as const;
 
@@ -21,6 +21,18 @@ function monthHasData(month: OccupancyMonth | undefined): month is OccupancyMont
   }
   const { available, revenue, sold } = month.inputs;
   return month.fromFile || [available, revenue, sold].some((s) => s.some((v) => v !== 0));
+}
+
+/**
+ * The same naming the series card uses — the year is added only when more than one is on screen.
+ * Every card of the tab labels its series through here, so a legend never says «Manor · 2026»
+ * next to a plain «Manor».
+ */
+export function labelFor(
+  datasets: readonly OccupancyDataset[],
+): (dataset: OccupancyDataset) => string {
+  const multiYear = new Set(datasets.map((d) => d.year)).size > 1;
+  return (dataset) => (multiYear ? `${dataset.centerName} · ${dataset.year}` : dataset.centerName);
 }
 
 /** The datasets the query selects, in the order it names them. */
@@ -77,88 +89,154 @@ export interface Kpi {
   unit: MetricUnit;
 }
 
+/** One sucursal-year's four figures. A single group is the "no comparison" case, not a special one. */
+export interface KpiGroup {
+  key: OccupancySeriesKey;
+  label: string;
+  kpis: Kpi[];
+}
+
 /**
- * The four figures that describe the marked scope. They are ratios of the SUMS across
- * everything marked — the same definition the grid's own totals use, so the tab and the table
- * never disagree.
+ * The four figures that describe the marked scope, ONE GROUP PER SUCURSAL-YEAR — marking two
+ * years is asking to compare them, and a single blended figure answers a question nobody asked.
+ * Inside a group they are ratios of the SUMS, the same definition the grid's own totals use, so
+ * the tab and the table never disagree.
  */
-export function occupancyKpis(datasets: readonly OccupancyDataset[], query: OccupancyQuery): Kpi[] {
-  let revenue = 0;
-  let sold = 0;
-  let available = 0;
-  for (const dataset of scopedDatasets(datasets, query)) {
+export function occupancyKpis(
+  datasets: readonly OccupancyDataset[],
+  query: OccupancyQuery,
+): KpiGroup[] {
+  const scoped = scopedDatasets(datasets, query);
+  const label = labelFor(scoped);
+  return scoped.map((dataset) => {
+    let revenue = 0;
+    let sold = 0;
+    let available = 0;
     for (const month of scopedMonths(dataset, query)) {
       const days = scopedDays(month, query);
       revenue += sumDays(month.inputs.revenue, days);
       sold += sumDays(month.inputs.sold, days);
       available += sumDays(month.inputs.available, days);
     }
-  }
-  return [
-    { id: "occupancy", label: "Ocupación media", value: ratio(sold, available), unit: "percent" },
-    { id: "adr", label: "ADR", value: ratio(revenue, sold), unit: "currency" },
-    { id: "revpar", label: "RevPAR", value: ratio(revenue, available), unit: "currency" },
-    {
-      id: "revenue",
-      label: "Ingresos habitaciones",
-      value: available === 0 && revenue === 0 ? null : revenue,
-      unit: "currency",
-    },
-  ];
+    return {
+      key: { centerId: dataset.centerId, year: dataset.year },
+      label: label(dataset),
+      kpis: [
+        {
+          id: "occupancy",
+          label: "Ocupación media",
+          value: ratio(sold, available),
+          unit: "percent" as const,
+        },
+        { id: "adr", label: "ADR", value: ratio(revenue, sold), unit: "currency" as const },
+        {
+          id: "revpar",
+          label: "RevPAR",
+          value: ratio(revenue, available),
+          unit: "currency" as const,
+        },
+        {
+          id: "revenue",
+          label: "Ingresos habitaciones",
+          value: available === 0 && revenue === 0 ? null : revenue,
+          unit: "currency" as const,
+        },
+      ],
+    };
+  });
 }
 
+/** A channel of the catalogue, with what everything marked sold through it together. */
 export interface ChannelEntry {
   id: string;
   name: string;
-  nights: number;
+  /** Nights across every marked sucursal-year — what orders the chart's rows. */
+  total: number;
+}
+
+export interface ChannelBreakdown {
+  /** The channels to draw, largest total first. */
+  channels: ChannelEntry[];
+  /** One row per sucursal-year; `nights` is aligned with `channels`. */
+  series: { key: OccupancySeriesKey; label: string; nights: number[] }[];
+  total: number;
 }
 
 /**
- * Nights per sales channel over the marked scope, largest first. Channels are unioned by id
- * across everything marked, so comparing two sucursales adds their Booking rather than showing
- * it twice.
+ * Nights per sales channel over the marked scope. Channels are unioned by id across everything
+ * marked — one Booking row, not one per sucursal — but each sucursal-year keeps its OWN nights
+ * inside that row, because «¿por dónde vende cada una?» is the question a comparison is asking.
+ * The row order is the combined total, so both series read against the same ranking.
  */
 export function channelTotals(
   datasets: readonly OccupancyDataset[],
   query: OccupancyQuery,
-): { entries: ChannelEntry[]; total: number } {
-  const nights = new Map<string, number>();
+): ChannelBreakdown {
+  const scoped = scopedDatasets(datasets, query);
+  const label = labelFor(scoped);
   const names = new Map<string, string>();
-
-  for (const dataset of scopedDatasets(datasets, query)) {
+  const perDataset = scoped.map((dataset) => {
     for (const channel of dataset.channels) {
       names.set(channel.id, names.get(channel.id) ?? channel.name);
     }
+    const nights = new Map<string, number>();
     for (const month of scopedMonths(dataset, query)) {
       const days = scopedDays(month, query);
       for (const [id, series] of Object.entries(month.inputs.channels)) {
         nights.set(id, (nights.get(id) ?? 0) + sumDays(series, days));
       }
     }
+    return { dataset, nights };
+  });
+
+  const totals = new Map<string, number>();
+  for (const { nights } of perDataset) {
+    for (const [id, value] of nights) {
+      totals.set(id, (totals.get(id) ?? 0) + value);
+    }
   }
 
-  const entries = [...nights.entries()]
-    .map(([id, value]) => ({ id, name: names.get(id) ?? id, nights: value }))
-    .filter((entry) => entry.nights > 0)
-    .sort((a, b) => b.nights - a.nights);
-  return { entries, total: entries.reduce((all, entry) => all + entry.nights, 0) };
+  const channels = [...totals.entries()]
+    .map(([id, total]) => ({ id, name: names.get(id) ?? id, total }))
+    .filter((entry) => entry.total > 0)
+    .sort((a, b) => b.total - a.total);
+
+  return {
+    channels,
+    series: perDataset.map(({ dataset, nights }) => ({
+      key: { centerId: dataset.centerId, year: dataset.year },
+      label: label(dataset),
+      nights: channels.map((channel) => nights.get(channel.id) ?? 0),
+    })),
+    total: channels.reduce((all, entry) => all + entry.total, 0),
+  };
+}
+
+export interface WeekdayBreakdown {
+  labels: string[];
+  /** One row per sucursal-year; `values` has seven entries, Monday first. */
+  series: { key: OccupancySeriesKey; label: string; values: (number | null)[] }[];
 }
 
 /**
- * The active metric by day of the week. Every day of the marked scope falls into its weekday
- * and the metric is aggregated there under its own rule — a ratio stays a ratio of sums, so
- * «los domingos llenan al 60%» is a real 60%, not an average of daily percentages.
+ * The active metric by day of the week, ONE ROW PER SUCURSAL-YEAR. Every day of the marked scope
+ * falls into its weekday and the metric is aggregated there under its own rule — a ratio stays a
+ * ratio of sums, so «los domingos llenan al 60%» is a real 60%, not an average of daily
+ * percentages.
  */
 export function weekdayRhythm(
   datasets: readonly OccupancyDataset[],
   query: OccupancyQuery,
-): { labels: string[]; values: (number | null)[] } {
+): WeekdayBreakdown {
   const metric = metricSpec(query.metric);
-  const numerator = new Array<number>(7).fill(0);
-  const denominator = new Array<number>(7).fill(0);
-  const seen = new Array<boolean>(7).fill(false);
+  const scoped = scopedDatasets(datasets, query);
+  const label = labelFor(scoped);
 
-  for (const dataset of scopedDatasets(datasets, query)) {
+  const series = scoped.map((dataset) => {
+    const numerator = new Array<number>(7).fill(0);
+    const denominator = new Array<number>(7).fill(0);
+    const seen = new Array<boolean>(7).fill(false);
+
     for (const month of scopedMonths(dataset, query)) {
       for (const day of scopedDays(month, query)) {
         // getDay() is Sunday-first; the hotel's week starts on Monday.
@@ -189,14 +267,17 @@ export function weekdayRhythm(
         denominator[slot] += den;
       }
     }
-  }
 
-  return {
-    labels: WEEKDAYS_ES,
-    values: numerator.map((value, slot) =>
-      !seen[slot] || denominator[slot] === 0 ? null : value / denominator[slot],
-    ),
-  };
+    return {
+      key: { centerId: dataset.centerId, year: dataset.year },
+      label: label(dataset),
+      values: numerator.map((value, slot) =>
+        !seen[slot] || denominator[slot] === 0 ? null : value / denominator[slot],
+      ),
+    };
+  });
+
+  return { labels: WEEKDAYS_ES, series };
 }
 
 /** Label for a day the panel opens on, e.g. "14 mar 2026". */
@@ -207,7 +288,8 @@ export function dayLabel(year: number, monthIndex: number, day: number): string 
 export interface DayDetail {
   label: string;
   indicators: { id: string; label: string; value: number | null; unit: MetricUnit }[];
-  channels: ChannelEntry[];
+  /** One day of ONE sucursal-year: there is nothing to compare here, so nights stand alone. */
+  channels: { id: string; name: string; nights: number }[];
 }
 
 /** Everything one day says about itself — what the heatmap opens when a cell is clicked. */

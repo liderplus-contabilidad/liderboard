@@ -461,3 +461,94 @@ describe("toAnnualGrid", () => {
     expect(grid.rows.every((r) => !r.editable)).toBe(true);
   });
 });
+
+describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
+  /** Ene/Feb/Mar and Abr, so T1 covers three months and T2 only one. */
+  const quarters = () =>
+    yearWith([
+      { revenue: 300, sold: 10, available: 40 },
+      { revenue: 400, sold: 20, available: 60 },
+      { revenue: 500, sold: 30, available: 100 },
+      { revenue: 200, sold: 5, available: 50 },
+    ]);
+
+  const cell = (dataset: OccupancyDataset, id: string, frequency: "trimestral" | "semestral") => {
+    const found = toAnnualGrid(dataset, frequency).rows.find((r) => r.id === id);
+    if (!found) {
+      throw new Error(`No row ${id}`);
+    }
+    return found;
+  };
+
+  it("has one column per period, named the way PyG names them", () => {
+    const grid = toAnnualGrid(emptyDataset(2026, "HOTEL X"), "trimestral");
+    expect(grid.scope).toBe("year");
+    expect(grid.frequency).toBe("trimestral");
+    expect(grid.columns).toBe(4);
+    expect(grid.columnLabels).toEqual(["T1", "T2", "T3", "T4"]);
+
+    const semesters = toAnnualGrid(emptyDataset(2026, "HOTEL X"), "semestral");
+    expect(semesters.columns).toBe(2);
+    expect(semesters.columnLabels).toEqual(["S1", "S2"]);
+  });
+
+  it("defaults to months, so the existing annual view is unchanged", () => {
+    expect(toAnnualGrid(quarters()).columnLabels).toHaveLength(12);
+    expect(toAnnualGrid(quarters(), "mensual").rows).toEqual(toAnnualGrid(quarters()).rows);
+  });
+
+  it("sums the raw inputs of the months it covers", () => {
+    expect(cell(quarters(), "sold", "trimestral").cells).toEqual([60, 5, 0, 0]);
+    expect(cell(quarters(), "revenue", "trimestral").cells).toEqual([1200, 200, 0, 0]);
+    expect(cell(quarters(), "available", "trimestral").cells).toEqual([200, 50, 0, 0]);
+    expect(cell(quarters(), "sold", "semestral").cells).toEqual([65, 0]);
+  });
+
+  it("computes the indicators as ratios OF THOSE SUMS, not averages of the months", () => {
+    // ADR of T1 = 1200 / 60 = 20, not the mean of 30, 20 and 16,67.
+    expect(cell(quarters(), "adr", "trimestral").cells[0]).toBeCloseTo(20, 10);
+    expect(cell(quarters(), "occupancy", "trimestral").cells[0]).toBeCloseTo(0.3, 10);
+    expect(cell(quarters(), "revpar", "trimestral").cells[0]).toBeCloseTo(6, 10);
+  });
+
+  it("keeps ADR × Ocupación = RevPAR inside a quarter", () => {
+    const adr = cell(quarters(), "adr", "trimestral").cells[0] ?? 0;
+    const occupancy = cell(quarters(), "occupancy", "trimestral").cells[0] ?? 0;
+    expect(adr * occupancy).toBeCloseTo(cell(quarters(), "revpar", "trimestral").cells[0] ?? 0, 10);
+  });
+
+  it("leaves a period with nothing in it empty instead of zero", () => {
+    expect(cell(quarters(), "sold", "trimestral").cells[2]).toBe(0);
+    expect(cell(quarters(), "adr", "trimestral").cells[2]).toBeNull();
+    expect(cell(quarters(), "occupancy", "trimestral").cells[2]).toBeNull();
+  });
+
+  it("keeps the Total column on the whole year whatever the columns are", () => {
+    expect(cell(quarters(), "sold", "trimestral").agg).toBe(65);
+    expect(cell(quarters(), "sold", "semestral").agg).toBe(65);
+  });
+
+  it("folds the channels into the same periods", () => {
+    const channels = [{ id: "booking", name: "Booking" }];
+    const dataset = yearWith([{}, {}, {}, {}], channels);
+    dataset.months[0].inputs.channels.booking[0] = 7;
+    dataset.months[2].inputs.channels.booking[0] = 5;
+    dataset.months[3].inputs.channels.booking[0] = 3;
+
+    expect(cell(dataset, "channel:booking", "trimestral").cells).toEqual([12, 3, 0, 0]);
+  });
+
+  it("reports the cuadre checks by period, not by month", () => {
+    const dataset = yearWith([{ sold: 5 }, { sold: 5 }], [{ id: "booking", name: "Booking" }]);
+    dataset.months[0].inputs.channels.booking[0] = 5;
+    dataset.months[1].inputs.channels.booking[0] = 5;
+    // Both months cuadran on channels, so T1 does too — and no other quarter sold anything.
+    expect(toAnnualGrid(dataset, "trimestral").channelMismatch).toEqual([]);
+    // Neither month declares room types for what it sold, so T1 fails that second check.
+    expect(toAnnualGrid(dataset, "trimestral").roomMismatch).toEqual([0]);
+  });
+
+  it("stays read-only: a quarter's cell is an aggregate of days", () => {
+    expect(toAnnualGrid(quarters(), "trimestral").rows.every((r) => !r.editable)).toBe(true);
+  });
+});

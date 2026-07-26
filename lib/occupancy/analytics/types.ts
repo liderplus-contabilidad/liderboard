@@ -10,6 +10,7 @@
  * vendidas and PAX are counts. Mixing them in one card would need a second Y axis, which
  * `ChartOption` forbids by construction.
  */
+import { FREQUENCY_ORDER, type Frequency } from "@/lib/period";
 
 export type OccupancyMetricId = "occupancy" | "adr" | "revpar" | "revenue" | "sold" | "pax";
 
@@ -55,8 +56,14 @@ export function metricSpec(id: OccupancyMetricId): MetricSpec {
   return METRICS.find((metric) => metric.id === id) ?? METRICS[0];
 }
 
-/** Whether a column of the X axis is a month of the year or a day. */
-export type Scope = "mes" | "dia";
+/**
+ * How coarse a column of the X axis is. It is PyG's frequency ladder with a day step under it —
+ * the same `Frequency` values, so "T1" is spelled in one place for the whole app.
+ */
+export type Scope = "dia" | Frequency;
+
+/** Every step of the axis, finest first — the order «Ver por» offers them in. */
+export const SCOPE_ORDER: readonly Scope[] = ["dia", ...FREQUENCY_ORDER];
 
 export interface OccupancySeriesKey {
   centerId: string;
@@ -68,11 +75,29 @@ export function occupancySeriesId(key: OccupancySeriesKey): string {
   return `${key.centerId}|${key.year}`;
 }
 
-/** One column of the X axis. `day` is 0-based and absent on the monthly axis. */
+/**
+ * One column of the X axis. It carries EVERY month it covers — one on a monthly or daily axis,
+ * three on a quarter, twelve on the year — so a click can narrow to exactly what was drawn.
+ * `day` is 0-based and present only on the daily axis.
+ */
 export interface AxisPoint {
   label: string;
-  monthIndex: number;
+  monthIndexes: number[];
   day?: number;
+}
+
+/**
+ * The raw figures behind ONE column of one series, kept so a tooltip can answer «¿de dónde sale
+ * ese 59 %?» without a second pass over the datasets. `numerator`/`denominator` are the active
+ * metric's own two operands; the rest are the inputs every metric is built from.
+ */
+export interface PointFacts {
+  revenue: number;
+  sold: number;
+  available: number;
+  pax: number;
+  numerator: number;
+  denominator: number;
 }
 
 export interface OccupancySeries {
@@ -80,6 +105,8 @@ export interface OccupancySeries {
   label: string;
   /** One entry per axis column; `null` is a period with no data. */
   values: (number | null)[];
+  /** Aligned with `values`; `null` exactly where the value is. */
+  facts: (PointFacts | null)[];
 }
 
 export interface OccupancyQuery {

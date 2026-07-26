@@ -7,7 +7,14 @@
  * two units would need a second Y axis.
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
-import { DEFAULT_METRIC, metricSpec, type OccupancyMetricId, type Scope } from "./analytics/types";
+import { bucketMonths, monthsInPeriod, periodLabels, type Frequency } from "@/lib/period";
+import {
+  DEFAULT_METRIC,
+  metricSpec,
+  SCOPE_ORDER,
+  type OccupancyMetricId,
+  type Scope,
+} from "./analytics/types";
 
 export interface OccupancyFilters {
   metric: OccupancyMetricId;
@@ -21,7 +28,14 @@ export interface OccupancyFilters {
 }
 
 export function emptyFilters(): OccupancyFilters {
-  return { metric: DEFAULT_METRIC, centerIds: [], years: [], months: [], days: [], scope: "mes" };
+  return {
+    metric: DEFAULT_METRIC,
+    centerIds: [],
+    years: [],
+    months: [],
+    days: [],
+    scope: "mensual",
+  };
 }
 
 /** Toggles keeping the UNIVERSE's order, so series and colors never depend on click order. */
@@ -59,9 +73,46 @@ export function withYearToggled(
   return { ...filters, years: toggled(filters.years, year, universe) };
 }
 
+const MONTH_UNIVERSE = Array.from({ length: 12 }, (_, m) => m);
+
 export function withMonthToggled(filters: OccupancyFilters, month: number): OccupancyFilters {
-  const universe = Array.from({ length: 12 }, (_, m) => m);
-  return { ...filters, months: toggled(filters.months, month, universe) };
+  return { ...filters, months: toggled(filters.months, month, MONTH_UNIVERSE) };
+}
+
+/**
+ * The «T1» / «S1» shortcuts of the Periodo dropdown: they mark or unmark the period's own months
+ * and nothing else. The mark stays a MONTH — there is no second kind of period mark to reconcile
+ * with, no new chip, and nothing extra for `sanitizeFilters` to prune.
+ *
+ * Unlike marking a day this does NOT touch the axis: T1 over a monthly axis is three perfectly
+ * readable columns, whereas a day mark on a monthly axis has nowhere to land.
+ */
+export function withPeriodShortcutToggled(
+  filters: OccupancyFilters,
+  frequency: Frequency,
+  index: number,
+): OccupancyFilters {
+  const span = monthsInPeriod(frequency, index);
+  const marked = new Set(filters.months);
+  const wasWhole = span.every((month) => marked.has(month));
+  for (const month of span) {
+    if (wasWhole) {
+      marked.delete(month);
+    } else {
+      marked.add(month);
+    }
+  }
+  return { ...filters, months: MONTH_UNIVERSE.filter((month) => marked.has(month)) };
+}
+
+/** Whether every month of a period is marked — what lights its shortcut button up. */
+export function isPeriodMarked(
+  filters: OccupancyFilters,
+  frequency: Frequency,
+  index: number,
+): boolean {
+  const marked = new Set(filters.months);
+  return monthsInPeriod(frequency, index).every((month) => marked.has(month));
 }
 
 /**
@@ -95,13 +146,24 @@ export function clearMarks(filters: OccupancyFilters): OccupancyFilters {
   return { ...filters, centerIds: [], years: [], months: [], days: [] };
 }
 
+/** One step finer than `scope`, or null when there is nothing left below it. */
+export function finerScope(scope: Scope): Scope | null {
+  const at = SCOPE_ORDER.indexOf(scope);
+  return at > 0 ? SCOPE_ORDER[at - 1] : null;
+}
+
 /**
- * Drill-down: clicking a month's bar narrows the tab to that month and drops the axis to days.
- * It writes into the same bar the user can see, so undoing it is removing the chip.
+ * Drill-down: clicking a column narrows the tab to the months that column covered and drops the
+ * axis one step — a quarter opens into its three months, a month into its days. It writes into
+ * the same filter bar the user can see, so undoing it is removing the chips.
  */
-export function withDrillIntoMonth(filters: OccupancyFilters, month: number): OccupancyFilters {
-  // The days of the month you were in say nothing about the one you just opened.
-  return { ...filters, months: [month], days: [], scope: "dia" };
+export function withDrillIntoPeriod(
+  filters: OccupancyFilters,
+  months: readonly number[],
+  scope: Scope,
+): OccupancyFilters {
+  // The days of the period you were in say nothing about the one you just opened.
+  return { ...filters, months: MONTH_UNIVERSE.filter((m) => months.includes(m)), days: [], scope };
 }
 
 export interface FilterUniverse {
@@ -139,9 +201,34 @@ export function hasMarks(filters: OccupancyFilters): boolean {
  * The marked period as a person would say it: «5 de enero», not «Periodo · 1 · 1 día». A count
  * tells the reader how many boxes are ticked; what they need is which period they are looking at.
  */
+/**
+ * The name of a marked set of months when it happens to BE a period: ene+feb+mar is «T1», not
+ * «Ene · Feb · Mar». Coarser first, so the six months of a semester read as S1 rather than as
+ * two quarters — a six-month span produces two trimestral buckets, so that check falls through
+ * on its own and there is no ambiguity to break.
+ */
+function wholePeriodLabel(months: readonly number[]): string | null {
+  for (const frequency of ["trimestral", "semestral"] as const) {
+    const buckets = bucketMonths(frequency, months);
+    if (buckets.length === 1 && buckets[0].complete) {
+      return periodLabels(frequency)[buckets[0].index] ?? null;
+    }
+  }
+  return null;
+}
+
 export function periodLabel(months: readonly number[], days: readonly number[]): string {
   if (months.length === 0) {
     return "Todo el año";
+  }
+  if (days.length === 0) {
+    if (months.length === 12) {
+      return "Todo el año";
+    }
+    const whole = wholePeriodLabel(months);
+    if (whole) {
+      return whole;
+    }
   }
   const short = months.map((month) => MONTHS_SHORT_ES[month]).join(" · ");
   if (days.length === 0) {
@@ -154,6 +241,15 @@ export function periodLabel(months: readonly number[], days: readonly number[]):
       : `días ${list} de ${MONTHS_FULL_ES[months[0]].toLowerCase()}`;
   }
   return `${days.length === 1 ? "día" : "días"} ${list} de ${short}`;
+}
+
+/**
+ * The same label cased for the middle of a sentence: «enero», but «T1» keeps its capitals —
+ * lowercasing a period code turns it into something that no longer names anything.
+ */
+export function periodPhrase(months: readonly number[], days: readonly number[]): string {
+  const label = periodLabel(months, days);
+  return /^[TS]\d$/.test(label) ? label : label.toLowerCase();
 }
 
 /**

@@ -7,25 +7,35 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import type { Frequency } from "@/lib/period";
 import { CenterTabs } from "./center-tabs";
 import { MonthTabs } from "./month-tabs";
 import { useOccupancyData } from "./occupancy-data-provider";
 import { OccupancyGrid } from "./occupancy-grid";
 import { YearTabs } from "./year-tabs";
 
+/** What the annual grid's caption adds to the year. Months are the default; they say nothing. */
+const ANNUAL_SUFFIX: Record<Frequency, string> = {
+  mensual: "",
+  trimestral: "por trimestre",
+  semestral: "por semestre",
+  anual: "",
+};
+
 /**
- * Wording for the cuadre banner's expandable detail. The columns are days in the monthly view
- * and months in the annual one, so both the noun and how they are named change.
+ * Wording for the cuadre banner's expandable detail. The columns are days, months, quarters or
+ * semesters, so the noun changes — and the names come off the grid's own header labels rather
+ * than being rebuilt here, which is what keeps this working at every granularity.
  */
 function mismatchDetails(
   channelColumns: number[],
   roomColumns: number[],
   scope: "month" | "year",
+  columnLabels: readonly string[],
 ): string[] {
   const details: string[] = [];
-  const noun = scope === "year" ? "meses" : "días";
-  const list = (columns: number[]) =>
-    columns.map((c) => (scope === "year" ? MONTHS_FULL_ES[c] : String(c + 1))).join(", ");
+  const noun = scope === "year" ? "periodos" : "días";
+  const list = (columns: number[]) => columns.map((c) => columnLabels[c] ?? c + 1).join(", ");
   if (channelColumns.length > 0) {
     details.push(`Suma de canales ≠ vendidas + complementarias: ${noun} ${list(channelColumns)}`);
   }
@@ -59,6 +69,8 @@ export function OccupancyDatosView() {
     setMonthIndex,
     gridScope,
     setGridScope,
+    gridFrequency,
+    setGridFrequency,
     dataset,
     grid,
     canEdit,
@@ -156,11 +168,14 @@ export function OccupancyDatosView() {
   }
 
   const warnings = dataset?.warnings ?? [];
-  const details = grid ? mismatchDetails(grid.channelMismatch, grid.roomMismatch, gridScope) : [];
+  const details = grid
+    ? mismatchDetails(grid.channelMismatch, grid.roomMismatch, gridScope, grid.columnLabels)
+    : [];
   const isAnnual = gridScope === "year";
-  // In the annual view the title already says "Detalle anual", so the year stands alone.
+  // In the annual view the title already says "Detalle anual", so the year carries only the
+  // granularity — «2025 · por trimestre» — and nothing at all when the columns are months.
   const monthLabel = isAnnual
-    ? String(activeYear ?? "")
+    ? [String(activeYear ?? ""), ANNUAL_SUFFIX[gridFrequency]].filter(Boolean).join(" · ")
     : `${MONTHS_FULL_ES[monthIndex]} ${activeYear ?? ""}`.trim();
   // Named above the grid even when its strip is hidden, so the table always says which one.
   const centerLabel = isConsolidated || centers.length > 1 ? activeCenterName : undefined;
@@ -206,12 +221,14 @@ export function OccupancyDatosView() {
           dataset={dataset}
           activeIndex={monthIndex}
           scope={gridScope}
+          frequency={gridFrequency}
           onSelect={(index) => {
             // Picking a month is itself the way back from the annual view.
             setGridScope("month");
             setMonthIndex(index);
           }}
           onSelectScope={setGridScope}
+          onSelectFrequency={setGridFrequency}
           onSaveNights={canEdit ? (nights) => void saveNights(nights) : undefined}
         />
       )}
@@ -221,8 +238,8 @@ export function OccupancyDatosView() {
           {grid.mismatch.length}{" "}
           {isAnnual
             ? grid.mismatch.length === 1
-              ? "mes no cuadra"
-              : "meses no cuadran"
+              ? "periodo no cuadra"
+              : "periodos no cuadran"
             : grid.mismatch.length === 1
               ? "día no cuadra"
               : "días no cuadran"}{" "}

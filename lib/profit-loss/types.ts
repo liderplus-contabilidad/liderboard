@@ -4,7 +4,10 @@
  * original-vs-edited comparison needs no migration.
  */
 
-export type Frequency = "mensual" | "trimestral" | "semestral" | "anual";
+import type { Frequency } from "@/lib/period";
+
+/** The ladder is shared with Ocupaciones; re-exported so PyG's callers keep one import. */
+export type { Frequency };
 
 /** How a dataset participates in a workspace. "single" = a standalone statement. */
 export type DatasetRole = "single" | "center" | "sin-centro";

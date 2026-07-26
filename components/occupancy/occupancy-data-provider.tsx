@@ -12,18 +12,20 @@ import {
   sanitizeFilters,
   withCenterToggled,
   withCentersCleared,
-  withDrillIntoMonth,
+  withDrillIntoPeriod,
   withMetric,
   withDayToggled,
   withDaysCleared,
   withMonthToggled,
   withMonthsCleared,
+  withPeriodShortcutToggled,
   withScope,
   withYearToggled,
   withYearsCleared,
   type OccupancyFilters,
 } from "@/lib/occupancy/filters";
 import type { OccupancyMetricId, Scope } from "@/lib/occupancy/analytics/types";
+import type { Frequency } from "@/lib/period";
 import { normalize } from "@/lib/occupancy/slug";
 import {
   CONSOLIDATED_CENTER_ID,
@@ -62,9 +64,13 @@ interface OccupancyDataValue {
   setActiveYear: (year: number) => void;
   monthIndex: number;
   setMonthIndex: (index: number) => void;
-  /** Whether the DATOS grid shows one month by days, or the whole year by months. */
+  /** Whether the DATOS grid shows one month by days, or the whole year by periods. */
   gridScope: "month" | "year";
   setGridScope: (scope: "month" | "year") => void;
+  /** How coarse the annual grid's columns are: 12 months, 4 quarters or 2 semesters. */
+  gridFrequency: Frequency;
+  /** Picks the annual grid's granularity — and switches to it. */
+  setGridFrequency: (frequency: Frequency) => void;
   /** The active view's dataset: a stored sucursal-year, or the consolidated sum. */
   dataset: OccupancyDataset | undefined;
   /** The active month's grid; null while there is nothing to show. */
@@ -112,8 +118,10 @@ interface OccupancyDataValue {
   clearMonthMarks: () => void;
   clearDayMarks: () => void;
   clearAllMarks: () => void;
-  /** Clicking a month's bar: narrows to that month and drops the axis to days. */
-  drillIntoMonth: (month: number) => void;
+  /** The «T1»/«S1» shortcuts: they mark that period's own months, no new kind of mark. */
+  togglePeriodMark: (frequency: Frequency, index: number) => void;
+  /** Clicking a column: narrows to the months it covered and drops the axis one step. */
+  drillIntoPeriod: (months: readonly number[], scope: Scope) => void;
 }
 
 const OccupancyDataContext = createContext<OccupancyDataValue | null>(null);
@@ -134,6 +142,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const [monthIndex, setMonthIndex] = useState(0);
   // The month is kept while looking at the year, so coming back lands where you left.
   const [gridScope, setGridScope] = useState<"month" | "year">("month");
+  const [gridFrequency, setRawGridFrequency] = useState<Frequency>("mensual");
   const [importError, setImportError] = useState<string | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<string[]>([]);
   const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(null);
@@ -194,10 +203,18 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     if (!dataset) {
       return null;
     }
-    return gridScope === "year" ? toAnnualGrid(dataset) : toOccupancyGrid(dataset, monthIndex);
-  }, [dataset, monthIndex, gridScope]);
+    return gridScope === "year"
+      ? toAnnualGrid(dataset, gridFrequency)
+      : toOccupancyGrid(dataset, monthIndex);
+  }, [dataset, monthIndex, gridScope, gridFrequency]);
 
-  // The annual grid aggregates days into months: there is no cell to write back to.
+  // Picking a granularity IS switching to the annual grid — the two are one gesture.
+  const setGridFrequency = useCallback((frequency: Frequency) => {
+    setRawGridFrequency(frequency);
+    setGridScope("year");
+  }, []);
+
+  // The annual grid aggregates days into periods: there is no cell to write back to.
   const canEdit = !isConsolidated && dataset !== undefined && gridScope === "month";
   /** The record every mutation writes to; undefined in the consolidated view. */
   const activeKey = useMemo(
@@ -385,8 +402,14 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const clearMonthMarks = useCallback(() => setRawFilters(withMonthsCleared), []);
   const clearDayMarks = useCallback(() => setRawFilters(withDaysCleared), []);
   const clearAllMarks = useCallback(() => setRawFilters(clearMarks), []);
-  const drillIntoMonth = useCallback(
-    (month: number) => setRawFilters((f) => withDrillIntoMonth(f, month)),
+  const togglePeriodMark = useCallback(
+    (frequency: Frequency, index: number) =>
+      setRawFilters((f) => withPeriodShortcutToggled(f, frequency, index)),
+    [],
+  );
+  const drillIntoPeriod = useCallback(
+    (months: readonly number[], scope: Scope) =>
+      setRawFilters((f) => withDrillIntoPeriod(f, months, scope)),
     [],
   );
 
@@ -413,6 +436,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       setMonthIndex,
       gridScope,
       setGridScope,
+      gridFrequency,
+      setGridFrequency,
       dataset,
       grid,
       canEdit,
@@ -441,7 +466,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       clearMonthMarks,
       clearDayMarks,
       clearAllMarks,
-      drillIntoMonth,
+      togglePeriodMark,
+      drillIntoPeriod,
     }),
     [
       datasets,
@@ -457,6 +483,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       setActiveYear,
       monthIndex,
       gridScope,
+      gridFrequency,
+      setGridFrequency,
       dataset,
       grid,
       canEdit,
@@ -486,7 +514,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       clearMonthMarks,
       clearDayMarks,
       clearAllMarks,
-      drillIntoMonth,
+      togglePeriodMark,
+      drillIntoPeriod,
     ],
   );
 

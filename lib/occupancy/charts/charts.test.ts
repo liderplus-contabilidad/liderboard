@@ -5,7 +5,7 @@ import { emptyFilters } from "../filters";
 import { emptyDataset } from "../derive";
 import type { OccupancyDataset } from "../types";
 import { buildHeatmaps } from "./heatmap";
-import { channelOption, formatMetric, seriesOption, seriesTable } from "./option";
+import { channelOption, formatMetric, seriesOption, seriesTable, weekdayOption } from "./option";
 import { colorResolver, colorUniverse, selectionUniverse, toOccupancyQuery } from "./selection";
 
 function dataset(centerId: string, year: number, sold: number[] = [9, 5, 0]): OccupancyDataset {
@@ -25,6 +25,7 @@ function dataset(centerId: string, year: number, sold: number[] = [9, 5, 0]): Oc
 
 const MANOR = dataset("manor", 2026);
 const NORTE = dataset("norte", 2026, [2, 1, 0]);
+const colorOf = colorResolver(colorUniverse([MANOR, NORTE]));
 
 describe("toOccupancyQuery", () => {
   it("sin nada marcado cae en la sucursal-año que el módulo ya muestra", () => {
@@ -60,14 +61,12 @@ describe("colorResolver", () => {
 });
 
 describe("seriesOption", () => {
-  const colorOf = colorResolver(colorUniverse([MANOR, NORTE]));
-
   it("dibuja barras cuando hay una sola serie leída por mes", () => {
     const bundle = buildOccupancySeries([MANOR], {
       metric: "occupancy",
       centerIds: ["manor"],
       years: [2026],
-      scope: "mes",
+      scope: "mensual",
       months: [],
       days: [],
     });
@@ -79,7 +78,7 @@ describe("seriesOption", () => {
       metric: "occupancy",
       centerIds: ["manor", "norte"],
       years: [2026],
-      scope: "mes",
+      scope: "mensual",
       months: [],
       days: [],
     });
@@ -105,7 +104,7 @@ describe("seriesOption", () => {
       metric: "revenue",
       centerIds: ["manor"],
       years: [2026],
-      scope: "mes",
+      scope: "mensual",
       months: [],
       days: [],
     });
@@ -119,7 +118,7 @@ describe("seriesOption", () => {
       metric: "occupancy",
       centerIds: ["manor"],
       years: [2026],
-      scope: "mes",
+      scope: "mensual",
       months: [0],
       days: [],
     });
@@ -129,17 +128,171 @@ describe("seriesOption", () => {
   });
 });
 
+describe("tooltip de la gráfica principal", () => {
+  const enero = (centers: string[]) => ({
+    metric: "occupancy" as const,
+    centerIds: centers,
+    years: [2026],
+    scope: "mensual" as const,
+    months: [0],
+    days: [],
+  });
+
+  /** What ECharts hands the formatter for one hovered column. */
+  const param = (seriesId: string, seriesName: string, value: number | null) => ({
+    seriesId,
+    seriesName,
+    name: "Ene",
+    value,
+    dataIndex: 0,
+    marker: "●",
+  });
+
+  it("con una sola serie abre las cifras crudas y los tres indicadores", () => {
+    const bundle = buildOccupancySeries([MANOR], enero(["manor"]));
+    const html =
+      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
+        param("manor|2026", "MANOR", bundle.series[0].values[0]),
+      ]) ?? "";
+
+    for (const label of [
+      "Ocupación",
+      "Vendidas",
+      "Disponibles",
+      "Ingresos",
+      "ADR",
+      "RevPAR",
+      "PAX",
+    ]) {
+      expect(html).toContain(label);
+    }
+    // 14 vendidas sobre 30 disponibles, y los $1.400 que produjeron.
+    expect(html).toContain("14");
+    expect(html).toContain("30");
+    expect(html).toContain("46,7 %");
+  });
+
+  // Con dos series y UNA columna manda `entityOption` (cada barra es una serie), así que la
+  // comparación sobre el eje se lee con el año entero delante: la columna 0 sigue siendo enero.
+  it("comparando da el valor de cada serie más la línea de dónde sale", () => {
+    const bundle = buildOccupancySeries([MANOR, NORTE], {
+      ...enero(["manor", "norte"]),
+      months: [],
+    });
+    const html =
+      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
+        param("manor|2026", "MANOR", bundle.series[0].values[0]),
+        param("norte|2026", "NORTE", bundle.series[1].values[0]),
+      ]) ?? "";
+
+    expect(html).toContain("MANOR");
+    expect(html).toContain("NORTE");
+    expect(html).toContain("14 de 30 habitaciones");
+    expect(html).toContain("3 de 30 habitaciones");
+    // El bloque completo es sólo para una serie: aquí no aparece.
+    expect(html).not.toContain("RevPAR");
+  });
+
+  it("una métrica de total no dice nunca «de 1»", () => {
+    const bundle = buildOccupancySeries([MANOR, NORTE], {
+      ...enero(["manor", "norte"]),
+      months: [],
+      metric: "revenue",
+    });
+    const html =
+      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
+        param("manor|2026", "MANOR", bundle.series[0].values[0]),
+        param("norte|2026", "NORTE", bundle.series[1].values[0]),
+      ]) ?? "";
+
+    expect(html).not.toContain("de 1 ");
+    expect(html).toContain("14 vendidas · ADR");
+  });
+
+  it("un punto sin datos no inventa un desglose", () => {
+    const bundle = buildOccupancySeries([MANOR], { ...enero(["manor"]), months: [7] });
+    const html =
+      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
+        param("manor|2026", "MANOR", null),
+      ]) ?? "";
+    expect(html).not.toContain("RevPAR");
+    expect(html).toContain("—");
+  });
+});
+
 describe("channelOption", () => {
-  it("una barra por canal, con su propio color", () => {
+  const channels = [
+    { id: "booking", name: "Booking", total: 10 },
+    { id: "web", name: "Página web", total: 3 },
+  ];
+  const order = ["booking", "web"];
+
+  it("con una sola sucursal: una serie, un color por canal y sin leyenda", () => {
     const option = channelOption(
-      [
-        { id: "booking", name: "Booking", nights: 7 },
-        { id: "web", name: "Página web", nights: 3 },
-      ],
-      ["booking", "web"],
+      {
+        channels,
+        series: [{ key: { centerId: "manor", year: 2026 }, label: "Manor", nights: [7, 3] }],
+        total: 10,
+      },
+      order,
+      { colorOf },
     );
+    expect(option.series).toHaveLength(1);
     expect(option.series[0].data).toHaveLength(2);
+    expect(option.legend?.show).toBe(false);
     expect(option.yAxis?.inverse).toBe(true);
+  });
+
+  it("comparando: una serie por sucursal-año, con leyenda y color de entidad", () => {
+    const option = channelOption(
+      {
+        channels,
+        series: [
+          { key: { centerId: "manor", year: 2026 }, label: "Manor", nights: [7, 3] },
+          { key: { centerId: "norte", year: 2026 }, label: "Norte", nights: [3, 0] },
+        ],
+        total: 13,
+      },
+      order,
+      { colorOf },
+    );
+    expect(option.series).toHaveLength(2);
+    expect(option.series.map((s) => s.name)).toEqual(["Manor", "Norte"]);
+    expect(option.legend?.show).toBe(true);
+    // El color pasa a decir QUÉ sucursal es, porque el canal ya es la fila.
+    expect(option.series[0].itemStyle?.color).toBe(colorOf({ centerId: "manor", year: 2026 }));
+  });
+});
+
+describe("weekdayOption", () => {
+  const labels = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  const row = (centerId: string, value: number) => ({
+    key: { centerId, year: 2026 },
+    label: centerId,
+    values: [value, null, null, null, null, null, null],
+  });
+
+  it("con una sola serie imprime el número sobre cada barra", () => {
+    const option = weekdayOption(
+      { labels, series: [row("manor", 0.5)] },
+      "percent",
+      { colorOf },
+      "#000",
+    );
+    expect(option.series).toHaveLength(1);
+    expect(option.series[0].label?.show).toBe(true);
+  });
+
+  it("comparando agrupa las barras y deja los números al tooltip", () => {
+    const option = weekdayOption(
+      { labels, series: [row("manor", 0.5), row("norte", 0.7)] },
+      "percent",
+      { colorOf },
+      "#000",
+    );
+    expect(option.series).toHaveLength(2);
+    expect(option.series[0].label?.show).toBe(false);
+    expect(option.legend?.show).toBe(true);
   });
 });
 
@@ -148,7 +301,7 @@ describe("buildHeatmaps", () => {
     metric: "occupancy" as const,
     centerIds: ["manor", "norte"],
     years: [2026],
-    scope: "mes" as const,
+    scope: "mensual" as const,
     months: [],
     days: [],
   };

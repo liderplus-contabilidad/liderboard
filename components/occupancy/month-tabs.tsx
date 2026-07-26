@@ -5,6 +5,7 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { parseCurrency } from "@/lib/format";
+import type { Frequency } from "@/lib/period";
 import type { OccupancyDataset } from "@/lib/occupancy/types";
 
 export interface MonthTabsProps {
@@ -12,11 +13,24 @@ export interface MonthTabsProps {
   activeIndex: number;
   /** "year" while the annual grid is showing; the month stays selected underneath it. */
   scope: "month" | "year";
+  /** Which granularity the annual grid is drawn at, so its button reads as pressed. */
+  frequency: Frequency;
   onSelect: (index: number) => void;
   onSelectScope: (scope: "month" | "year") => void;
+  onSelectFrequency: (frequency: Frequency) => void;
   /** Absent in the consolidated view: the sucursales' declared nights are not summable. */
   onSaveNights?: (nights: number | null) => void;
 }
+
+/**
+ * The three ways to read the whole year, coarsest last. They sit apart from the months because
+ * they answer a different question — «el año entero, en qué tramos» — not «qué mes edito».
+ */
+const YEAR_VIEWS: { frequency: Frequency; label: string }[] = [
+  { frequency: "trimestral", label: "Trim." },
+  { frequency: "semestral", label: "Sem." },
+  { frequency: "mensual", label: "Año" },
+];
 
 /** A month is "filled" once it came from a file or has any room sold. */
 function hasData(dataset: OccupancyDataset, index: number): boolean {
@@ -33,8 +47,10 @@ export function MonthTabs({
   dataset,
   activeIndex,
   scope,
+  frequency,
   onSelect,
   onSelectScope,
+  onSelectFrequency,
   onSaveNights,
 }: MonthTabsProps) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -69,21 +85,29 @@ export function MonthTabs({
         );
       })}
 
-      <button
-        type="button"
-        aria-pressed={scope === "year"}
-        onClick={() => onSelectScope(scope === "year" ? "month" : "year")}
-        className={cn(
-          // Set apart from the months: it is a different question, not a thirteenth month.
-          "ml-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
-          scope === "year"
-            ? "border-brand bg-brand-soft text-brand"
-            : "border-dashed border-border bg-surface text-muted hover:bg-canvas",
-        )}
-      >
-        <CalendarRange size={14} />
-        Año
-      </button>
+      {YEAR_VIEWS.map((view, position) => {
+        const isActive = scope === "year" && frequency === view.frequency;
+        return (
+          <button
+            key={view.frequency}
+            type="button"
+            aria-pressed={isActive}
+            // Pressing the granularity you are already on is the way back to the days.
+            onClick={() => (isActive ? onSelectScope("month") : onSelectFrequency(view.frequency))}
+            className={cn(
+              // Set apart from the months: a different question, not a thirteenth month.
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
+              position === 0 && "ml-1.5",
+              isActive
+                ? "border-brand bg-brand-soft text-brand"
+                : "border-dashed border-border bg-surface text-muted hover:bg-canvas",
+            )}
+          >
+            {position === 0 && <CalendarRange size={14} />}
+            {view.label}
+          </button>
+        );
+      })}
 
       <span className="flex-1" />
 

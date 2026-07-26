@@ -12,7 +12,8 @@ import {
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { colorForEntity } from "@/lib/charts/palette";
-import { describeSelection, periodLabel } from "@/lib/occupancy/filters";
+import { describeSelection, isPeriodMarked, periodLabel } from "@/lib/occupancy/filters";
+import { periodFullLabel, periodLabels, type Frequency } from "@/lib/period";
 import { METRICS } from "@/lib/occupancy/analytics/types";
 import { occupancySeriesId } from "@/lib/occupancy/analytics/types";
 import { cn } from "@/lib/cn";
@@ -21,6 +22,25 @@ import { useOccupancyData } from "./occupancy-data-provider";
 const PERIOD_CELL =
   "rounded-lg border border-border bg-surface px-2 py-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:bg-canvas";
 const PERIOD_CELL_ON = "border-brand bg-brand-soft text-brand";
+
+/**
+ * The quarter/semester shortcuts. They are NOT a second kind of mark: each one just marks its
+ * own months, so the chips, the sanitation and the engine keep seeing months and nothing else.
+ */
+const SHORTCUTS: { frequency: Frequency; index: number; label: string; name: string }[] = [
+  ...periodLabels("trimestral").map((label, index) => ({
+    frequency: "trimestral" as const,
+    index,
+    label,
+    name: periodFullLabel("trimestral", index),
+  })),
+  ...periodLabels("semestral").map((label, index) => ({
+    frequency: "semestral" as const,
+    index,
+    label,
+    name: periodFullLabel("semestral", index),
+  })),
+];
 
 /**
  * Ocupaciones' filter row: Métrica · Sucursal · Año · Periodo, with the active-mark chips below.
@@ -43,6 +63,7 @@ export function OccupancyToolbar() {
     toggleCenterMark,
     toggleYearMark,
     toggleMonthMark,
+    togglePeriodMark,
     toggleDayMark,
     clearCenterMarks,
     clearYearMarks,
@@ -175,7 +196,34 @@ export function OccupancyToolbar() {
           </DropdownTrigger>
           <DropdownPanel width={300}>
             <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faintest">
-              1 · Mes
+              1 · Atajos
+            </p>
+            <div className="flex gap-1">
+              {SHORTCUTS.map(({ frequency, index, label, name }) => (
+                <button
+                  key={label}
+                  type="button"
+                  // «T1» is unreadable on its own: the full name is what hover and a screen
+                  // reader get, so the button can stay narrow enough to fit six in a row.
+                  title={name}
+                  aria-label={name}
+                  aria-pressed={isPeriodMarked(filters, frequency, index)}
+                  onClick={() => togglePeriodMark(frequency, index)}
+                  className={cn(
+                    PERIOD_CELL,
+                    "flex-1 px-0 tabular-nums",
+                    // The semesters start a group of their own: S1 is not a fifth quarter.
+                    frequency === "semestral" && index === 0 && "ml-2",
+                    isPeriodMarked(filters, frequency, index) && PERIOD_CELL_ON,
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <p className="mb-1.5 mt-3 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faintest">
+              2 · Mes
             </p>
             <div className="grid grid-cols-4 gap-1">
               {MONTHS_SHORT_ES.map((label, month) => (
@@ -193,7 +241,7 @@ export function OccupancyToolbar() {
 
             <div className="mb-1.5 mt-3 flex items-baseline justify-between gap-2">
               <p className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faintest">
-                2 · Día del mes
+                3 · Día del mes
               </p>
               <p className="text-[10.5px] text-faint">
                 {filters.months.length === 0

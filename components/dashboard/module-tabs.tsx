@@ -24,8 +24,8 @@ import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
  * layout, so the header and the panel read the same thing.
  */
 interface ModuleViews {
-  /** Rendered at the right end of the tab bar. */
-  rightSlot?: ReactNode;
+  /** Rendered at the right end of the tab bar; tab-aware, like the toolbar and the panel. */
+  rightSlot?: (tab: ModuleTabId) => ReactNode;
   /** Rendered between the tab bar and the panel. */
   toolbar?: (tab: ModuleTabId) => ReactNode;
   /** Panel body; return null to fall back to ComingSoon. */
@@ -34,7 +34,7 @@ interface ModuleViews {
 
 const MODULE_VIEWS: Record<string, ModuleViews> = {
   "profit-loss": {
-    rightSlot: <Semaforo />,
+    rightSlot: () => <Semaforo />,
     toolbar: (tab) => (
       <>
         <PygToolbar />
@@ -54,12 +54,16 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
     },
   },
   occupancy: {
-    rightSlot: (
-      <div className="flex items-center gap-2.5">
-        <OccupancyDownloadButton />
-        <OccupancyUploadButton />
-      </div>
-    ),
+    // The Excel buttons belong to Datos: that tab owns the sucursal-year they read and write,
+    // and it is where the upload's error banner and cuadre notices land. Gráficos compares what
+    // is already loaded.
+    rightSlot: (tab) =>
+      tab === "datos" ? (
+        <div className="flex items-center gap-2.5">
+          <OccupancyDownloadButton />
+          <OccupancyUploadButton />
+        </div>
+      ) : null,
     // The filter bar belongs to Gráficos: Datos selects what to EDIT with its own three strips.
     toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
     panel: (tab) => {
@@ -120,7 +124,7 @@ export function ModuleTabs({ slug }: { slug: string }) {
         </div>
 
         {/* Bare: each slot owns its own bottom padding so it aligns with the tab underline. */}
-        {views.rightSlot}
+        {views.rightSlot?.(activeTab.id)}
       </div>
 
       {views.toolbar?.(activeTab.id)}

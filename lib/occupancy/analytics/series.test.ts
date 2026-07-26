@@ -29,10 +29,76 @@ const query = (over: Partial<OccupancyQuery> = {}): OccupancyQuery => ({
   metric: "occupancy",
   centerIds: ["a"],
   years: [2026],
-  scope: "mes",
+  scope: "mensual",
   months: [],
   days: [],
   ...over,
+});
+
+describe("buildOccupancySeries · eje agrupado", () => {
+  /** Ene 10/40, Feb 20/60, Mar 30/100, Abr 5/50 — T1 spans three months, T2 only one. */
+  const filled = () =>
+    dataset("a", 2026, {
+      0: { sold: [10], available: [40], revenue: [300] },
+      1: { sold: [20], available: [60], revenue: [400] },
+      2: { sold: [30], available: [100], revenue: [500] },
+      3: { sold: [5], available: [50], revenue: [200] },
+    });
+
+  it("dibuja cuatro columnas T1–T4 sobre el año entero", () => {
+    const bundle = buildOccupancySeries([filled()], query({ scope: "trimestral" }));
+    expect(bundle.axis.map((point) => point.label)).toEqual(["T1", "T2", "T3", "T4"]);
+    expect(bundle.axis[0].monthIndexes).toEqual([0, 1, 2]);
+  });
+
+  it("dibuja dos columnas S1–S2", () => {
+    const bundle = buildOccupancySeries([filled()], query({ scope: "semestral" }));
+    expect(bundle.axis.map((point) => point.label)).toEqual(["S1", "S2"]);
+  });
+
+  it("colapsa el año en una sola columna", () => {
+    const bundle = buildOccupancySeries([filled()], query({ scope: "anual" }));
+    expect(bundle.axis).toHaveLength(1);
+    expect(bundle.axis[0].monthIndexes).toHaveLength(12);
+  });
+
+  it("una razón es la razón de las sumas del periodo, no la media de sus meses", () => {
+    // T1: 60 vendidas / 200 disponibles = 0,30 — no la media de 0,25, 0,33 y 0,30.
+    const bundle = buildOccupancySeries([filled()], query({ scope: "trimestral" }));
+    expect(bundle.series[0].values[0]).toBeCloseTo(0.3, 10);
+
+    const adr = buildOccupancySeries([filled()], query({ scope: "trimestral", metric: "adr" }));
+    expect(adr.series[0].values[0]).toBeCloseTo(20, 10); // 1200 / 60
+  });
+
+  it("un total suma sus meses en vez de promediarlos", () => {
+    const bundle = buildOccupancySeries([filled()], query({ scope: "trimestral", metric: "sold" }));
+    expect(bundle.series[0].values[0]).toBe(60);
+    expect(bundle.series[0].values[1]).toBe(5);
+  });
+
+  it("dibuja un trimestre cubierto sólo a medias con lo que tiene", () => {
+    const partial = dataset("a", 2026, { 0: { sold: [10], available: [40] } });
+    const bundle = buildOccupancySeries([partial], query({ scope: "trimestral" }));
+    expect(bundle.series[0].values[0]).toBeCloseTo(0.25, 10); // T1 = enero
+    expect(bundle.series[0].values[1]).toBeNull(); // T2 no llegó nunca
+  });
+
+  it("marcar meses acota el eje agrupado y rotula lo que la columna contiene", () => {
+    const whole = buildOccupancySeries(
+      [filled()],
+      query({ scope: "trimestral", months: [0, 1, 2] }),
+    );
+    expect(whole.axis.map((p) => p.label)).toEqual(["T1"]);
+
+    // Dos tercios de T1 no son T1: la columna dice qué meses lleva dentro.
+    const partial = buildOccupancySeries(
+      [filled()],
+      query({ scope: "trimestral", months: [0, 1] }),
+    );
+    expect(partial.axis.map((p) => p.label)).toEqual(["Ene · Feb"]);
+    expect(partial.series[0].values[0]).toBeCloseTo(30 / 100, 10);
+  });
 });
 
 describe("buildOccupancySeries · eje", () => {
@@ -61,7 +127,7 @@ describe("buildOccupancySeries · eje", () => {
       query({ scope: "dia", months: [2] }),
     );
     expect(bundle.axis).toHaveLength(31);
-    expect(bundle.axis[0]).toMatchObject({ label: "1 mar", monthIndex: 2, day: 0 });
+    expect(bundle.axis[0]).toMatchObject({ label: "1 mar", monthIndexes: [2], day: 0 });
   });
 
   it("usa el febrero más largo de los años comparados", () => {

@@ -23,12 +23,14 @@ import type {
   ChartTooltip,
 } from "@/lib/charts/types";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
-import type { ChannelEntry } from "../analytics/breakdown";
+import type { ChannelBreakdown, WeekdayBreakdown } from "../analytics/breakdown";
 import {
   occupancySeriesId,
+  type MetricSpec,
   type MetricUnit,
   type OccupancyBundle,
   type OccupancySeriesKey,
+  type PointFacts,
 } from "../analytics/types";
 
 /** Beyond this a legend is noise: one series is named by the card's own subtitle. */
@@ -157,6 +159,109 @@ function axisTooltip(unit: MetricUnit, pointer: "shadow" | "line"): ChartTooltip
   };
 }
 
+/* --- The figures behind a point ------------------------------------------------------------- */
+
+const TIP_HEAD = `color:${CHART_INK.strong};font-weight:600;margin-bottom:4px`;
+const TIP_KEY = `color:${CHART_INK.muted};font-weight:500;padding-right:16px;text-align:left`;
+const TIP_VALUE = `color:${CHART_INK.strong};font-weight:600;text-align:right;font-variant-numeric:tabular-nums`;
+const TIP_SUPPORT = `color:${CHART_INK.faint};padding-left:16px`;
+
+function ratioOrNull(numerator: number, denominator: number): number | null {
+  return denominator === 0 ? null : numerator / denominator;
+}
+
+/**
+ * The full breakdown of one column: the raw inputs AND the three indicators they produce. Shown
+ * only when a single series is on screen — eight of these blocks stacked would run off the card.
+ */
+function detailTable(facts: PointFacts): string {
+  const rows: [string, string | null][] = [
+    ["Ocupación", formatMetric(ratioOrNull(facts.sold, facts.available), "percent")],
+    ["Vendidas", formatMetric(facts.sold, "count")],
+    ["Disponibles", formatMetric(facts.available, "count")],
+    ["Ingresos", formatMetric(facts.revenue, "currency")],
+    ["ADR", formatMetric(ratioOrNull(facts.revenue, facts.sold), "currency")],
+    ["RevPAR", formatMetric(ratioOrNull(facts.revenue, facts.available), "currency")],
+    ["PAX", formatMetric(facts.pax, "count")],
+  ];
+  const body = rows
+    .map(
+      ([label, value]) =>
+        `<tr><td style="${TIP_KEY}">${label}</td><td style="${TIP_VALUE}">${value ?? "—"}</td></tr>`,
+    )
+    .join("");
+  return `<table style="border-collapse:collapse;font-size:12px">${body}</table>`;
+}
+
+/**
+ * The one line that answers «¿de dónde sale ese 59 %?» while comparing. Each metric names the
+ * figures that are actually its own: a ratio shows its two operands, a total shows what it sat
+ * next to — «1.610 vendidas de 2.730» is the reading, never a bare «1.610 de 1».
+ */
+function supportLine(metric: MetricSpec, facts: PointFacts): string {
+  const count = (value: number) => formatMetric(value, "count") ?? "—";
+  const money = (value: number | null) => formatMetric(value, "currency") ?? "—";
+  switch (metric.id) {
+    case "occupancy":
+      return `${count(facts.sold)} de ${count(facts.available)} habitaciones`;
+    case "adr":
+      return `${money(facts.revenue)} en ${count(facts.sold)} vendidas`;
+    case "revpar":
+      return `${money(facts.revenue)} en ${count(facts.available)} disponibles`;
+    case "revenue":
+      return `${count(facts.sold)} vendidas · ADR ${money(ratioOrNull(facts.revenue, facts.sold))}`;
+    case "sold":
+      return `de ${count(facts.available)} disponibles · ${
+        formatMetric(ratioOrNull(facts.sold, facts.available), "percent") ?? "—"
+      }`;
+    case "pax":
+      return `en ${count(facts.sold)} habitaciones vendidas`;
+  }
+}
+
+/**
+ * The main card's tooltip. With ONE series it opens the whole column — the raw inputs and the
+ * three indicators — because that is the reading a single line invites. Comparing, each series
+ * keeps to its value plus the support line: the point of a comparison is the difference between
+ * the series, and seven rows apiece would bury it.
+ */
+function seriesTooltip(bundle: OccupancyBundle, pointer: "shadow" | "line"): ChartTooltip {
+  const unit = bundle.metric.unit;
+  const factsOf = (seriesId: string | undefined, dataIndex: number): PointFacts | null =>
+    bundle.series.find((entry) => occupancySeriesId(entry.key) === seriesId)?.facts[dataIndex] ??
+    null;
+
+  return {
+    ...TOOLTIP_CHROME,
+    trigger: "axis",
+    axisPointer: { type: pointer, lineStyle: { color: CHART_LINES.axis, width: 1 } },
+    formatter: (params) => {
+      const rows = Array.isArray(params) ? params : [params];
+      const head = rows[0]?.name ?? "";
+
+      if (bundle.series.length === 1) {
+        const facts = factsOf(rows[0]?.seriesId, rows[0]?.dataIndex ?? 0);
+        const title = `${head} · ${bundle.series[0].label}`;
+        return facts
+          ? `<div style="${TIP_HEAD}">${title}</div>${detailTable(facts)}`
+          : `<div style="${TIP_HEAD}">${title}</div>—`;
+      }
+
+      const body = rows
+        .map((row) => {
+          const value = formatMetric(row.value === null ? null : Number(row.value), unit);
+          const facts = factsOf(row.seriesId, row.dataIndex);
+          const support = facts
+            ? `<div style="${TIP_SUPPORT}">${supportLine(bundle.metric, facts)}</div>`
+            : "";
+          return `<div>${row.marker ?? ""}${row.seriesName ?? ""} <b>${value ?? "—"}</b></div>${support}`;
+        })
+        .join("");
+      return `<div style="${TIP_HEAD}">${head}</div>${body}`;
+    },
+  };
+}
+
 /**
  * When the axis collapses to ONE column, the thing that varies stops being the date and becomes
  * the series: «el 5 de enero de 2025 contra el de 2026» is two entities, not two readings of one
@@ -176,7 +281,12 @@ function entityOption(bundle: OccupancyBundle, context: SeriesOptionContext): Ch
       formatter: (params) => {
         const row = Array.isArray(params) ? params[0] : params;
         const value = formatMetric(row.value === null ? null : Number(row.value), unit);
-        return `${row.name}<br><b>${value ?? "—"}</b>`;
+        // Here each BAR is a series, so its column is always index 0 of that series' facts.
+        const facts = bundle.series[row.dataIndex]?.facts[0] ?? null;
+        const support = facts
+          ? `<div style="${TIP_SUPPORT}">${supportLine(bundle.metric, facts)}</div>`
+          : "";
+        return `<div style="${TIP_HEAD}">${row.name}</div><b>${value ?? "—"}</b>${support}`;
       },
     },
     series: [
@@ -223,7 +333,7 @@ export function seriesOption(bundle: OccupancyBundle, context: SeriesOptionConte
     ...chrome(bundle.series.length),
     xAxis: categoryAxis(labels),
     yAxis: valueAxis(unit),
-    tooltip: axisTooltip(unit, asBars ? "shadow" : "line"),
+    tooltip: seriesTooltip(bundle, asBars ? "shadow" : "line"),
     series: bundle.series.map((entry) => {
       const color = context.colorOf(entry.key);
       return asBars
@@ -274,16 +384,29 @@ const CHANNEL_LABEL_WIDTH = 150;
 /**
  * Nights per channel, largest on top. Horizontal because a channel's name is words, and words
  * rotated 45° under an axis are not read.
+ *
+ * With one sucursal-year on screen the bars are coloured BY CHANNEL — the channel is what varies,
+ * and each keeps its slot across the tab. Comparing, the colour has to encode the sucursal-year
+ * instead, because that is now what tells two bars in the same row apart; the channel is the row.
  */
 export function channelOption(
-  entries: readonly ChannelEntry[],
+  breakdown: ChannelBreakdown,
   order: readonly string[],
+  context: SeriesOptionContext,
 ): ChartOption {
+  const comparing = breakdown.series.length > 1;
+  const legend = legendFor(breakdown.series.length);
   return {
     animationDuration: 320,
     textStyle: { fontFamily: CHART_FONT },
-    grid: { left: CHANNEL_LABEL_WIDTH + 14, right: 84, top: 8, bottom: 8, outerBoundsMode: "none" },
-    legend: { show: false },
+    grid: {
+      left: CHANNEL_LABEL_WIDTH + 14,
+      right: 84,
+      top: 8,
+      bottom: comparing ? 28 : 8,
+      outerBoundsMode: "none",
+    },
+    legend: comparing ? legend : { show: false },
     xAxis: {
       type: "value",
       axisLine: { show: false },
@@ -293,7 +416,7 @@ export function channelOption(
     },
     yAxis: {
       type: "category",
-      data: entries.map((entry) => entry.name),
+      data: breakdown.channels.map((entry) => entry.name),
       inverse: true,
       axisLine: { show: false },
       axisTick: { show: false },
@@ -310,99 +433,130 @@ export function channelOption(
       trigger: "item",
       formatter: (params) => {
         const row = Array.isArray(params) ? params[0] : params;
-        return `${row.name}<br><b>${formatNumber(Number(row.value ?? 0))}</b> noches`;
+        const who = comparing ? `${row.marker ?? ""}${row.seriesName ?? ""}<br>` : "";
+        return `<div style="${TIP_HEAD}">${row.name}</div>${who}<b>${formatNumber(Number(row.value ?? 0))}</b> noches`;
       },
     },
-    series: [
-      {
-        id: "canales",
-        name: "Noches",
-        type: "bar",
-        // Per-datum color: each channel keeps its slot across the tab, like any other entity.
-        data: entries.map((entry) => ({
-          value: entry.nights,
-          itemStyle: {
-            color: colorForEntity(entry.id, order),
-            borderRadius: [0, CHART_MARK.radius, CHART_MARK.radius, 0],
-          },
-        })),
-        barMaxWidth: CHART_MARK.barMaxWidth,
-        label: {
-          show: true,
-          position: "right",
-          distance: 6,
-          color: CHART_INK.muted,
-          fontSize: 11,
-          formatter: (param: ChartParam) => formatNumber(Number(param.value ?? 0)),
-        },
+    series: breakdown.series.map((entry) => ({
+      id: `canales:${occupancySeriesId(entry.key)}`,
+      name: comparing ? entry.label : "Noches",
+      type: "bar" as const,
+      data: comparing
+        ? entry.nights
+        : // Per-datum color: with one series each channel keeps its slot, like any other entity.
+          entry.nights.map((nights, index) => ({
+            value: nights,
+            itemStyle: {
+              color: colorForEntity(breakdown.channels[index].id, order),
+              borderRadius: [0, CHART_MARK.radius, CHART_MARK.radius, 0],
+            },
+          })),
+      ...(comparing
+        ? {
+            itemStyle: {
+              color: context.colorOf(entry.key),
+              borderRadius: [0, CHART_MARK.radius, CHART_MARK.radius, 0],
+            },
+          }
+        : {}),
+      barMaxWidth: CHART_MARK.barMaxWidth,
+      label: {
+        show: true,
+        position: "right" as const,
+        distance: 6,
+        color: CHART_INK.muted,
+        fontSize: 11,
+        formatter: (param: ChartParam) => formatNumber(Number(param.value ?? 0)),
       },
-    ],
-  };
-}
-
-export function channelTable(
-  entries: readonly ChannelEntry[],
-  order: readonly string[],
-): ChartTable {
-  return {
-    columns: ["Noches"],
-    rows: entries.map((entry) => ({
-      id: entry.id,
-      label: entry.name,
-      color: colorForEntity(entry.id, order),
-      values: [formatNumber(entry.nights)],
     })),
   };
 }
 
-/** The week's rhythm: seven bars, one tone — the comparison here is between days, not entities. */
-export function weekdayOption(
-  labels: readonly string[],
-  values: readonly (number | null)[],
-  unit: MetricUnit,
-  color: string,
-): ChartOption {
+export function channelTable(
+  breakdown: ChannelBreakdown,
+  order: readonly string[],
+  context: SeriesOptionContext,
+): ChartTable {
+  const comparing = breakdown.series.length > 1;
+  if (!comparing) {
+    const nights = breakdown.series[0]?.nights ?? [];
+    return {
+      columns: ["Noches"],
+      rows: breakdown.channels.map((entry, index) => ({
+        id: entry.id,
+        label: entry.name,
+        color: colorForEntity(entry.id, order),
+        values: [formatNumber(nights[index] ?? 0)],
+      })),
+    };
+  }
+  // Comparing, the channels become the columns: a row per sucursal-year is what is being read.
   return {
-    ...chrome(1),
-    xAxis: categoryAxis([...labels]),
+    columns: breakdown.channels.map((entry) => entry.name),
+    rows: breakdown.series.map((entry) => ({
+      id: occupancySeriesId(entry.key),
+      label: entry.label,
+      color: context.colorOf(entry.key),
+      values: entry.nights.map((nights) => formatNumber(nights)),
+    })),
+  };
+}
+
+/**
+ * The week's rhythm. One series is seven bars in one tone — what varies is the day. Marking two
+ * sucursales or two years groups their bars under each weekday, so «el domingo de 2025 contra el
+ * de 2026» is a pair you read side by side instead of a figure blended out of both.
+ */
+export function weekdayOption(
+  breakdown: WeekdayBreakdown,
+  unit: MetricUnit,
+  context: SeriesOptionContext,
+  fallbackColor: string,
+): ChartOption {
+  const comparing = breakdown.series.length > 1;
+  return {
+    ...chrome(breakdown.series.length),
+    xAxis: categoryAxis([...breakdown.labels]),
     yAxis: valueAxis(unit),
     tooltip: axisTooltip(unit, "shadow"),
-    series: [
-      {
-        id: "semana",
-        name: "Por día de la semana",
-        type: "bar",
-        data: [...values],
-        itemStyle: { color, borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0] },
-        barMaxWidth: CHART_MARK.barMaxWidth,
-        label: {
-          show: true,
-          position: "top",
-          color: CHART_INK.muted,
-          fontSize: 11,
-          formatter: (param: ChartParam) =>
-            formatMetric(param.value === null ? null : Number(param.value), unit) ?? "",
-        },
+    series: breakdown.series.map((entry) => ({
+      id: `semana:${occupancySeriesId(entry.key)}`,
+      name: comparing ? entry.label : "Por día de la semana",
+      type: "bar" as const,
+      data: [...entry.values],
+      itemStyle: {
+        color: comparing ? context.colorOf(entry.key) : fallbackColor,
+        borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0],
       },
-    ],
+      barMaxWidth: CHART_MARK.barMaxWidth,
+      label: {
+        // Seven days × several series is too many numbers to print over the bars; the tooltip
+        // carries them there instead.
+        show: !comparing,
+        position: "top" as const,
+        color: CHART_INK.muted,
+        fontSize: 11,
+        formatter: (param: ChartParam) =>
+          formatMetric(param.value === null ? null : Number(param.value), unit) ?? "",
+      },
+    })),
   };
 }
 
 export function weekdayTable(
-  labels: readonly string[],
-  values: readonly (number | null)[],
+  breakdown: WeekdayBreakdown,
   unit: MetricUnit,
-  color: string,
+  context: SeriesOptionContext,
+  fallbackColor: string,
 ): ChartTable {
+  const comparing = breakdown.series.length > 1;
   return {
-    columns: [...labels],
-    rows: [
-      {
-        id: "semana",
-        label: "Promedio del día",
-        color,
-        values: values.map((value) => formatMetric(value, unit)),
-      },
-    ],
+    columns: [...breakdown.labels],
+    rows: breakdown.series.map((entry) => ({
+      id: occupancySeriesId(entry.key),
+      label: comparing ? entry.label : "Promedio del día",
+      color: comparing ? context.colorOf(entry.key) : fallbackColor,
+      values: entry.values.map((value) => formatMetric(value, unit)),
+    })),
   };
 }

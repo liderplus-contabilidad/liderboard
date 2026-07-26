@@ -10,7 +10,7 @@
  * averages of the daily ratios — that is the hotel-industry definition and the only one
  * under which ADR × Ocupación = RevPAR holds in the "Total / prom." column.
  */
-import { MONTHS_SHORT_ES } from "@/lib/date";
+import { periodLabels, periodsPerYear, sumByPeriod, type Frequency } from "@/lib/period";
 import {
   DEFAULT_CENTER_ID,
   type CenterRow,
@@ -41,13 +41,15 @@ export interface OccupancyGridRow {
 }
 
 export interface OccupancyGrid {
-  /** Whether a column is a day of one month, or a month of the year. */
+  /** Whether a column is a day of one month, or a period of the year. */
   scope: "month" | "year";
   /** Present only in the monthly scope. */
   monthIndex?: number;
-  /** How many value columns the rows carry: days of the month, or 12. */
+  /** How coarse the year's columns are. Present only in the annual scope. */
+  frequency?: Frequency;
+  /** How many value columns the rows carry: days of the month, or periods of the year. */
   columns: number;
-  /** Header label per column: "1"…"31", or "Ene"…"Dic". */
+  /** Header label per column: "1"…"31", "Ene"…"Dic", or "T1"…"T4". */
   columnLabels: string[];
   rows: OccupancyGridRow[];
   /** Columns where the channel total ≠ sold + complimentary. */
@@ -396,24 +398,38 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
 }
 
 /**
- * The same rows with one column per month. ALWAYS computed from the raw inputs: a row mixing
- * months shown verbatim with recomputed ones would be a total nothing on screen explains.
- * Read-only by construction — a month's cell is an aggregate of days.
+ * The same rows with one column per period of the year: twelve months, four quarters or two
+ * semesters. ALWAYS computed from the raw inputs — a row mixing months shown verbatim with
+ * recomputed ones would be a total nothing on screen explains — and read-only by construction,
+ * since every cell is an aggregate of days.
+ *
+ * Coarser columns change only WHICH days each cell adds up. The raw inputs are summed and ADR,
+ * ocupación and RevPAR stay ratios OF THOSE SUMS, so ADR × Ocupación = RevPAR holds inside a T1
+ * exactly as it does inside a month.
  */
-export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
+export function toAnnualGrid(
+  dataset: OccupancyDataset,
+  frequency: Frequency = "mensual",
+): OccupancyGrid {
   const months = Array.from(
     { length: 12 },
     (_, index) => dataset.months[index] ?? emptyMonth(index, daysInMonth(dataset.year, index)),
   );
+  const columns = periodsPerYear(frequency);
+  const perColumn = <T>(build: (column: number) => T): T[] =>
+    Array.from({ length: columns }, (_, column) => build(column));
 
-  /** One total per month, from a raw input series. */
-  const monthly = (pick: (inputs: MonthInputs) => number[] | undefined): number[] =>
-    months.map((month) => sum(series(pick(month.inputs), month.days)));
+  /** One total per COLUMN, from a raw input series: month totals folded into their period. */
+  const byPeriod = (pick: (inputs: MonthInputs) => number[] | undefined): number[] =>
+    sumByPeriod(
+      months.map((month) => sum(series(pick(month.inputs), month.days))),
+      frequency,
+    );
 
-  const available = monthly((i) => i.available);
-  const revenue = monthly((i) => i.revenue);
-  const sold = monthly((i) => i.sold);
-  const complimentary = monthly((i) => i.complimentary);
+  const available = byPeriod((i) => i.available);
+  const revenue = byPeriod((i) => i.revenue);
+  const sold = byPeriod((i) => i.sold);
+  const complimentary = byPeriod((i) => i.complimentary);
 
   const totalRevenue = sum(revenue);
   const totalSold = sum(sold);
@@ -421,42 +437,45 @@ export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
   const cumulativeOccupancy = cumulativeRatio(sold, available);
 
   const rooms = Object.fromEntries(
-    ROOM_ROW_IDS.map((id) => [id, monthly((i) => i.rooms?.[id])]),
+    ROOM_ROW_IDS.map((id) => [id, byPeriod((i) => i.rooms?.[id])]),
   ) as Record<RoomRowId, number[]>;
-  const totalRooms = months.map((_, m) => sum(ROOM_ROW_IDS.map((id) => rooms[id][m])));
+  const totalRooms = perColumn((c) => sum(ROOM_ROW_IDS.map((id) => rooms[id][c])));
 
   // A stated PAX wins over the room-type formula, so the extra beds the files record survive.
-  const pax = months.map((month) => {
-    let total = 0;
-    for (let d = 0; d < month.days; d++) {
-      const fromRooms = ROOM_ROW_IDS.reduce(
-        (guests, id) => guests + at(month.inputs.rooms?.[id], d) * ROOM_PAX[id],
-        0,
-      );
-      total += month.inputs.pax?.[d] ?? fromRooms;
-    }
-    return total;
-  });
+  const pax = sumByPeriod(
+    months.map((month) => {
+      let total = 0;
+      for (let d = 0; d < month.days; d++) {
+        const fromRooms = ROOM_ROW_IDS.reduce(
+          (guests, id) => guests + at(month.inputs.rooms?.[id], d) * ROOM_PAX[id],
+          0,
+        );
+        total += month.inputs.pax?.[d] ?? fromRooms;
+      }
+      return total;
+    }),
+    frequency,
+  );
   const cumulativePax = cumulativeSum(pax);
 
-  // A channel appears once it is used by ANY month, and its column is that month's nights.
+  // A channel appears once it is used by ANY month, and its column is that period's nights.
   const channelSeries = dataset.channels
     .filter((channel) => months.some((month) => month.inputs.channels?.[channel.id] !== undefined))
     .map((channel) => ({
       channel,
-      values: months.map((month) => sum(series(month.inputs.channels?.[channel.id], month.days))),
+      values: byPeriod((i) => i.channels?.[channel.id]),
     }));
-  const totalChannels = months.map((_, m) => sum(channelSeries.map((c) => c.values[m])));
+  const totalChannels = perColumn((c) => sum(channelSeries.map((entry) => entry.values[c])));
 
-  const occupied = months.map((_, m) => sold[m] + complimentary[m]);
+  const occupied = perColumn((c) => sold[c] + complimentary[c]);
   const channelMismatch: number[] = [];
   const roomMismatch: number[] = [];
-  for (let m = 0; m < 12; m++) {
-    if (Math.abs(totalChannels[m] - occupied[m]) > EPSILON) {
-      channelMismatch.push(m);
+  for (let c = 0; c < columns; c++) {
+    if (Math.abs(totalChannels[c] - occupied[c]) > EPSILON) {
+      channelMismatch.push(c);
     }
-    if (Math.abs(totalRooms[m] - occupied[m]) > EPSILON) {
-      roomMismatch.push(m);
+    if (Math.abs(totalRooms[c] - occupied[c]) > EPSILON) {
+      roomMismatch.push(c);
     }
   }
 
@@ -472,7 +491,7 @@ export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
     inputRow(
       "cancellations",
       "Cancelaciones",
-      monthly((i) => i.cancellations),
+      byPeriod((i) => i.cancellations),
       {
         hint: "noches",
       },
@@ -480,13 +499,13 @@ export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
     inputRow(
       "noShows",
       "No shows",
-      monthly((i) => i.noShows),
+      byPeriod((i) => i.noShows),
       { hint: "habitaciones" },
     ),
     inputRow(
       "noShowsOta",
       "No shows OTAS",
-      monthly((i) => i.noShowsOta),
+      byPeriod((i) => i.noShowsOta),
     ),
 
     derivedRow(
@@ -518,13 +537,18 @@ export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
       { hint: "ocupación acumulada del año", format: "percent-whole" },
     ),
 
-    sectionRow("section:rooms", "Habitaciones", 12),
+    sectionRow("section:rooms", "Habitaciones", columns),
     ...ROOM_ROW_IDS.map((id) => inputRow(id, ROOM_LABELS[id], rooms[id])),
     derivedRow("totalRooms", "Total habitaciones", totalRooms, sum(totalRooms)),
     inputRow("pax", "PAX totales", pax),
     derivedRow("cumulativePax", "PAX acumulados", cumulativePax, last(cumulativePax)),
 
-    sectionRow("section:channels", "Canales de venta", 12, "noches por mes"),
+    sectionRow(
+      "section:channels",
+      "Canales de venta",
+      columns,
+      frequency === "mensual" ? "noches por mes" : "noches por periodo",
+    ),
     ...channelSeries.map<OccupancyGridRow>(({ channel, values }) => ({
       id: `channel:${channel.id}`,
       label: channel.name,
@@ -539,8 +563,9 @@ export function toAnnualGrid(dataset: OccupancyDataset): OccupancyGrid {
 
   return {
     scope: "year",
-    columns: 12,
-    columnLabels: [...MONTHS_SHORT_ES],
+    frequency,
+    columns,
+    columnLabels: [...periodLabels(frequency)],
     rows: rows.map((row) => ({ ...row, editable: false })),
     asImported: false,
     channelMismatch,
