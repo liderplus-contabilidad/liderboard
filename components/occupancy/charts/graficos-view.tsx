@@ -38,7 +38,6 @@ import { useOccupancyData } from "../occupancy-data-provider";
 import { DayPanel } from "./day-panel";
 import { HeatmapCard } from "./heatmap-card";
 
-/** «Ver por»: the axis of the series card, and of nothing else on the tab. Finest first. */
 const SCOPES: { value: Scope; label: string }[] = [
   { value: "dia", label: "Día" },
   { value: "mensual", label: "Mes" },
@@ -47,7 +46,6 @@ const SCOPES: { value: Scope; label: string }[] = [
   { value: "anual", label: "Año" },
 ];
 
-/** How the card's title finishes the sentence «Ocupación …». */
 const SCOPE_TITLES: Record<Scope, string> = {
   dia: "por día",
   mensual: "por mes",
@@ -56,7 +54,6 @@ const SCOPE_TITLES: Record<Scope, string> = {
   anual: "por año",
 };
 
-/** What a click opens, said as the invitation it is. Absent on the daily axis: it is the floor. */
 const DRILL_HINTS: Partial<Record<Scope, string>> = {
   mensual: "Clic en una barra para abrir ese mes día a día",
   trimestral: "Clic en una barra para abrir ese trimestre mes a mes",
@@ -64,7 +61,6 @@ const DRILL_HINTS: Partial<Record<Scope, string>> = {
   anual: "Clic en una barra para abrir el año semestre a semestre",
 };
 
-/** Which day the side panel is showing, if any. */
 interface OpenDay {
   centerId: string;
   year: number;
@@ -72,14 +68,6 @@ interface OpenDay {
   day: number;
 }
 
-/**
- * Ocupaciones › Gráficos. The métrica is the lens and everything else marked is the comparison,
- * so one filter bar feeds every card at once: the same «marzo de Cultura Manor» in the series,
- * in the grid of days, in the channels and in the week.
- *
- * With nothing marked it draws the sucursal-year Datos already has open, because a blank panel
- * next to loaded data hands the reader the job of guessing what can be asked.
- */
 export function GraficosView() {
   const {
     datasets,
@@ -97,7 +85,6 @@ export function GraficosView() {
     () =>
       selectionUniverse(
         datasets,
-        // The Consolidado is a Datos view, not a stored sucursal: it cannot seed the fallback.
         !isConsolidated && activeCenterId && activeYear !== undefined
           ? { centerId: activeCenterId, year: activeYear }
           : undefined,
@@ -122,8 +109,6 @@ export function GraficosView() {
     [],
   );
 
-  // Clicking a bar is the way down the ladder: a quarter opens into its months, a month into
-  // its days. The daily axis is the floor — there is nothing under a day to open.
   const onSelectColumn = useCallback(
     (index: number) => {
       const point = bundle.axis[index];
@@ -164,13 +149,10 @@ export function GraficosView() {
   }
 
   const scopeLabel = SCOPE_TITLES[filters.scope];
-  // The same wording the filter bar uses, so a KPI never says «Enero» under a «5 de enero».
   const period = periodPhrase(filters.months, filters.days);
 
   return (
     <div className="flex flex-col gap-4 px-7 py-5">
-      {/* One row of tiles per sucursal-year: marking two years is asking to compare them, and a
-          single blended figure would answer a question nobody asked. */}
       <div className="flex flex-col gap-3">
         {kpis.map((group) => (
           <div key={occupancySeriesId(group.key)} className="flex flex-col gap-1.5">

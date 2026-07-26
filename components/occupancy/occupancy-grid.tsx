@@ -10,9 +10,9 @@ export interface OccupancyGridProps {
   grid: Grid;
   /** "Enero 2026" — also what the channel actions name, so they stay short. */
   monthLabel: string;
-  /** Active sucursal, appended to the title only. Absent when there is nothing to add. */
+  /** Appended to the title only. Absent when there is nothing to add. */
   centerLabel?: string;
-  /** True in the consolidated view: it is a calculation, edited in each sucursal. */
+  /** True in the consolidated view: it is a calculation, edited in each center. */
   readOnly?: boolean;
   onSaveCell: (rowId: string, dayIndex: number, value: number) => void;
   onAddChannel: (name: string) => void;
@@ -20,12 +20,8 @@ export interface OccupancyGridProps {
 }
 
 /**
- * The daily grid: concepts down the side, days across, "Total / prom." pinned right. The
- * concept column and the aggregate column are sticky so a 31-day month stays readable.
- *
- * Every day column looks identical on purpose. Earlier passes marked weekends — first by
- * filling the columns, then by dimming the day number — and both read as "those days are
- * different/disabled" rather than "those days are Saturday".
+ * Every day column looks identical ON PURPOSE. Earlier passes marked weekends, by filling the
+ * column and by dimming the number, and both read as "disabled" rather than as "Saturday".
  */
 export function OccupancyGrid({
   grid,

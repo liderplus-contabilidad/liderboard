@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/cn";
 
 export interface YearTabsProps {
-  /** Years of the ACTIVE sucursal, ascending — never a year it does not hold. */
+  /** Years of the ACTIVE center, ascending — never a year it does not hold. */
   years: number[];
   activeYear: number | undefined;
   /** Softens the delete confirmation when the year is empty. */
@@ -24,10 +24,7 @@ function nextYear(years: number[]): number {
   return newest > 0 ? newest + 1 : new Date().getFullYear();
 }
 
-/**
- * The AÑO selector, scoped to the active sucursal. Each year is filled and edited on its own;
- * an uploaded workbook merges into the year it declares rather than into whichever tab is open.
- */
+/** An uploaded workbook merges into the year it DECLARES, not into whichever tab is open. */
 export function YearTabs({
   years,
   activeYear,

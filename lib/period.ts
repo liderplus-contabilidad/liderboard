@@ -1,11 +1,10 @@
 /**
- * The app's one vocabulary for "how coarse is a period": the four frequencies, how many months
- * each spans, and what they are called. It lived inside PyG until Ocupaciones needed the same
- * ladder; the spelling of "T1" has to be the same in both modules, so it lives here.
+ * The app's one vocabulary for "how coarse is a period". PyG and Ocupaciones both need it, and
+ * "T1" has to be spelled the same in both.
  *
- * What does NOT live here is how values combine. A P&L adds its months (`aggregate` in
- * `lib/profit-loss/derive.ts`); Ocupaciones adds the raw inputs but recomputes ADR, ocupación and
- * RevPAR as ratios OF THOSE SUMS. Only the shape of the buckets is shared.
+ * What does NOT live here is how values combine: a P&L adds its months, while Ocupaciones adds
+ * the raw inputs and recomputes ADR, ocupación and RevPAR as ratios OF THOSE SUMS. Only the shape
+ * of the buckets is shared.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 
@@ -58,10 +57,7 @@ export function periodOfMonth(frequency: Frequency, month: number): number {
   return Math.floor(month / MONTHS_PER_PERIOD[frequency]);
 }
 
-/**
- * Folds twelve monthly figures into one per period, by SUM. Both modules need this for their
- * additive rows; what a ratio does with the result is each module's own business.
- */
+/** Folds twelve monthly figures into one per period, by SUM. */
 export function sumByPeriod(monthly: readonly number[], frequency: Frequency): number[] {
   const span = MONTHS_PER_PERIOD[frequency];
   return Array.from({ length: periodsPerYear(frequency) }, (_, index) =>
@@ -76,10 +72,7 @@ const FREQUENCY_NOUNS: Record<Frequency, string> = {
   anual: "Año",
 };
 
-/**
- * A period spelled out: «Trimestre 1 · ene–mar». "T1" is short enough to fit in a button and
- * short enough to mean nothing on its own — this is what the button says when you hover it.
- */
+/** «Trimestre 1 · ene–mar»: what a button reading "T1" says when you hover it. */
 export function periodFullLabel(frequency: Frequency, index: number): string {
   const months = monthsInPeriod(frequency, index);
   const span =
@@ -89,7 +82,7 @@ export function periodFullLabel(frequency: Frequency, index: number): string {
   return `${FREQUENCY_NOUNS[frequency]} ${index + 1} · ${span}`;
 }
 
-/** A period and the months of the SELECTION that fall into it — never the months it could hold. */
+/** The months of the SELECTION that fall into a period — never the months it could hold. */
 export interface MonthBucket {
   /** Position in the year: 0–3 for a quarter, 0–1 for a semester. */
   index: number;
@@ -99,9 +92,8 @@ export interface MonthBucket {
 }
 
 /**
- * Groups marked months into their periods, in calendar order. A partial bucket is kept rather
- * than dropped — the user marked those months and expects to see them — but it is flagged, so
- * whoever labels it can avoid calling two months "T1".
+ * Groups marked months into their periods, in calendar order. A partial bucket is KEPT — the user
+ * marked those months — but flagged, so whoever labels it avoids calling two months "T1".
  */
 export function bucketMonths(frequency: Frequency, months: readonly number[]): MonthBucket[] {
   const span = MONTHS_PER_PERIOD[frequency];
@@ -116,9 +108,8 @@ export function bucketMonths(frequency: Frequency, months: readonly number[]): M
 }
 
 /**
- * What a bucket's column says. A complete quarter is "T1"; an incomplete one names the months it
- * actually holds, because a column reading "T1" that covers two of its three months is a lie
- * about the reader's own selection, and nothing else on screen would correct it.
+ * A complete quarter is "T1"; an incomplete one names the months it holds, because a column
+ * reading "T1" over two of its three months is a lie nothing else on screen would correct.
  */
 export function bucketLabel(frequency: Frequency, bucket: MonthBucket): string {
   if (bucket.complete) {

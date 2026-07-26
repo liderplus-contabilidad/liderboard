@@ -1,10 +1,8 @@
 /**
- * The Ocupaciones engine: a selection of métrica × sucursales × años × alcance becomes series
- * over one shared X axis.
+ * A selection of métrica × centers × years × scope becomes series over one shared X axis.
  *
- * Coverage is the load-bearing rule. A month the workspace never received is `null`, so a year
- * loaded only to July stops in July instead of falling to zero; but a day inside a covered
- * month that simply sold nothing is a real `0` and gets drawn.
+ * Coverage is the load-bearing rule: a month the workspace never received is `null`, so a year
+ * loaded only to July stops there; a day inside a covered month that sold nothing is a real `0`.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { CHART_MAX_SERIES } from "@/lib/charts/palette";
@@ -75,9 +73,8 @@ function rawInputs(
 }
 
 /**
- * The metric's two operands over already-summed inputs. A "total" metric divides by a literal 1,
- * which is what keeps a period from turning into the AVERAGE of its months: the 1 is not summed
- * with the others, it is read off the total once.
+ * A "total" metric divides by a literal 1, read off the summed inputs ONCE — summing the 1s
+ * instead would turn a period into the average of its months.
  */
 function amounts(
   metric: MetricSpec,
@@ -106,12 +103,9 @@ function monthsOf(query: OccupancyQuery): number[] {
 }
 
 /**
- * The X axis. Its daily columns are sized by the LONGEST of the compared years, so a leap
- * February still has its 29th and the years that lack it simply leave that column empty.
- *
- * Above the month the columns are periods: the marked months folded into quarters, semesters or
- * the year. A period that only holds SOME of its months is still drawn — the user marked them —
- * but it is labelled by those months rather than called "T1".
+ * Daily columns are sized by the LONGEST of the compared years, so a leap February keeps its 29th
+ * and the years that lack it leave that column empty. Above the month the columns are periods; a
+ * period holding SOME of its months is still drawn, labelled by those months rather than "T1".
  */
 function buildAxis(query: OccupancyQuery, years: number[]): AxisPoint[] {
   const months = monthsOf(query);
@@ -156,7 +150,7 @@ export function buildOccupancySeries(
   const axis = buildAxis(query, years.length > 0 ? years : [new Date().getFullYear()]);
   const warnings: string[] = [];
 
-  // Sucursal outer, year inner: a sucursal's years sit together in the legend and in the table.
+  // Center outer, year inner: a center's years sit together in the legend and the table.
   const wanted: OccupancyDataset[] = [];
   for (const centerId of query.centerIds) {
     for (const year of years) {
@@ -179,10 +173,8 @@ export function buildOccupancySeries(
   const multiYear = new Set(wanted.map((d) => d.year)).size > 1;
 
   /**
-   * A column adds up the RAW INPUTS of the months it covers and only then applies the metric —
-   * the ratio of the sums, the same rule the Datos grid and the Consolidado follow. It is covered
-   * when at least ONE of its months is, so a T1 loaded only to enero is drawn from enero instead
-   * of vanishing.
+   * Adds up the RAW INPUTS of the months covered and only THEN applies the metric — the ratio of
+   * the sums. Covered when at least ONE of its months is, so a T1 loaded only to enero is drawn.
    */
   const factsAt = (dataset: OccupancyDataset, point: AxisPoint): PointFacts | null => {
     const totals = { revenue: 0, sold: 0, available: 0, pax: 0 };

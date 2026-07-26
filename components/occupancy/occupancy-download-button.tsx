@@ -5,13 +5,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useOccupancyData } from "./occupancy-data-provider";
 
-/**
- * Downloads the active sucursal-year in the layout the parser reads, so it re-uploads into the
- * same sucursal. Behind a dynamic import so exceljs stays out of the initial bundle.
- *
- * The Consolidado has nothing to hand over: exporting a calculation would invite re-uploading
- * it as a sucursal named «Consolidado».
- */
 export function OccupancyDownloadButton() {
   const { dataset, isConsolidated } = useOccupancyData();
   const year = isConsolidated ? undefined : dataset;

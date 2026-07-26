@@ -1,14 +1,9 @@
 /**
- * IndexedDB persistence for Ocupaciones via Dexie.
+ * A record is one CENTER-YEAR, keyed by `[centerId+year]`: that pair is the unit written, merged
+ * and deleted. The consolidated view is never stored — it is derived on read, because an edit in
+ * any center would otherwise leave a saved copy stale.
  *
- * A record is one SUCURSAL-YEAR, keyed by `[centerId+year]` — the accountant exports one
- * workbook per sucursal per year, so that pair is the unit that gets written, merged and
- * deleted. The consolidated view is never stored: it is derived on read (`consolidate.ts`),
- * because every edit in any sucursal would otherwise leave a saved copy stale.
- *
- * The dataset is edited IN PLACE — there is no immutable original + edit overlay as in PyG,
- * because a year can be created from scratch (nothing to compare against) and the user owns
- * the channel catalogue. Every mutation is a read-modify-write inside a transaction so
+ * The dataset is edited IN PLACE. Every mutation is a read-modify-write inside a transaction, so
  * concurrent cell saves cannot clobber one another.
  */
 import Dexie, { type Table } from "dexie";
@@ -89,11 +84,7 @@ const INPUT_ROW_IDS: InputRowId[] = [
 
 const CHANNEL_PREFIX = "channel:";
 
-/**
- * Channels a blank year starts with — the ones actually used across the sample workbooks, in
- * descending order of use. They give an empty table somewhere to type instead of a wall of
- * "add channel"; the user drops the ones a given month does not sell through.
- */
+/** Gives an empty table somewhere to type instead of a wall of "add channel". */
 const DEFAULT_CHANNELS = [
   "Booking",
   "Página web",
@@ -102,16 +93,13 @@ const DEFAULT_CHANNELS = [
   "Complementarias",
 ];
 
-/** Records ordered as the UI reads them: by sucursal name, then by year. */
+/** Ordered as the UI reads them: by center name, then by year. */
 export async function listDatasets(): Promise<OccupancyDataset[]> {
   const datasets = await db.datasets.toArray();
   return datasets.sort((a, b) => a.centerName.localeCompare(b.centerName, "es") || a.year - b.year);
 }
 
-/**
- * The sucursales present, in display order. Derived from the records rather than stored: a
- * sucursal exists exactly while it has at least one year, so the two can never disagree.
- */
+/** Derived, not stored: a center exists exactly while it has a year, so they cannot disagree. */
 export function centersOf(datasets: OccupancyDataset[]): CenterRow[] {
   const byId = new Map<string, CenterRow>();
   for (const dataset of datasets) {
@@ -139,9 +127,8 @@ export async function saveActiveView(key: DatasetKey): Promise<void> {
 }
 
 /**
- * Creates a blank sucursal-year and activates it. It inherits the channel catalogue of the
- * newest year of the SAME sucursal, then of any sucursal, so consecutive years line up; with
- * nothing to inherit it is seeded with the default channels so its tables are not empty.
+ * Inherits the channel catalogue of the newest year of the SAME center, then of any center, so
+ * consecutive years line up; with nothing to inherit it falls back to the defaults.
  */
 export async function addYear(key: DatasetKey, hotelName?: string): Promise<void> {
   await db.transaction("rw", db.datasets, db.meta, async () => {
@@ -159,7 +146,7 @@ export async function addYear(key: DatasetKey, hotelName?: string): Promise<void
 
     const meta = await db.meta.get("workspace");
     const hotel = hotelName ?? meta?.hotelName ?? sibling?.hotelName ?? "—";
-    // A brand-new sucursal has only its id to go by; `principal` takes the hotel's name.
+    // A brand-new center has only its id to go by; `principal` takes the hotel's name.
     const center: CenterRow = {
       id: key.centerId,
       name:
@@ -176,10 +163,8 @@ export async function addYear(key: DatasetKey, hotelName?: string): Promise<void
 }
 
 /**
- * Fills every still-untouched month that has no channels with the default set, and lists any
- * seeded name in the catalogue so the grid can show it. Editing removes channels only through
- * `removeChannel` (which marks the month `edited`), so a month the user deliberately emptied
- * is left alone.
+ * Seeds the default channels into still-untouched months. Channels only leave through
+ * `removeChannel` (which marks the month `edited`), so a deliberately emptied month is left alone.
  */
 function seedEmptyMonths(dataset: OccupancyDataset): void {
   const defaults = DEFAULT_CHANNELS.map((name) => ({ id: slugify(name), name }));
@@ -203,7 +188,7 @@ function seedEmptyMonths(dataset: OccupancyDataset): void {
   }
 }
 
-/** Deletes one sucursal-year and, if it was active, falls back to whatever remains. */
+/** Deletes one center-year and, if it was active, falls back to whatever remains. */
 export async function deleteYear(key: DatasetKey): Promise<void> {
   await db.transaction("rw", db.datasets, db.meta, async () => {
     await db.datasets.delete([key.centerId, key.year]);
@@ -211,7 +196,7 @@ export async function deleteYear(key: DatasetKey): Promise<void> {
   });
 }
 
-/** Deletes a whole sucursal — every year of it. */
+/** Deletes a whole center — every year of it. */
 export async function deleteCenter(centerId: string): Promise<void> {
   await db.transaction("rw", db.datasets, db.meta, async () => {
     const doomed = await db.datasets.toArray();
@@ -223,11 +208,8 @@ export async function deleteCenter(centerId: string): Promise<void> {
 }
 
 /**
- * Folds a parsed workbook into its own sucursal-year.
- *
- * Only the months the file actually carries are replaced, so a hand-typed month survives a
- * later upload. The stored catalogue wins on naming — a channel the user renamed keeps its
- * name — and the file's unseen channels are appended rather than substituted.
+ * Only the months the file actually carries are replaced, so a hand-typed month survives a later
+ * upload. The stored catalogue wins on naming; the file's unseen channels are appended.
  */
 export async function mergeParsedDataset(parsed: OccupancyParseResult): Promise<void> {
   await db.transaction("rw", db.datasets, db.meta, async () => {
@@ -235,10 +217,7 @@ export async function mergeParsedDataset(parsed: OccupancyParseResult): Promise<
   });
 }
 
-/**
- * Used when the uploaded workbooks belong to a different hotel: keeping the old sucursales
- * alongside would silently mix two companies into one set of tabs.
- */
+/** For workbooks of a different hotel: keeping the old centers would mix two companies. */
 export async function replaceAll(
   results: OccupancyParseResult[],
   hotelName: string,
@@ -283,7 +262,7 @@ async function mergeWithin(parsed: OccupancyParseResult): Promise<void> {
   const merged: OccupancyDataset = {
     ...existing,
     hotelName: incoming.hotelName || existing.hotelName,
-    // The file's spelling of the sucursal wins: the workbook is where that name comes from.
+    // The file's spelling wins: the workbook is where that name comes from.
     centerName: incoming.centerName || existing.centerName,
     channels,
     months: months.map(sizeChannels),
@@ -308,8 +287,8 @@ export async function saveCell(
     if (!month || dayIndex < 0 || dayIndex >= month.days) {
       return false;
     }
-    // PAX keeps a null when the typed value matches the room-type formula, so the row goes
-    // back to tracking the room types instead of freezing a now-redundant override.
+    // A typed value matching the formula stores null, so the row goes back to TRACKING the room
+    // types instead of freezing a now-redundant override.
     if (rowId === "pax") {
       const { simples, dobles, triples } = month.inputs.rooms;
       const fromRooms =
@@ -344,11 +323,7 @@ export async function saveNights(
   });
 }
 
-/**
- * Adds a channel row to ONE month. Channel membership is per month — a hotel sells through
- * different channels in March than in January — so the dataset catalogue only records the name
- * and the display order.
- */
+/** Channel membership is PER MONTH; the catalogue only records the name and display order. */
 export async function addChannel(key: DatasetKey, monthIndex: number, name: string): Promise<void> {
   const id = slugify(name);
   if (!id) {
@@ -385,11 +360,7 @@ export async function renameChannel(key: DatasetKey, id: string, name: string): 
   });
 }
 
-/**
- * Removes a channel row from ONE month, with its nights. The catalogue entry survives while
- * any other month still uses it; once none does, it is dropped so the list does not
- * accumulate names nobody sells through any more.
- */
+/** The catalogue entry survives while any other month still uses it, and is dropped once none does. */
 export async function removeChannel(
   key: DatasetKey,
   monthIndex: number,
@@ -436,10 +407,7 @@ async function putMeta(hotelName: string, key: DatasetKey): Promise<void> {
   });
 }
 
-/**
- * Points the active view at something that still exists. Prefers another year of the same
- * sucursal: deleting 2025 should not also move the user to a different sucursal.
- */
+/** Prefers another year of the same center: deleting 2025 should not also move the user. */
 async function repairActive(): Promise<void> {
   const meta = await db.meta.get("workspace");
   if (!meta) {
@@ -479,9 +447,8 @@ function seriesFor(inputs: MonthInputs, rowId: string): number[] | null {
 }
 
 /**
- * Resizes a month's channel series to its own day count, keeping EXACTLY the channels that
- * month holds. It deliberately does not add the rest of the catalogue: membership is per
- * month, so a channel absent from March must stay absent from March.
+ * Keeps EXACTLY the channels that month holds and deliberately does not add the rest of the
+ * catalogue: a channel absent from March must stay absent from March.
  */
 function sizeChannels(month: OccupancyMonth): OccupancyMonth {
   const next: Record<string, number[]> = {};

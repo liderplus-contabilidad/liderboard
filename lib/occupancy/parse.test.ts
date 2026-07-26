@@ -74,8 +74,7 @@ describe("parseOccupancyWorkbook · bloques de mes", () => {
   });
 
   it("does not let a channel named «Complementarias» overwrite the metric row", () => {
-    // The real files carry both: the "Número de Habitaciones Complementarias" metric AND a
-    // "Complementarias" sales channel. Matching labels across the whole block conflates them.
+    // The real files carry BOTH a "Complementarias" metric and a "Complementarias" channel.
     const { dataset } = parse([
       {
         name: "ENERO",
@@ -133,8 +132,7 @@ describe("parseOccupancyWorkbook · valores tal cual del archivo", () => {
   });
 
   it("reads the TOTAL column even when the day headers stop short of it", () => {
-    // February's header runs to day 30 while TOTAL stays at AG, leaving a gap between them.
-    // Assuming TOTAL sits right after the last day column silently read an empty cell.
+    // February's header runs to day 30 while TOTAL stays at AG: assuming adjacency read empty.
     const { dataset } = parse([
       {
         name: "FEBRERO",
@@ -172,8 +170,7 @@ describe("parseOccupancyWorkbook · indicadores del archivo", () => {
   });
 
   it("stores PAX only on the days the file disagrees with the room types", () => {
-    // Day 1's 19 cannot come from 4+4+2 rooms (that is 18) — an extra bed. Days 2 and 3
-    // match the formula, so they stay null and keep following the room types.
+    // Day 1's 19 cannot come from 4+4+2 rooms — an extra bed. Days 2 and 3 match the formula.
     const { dataset } = parse([
       {
         name: "ENERO",

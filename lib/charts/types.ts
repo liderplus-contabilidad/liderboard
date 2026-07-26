@@ -1,12 +1,10 @@
 /**
- * The slice of the ECharts option contract this dashboard actually writes.
+ * The slice of the ECharts option contract this dashboard writes. Declaring it here rather than
+ * importing `EChartsOption` keeps `lib/` free of the renderer and lets Vitest reason about plain
+ * objects; `components/ui/chart.tsx` does the widening.
  *
- * Declaring it here rather than importing `EChartsOption` keeps the option builders in the
- * PURE layer: `lib/` stays free of the renderer, Vitest reasons about plain objects, and the
- * one place that hands them to the engine (`components/ui/chart.tsx`) does the widening.
- *
- * Two invariants are encoded in the types themselves, so violating them does not compile:
- * `xAxis`/`yAxis` are single objects — never a pair of scales — and `series` is always a list.
+ * Two invariants are encoded in the types, so violating them does not compile: `xAxis`/`yAxis`
+ * are single objects — never a pair of scales — and `series` is always a list.
  */
 
 export type ChartValue = number | null;
@@ -78,11 +76,7 @@ export interface ChartItemStyle {
   borderRadius?: number | number[];
 }
 
-/**
- * One end of a mark line: a whole-axis reference (`xAxis`/`yAxis`), or an exact point of the
- * plot. `coord` is what lets a line stop somewhere — the connector of a cascade runs from the
- * close of one step to the start of the next, not across the whole grid.
- */
+/** `coord` is what lets a line STOP somewhere instead of crossing the whole grid. */
 export interface ChartMarkPoint {
   xAxis?: number;
   yAxis?: number;
@@ -154,11 +148,7 @@ export interface ChartGrid {
   right?: number | string;
   top?: number | string;
   bottom?: number | string;
-  /**
-   * ECharts 6 replaced `containLabel` with these two: `"same"` bounds the plot by the rect
-   * `left/right/top/bottom` describes, and `"axisLabel"` makes the axis text shrink the plot
-   * instead of overflowing it. Together they are what `containLabel: true` used to mean.
-   */
+  /** ECharts 6 replaced `containLabel` with these two; together they mean what it did. */
   outerBoundsMode?: "auto" | "same" | "none";
   outerBoundsContain?: "all" | "axisLabel" | "auto";
 }
@@ -208,10 +198,7 @@ export interface ChartTableRow {
   values: (string | null)[];
 }
 
-/**
- * The numeric twin every chart card carries. Three of the eight palette slots fall below 3:1
- * against white — unavoidable in a categorical eight — so a readable table is not a nicety.
- */
+/** Three of the eight palette slots fall below 3:1 against white, so this is not a nicety. */
 export interface ChartTable {
   columns: string[];
   rows: ChartTableRow[];

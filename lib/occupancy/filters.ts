@@ -1,10 +1,6 @@
 /**
- * The single selection of Ocupaciones: which métrica, sucursales, años and periodos are marked,
- * and whether the axis reads by month or by day.
- *
- * As in PyG there is no comparison axis to declare — it falls out of whichever lists end up
- * populated. Unlike PyG the métrica is single: the metrics do not share a unit, and a card with
- * two units would need a second Y axis.
+ * The single selection of Ocupaciones. There is no comparison axis to declare — it falls out of
+ * whichever lists end up populated.
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { bucketMonths, monthsInPeriod, periodLabels, type Frequency } from "@/lib/period";
@@ -80,9 +76,8 @@ export function withMonthToggled(filters: OccupancyFilters, month: number): Occu
 }
 
 /**
- * The «T1» / «S1» shortcuts of the Periodo dropdown: they mark or unmark the period's own months
- * and nothing else. The mark stays a MONTH — there is no second kind of period mark to reconcile
- * with, no new chip, and nothing extra for `sanitizeFilters` to prune.
+ * The «T1»/«S1» shortcuts mark the period's own months and nothing else — the mark stays a MONTH,
+ * so there is no second kind of period mark, no new chip and nothing extra to prune.
  *
  * Unlike marking a day this does NOT touch the axis: T1 over a monthly axis is three perfectly
  * readable columns, whereas a day mark on a monthly axis has nowhere to land.
@@ -136,7 +131,7 @@ export function withYearsCleared(filters: OccupancyFilters): OccupancyFilters {
   return { ...filters, years: [] };
 }
 
-/** Clearing the months clears the days with them: a day belongs to the month it narrows. */
+/** A day belongs to the month it narrows, so clearing the months clears them too. */
 export function withMonthsCleared(filters: OccupancyFilters): OccupancyFilters {
   return { ...filters, months: [], days: [] };
 }
@@ -153,9 +148,8 @@ export function finerScope(scope: Scope): Scope | null {
 }
 
 /**
- * Drill-down: clicking a column narrows the tab to the months that column covered and drops the
- * axis one step — a quarter opens into its three months, a month into its days. It writes into
- * the same filter bar the user can see, so undoing it is removing the chips.
+ * Clicking a column narrows to the months it covered and drops the axis one step. It writes into
+ * the filter bar the user can see, so undoing it is removing the chips.
  */
 export function withDrillIntoPeriod(
   filters: OccupancyFilters,
@@ -198,14 +192,8 @@ export function hasMarks(filters: OccupancyFilters): boolean {
 }
 
 /**
- * The marked period as a person would say it: «5 de enero», not «Periodo · 1 · 1 día». A count
- * tells the reader how many boxes are ticked; what they need is which period they are looking at.
- */
-/**
- * The name of a marked set of months when it happens to BE a period: ene+feb+mar is «T1», not
- * «Ene · Feb · Mar». Coarser first, so the six months of a semester read as S1 rather than as
- * two quarters — a six-month span produces two trimestral buckets, so that check falls through
- * on its own and there is no ambiguity to break.
+ * ene+feb+mar is «T1», not «Ene · Feb · Mar». A six-month span produces TWO trimestral buckets,
+ * so the quarter check falls through on its own and a semester reads as S1 with no tie to break.
  */
 function wholePeriodLabel(months: readonly number[]): string | null {
   for (const frequency of ["trimestral", "semestral"] as const) {
@@ -217,6 +205,7 @@ function wholePeriodLabel(months: readonly number[]): string | null {
   return null;
 }
 
+/** «5 de enero», not «Periodo · 1 · 1 día»: a tick count is not a period. */
 export function periodLabel(months: readonly number[], days: readonly number[]): string {
   if (months.length === 0) {
     return "Todo el año";
@@ -243,19 +232,15 @@ export function periodLabel(months: readonly number[], days: readonly number[]):
   return `${days.length === 1 ? "día" : "días"} ${list} de ${short}`;
 }
 
-/**
- * The same label cased for the middle of a sentence: «enero», but «T1» keeps its capitals —
- * lowercasing a period code turns it into something that no longer names anything.
- */
+/** Cased for the middle of a sentence: «enero», but «T1» keeps its capitals. */
 export function periodPhrase(months: readonly number[], days: readonly number[]): string {
   const label = periodLabel(months, days);
   return /^[TS]\d$/.test(label) ? label : label.toLowerCase();
 }
 
 /**
- * The whole selection as one sentence, for the line that sits under the filter bar. Reading the
- * marks off four separate controls is what makes a comparison like «el 5 de enero de 2025 contra
- * el de 2026» hard to be sure of before looking at the chart.
+ * The whole selection as one sentence. Reading the marks off four separate controls is what makes
+ * «el 5 de enero de 2025 contra el de 2026» hard to be sure of before looking at the chart.
  */
 export function describeSelection(
   filters: OccupancyFilters,

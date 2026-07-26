@@ -1,14 +1,11 @@
 /**
- * Contracts for the Ocupaciones analytics engine.
+ * A series is identified by (center, year); the period is its X axis, not its identity.
  *
- * A series is identified by (sucursal, año); the period is its X axis, not its identity — the
- * same rule PyG follows. The contract everything rests on is also the same: `null` means "this
- * period had no data" and `0` means "a real zero". A year loaded only to July must leave August
- * blank; drawing it as 0 invents a collapse that never happened.
+ * `null` means "this period had no data" and `0` means "a real zero": a year loaded only to July
+ * must leave August blank, because drawing it as 0 invents a collapse that never happened.
  *
- * The metric, unlike PyG's accounts, is SINGLE: ocupación is a %, ADR and RevPAR are $, and
- * vendidas and PAX are counts. Mixing them in one card would need a second Y axis, which
- * `ChartOption` forbids by construction.
+ * The metric is SINGLE — ocupación is a %, ADR is $, PAX is a count — because two units in one
+ * card would need the second `yAxis` that `ChartOption` forbids by construction.
  */
 import { FREQUENCY_ORDER, type Frequency } from "@/lib/period";
 
@@ -56,13 +53,10 @@ export function metricSpec(id: OccupancyMetricId): MetricSpec {
   return METRICS.find((metric) => metric.id === id) ?? METRICS[0];
 }
 
-/**
- * How coarse a column of the X axis is. It is PyG's frequency ladder with a day step under it —
- * the same `Frequency` values, so "T1" is spelled in one place for the whole app.
- */
+/** PyG's frequency ladder with a day step under it, so "T1" is spelled in one place. */
 export type Scope = "dia" | Frequency;
 
-/** Every step of the axis, finest first — the order «Ver por» offers them in. */
+/** Finest first — the order «Ver por» offers them in. */
 export const SCOPE_ORDER: readonly Scope[] = ["dia", ...FREQUENCY_ORDER];
 
 export interface OccupancySeriesKey {
@@ -76,9 +70,8 @@ export function occupancySeriesId(key: OccupancySeriesKey): string {
 }
 
 /**
- * One column of the X axis. It carries EVERY month it covers — one on a monthly or daily axis,
- * three on a quarter, twelve on the year — so a click can narrow to exactly what was drawn.
- * `day` is 0-based and present only on the daily axis.
+ * Carries EVERY month the column covers — one on a monthly axis, three on a quarter — so a click
+ * can narrow to exactly what was drawn. `day` is 0-based and present only on the daily axis.
  */
 export interface AxisPoint {
   label: string;
@@ -87,9 +80,8 @@ export interface AxisPoint {
 }
 
 /**
- * The raw figures behind ONE column of one series, kept so a tooltip can answer «¿de dónde sale
- * ese 59 %?» without a second pass over the datasets. `numerator`/`denominator` are the active
- * metric's own two operands; the rest are the inputs every metric is built from.
+ * The figures behind ONE column, so a tooltip can answer «¿de dónde sale ese 59 %?» without a
+ * second pass. `numerator`/`denominator` are the ACTIVE metric's operands.
  */
 export interface PointFacts {
   revenue: number;
@@ -116,11 +108,7 @@ export interface OccupancyQuery {
   scope: Scope;
   /** Marked months (0–11). Empty means the whole year: marking NARROWS the axis. */
   months: number[];
-  /**
-   * Marked days of the month, 0-based. Empty means every day of the marked months. Narrowing
-   * to one day is what turns «enero de 2025 contra 2026» into «el 5 de enero de 2025 contra el
-   * 5 de enero de 2026».
-   */
+  /** Marked days of the month, 0-based. Empty means every day of the marked months. */
   days: number[];
   limit?: number;
 }

@@ -16,19 +16,9 @@ import { Semaforo } from "@/components/profit-loss/semaforo";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
 
-/**
- * Per-module pieces of the tab shell. Modules not listed here render `ComingSoon` for
- * every tab — that is the default, so adding one is purely additive.
- *
- * Module state does NOT live here: each module's data provider is mounted in the dashboard
- * layout, so the header and the panel read the same thing.
- */
 interface ModuleViews {
-  /** Rendered at the right end of the tab bar; tab-aware, like the toolbar and the panel. */
   rightSlot?: (tab: ModuleTabId) => ReactNode;
-  /** Rendered between the tab bar and the panel. */
   toolbar?: (tab: ModuleTabId) => ReactNode;
-  /** Panel body; return null to fall back to ComingSoon. */
   panel?: (tab: ModuleTabId) => ReactNode;
 }
 
@@ -41,7 +31,6 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
         {tab === "datos" && <DatosToolbar />}
       </>
     ),
-    // PyG covers its three tabs, so nothing here falls through to ComingSoon.
     panel: (tab) => {
       switch (tab) {
         case "datos":
@@ -54,9 +43,6 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
     },
   },
   occupancy: {
-    // The Excel buttons belong to Datos: that tab owns the sucursal-year they read and write,
-    // and it is where the upload's error banner and cuadre notices land. Gráficos compares what
-    // is already loaded.
     rightSlot: (tab) =>
       tab === "datos" ? (
         <div className="flex items-center gap-2.5">
@@ -64,7 +50,6 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
           <OccupancyUploadButton />
         </div>
       ) : null,
-    // The filter bar belongs to Gráficos: Datos selects what to EDIT with its own three strips.
     toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
     panel: (tab) => {
       switch (tab) {
@@ -123,7 +108,6 @@ export function ModuleTabs({ slug }: { slug: string }) {
           })}
         </div>
 
-        {/* Bare: each slot owns its own bottom padding so it aligns with the tab underline. */}
         {views.rightSlot?.(activeTab.id)}
       </div>
 

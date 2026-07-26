@@ -1,10 +1,9 @@
 /**
- * The day × month grid, as data. It is deliberately NOT an ECharts chart: 372 coloured cells
- * are 372 divs, while the renderer's heatmap would pull its component and its visualMap into a
- * bundle that draws bars, lines and pies.
+ * Deliberately NOT an ECharts chart: 372 coloured cells are 372 divs, while the renderer's
+ * heatmap would pull its component and visualMap into a bundle that draws bars, lines and pies.
  *
- * One grid per marked sucursal-year, and ONE scale shared by all of them — two grids side by
- * side are only comparable if the same tone means the same figure in both.
+ * One grid per marked center-year, and ONE scale shared by all — two grids side by side are only
+ * comparable if the same tone means the same figure in both.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { metricSpec, type MetricSpec, type OccupancyQuery } from "../analytics/types";
@@ -121,8 +120,7 @@ export function buildHeatmaps(
 
   return {
     grids,
-    // A ratio always scales from zero: starting the ramp at the lowest day would paint a 20%
-    // month as "empty" and a 25% one as "full".
+    // From zero: starting the ramp at the lowest day would paint a 20% month "empty".
     scale: Number.isFinite(max) ? { min: metric.kind === "ratio" ? 0 : min, max } : null,
     metric,
     truncated,

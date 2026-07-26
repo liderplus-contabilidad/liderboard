@@ -1,8 +1,4 @@
-/**
- * Synthetic fixtures for the occupancy parse tests. They mirror the STRUCTURE of the real
- * `OCUPACION_*.xlsx` exports — stacked month blocks on a single sheet — with invented
- * data, so tests never depend on a customer file living outside the repo.
- */
+/** Mirror the STRUCTURE of the real exports with invented data, so no customer file is needed. */
 import * as XLSX from "xlsx";
 
 export type FixtureCell = string | number | null;
@@ -32,16 +28,12 @@ export interface MonthBlockSpec {
 
 const DEFAULT_DAYS = [1, 2, 3];
 
-/**
- * Column AG (0-based 32), where every real block puts its TOTAL — regardless of how many day
- * columns the header emitted. February's header stops at day 30, leaving a gap before it.
- */
+/** Column AG, where every real block puts its TOTAL however many day columns it emitted. */
 const TOTAL_COL = 32;
 
 /**
- * One month block. Every data row ends with a TOTAL cell holding a formula STRING —
- * exactly what SheetJS yields for the real files' uncached `SUM(...)` formulas. A parser
- * that trusted that column would read text where it expects a number.
+ * Every data row ends with a TOTAL cell holding a formula STRING, exactly what SheetJS yields for
+ * the real files' uncached `SUM(...)`: a parser trusting that column reads text, not a number.
  */
 export function monthBlock(spec: MonthBlockSpec): FixtureCell[][] {
   const days = spec.dayHeaders ?? DEFAULT_DAYS;
@@ -118,14 +110,13 @@ export interface SheetSpec {
   title?: string;
   /** The hotel line, right under the title. Omit to reproduce the older format. */
   hotel?: string;
-  /** The cost-center line, under the hotel. Omit for a hotel with no sucursales. */
+  /** Under the hotel. Omit for a hotel with no cost centers. */
   center?: string;
 }
 
 /**
- * The sheet preamble: title, then the optional hotel and cost-center lines, then the blocks.
- * A `center` without a `hotel` is not expressible on purpose — the parser reads the two name
- * lines by position, so the second one only means "sucursal" when the first one is the hotel.
+ * A `center` without a `hotel` is not expressible ON PURPOSE: the parser reads the two name lines
+ * BY POSITION, so the second only means "center" when the first is the hotel.
  */
 export function occupancySheet(blocks: FixtureCell[][][], spec: SheetSpec = {}) {
   const names: FixtureCell[][] = [];

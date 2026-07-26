@@ -6,18 +6,11 @@ export interface StatTileProps {
   /** Already formatted; `null` renders the em dash of a period with no coverage. */
   value: string | null;
   hint?: string;
-  /**
-   * Marks the tile as a result whose sign matters. The sign is ALWAYS drawn with an icon and
-   * the signed value too — `positive`/`negative` are color alone, and color alone is not a
-   * reading for everyone.
-   */
+  /** ALWAYS drawn with an icon and the signed value too: color alone is not a reading. */
   sign?: "positivo" | "negativo";
 }
 
-/**
- * A total is a number, not a chart. "How much was the Utilidad this period" answered with a
- * one-bar plot gives the reader an axis, a grid and a legend to decode a single figure.
- */
+/** A total is a number, not a chart: a one-bar plot is an axis and a legend for one figure. */
 export function StatTile({ label, value, hint, sign }: StatTileProps) {
   const Icon = sign === "negativo" ? TrendingDown : TrendingUp;
 

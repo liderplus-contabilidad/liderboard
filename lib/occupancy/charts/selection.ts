@@ -1,9 +1,6 @@
 /**
- * The one translation from what the filter bar has marked into what the engine is asked, plus
- * the resolver that gives a series its color.
- *
- * A query assembled inline is a query nobody can test, and the moment two cards assemble one
- * each they drift — so every card in the tab goes through here.
+ * The ONE translation from what the filter bar marked into what the engine is asked. A query
+ * assembled inline is a query nobody can test, and two cards assembling one each would drift.
  */
 import { colorForEntity } from "@/lib/charts/palette";
 import type { OccupancyDataset } from "../types";
@@ -18,7 +15,7 @@ import type { OccupancyFilters } from "../filters";
 export interface SelectionUniverse {
   centerIds: string[];
   years: number[];
-  /** Where an empty selection lands: the sucursal-year the module is already showing. */
+  /** Where an empty selection lands: the center-year the module is already showing. */
   fallback?: { centerId: string; year: number };
 }
 
@@ -37,10 +34,8 @@ export function selectionUniverse(
 }
 
 /**
- * Marks narrow; an empty list means "everything available" for the sucursales and the años —
- * except when nothing at all is marked, where the tab shows the sucursal-year already open
- * instead of every series the workspace holds. A blank panel next to loaded data hands the
- * reader the job of guessing what can be asked.
+ * Marks narrow; an empty list means "everything available" — except when NOTHING is marked, where
+ * the tab falls back to the center-year Datos already has open rather than to every series.
  */
 export function toOccupancyQuery(
   filters: OccupancyFilters,
@@ -68,9 +63,8 @@ export function toOccupancyQuery(
 }
 
 /**
- * Every sucursal-year the workspace holds, in a stable order. A series takes its color from its
- * place HERE, not from its index in the result, so filtering one out leaves the rest painted
- * exactly as they were.
+ * A series takes its color from its place HERE, not from its index in the result, so filtering
+ * one out leaves the rest painted exactly as they were.
  */
 export function colorUniverse(datasets: readonly OccupancyDataset[]): string[] {
   return datasets.map((dataset) =>

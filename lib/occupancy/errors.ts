@@ -1,7 +1,4 @@
-/**
- * Typed parse failures for Ocupaciones. Kept out of parse.ts so UI code can catch and
- * inspect them without pulling SheetJS into the initial bundle.
- */
+/** Kept out of parse.ts so UI code can catch these without pulling SheetJS into the bundle. */
 
 export type OccupancyParseErrorCode = "invalid-file" | "no-months";
 

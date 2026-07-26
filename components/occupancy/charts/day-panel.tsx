@@ -7,16 +7,12 @@ import { formatMetric } from "@/lib/occupancy/charts/option";
 
 export interface DayPanelProps {
   detail: DayDetail;
-  /** Which sucursal-year the day belongs to; two grids on screen make this necessary. */
+  /** Which center-year the day belongs to; two grids on screen make this necessary. */
   centerLabel: string;
   onClose: () => void;
 }
 
-/**
- * One day, opened from the heatmap. It does NOT touch the filters: a single day is a point, not
- * a level of the axis, and turning the whole tab into four numbers would lose the context the
- * reader came from.
- */
+/** Does NOT touch the filters: a day is a point, not a level of the axis. */
 export function DayPanel({ detail, centerLabel, onClose }: DayPanelProps) {
   return (
     <SidePanel eyebrow={centerLabel} title={`Detalle del día · ${detail.label}`} onClose={onClose}>

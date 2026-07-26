@@ -1,6 +1,5 @@
 /**
- * `OccupancyBundle` in, an ECharts option out. Pure, so the rules that keep a chart honest are
- * testable without a DOM:
+ * `OccupancyBundle` in, an ECharts option out. Pure, so these stay testable without a DOM:
  *
  * - A `null` point stays `null`: no mark, and no line drawn across it.
  * - No builder returns two `yAxis` — the métrica is single precisely so one scale is enough.
@@ -39,10 +38,7 @@ const MIN_LEGEND_SERIES = 2;
 /** Past this many columns a label per bar stops being read and becomes texture. */
 const MAX_DIRECT_LABELS = 14;
 
-/**
- * How few columns a COMPARISON needs before grouped bars beat lines. Narrowing to one day is
- * the case this exists for: a line of a single point draws nothing at all.
- */
+/** Below this a comparison draws as grouped bars: a line of a single point draws nothing. */
 const FEW_COLUMNS = 6;
 
 export interface SeriesOptionContext {
@@ -54,11 +50,9 @@ export interface SeriesOptionContext {
 const CENTS_FIT_BELOW = 1000;
 
 /**
- * The single value formatter every axis, label, tooltip and table cell goes through.
- *
- * A ratio arrives as a fraction (0.298) and `formatPercent` speaks in percentage points, so the
- * ×100 lives here. Money keeps its cents while it fits: an ADR of $82,89 rounded to $83 loses
- * exactly the precision the figure exists for, while a year's revenue does not need them.
+ * The one formatter every axis, label, tooltip and table cell goes through. A ratio arrives as a
+ * fraction and `formatPercent` speaks in points, so the ×100 lives here; an ADR of $82,89 keeps
+ * its cents because rounding to $83 loses exactly the precision the figure exists for.
  */
 export function formatMetric(value: number | null, unit: MetricUnit): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -159,8 +153,6 @@ function axisTooltip(unit: MetricUnit, pointer: "shadow" | "line"): ChartTooltip
   };
 }
 
-/* --- The figures behind a point ------------------------------------------------------------- */
-
 const TIP_HEAD = `color:${CHART_INK.strong};font-weight:600;margin-bottom:4px`;
 const TIP_KEY = `color:${CHART_INK.muted};font-weight:500;padding-right:16px;text-align:left`;
 const TIP_VALUE = `color:${CHART_INK.strong};font-weight:600;text-align:right;font-variant-numeric:tabular-nums`;
@@ -170,10 +162,7 @@ function ratioOrNull(numerator: number, denominator: number): number | null {
   return denominator === 0 ? null : numerator / denominator;
 }
 
-/**
- * The full breakdown of one column: the raw inputs AND the three indicators they produce. Shown
- * only when a single series is on screen — eight of these blocks stacked would run off the card.
- */
+/** Only for a single series: eight of these blocks stacked would run off the card. */
 function detailTable(facts: PointFacts): string {
   const rows: [string, string | null][] = [
     ["Ocupación", formatMetric(ratioOrNull(facts.sold, facts.available), "percent")],
@@ -194,9 +183,8 @@ function detailTable(facts: PointFacts): string {
 }
 
 /**
- * The one line that answers «¿de dónde sale ese 59 %?» while comparing. Each metric names the
- * figures that are actually its own: a ratio shows its two operands, a total shows what it sat
- * next to — «1.610 vendidas de 2.730» is the reading, never a bare «1.610 de 1».
+ * Answers «¿de dónde sale ese 59 %?» while comparing. Each metric names the figures that are its
+ * own — a TOTAL divides by a literal 1, so it must never read «1.610 de 1».
  */
 function supportLine(metric: MetricSpec, facts: PointFacts): string {
   const count = (value: number) => formatMetric(value, "count") ?? "—";
@@ -220,10 +208,8 @@ function supportLine(metric: MetricSpec, facts: PointFacts): string {
 }
 
 /**
- * The main card's tooltip. With ONE series it opens the whole column — the raw inputs and the
- * three indicators — because that is the reading a single line invites. Comparing, each series
- * keeps to its value plus the support line: the point of a comparison is the difference between
- * the series, and seven rows apiece would bury it.
+ * With ONE series it opens the whole column. Comparing, each series keeps to its value plus the
+ * support line: the point is the difference between series, and seven rows apiece would bury it.
  */
 function seriesTooltip(bundle: OccupancyBundle, pointer: "shadow" | "line"): ChartTooltip {
   const unit = bundle.metric.unit;
@@ -263,11 +249,8 @@ function seriesTooltip(bundle: OccupancyBundle, pointer: "shadow" | "line"): Cha
 }
 
 /**
- * When the axis collapses to ONE column, the thing that varies stops being the date and becomes
- * the series: «el 5 de enero de 2025 contra el de 2026» is two entities, not two readings of one
- * date. Leaving «5 ene» on the axis would label both bars with the same date and hide the
- * comparison in the legend, so the entities take the axis and the date moves to the card's
- * subtitle.
+ * With ONE column what varies is the series, not the date. Leaving «5 ene» on the axis would
+ * label both bars the same, so the entities take the axis and the date moves to the subtitle.
  */
 function entityOption(bundle: OccupancyBundle, context: SeriesOptionContext): ChartOption {
   const unit = bundle.metric.unit;
@@ -315,11 +298,7 @@ function entityOption(bundle: OccupancyBundle, context: SeriesOptionContext): Ch
   };
 }
 
-/**
- * The main card. Bars when a single series is read month by month — that is the shape you click
- * to drill into — and lines whenever there is a comparison or a daily axis, where 365 bars per
- * series would be a solid block of ink.
- */
+/** Bars for a single series read by month; lines once 365 bars apiece would be a block of ink. */
 export function seriesOption(bundle: OccupancyBundle, context: SeriesOptionContext): ChartOption {
   if (bundle.axis.length === 1 && bundle.series.length > 1) {
     return entityOption(bundle, context);
@@ -382,12 +361,10 @@ export function seriesTable(bundle: OccupancyBundle, context: SeriesOptionContex
 const CHANNEL_LABEL_WIDTH = 150;
 
 /**
- * Nights per channel, largest on top. Horizontal because a channel's name is words, and words
- * rotated 45° under an axis are not read.
+ * Horizontal because a channel's name is words, and words rotated 45° are not read.
  *
- * With one sucursal-year on screen the bars are coloured BY CHANNEL — the channel is what varies,
- * and each keeps its slot across the tab. Comparing, the colour has to encode the sucursal-year
- * instead, because that is now what tells two bars in the same row apart; the channel is the row.
+ * With one series the bars are coloured BY CHANNEL. Comparing, the colour has to encode the
+ * center-year instead: the channel is now the row, so colour is what tells two bars in it apart.
  */
 export function channelOption(
   breakdown: ChannelBreakdown,
@@ -490,7 +467,7 @@ export function channelTable(
       })),
     };
   }
-  // Comparing, the channels become the columns: a row per sucursal-year is what is being read.
+  // Comparing, the channels become the columns: a row per center-year is what is read.
   return {
     columns: breakdown.channels.map((entry) => entry.name),
     rows: breakdown.series.map((entry) => ({
@@ -503,9 +480,8 @@ export function channelTable(
 }
 
 /**
- * The week's rhythm. One series is seven bars in one tone — what varies is the day. Marking two
- * sucursales or two years groups their bars under each weekday, so «el domingo de 2025 contra el
- * de 2026» is a pair you read side by side instead of a figure blended out of both.
+ * One series is seven bars in one tone: what varies is the day. Marking two centers or two years
+ * groups their bars under each weekday instead of blending them into one figure.
  */
 export function weekdayOption(
   breakdown: WeekdayBreakdown,
@@ -530,8 +506,7 @@ export function weekdayOption(
       },
       barMaxWidth: CHART_MARK.barMaxWidth,
       label: {
-        // Seven days × several series is too many numbers to print over the bars; the tooltip
-        // carries them there instead.
+        // Seven days × several series is too many numbers to print; the tooltip carries them.
         show: !comparing,
         position: "top" as const,
         color: CHART_INK.muted,

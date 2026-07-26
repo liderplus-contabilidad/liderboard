@@ -22,11 +22,7 @@ const ANNUAL_SUFFIX: Record<Frequency, string> = {
   anual: "",
 };
 
-/**
- * Wording for the cuadre banner's expandable detail. The columns are days, months, quarters or
- * semesters, so the noun changes — and the names come off the grid's own header labels rather
- * than being rebuilt here, which is what keeps this working at every granularity.
- */
+/** Column names come off the grid's own labels, which is what makes this work at every scope. */
 function mismatchDetails(
   channelColumns: number[],
   roomColumns: number[],
@@ -48,8 +44,6 @@ function mismatchDetails(
 }
 
 /**
- * The Ocupaciones › Datos body: sucursal, year and month selectors over the grid.
- *
  * Indicators are never stored — they are recomputed from the raw inputs on each render, so
  * editing a cell updates them immediately.
  */
@@ -112,8 +106,8 @@ export function OccupancyDatosView() {
     [addChannel],
   );
 
-  // Removing a channel drops its nights for THIS month only. An all-zero row has nothing to
-  // lose, so it goes straight away — a confirmation there is just a click to dismiss.
+  // An all-zero row has nothing to lose, so it goes without asking: a confirmation there would
+  // be just a click to dismiss.
   const onRemoveChannel = useCallback(
     (id: string) => {
       const channel = dataset?.channels.find((candidate) => candidate.id === id);
@@ -172,8 +166,6 @@ export function OccupancyDatosView() {
     ? mismatchDetails(grid.channelMismatch, grid.roomMismatch, gridScope, grid.columnLabels)
     : [];
   const isAnnual = gridScope === "year";
-  // In the annual view the title already says "Detalle anual", so the year carries only the
-  // granularity — «2025 · por trimestre» — and nothing at all when the columns are months.
   const monthLabel = isAnnual
     ? [String(activeYear ?? ""), ANNUAL_SUFFIX[gridFrequency]].filter(Boolean).join(" · ")
     : `${MONTHS_FULL_ES[monthIndex]} ${activeYear ?? ""}`.trim();

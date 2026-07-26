@@ -1,7 +1,3 @@
-/**
- * Cell rendering rules for the Ocupaciones grid. Day cells stay terse (the columns are
- * ~46px wide); the "Total / prom." column can afford the full currency form.
- */
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import type { OccupancyGridRow } from "@/lib/occupancy/derive";
 
@@ -15,14 +11,9 @@ function cents(value: number): string {
 /** Past this, "1.095,17" no longer fits a day column and would be clipped mid-number. */
 const CENTS_FIT_BELOW = 1000;
 
-/**
- * Occupancy is a small ratio out of few rooms, so whole percents lose real information:
- * 9/22 and 10/22 both read "41 %" at zero decimals. Fixed (not trimmed) so the column
- * stays aligned.
- */
+/** Occupancy is a small ratio out of few rooms: at zero decimals 9/22 and 10/22 both read "41 %". */
 const PERCENT_DECIMALS = 2;
 
-/** A day cell. `null` means "not defined" (e.g. ADR with nothing sold), not zero. */
 export function formatDayCell(value: number | null, format: Format): string {
   if (value === null) {
     return "—";
@@ -30,13 +21,11 @@ export function formatDayCell(value: number | null, format: Format): string {
   if (format === "percent" || format === "percent-whole") {
     return formatPercent(value * 100, format === "percent" ? PERCENT_DECIMALS : 0);
   }
-  // Cents where they fit, whole units where they don't. Dropping them everywhere would
-  // cost ADR its precision; keeping them everywhere clips four-figure revenue days. The
-  // "Total / prom." column always shows the exact amount.
+  // Dropping cents everywhere would cost ADR its precision; keeping them everywhere clips
+  // four-figure revenue days. The "Total / prom." column always shows the exact amount.
   return Math.abs(value) >= CENTS_FIT_BELOW ? formatNumber(Math.round(value)) : cents(value);
 }
 
-/** The "Total / prom." column. */
 export function formatAggregate(value: number | null, format: Format): string {
   if (value === null) {
     return "—";
@@ -48,12 +37,9 @@ export function formatAggregate(value: number | null, format: Format): string {
 }
 
 /**
- * The string an editable cell is seeded with ON FOCUS. This must be the EXACT value:
- * `formatNumber` (es-EC: "," decimal) is the inverse of `parseCurrency`, so focusing and
- * blurring without typing round-trips to the same number. Seeding the compact display form
- * instead would make a stray click commit 1.095 over a stored 1.095,17.
- *
- * A zero seeds as blank — typing over "0" every time is friction, and committing a blank
+ * Seeds an editable cell ON FOCUS with the EXACT value: `formatNumber` (es-EC) is the inverse of
+ * `parseCurrency`, so focus-and-blur round-trips. Seeding the compact display form instead would
+ * make a stray click commit 1.095 over a stored 1.095,17. A zero seeds blank; committing a blank
  * yields 0 again, so nothing is lost.
  */
 export function seedEditValue(value: number | null): string {

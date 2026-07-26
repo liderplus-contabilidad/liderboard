@@ -10,18 +10,12 @@ import { CONSOLIDATED_CENTER_ID, type CenterRow } from "@/lib/occupancy/types";
 export interface CenterTabsProps {
   centers: CenterRow[];
   activeCenterId: string | undefined;
-  /** Whether the Consolidado tab is on offer — it needs two sucursales to mean anything. */
   hasConsolidated: boolean;
-  /** Sucursal id → the years it holds, for the delete confirmation. */
   yearsByCenter: Record<string, number[]>;
   onSelect: (centerId: string) => void;
   onDelete: (centerId: string) => void;
 }
 
-/**
- * The SUCURSAL selector. With a single sucursal it renders NOTHING: one tab is not a choice,
- * and the name is already in the header and above the grid.
- */
 export function CenterTabs({
   centers,
   activeCenterId,

@@ -1,9 +1,6 @@
 /**
- * The aggregations that are not a time series: the tab's four indicators, the nights each sales
- * channel brought, and the rhythm of the week.
- *
- * All three read the SAME query the main card does, so «marzo de Cultura Manor» means the same
- * thing in every corner of the tab.
+ * The aggregations that are not a time series. All three read the SAME query the main card does,
+ * so «marzo de Cultura Manor» means the same thing in every corner of the tab.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { ROOM_ROW_IDS } from "../derive";
@@ -23,11 +20,7 @@ function monthHasData(month: OccupancyMonth | undefined): month is OccupancyMont
   return month.fromFile || [available, revenue, sold].some((s) => s.some((v) => v !== 0));
 }
 
-/**
- * The same naming the series card uses — the year is added only when more than one is on screen.
- * Every card of the tab labels its series through here, so a legend never says «Manor · 2026»
- * next to a plain «Manor».
- */
+/** The year is added only when more than one is on screen, and every card names through here. */
 export function labelFor(
   datasets: readonly OccupancyDataset[],
 ): (dataset: OccupancyDataset) => string {
@@ -89,7 +82,7 @@ export interface Kpi {
   unit: MetricUnit;
 }
 
-/** One sucursal-year's four figures. A single group is the "no comparison" case, not a special one. */
+/** A single group is the "no comparison" case, not a special one. */
 export interface KpiGroup {
   key: OccupancySeriesKey;
   label: string;
@@ -97,10 +90,9 @@ export interface KpiGroup {
 }
 
 /**
- * The four figures that describe the marked scope, ONE GROUP PER SUCURSAL-YEAR — marking two
- * years is asking to compare them, and a single blended figure answers a question nobody asked.
- * Inside a group they are ratios of the SUMS, the same definition the grid's own totals use, so
- * the tab and the table never disagree.
+ * ONE GROUP PER CENTER-YEAR: marking two years is asking to compare them, and a blended figure
+ * answers a question nobody asked. Inside a group they are ratios of the SUMS, the same
+ * definition the grid's own totals use, so the tab and the table never disagree.
  */
 export function occupancyKpis(
   datasets: readonly OccupancyDataset[],
@@ -146,27 +138,25 @@ export function occupancyKpis(
   });
 }
 
-/** A channel of the catalogue, with what everything marked sold through it together. */
 export interface ChannelEntry {
   id: string;
   name: string;
-  /** Nights across every marked sucursal-year — what orders the chart's rows. */
+  /** Across every marked center-year — what orders the chart's rows. */
   total: number;
 }
 
 export interface ChannelBreakdown {
   /** The channels to draw, largest total first. */
   channels: ChannelEntry[];
-  /** One row per sucursal-year; `nights` is aligned with `channels`. */
+  /** One row per center-year; `nights` is aligned with `channels`. */
   series: { key: OccupancySeriesKey; label: string; nights: number[] }[];
   total: number;
 }
 
 /**
- * Nights per sales channel over the marked scope. Channels are unioned by id across everything
- * marked — one Booking row, not one per sucursal — but each sucursal-year keeps its OWN nights
- * inside that row, because «¿por dónde vende cada una?» is the question a comparison is asking.
- * The row order is the combined total, so both series read against the same ranking.
+ * Channels are unioned by id — one Booking row, not one per center — but each center-year keeps
+ * its OWN nights inside that row. The order is the combined total, so both series read against
+ * the same ranking.
  */
 export function channelTotals(
   datasets: readonly OccupancyDataset[],
@@ -214,15 +204,13 @@ export function channelTotals(
 
 export interface WeekdayBreakdown {
   labels: string[];
-  /** One row per sucursal-year; `values` has seven entries, Monday first. */
+  /** One row per center-year; `values` has seven entries, Monday first. */
   series: { key: OccupancySeriesKey; label: string; values: (number | null)[] }[];
 }
 
 /**
- * The active metric by day of the week, ONE ROW PER SUCURSAL-YEAR. Every day of the marked scope
- * falls into its weekday and the metric is aggregated there under its own rule — a ratio stays a
- * ratio of sums, so «los domingos llenan al 60%» is a real 60%, not an average of daily
- * percentages.
+ * ONE ROW PER CENTER-YEAR. A ratio stays a ratio of sums, so «los domingos llenan al 60%» is a
+ * real 60%, not an average of daily percentages.
  */
 export function weekdayRhythm(
   datasets: readonly OccupancyDataset[],
@@ -288,7 +276,7 @@ export function dayLabel(year: number, monthIndex: number, day: number): string 
 export interface DayDetail {
   label: string;
   indicators: { id: string; label: string; value: number | null; unit: MetricUnit }[];
-  /** One day of ONE sucursal-year: there is nothing to compare here, so nights stand alone. */
+  /** One day of ONE center-year: nothing to compare, so nights stand alone. */
   channels: { id: string; name: string; nights: number }[];
 }
 

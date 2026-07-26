@@ -66,16 +66,14 @@ describe("toOccupancyGrid · indicadores por día", () => {
 
 describe("toOccupancyGrid · columna Total / prom.", () => {
   it("aggregates ADR as total revenue over total rooms sold, not the average of daily ADRs", () => {
-    // Daily ADRs are 100 and 50, so the mean of ratios is 75. The ratio of sums —
-    // 1200/14 — is the answer, and the two must not be confused.
+    // Daily ADRs are 100 and 50, so the mean of ratios is 75; 1200/14 is the answer.
     const year = january({ revenue: [1000, 200, 0], sold: [10, 4, 0] });
     expect(row(year, "adr").agg).toBeCloseTo(1200 / 14, 10);
     expect(row(year, "adr").agg).not.toBe(75);
   });
 
   it("keeps RevPAR = ADR × ocupación in the aggregate, which averaging ratios would break", () => {
-    // The identity holds by algebra: (ΣR/ΣS) × (ΣS/ΣA) = ΣR/ΣA. It is the reason the
-    // aggregates are ratios of sums; a mean of the daily ratios would not satisfy it.
+    // (ΣR/ΣS) × (ΣS/ΣA) = ΣR/ΣA — a mean of the daily ratios would not satisfy it.
     const year = january({
       revenue: [1000, 200, 350],
       sold: [10, 4, 5],

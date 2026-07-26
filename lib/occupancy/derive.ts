@@ -1,14 +1,11 @@
 /**
- * Pure derivation for Ocupaciones: turns a stored `OccupancyDataset` (raw inputs only) into
- * the day-by-day grid the Datos tab renders.
+ * Turns a stored dataset (raw inputs only) into the grid the Datos tab renders.
  *
- * An imported month is shown VERBATIM until it is first edited (see `applySnapshot`), so an
- * upload reproduces the accountant's file rather than a corrected version of it. Everything
+ * An imported month is shown VERBATIM until its first edit (see `applySnapshot`); everything
  * below describes what happens once the month is computed.
  *
- * The monthly aggregates are RATIOS OF SUMS (ADR = total revenue / total rooms sold), not
- * averages of the daily ratios — that is the hotel-industry definition and the only one
- * under which ADR × Ocupación = RevPAR holds in the "Total / prom." column.
+ * Aggregates are RATIOS OF SUMS (ADR = total revenue / total rooms sold), not averages of the
+ * daily ratios — the only definition under which ADR × Ocupación = RevPAR holds in the total.
  */
 import { periodLabels, periodsPerYear, sumByPeriod, type Frequency } from "@/lib/period";
 import {
@@ -43,22 +40,20 @@ export interface OccupancyGridRow {
 export interface OccupancyGrid {
   /** Whether a column is a day of one month, or a period of the year. */
   scope: "month" | "year";
-  /** Present only in the monthly scope. */
   monthIndex?: number;
-  /** How coarse the year's columns are. Present only in the annual scope. */
+  /** Annual scope only: how coarse the year's columns are. */
   frequency?: Frequency;
-  /** How many value columns the rows carry: days of the month, or periods of the year. */
   columns: number;
-  /** Header label per column: "1"…"31", "Ene"…"Dic", or "T1"…"T4". */
+  /** "1"…"31", "Ene"…"Dic", or "T1"…"T4". */
   columnLabels: string[];
   rows: OccupancyGridRow[];
   /** Columns where the channel total ≠ sold + complimentary. */
   channelMismatch: number[];
   /** Columns where the room-type total ≠ sold + complimentary. */
   roomMismatch: number[];
-  /** Columns whose PAX was stated by hand AND differs from simples·1 + dobles·2 + triples·3. */
+  /** Columns whose PAX was stated by hand AND differs from the room-type formula. */
   paxOverrides: number[];
-  /** true while the month is being shown verbatim from the workbook (nothing recomputed). */
+  /** true while the month is shown verbatim from the workbook. */
   asImported: boolean;
   /** Union of both checks — the banner's headline count. */
   mismatch: number[];
@@ -108,11 +103,7 @@ export function emptyMonth(
   return { index, days, nights: null, fromFile: false, inputs, edited: false };
 }
 
-/**
- * A blank sucursal-year: 12 months sized to the real calendar, no channels. With no center
- * given it falls into `principal`, rotulada with the hotel's own name — a hotel that runs a
- * single property still needs one place to put its years.
- */
+/** With no center given it falls into `principal`, labelled with the hotel's own name. */
 export function emptyDataset(
   year: number,
   hotelName: string,
@@ -179,9 +170,8 @@ function inputRow(
   options: { hint?: string; format?: OccupancyGridRow["format"]; agg?: "sum" | "avg" } = {},
 ): OccupancyGridRow {
   const agg = options.agg ?? "sum";
-  // "avg" only ever averages room counts, and a hotel cannot hold 21,94 rooms — the mean is
-  // rounded to a whole room. Nothing computes from it: the occupancy and RevPAR
-  // denominators use the SUM of available rooms, not this average.
+  // A hotel cannot hold 21,94 rooms, so the mean is rounded. Nothing computes from it: the
+  // occupancy and RevPAR denominators use the SUM of available rooms, not this average.
   const mean = cells.length > 0 ? Math.round(sum(cells) / cells.length) : null;
   return {
     id,
@@ -228,9 +218,8 @@ function sectionRow(id: string, label: string, days: number, hint?: string): Occ
 }
 
 /**
- * Overlays what the workbook actually held on top of the computed row. Rows the file left
- * empty — the many uncached `SUM(...)` TOTAL cells — keep the computed value: there is no
- * number in the file to show, so refusing to compute would just leave a hole.
+ * Rows the file left empty — the many uncached `SUM(...)` TOTAL cells — keep the COMPUTED value:
+ * there is no number in the file to show, so refusing to compute would just leave a hole.
  */
 function applySnapshot(
   row: OccupancyGridRow,
@@ -246,10 +235,6 @@ function applySnapshot(
   };
 }
 
-/**
- * Builds the Datos grid for one month. Rows come out in display order: raw inputs,
- * indicators, the channel catalogue, then room types and PAX.
- */
 export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): OccupancyGrid {
   const month =
     dataset.months[monthIndex] ?? emptyMonth(monthIndex, daysInMonth(dataset.year, monthIndex));
@@ -267,9 +252,8 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
 
   const cumulativeOccupancy = cumulativeRatio(sold, available);
 
-  // Channel membership is PER MONTH: each table holds only the channels that month uses, so
-  // a channel can be dropped from March without touching January. The dataset catalogue only
-  // supplies the display name and the order.
+  // Channel membership is PER MONTH, so a channel can be dropped from March without touching
+  // January. The dataset catalogue only supplies the display name and the order.
   const channelSeries = dataset.channels
     .filter((channel) => raw.channels?.[channel.id] !== undefined)
     .map((channel) => ({ channel, values: series(raw.channels[channel.id], days) }));
@@ -296,8 +280,8 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
   }, []);
   const cumulativePax = cumulativeSum(pax);
 
-  // The workbook's own per-day "OK" check: every occupied room must be accounted for both
-  // by the channel that sold it and by its room type.
+  // The workbook's own check: every occupied room must be accounted for both by the channel
+  // that sold it and by its room type.
   const occupied = Array.from({ length: days }, (_, d) => sold[d] + complimentary[d]);
   const channelMismatch: number[] = [];
   const roomMismatch: number[] = [];
@@ -350,13 +334,11 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
       "% acumulado diario",
       cumulativeOccupancy,
       last(cumulativeOccupancy),
-      // Whole percents: the running figure is a trend read at a glance, not a precise
-      // measure — its final value is the same number Ocupación already reports exactly.
+      // A trend read at a glance; its final value is what Ocupación already reports exactly.
       { hint: "ocupación acumulada del mes", format: "percent-whole" },
     ),
 
-    // Room types first, then channels: the room breakdown reconciles directly with the
-    // sold/complimentary rows above it, so it reads better next to them.
+    // Rooms before channels: the room breakdown reconciles with the rows just above it.
     sectionRow("section:rooms", "Habitaciones", days),
     ...ROOM_ROW_IDS.map((id) => inputRow(id, ROOM_LABELS[id], rooms[id])),
     derivedRow("totalRooms", "Total habitaciones", totalRooms, sum(totalRooms)),
@@ -378,9 +360,8 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
     derivedRow("totalChannels", "Total canales", totalChannels, sum(totalChannels)),
   ];
 
-  // An untouched imported month is shown EXACTLY as the workbook had it — indicators and
-  // TOTAL column included, errors and all. The first edit flips `edited` and every row
-  // switches to the computed value at once, so a month never mixes the two provenances.
+  // Shown EXACTLY as the workbook had it, errors and all. The first edit flips `edited` and
+  // every row switches at once, so a month never mixes the two provenances.
   const snapshot = month.edited ? undefined : month.imported;
 
   return {
@@ -398,14 +379,12 @@ export function toOccupancyGrid(dataset: OccupancyDataset, monthIndex: number): 
 }
 
 /**
- * The same rows with one column per period of the year: twelve months, four quarters or two
- * semesters. ALWAYS computed from the raw inputs — a row mixing months shown verbatim with
- * recomputed ones would be a total nothing on screen explains — and read-only by construction,
- * since every cell is an aggregate of days.
+ * The same rows with one column per period: twelve months, four quarters or two semesters.
+ * ALWAYS computed — a row mixing verbatim and recomputed months would be a total nothing on
+ * screen explains — and read-only, since every cell is an aggregate of days.
  *
- * Coarser columns change only WHICH days each cell adds up. The raw inputs are summed and ADR,
- * ocupación and RevPAR stay ratios OF THOSE SUMS, so ADR × Ocupación = RevPAR holds inside a T1
- * exactly as it does inside a month.
+ * Coarser columns change only WHICH days each cell adds up: the raw inputs are summed and the
+ * indicators stay ratios OF THOSE SUMS, so ADR × Ocupación = RevPAR holds inside a T1 too.
  */
 export function toAnnualGrid(
   dataset: OccupancyDataset,
@@ -481,7 +460,7 @@ export function toAnnualGrid(
 
   const rows: OccupancyGridRow[] = [
     // Room-NIGHTS, not the "rooms the hotel has" of the monthly view: this is what the
-    // occupancy and RevPAR of each month divide by.
+    // occupancy and RevPAR of each period divide by.
     inputRow("available", "Habitaciones disponibles", available, {
       hint: "habitaciones-noche",
     }),

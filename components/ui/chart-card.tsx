@@ -25,29 +25,19 @@ export interface ChartCardProps {
   empty?: boolean;
   /** Passed to the chart: clicking a category is how the reader goes one level down. */
   onSelect?: (dataIndex: number) => void;
-  /**
-   * Offer the "Ver como tabla" twin. Default true. The account ficha turns it off: its numbers
-   * already sit above the chart as metrics, and a single-series bar reads fine on its own.
-   */
+  /** Default true. The account ficha turns it off: its numbers already sit above the chart. */
   tableToggle?: boolean;
-  /**
-   * Control that acts on THIS card only, rendered in its header beside the table toggle. A
-   * control that shapes one chart belongs over that chart: in the module filter bar it would
-   * read as applying to every card there.
-   */
+  /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
 }
 
 /**
- * One chart, its warnings, and its table twin behind a switch.
- *
- * The twin is not an accessibility afterthought: three of the eight palette slots fall below
- * 3:1 against the white surface — unavoidable in a categorical eight — and a transformed chart
- * (índice 100, variación, YTD) holds numbers that exist nowhere else in the app, least of all
- * in the Datos tab. It costs nothing: the table is built from the same `Series[]`.
+ * The table twin is not an afterthought: three of the eight palette slots fall below 3:1 against
+ * white, and a transformed chart holds numbers that exist nowhere else in the app. It costs
+ * nothing — the table is built from the same `Series[]`.
  *
  * Memoized because a tab draws several of these and the provider rebuilds its sources on every
- * cell edit; the props are memoized objects, so an unrelated edit re-renders nothing here.
+ * cell edit.
  */
 export const ChartCard = memo(function ChartCard({
   title,
@@ -129,9 +119,8 @@ export const ChartCard = memo(function ChartCard({
                 />
               )
             ) : (
-              // Never an empty plot: the warnings above already say why, and when there are
-              // none this line is the explanation. The note below often completes it — a
-              // period whose accounts are all at zero has nothing positive to compose.
+              // Never an empty plot: the warnings above say why, and when there are none this
+              // line is the explanation.
               <EmptyState className="py-8">
                 {warnings.length > 0
                   ? "No se pudo construir ninguna serie con estos datos."

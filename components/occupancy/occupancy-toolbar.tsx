@@ -23,10 +23,7 @@ const PERIOD_CELL =
   "rounded-lg border border-border bg-surface px-2 py-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:bg-canvas";
 const PERIOD_CELL_ON = "border-brand bg-brand-soft text-brand";
 
-/**
- * The quarter/semester shortcuts. They are NOT a second kind of mark: each one just marks its
- * own months, so the chips, the sanitation and the engine keep seeing months and nothing else.
- */
+/** NOT a second kind of mark: each just marks its own months. */
 const SHORTCUTS: { frequency: Frequency; index: number; label: string; name: string }[] = [
   ...periodLabels("trimestral").map((label, index) => ({
     frequency: "trimestral" as const,
@@ -43,15 +40,10 @@ const SHORTCUTS: { frequency: Frequency; index: number; label: string; name: str
 ];
 
 /**
- * Ocupaciones' filter row: Métrica · Sucursal · Año · Periodo, with the active-mark chips below.
- * The comparison is never declared — marking two sucursales, two years or two months is itself
- * what produces it.
+ * The comparison is never declared — marking two centers, years or months is what produces it.
  *
- * «Ver por» is deliberately NOT here: it only swaps the axis of the series card, and every
- * control in this bar feeds every card on the tab. It lives in that card's own header.
- *
- * The métrica is the one single-choice control here: ocupación is a %, ADR is money and PAX is
- * a count, so a card holding two of them at once would need a second Y axis.
+ * «Ver por» is deliberately NOT here: every control in this bar feeds EVERY card on the tab,
+ * while that one swaps the axis of the series card alone, so it lives in that card's header.
  */
 export function OccupancyToolbar() {
   const {
@@ -87,7 +79,7 @@ export function OccupancyToolbar() {
     ...filters.centerIds.map((id) => ({
       key: `center:${id}`,
       label: centers.find((center) => center.id === id)?.name ?? id,
-      // The dot is the color that sucursal actually carries in the charts, whichever year.
+      // The color that center actually carries in the charts, whichever year.
       dotColor: colorForEntity(
         colorOrder.find((entry) => entry.startsWith(`${id}|`)) ?? id,
         colorOrder,
@@ -203,8 +195,7 @@ export function OccupancyToolbar() {
                 <button
                   key={label}
                   type="button"
-                  // «T1» is unreadable on its own: the full name is what hover and a screen
-                  // reader get, so the button can stay narrow enough to fit six in a row.
+                  // «T1» is unreadable on its own, so hover and screen readers get the full name.
                   title={name}
                   aria-label={name}
                   aria-pressed={isPeriodMarked(filters, frequency, index)}

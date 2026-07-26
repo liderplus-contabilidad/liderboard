@@ -172,8 +172,8 @@ describe("tooltip de la gráfica principal", () => {
     expect(html).toContain("46,7 %");
   });
 
-  // Con dos series y UNA columna manda `entityOption` (cada barra es una serie), así que la
-  // comparación sobre el eje se lee con el año entero delante: la columna 0 sigue siendo enero.
+  // Con dos series y UNA columna manda `entityOption`, así que la comparación sobre el eje se
+  // lee con el año entero delante: la columna 0 sigue siendo enero.
   it("comparando da el valor de cada serie más la línea de dónde sale", () => {
     const bundle = buildOccupancySeries([MANOR, NORTE], {
       ...enero(["manor", "norte"]),

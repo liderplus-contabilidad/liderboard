@@ -1,12 +1,9 @@
 /**
- * Builds a downloadable occupancy workbook in the SAME layout the parser reads — stacked
- * month blocks on one sheet — so a downloaded file re-uploads and re-parses cleanly. What is
- * written per row is the grid's EFFECTIVE value: an untouched month exports the figures it
- * showed verbatim; an edited month exports its recomputed ones. Either way re-importing shows
- * exactly what the user last saw.
+ * The SAME layout the parser reads, so a downloaded file re-uploads cleanly. Each row carries the
+ * grid's EFFECTIVE value — verbatim for an untouched month, recomputed for an edited one — so
+ * re-importing shows exactly what the user last saw.
  *
- * Imported statically here; UI code must load this via dynamic `import()` so exceljs stays
- * out of the initial bundle.
+ * exceljs is imported statically here; UI code must reach this through a dynamic `import()`.
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
@@ -59,8 +56,8 @@ export function buildOccupancyWorkbook(year: OccupancyDataset): ExcelJS.Workbook
   const ws = wb.addWorksheet(SHEET_NAME);
 
   ws.addRow([`Ocupación  - ${year.year}`]).getCell(1).font = { bold: true, size: 14 };
-  // The two name lines the parser reads BY POSITION. The cost-center line is omitted for
-  // `principal`: writing it would turn a hotel with no sucursales into one named after itself.
+  // Read BY POSITION. The cost-center line is omitted for `principal`: writing it would turn a
+  // hotel with no centers into one named after itself.
   ws.addRow([year.hotelName]).getCell(1).font = { bold: true };
   if (year.centerId !== DEFAULT_CENTER_ID) {
     ws.addRow([year.centerName]).getCell(1).font = { bold: true };
@@ -138,7 +135,7 @@ export async function workbookToBlob(wb: ExcelJS.Workbook): Promise<Blob> {
   });
 }
 
-/** `OCUPACION_<HOTEL>_<SUCURSAL>_<YEAR>.xlsx`, so a folder of downloads reads on its own. */
+/** `OCUPACION_<HOTEL>_<CENTER>_<YEAR>.xlsx`, so a folder of downloads reads on its own. */
 export function occupancyExportFilename(year: OccupancyDataset): string {
   const word = (value: string) => sanitize(value).replace(/\s+/g, "_");
   const hotel = year.hotelName && year.hotelName !== "—" ? word(year.hotelName) : "";

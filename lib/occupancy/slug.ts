@@ -1,8 +1,4 @@
-/**
- * Channel ids and cost-center ids share this one rule, so a name typed by hand and the same
- * name read from a workbook resolve to the same record.
- */
-
+/** Channel and cost-center ids share this rule, so a hand-typed name and a parsed one match. */
 export function normalize(value: string): string {
   return value
     .normalize("NFD")

@@ -1,14 +1,9 @@
 /**
- * Parses an `OCUPACION_*.xlsx` export into an `OccupancyDataset`.
+ * The source format is one sheet of month blocks stacked vertically, each opening with a
+ * "MES: ENERO" line. Only RAW inputs are read: the file's own indicators and TOTAL columns are
+ * formulas without a cached result, and their aggregates follow inconsistent definitions.
  *
- * The source format is a single sheet of month blocks stacked vertically, each opening
- * with a "MES: ENERO" line. Only RAW inputs are read: the file's own ADR / Ocupación /
- * RevPAR / PAX and every TOTAL column are skipped, because they are stored as formulas
- * without a cached result and their aggregates follow inconsistent definitions.
- * `derive.ts` recomputes all of it.
- *
- * This module imports SheetJS statically; UI code must load it via dynamic `import()` so
- * the library stays out of the initial bundle.
+ * SheetJS is imported statically here; UI code must reach this through a dynamic `import()`.
  */
 import * as XLSX from "xlsx";
 import { MONTHS_FULL_ES } from "@/lib/date";
@@ -107,8 +102,8 @@ function resolveCenter(name: string | undefined, warnings: string[]): CenterRow 
   if (!declared || !id) {
     return undefined;
   }
-  // "Consolidado" names the DERIVED all-sucursales view. A stored center answering to that id
-  // would be shadowed by it and become unreachable, so it is renamed rather than dropped.
+  // A stored center answering to the reserved consolidated id would be shadowed by it and
+  // become unreachable, so it is renamed rather than dropped.
   if (id === CONSOLIDATED_CENTER_ID) {
     warnings.push(
       `«${declared}» es el nombre reservado de la vista consolidada; esa sucursal se guardó como «${id}-sucursal».`,
@@ -269,8 +264,7 @@ function roomRowsOf(rows: Cell[][]): Map<RoomRowId, Cell[]> {
 
 function readBlock(block: Block, yearNumber: number, channels: ChannelRow[], warnings: string[]) {
   const days = daysInMonth(yearNumber, block.monthIndex);
-  // Only the channels THIS block lists: membership is per month, so a channel that appears
-  // in March must not materialise as an empty row in January.
+  // Membership is per month: a channel appearing in March must not materialise in January.
   const present = new Set(channelRowsOf(block.rows).map(({ name }) => slugify(name)));
   const month = emptyMonth(
     block.monthIndex,
@@ -308,9 +302,8 @@ function readBlock(block: Block, yearNumber: number, channels: ChannelRow[], war
 
   let droppedAny = false;
 
-  // Metric rows only — the scan MUST stop at "Cantidades por día". Below it live a
-  // "Complementarias" channel and a "Simples" room row whose labels would otherwise be
-  // matched again and silently overwrite the metrics above (they disagree in the real files).
+  // The scan MUST stop at "Cantidades por día": below it live a "Complementarias" channel and a
+  // "Simples" room row whose labels would otherwise match again and overwrite the metrics.
   for (const row of metricRowsOf(block.rows)) {
     const label = normalize(text(row?.[0]));
     if (!label) {
@@ -322,8 +315,7 @@ function readBlock(block: Block, yearNumber: number, channels: ChannelRow[], war
     }
   }
 
-  // Duplicated channel labels inside one block are summed — the real exports repeat
-  // "Grupos" and "Agencias de viajes", and dropping either one would lose nights.
+  // Duplicated labels are summed: the real exports repeat "Grupos" and "Agencias de viajes".
   const timesSeen = new Map<string, number>();
   for (const { name, row } of channelRowsOf(block.rows)) {
     const id = slugify(name);
@@ -349,10 +341,8 @@ function readBlock(block: Block, yearNumber: number, channels: ChannelRow[], war
     droppedAny = readSeries(row, month.inputs.rooms[id]) || droppedAny;
   }
 
-  // PAX is stored ONLY where the file disagrees with simples·1 + dobles·2 + triples·3.
-  // Those days are real (an extra bed); the rest stay null so PAX keeps tracking the room
-  // types as they are edited. The file's own PAX TOTAL is ignored — in this export it
-  // points at another month's rows.
+  // Stored ONLY where the file disagrees with the room-type formula (a real extra bed); the rest
+  // stay null so PAX keeps tracking the rooms. The file's PAX TOTAL points at another month.
   const paxRow = block.rows.find((row) => normalize(text(row?.[0])) === "pax totales");
   if (paxRow) {
     const declared = new Array<number>(days).fill(0);
@@ -392,17 +382,8 @@ const SNAPSHOT_ROWS: { id: string; test: (label: string) => boolean }[] = [
 ];
 
 /**
- * Captures the block EXACTLY as the workbook holds it — indicators, room types, channels and
- * the TOTAL column. An untouched month is rendered from this, so an upload reproduces the
- * accountant's file instead of a corrected version of it.
- *
- * A TOTAL cell that is an uncached formula yields no number and is simply left out; the grid
- * falls back to computing that one aggregate, because there is nothing in the file to show.
- */
-/**
- * The TOTAL column, read from the "Dias en el mes" header by name. It is NOT the column
- * after the last day: February's header stops at day 30 while TOTAL stays at AG, so assuming
- * adjacency reads an empty cell and silently loses the file's own totals.
+ * Read from the "Dias en el mes" header BY NAME. It is not the column after the last day:
+ * February stops at day 30 while TOTAL stays at AG, so adjacency would read an empty cell.
  */
 function totalColumnOf(rows: Cell[][]): number {
   const header = rows.find((row) => normalize(text(row?.[0])) === "dias en el mes");
@@ -466,8 +447,7 @@ function declaredNights(headerRow: Cell[] | undefined): number | null {
 }
 
 /**
- * Sheet columns holding day values, in day order. Read from the "Dias en el mes" row as a
- * contiguous run of 1–31 headers, which is what stops the TOTAL / Porcentaje / Promedio
+ * A CONTIGUOUS run of 1–31 headers, which is what stops the TOTAL / Porcentaje / Promedio
  * columns from ever being mistaken for data.
  */
 function dayColumnsOf(rows: Cell[][]): number[] {

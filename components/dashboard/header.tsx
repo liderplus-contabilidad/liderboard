@@ -33,9 +33,9 @@ export function DashboardHeader() {
       }
     : undefined;
 
-  // `principal` is left out: it is rotulada with the hotel's own name, so naming it here
-  // would say the same thing twice.
-  const sucursal = occupancy.isConsolidated
+  // `principal` is left out: it is labelled with the hotel's own name, so naming it here would
+  // say the same thing twice.
+  const centerLabel = occupancy.isConsolidated
     ? `Consolidado (${occupancy.centers.length} ${occupancy.centers.length === 1 ? "sucursal" : "sucursales"})`
     : occupancy.activeCenterId === DEFAULT_CENTER_ID
       ? undefined
@@ -43,7 +43,7 @@ export function DashboardHeader() {
   const hotel: ActiveClientInfo | undefined = occupancy.hotelName
     ? {
         name: occupancy.hotelName,
-        period: [occupancy.activeYear, sucursal].filter(Boolean).join(" · ") || undefined,
+        period: [occupancy.activeYear, centerLabel].filter(Boolean).join(" · ") || undefined,
       }
     : undefined;
 

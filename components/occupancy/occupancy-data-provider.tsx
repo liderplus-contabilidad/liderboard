@@ -36,7 +36,6 @@ import {
 
 const EMPTY_DATASETS: OccupancyDataset[] = [];
 
-/** Files parsed and waiting on the user to confirm they replace another hotel's workspace. */
 interface PendingReplace {
   results: OccupancyParseResult[];
   hotelName: string;
@@ -46,36 +45,28 @@ interface PendingReplace {
 
 interface OccupancyDataValue {
   datasets: OccupancyDataset[];
-  /** The sucursales present, alphabetically. */
   centers: CenterRow[];
   hotelName: string | undefined;
-  /** Active sucursal, or the reserved consolidated id. */
   activeCenterId: string | undefined;
   activeCenterName: string | undefined;
   isConsolidated: boolean;
-  /** Whether a Consolidado view is on offer at all — it needs two sucursales to mean anything. */
   hasConsolidated: boolean;
   setActiveCenter: (centerId: string) => void;
-  /** Years of the active sucursal (all years, in the consolidated view), ascending. */
+  /** Years of the ACTIVE center; `allYears` is every year the workspace holds. */
   years: number[];
-  /** Every year the workspace holds — the universe the Gráficos filter bar offers. */
   allYears: number[];
   activeYear: number | undefined;
   setActiveYear: (year: number) => void;
   monthIndex: number;
   setMonthIndex: (index: number) => void;
-  /** Whether the DATOS grid shows one month by days, or the whole year by periods. */
+  /** Whether the Datos grid shows one month BY DAYS, or the whole year BY PERIODS. */
   gridScope: "month" | "year";
   setGridScope: (scope: "month" | "year") => void;
-  /** How coarse the annual grid's columns are: 12 months, 4 quarters or 2 semesters. */
   gridFrequency: Frequency;
   /** Picks the annual grid's granularity — and switches to it. */
   setGridFrequency: (frequency: Frequency) => void;
-  /** The active view's dataset: a stored sucursal-year, or the consolidated sum. */
   dataset: OccupancyDataset | undefined;
-  /** The active month's grid; null while there is nothing to show. */
   grid: OccupancyGrid | null;
-  /** False in the consolidated view: it is a calculation, edited in each sucursal. */
   canEdit: boolean;
   /** False only on the very first Dexie read, so the empty state doesn't flash. */
   ready: boolean;
@@ -88,22 +79,14 @@ interface OccupancyDataValue {
   addYear: (year: number) => Promise<void>;
   deleteYear: (year: number) => Promise<void>;
   deleteCenter: (centerId: string) => Promise<void>;
-  /**
-   * Commits an already-parsed selection: the staging modal reads the files, so what arrives
-   * here is the whole upload, checked as one before anything is written.
-   */
+  /** The whole upload, already parsed and checked as one before anything is written. */
   importParsed: (results: OccupancyParseResult[]) => Promise<void>;
-  /**
-   * Last upload failure, in Spanish. Held here because the upload button lives in the module
-   * tab bar while its error banner belongs above the grid.
-   */
   importError: string | null;
   importErrorDetails: string[];
   dismissImportError: () => void;
   /**
    * What the Gráficos filter bar has marked. Datos keeps its own three strips: those answer
-   * «cuál edito» — a single sucursal-year-month — while these answer «cuáles comparo». The bar
-   * falls back to whatever Datos has open, so moving between tabs keeps the context.
+   * «cuál edito», these answer «cuáles comparo».
    */
   filters: OccupancyFilters;
   setMetric: (metric: OccupancyMetricId) => void;
@@ -118,9 +101,9 @@ interface OccupancyDataValue {
   clearMonthMarks: () => void;
   clearDayMarks: () => void;
   clearAllMarks: () => void;
-  /** The «T1»/«S1» shortcuts: they mark that period's own months, no new kind of mark. */
+  /** The «T1»/«S1» shortcuts: they mark that period's own MONTHS, no new kind of mark. */
   togglePeriodMark: (frequency: Frequency, index: number) => void;
-  /** Clicking a column: narrows to the months it covered and drops the axis one step. */
+  /** Narrows to those months AND drops the axis one step. */
   drillIntoPeriod: (months: readonly number[], scope: Scope) => void;
 }
 
@@ -152,11 +135,11 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const ready = stored !== undefined;
 
   const centers = useMemo(() => occupancyDb.centersOf(datasets), [datasets]);
-  // One sucursal has nothing to consolidate with: the sum would just be itself.
+  // One center has nothing to consolidate with: the sum would just be itself.
   const hasConsolidated = centers.length > 1;
 
-  // Prefer the in-session sucursal, then the persisted one, then the first — each only if it
-  // still exists, so deleting a sucursal cannot strand the view on nothing.
+  // In-session, then persisted, then the first — each only if it still exists, so deleting a
+  // center cannot strand the view on nothing.
   const requestedCenter = selected.centerId ?? meta?.activeCenterId;
   const activeCenterId =
     requestedCenter === CONSOLIDATED_CENTER_ID && hasConsolidated
@@ -170,8 +153,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   );
   const years = useMemo(() => yearsOf(centerDatasets), [centerDatasets]);
 
-  // A sucursal need not hold every year: switching to one that lacks the active year lands on
-  // its most recent instead of on an empty grid.
+  // A center need not hold every year: switching to one that lacks the active year lands on its
+  // most recent instead of on an empty grid.
   const activeYear =
     years.find((y) => y === selected.year) ??
     years.find((y) => y === meta?.activeYear) ??
@@ -208,7 +191,6 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       : toOccupancyGrid(dataset, monthIndex);
   }, [dataset, monthIndex, gridScope, gridFrequency]);
 
-  // Picking a granularity IS switching to the annual grid — the two are one gesture.
   const setGridFrequency = useCallback((frequency: Frequency) => {
     setRawGridFrequency(frequency);
     setGridScope("year");
@@ -216,7 +198,6 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
 
   // The annual grid aggregates days into periods: there is no cell to write back to.
   const canEdit = !isConsolidated && dataset !== undefined && gridScope === "month";
-  /** The record every mutation writes to; undefined in the consolidated view. */
   const activeKey = useMemo(
     () =>
       canEdit && activeCenterId !== undefined && activeYear !== undefined
@@ -226,7 +207,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   );
 
   const setActiveCenter = useCallback((centerId: string) => {
-    // The year is deliberately left to resolve itself against the new sucursal's own years.
+    // The year is deliberately left to resolve itself against the new center's own years.
     setSelected((current) => ({ centerId, year: current.year }));
   }, []);
 
@@ -287,7 +268,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
 
   const addYear = useCallback(
     async (year: number) => {
-      // The consolidated view owns no year, so a blank one goes to the first sucursal.
+      // The consolidated view owns no year, so a blank one goes to the first center.
       const centerId = isConsolidated ? centers[0]?.id : activeCenterId;
       if (centerId === undefined) {
         return;
@@ -318,8 +299,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     if (replaceHotel !== undefined) {
       await occupancyDb.replaceAll(results, replaceHotel);
     } else {
-      // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping
-      // ones (two files landing the same sucursal-year) would race on the same record.
+      // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping ones
+      // (two files landing the same center-year) would race on the same record.
       for (const parsed of results) {
         await occupancyDb.mergeParsedDataset(parsed);
       }
@@ -343,8 +324,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       }
 
       // Nothing is written until the whole selection is known to belong to ONE hotel: a mixed
-      // upload half-applied would leave two companies sharing one set of tabs. The staging modal
-      // blocks this before it gets here; the check stays because this is what writes.
+      // upload half-applied would leave two companies sharing one set of tabs. The modal blocks
+      // this earlier; the check stays because THIS is what writes.
       const hotels = [...new Map(results.map((r) => [normalize(r.dataset.hotelName), r])).values()];
       if (hotels.length > 1) {
         setImportError(
@@ -522,10 +503,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   return (
     <OccupancyDataContext.Provider value={value}>
       {children}
-      {/*
-        The dialog lives here, not in the Datos panel: the upload button sits in the module tab
-        bar, so the question has to be answerable from whichever tab is open.
-      */}
+      {/* Here, not in the Datos panel: the upload button sits in the tab bar, outside it. */}
       <ConfirmDialog
         open={pendingReplace !== null}
         variant="destructive"

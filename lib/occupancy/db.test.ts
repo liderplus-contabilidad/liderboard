@@ -85,8 +85,7 @@ describe("addYear / deleteYear", () => {
     await addYear(key(2027));
 
     const created = await record(2027);
-    // 2026's catalogue (the file's Booking + the defaults its empty months were seeded with,
-    // plus the user's Walk in) carries into 2027.
+    // 2026's whole catalogue — the file's, the seeded defaults and the user's — carries into 2027.
     expect(created?.channels.map((c) => c.name)).toEqual(
       expect.arrayContaining(["Booking", "Walk in"]),
     );
@@ -150,8 +149,7 @@ describe("mergeParsedDataset", () => {
     await mergeParsedDataset(incoming);
 
     const stored = await record(2026);
-    // The user's channels and the file's survive; the catalogue also carries the defaults
-    // seeded into the empty months.
+    // The user's channels and the file's survive, alongside the seeded defaults.
     expect(stored?.channels.map((c) => c.name)).toEqual(
       expect.arrayContaining(["Booking", "Mostrador", "AirBnB"]),
     );

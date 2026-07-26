@@ -22,10 +22,8 @@ function describe({ dataset, parsedMonths }: OccupancyParseResult): string {
 }
 
 /**
- * Staging modal for the occupancy upload, mirroring PyG's: drop or pick several files, each
- * parsed on the fly to show the sucursal-año it declares, drop the one that doesn't belong, then
- * commit the whole selection at once. Parse failures are reported per file HERE — where the user
- * can still act on them — instead of in the banner above the grid.
+ * Each file is parsed on the fly to show the center-year it declares, and the whole selection is
+ * committed at once. Parse failures are reported per file HERE, where they are still actionable.
  */
 export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { importParsed } = useOccupancyData();
@@ -36,7 +34,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
 
   const addFiles = useCallback(async (list: FileList | null) => {
     // Materialized BEFORE the first await: the caller clears `input.value` right after, which
-    // empties the live FileList this would otherwise read.
+    // empties the live FileList.
     const picked = list ? Array.from(list) : [];
     if (picked.length === 0) {
       return;
@@ -66,8 +64,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
   const valid = files.filter((file): file is StagedFile & { result: OccupancyParseResult } =>
     Boolean(file.result),
   );
-  // A mixed selection is refused before anything is written: two companies cannot share one set
-  // of tabs. Caught here so the reason is on screen while the files are still removable.
+  // Caught here so the reason is on screen while the files are still removable.
   const hotels = [
     ...new Map(valid.map((f) => [normalize(f.result.dataset.hotelName), f.result])).values(),
   ];
@@ -83,8 +80,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
     setBusy(true);
     try {
       await importParsed(valid.map((f) => f.result));
-      // Closed before the provider's replace dialog can answer: it is mounted outside this
-      // modal, so nothing is left stacked behind it.
+      // Closed first: the replace dialog is mounted outside this modal, so nothing stacks.
       onClose();
       setFiles([]);
     } finally {

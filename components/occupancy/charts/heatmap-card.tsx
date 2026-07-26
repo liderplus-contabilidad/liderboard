@@ -11,11 +11,7 @@ export interface HeatmapCardProps {
   onSelectDay: (centerId: string, year: number, monthIndex: number, day: number) => void;
 }
 
-/**
- * The day × month grid. Every cell is a day and the tone climbs with the metric; clicking one
- * opens its detail. All the grids share ONE scale, which is what makes two of them comparable
- * at a glance — a tone means the same figure in every grid on screen.
- */
+/** All the grids share ONE scale, so a tone means the same figure in every grid on screen. */
 export const HeatmapCard = memo(function HeatmapCard({ result, onSelectDay }: HeatmapCardProps) {
   const { scale, metric } = result;
 

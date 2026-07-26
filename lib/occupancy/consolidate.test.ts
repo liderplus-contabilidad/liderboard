@@ -4,7 +4,7 @@ import { emptyDataset, toOccupancyGrid } from "./derive";
 import { CONSOLIDATED_CENTER_ID, type OccupancyDataset } from "./types";
 
 /** A sucursal-year with January filled in; every array is sized to January's 31 days. */
-function sucursal(
+function center(
   id: string,
   values: {
     available?: number[];
@@ -50,7 +50,7 @@ describe("consolidate", () => {
   });
 
   it("identifies itself as the reserved consolidated view", () => {
-    const merged = consolidate([sucursal("a", {}), sucursal("b", {})]);
+    const merged = consolidate([center("a", {}), center("b", {})]);
     expect(merged?.centerId).toBe(CONSOLIDATED_CENTER_ID);
     expect(merged?.year).toBe(2026);
     expect(merged?.hotelName).toBe("HOTEL A");
@@ -58,8 +58,8 @@ describe("consolidate", () => {
 
   it("sums the raw inputs day by day", () => {
     const merged = consolidate([
-      sucursal("a", { sold: [9, 5], available: [22, 22] }),
-      sucursal("b", { sold: [1, 2], available: [10, 10] }),
+      center("a", { sold: [9, 5], available: [22, 22] }),
+      center("b", { sold: [1, 2], available: [10, 10] }),
     ]);
     expect(merged?.months[0].inputs.sold.slice(0, 2)).toEqual([10, 7]);
     expect(merged?.months[0].inputs.available.slice(0, 2)).toEqual([32, 32]);
@@ -69,16 +69,16 @@ describe("consolidate", () => {
     // A charges 100/room, B charges 50/room. The average of the two ADR is 75 only because
     // both sold the same number of rooms; the ratio of sums is the definition that holds.
     const merged = consolidate([
-      sucursal("a", { revenue: [1000], sold: [10] }),
-      sucursal("b", { revenue: [500], sold: [10] }),
+      center("a", { revenue: [1000], sold: [10] }),
+      center("b", { revenue: [500], sold: [10] }),
     ]);
     expect(agg(merged as OccupancyDataset, "adr")).toBeCloseTo(75, 10);
   });
 
   it("keeps ADR × Ocupación = RevPAR on the consolidated total", () => {
     const merged = consolidate([
-      sucursal("a", { revenue: [1000, 400], sold: [10, 4], available: [20, 20] }),
-      sucursal("b", { revenue: [300], sold: [2], available: [8, 8] }),
+      center("a", { revenue: [1000, 400], sold: [10, 4], available: [20, 20] }),
+      center("b", { revenue: [300], sold: [2], available: [8, 8] }),
     ]) as OccupancyDataset;
     const adr = agg(merged, "adr") ?? 0;
     const occupancy = agg(merged, "occupancy") ?? 0;
@@ -87,8 +87,8 @@ describe("consolidate", () => {
 
   it("unions the channels by id and sums the ones both sucursales sell through", () => {
     const merged = consolidate([
-      sucursal("a", { channels: { booking: [7, 5], "pagina-web": [3, 1] } }),
-      sucursal("b", { channels: { booking: [1, 1] } }),
+      center("a", { channels: { booking: [7, 5], "pagina-web": [3, 1] } }),
+      center("b", { channels: { booking: [1, 1] } }),
     ]);
     expect(merged?.channels.map((c) => c.id).sort()).toEqual(["booking", "pagina-web"]);
     expect(merged?.months[0].inputs.channels.booking.slice(0, 2)).toEqual([8, 6]);
@@ -99,8 +99,8 @@ describe("consolidate", () => {
   it("adds up the PAX each sucursal actually counted", () => {
     const merged = consolidate([
       // 4 doubles would be 8 guests; the file counted 9 (an extra bed).
-      sucursal("a", { rooms: { dobles: [4] }, pax: [9] }),
-      sucursal("b", { rooms: { dobles: [1] } }),
+      center("a", { rooms: { dobles: [4] }, pax: [9] }),
+      center("b", { rooms: { dobles: [1] } }),
     ]);
     // 9 counted + 2 derived = 11, and the room types alone would say 10 — so it is an override.
     expect(merged?.months[0].inputs.pax[0]).toBe(11);
@@ -108,8 +108,8 @@ describe("consolidate", () => {
 
   it("leaves PAX tracking the room types when no sucursal overrode it", () => {
     const merged = consolidate([
-      sucursal("a", { rooms: { dobles: [4] } }),
-      sucursal("b", { rooms: { simples: [3] } }),
+      center("a", { rooms: { dobles: [4] } }),
+      center("b", { rooms: { simples: [3] } }),
     ]) as OccupancyDataset;
     // Stored as null, so consolidating does not by itself raise the "PAX a mano" notice.
     expect(merged.months[0].inputs.pax[0]).toBeNull();
@@ -118,9 +118,9 @@ describe("consolidate", () => {
   });
 
   it("is never shown verbatim from a workbook", () => {
-    const verbatim = sucursal("a", { sold: [9] });
+    const verbatim = center("a", { sold: [9] });
     verbatim.months[0].imported = { cells: { sold: [999] }, aggregates: { sold: 999 } };
-    const merged = consolidate([verbatim, sucursal("b", { sold: [1] })]) as OccupancyDataset;
+    const merged = consolidate([verbatim, center("b", { sold: [1] })]) as OccupancyDataset;
 
     expect(merged.months[0].imported).toBeUndefined();
     const grid = toOccupancyGrid(merged, 0);
@@ -130,16 +130,16 @@ describe("consolidate", () => {
   });
 
   it("sizes every month from the calendar", () => {
-    const merged = consolidate([sucursal("a", {}), sucursal("b", {})]) as OccupancyDataset;
+    const merged = consolidate([center("a", {}), center("b", {})]) as OccupancyDataset;
     expect(merged.months).toHaveLength(12);
     expect(merged.months[1].days).toBe(28); // febrero 2026
     expect(merged.months[1].inputs.sold).toHaveLength(28);
   });
 
   it("carries no declared nights: the sucursales' own are not summable", () => {
-    const a = sucursal("a", {});
+    const a = center("a", {});
     a.months[0].nights = 25;
-    const merged = consolidate([a, sucursal("b", {})]);
+    const merged = consolidate([a, center("b", {})]);
     expect(merged?.months[0].nights).toBeNull();
   });
 });

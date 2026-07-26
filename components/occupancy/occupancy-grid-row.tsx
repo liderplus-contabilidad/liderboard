@@ -21,14 +21,9 @@ export interface OccupancyRowProps {
 }
 
 /**
- * One row of the daily grid. Editable rows render an `<input>` per day (the design edits
- * in place — there is no cell popover here); derived rows render read-only text.
+ * The blue tint means exactly one thing: THIS ROW IS COMPUTED. No other signal shares it.
  *
- * The blue tint means exactly one thing: THIS ROW IS COMPUTED. No other signal shares it —
- * the grid deliberately draws no distinction between one day column and another.
- *
- * Memoised because a month can be 25 rows × 31 cells and a single keystroke must not
- * re-render the whole table.
+ * Memoised because a month can be 25 rows × 31 cells and one keystroke must not re-render it all.
  */
 export const OccupancyRow = memo(function OccupancyRow({
   row,
@@ -40,8 +35,7 @@ export const OccupancyRow = memo(function OccupancyRow({
 }: OccupancyRowProps) {
   const isSection = row.kind === "section";
   const isDerived = row.kind === "derived";
-  // A read-only view renders text, not disabled inputs: a greyed-out field invites the user to
-  // fight with it, while a figure simply reads as a figure.
+  // Text, not disabled inputs: a greyed-out field invites a fight, a figure reads as a figure.
   const editable = row.editable && !readOnly;
   const flagsMismatch = row.id === "totalChannels" || row.id === "totalRooms";
 
@@ -162,14 +156,11 @@ function focusCell(navRow: number, day: number): void {
 }
 
 /**
- * A single day. While focused the input holds a local draft so the live query re-rendering
- * mid-typing cannot yank the caret; the draft is committed on blur or Enter and dropped on
- * Escape.
+ * While focused the input holds a local DRAFT, so the live query re-rendering mid-typing cannot
+ * yank the caret; it commits on blur or Enter and is dropped on Escape.
  *
- * Arrow keys move between cells like a spreadsheet: Up/Down always jump rows; Left/Right jump
- * columns only when the caret is already at the field's edge, so they still move within the
- * text otherwise. Enter commits and steps down. Moving focus fires the current cell's blur,
- * which commits its draft.
+ * Left/Right jump columns only when the caret is already at the field's edge, so they still move
+ * within the text otherwise.
  */
 function DayCell({
   rowId,
@@ -195,7 +186,7 @@ function DayCell({
     [onSave, rowId, day, value],
   );
 
-  // A failed cuadre outranks the calculated tint: it is the one thing worth interrupting for.
+  // A failed cuadre outranks the calculated tint.
   const background = mismatch ? "bg-negative/10" : derived ? "bg-surface-calc" : undefined;
 
   if (!editable) {
@@ -237,8 +228,8 @@ function DayCell({
         onKeyDown={(e) => {
           const input = e.currentTarget;
           const len = input.value.length;
-          // Whole-field selection (just focused) counts as being at either edge, so the first
-          // horizontal arrow jumps to the neighbour instead of only collapsing the selection.
+          // A whole-field selection counts as being at either edge, so the first horizontal
+          // arrow jumps to the neighbour instead of only collapsing the selection.
           const allSelected = input.selectionStart === 0 && input.selectionEnd === len;
           const atStart = allSelected || (input.selectionStart === 0 && input.selectionEnd === 0);
           const atEnd = allSelected || (input.selectionStart === len && input.selectionEnd === len);
