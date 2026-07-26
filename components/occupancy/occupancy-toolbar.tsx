@@ -9,12 +9,11 @@ import {
   DropdownPanel,
   DropdownTrigger,
 } from "@/components/ui/dropdown";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { colorForEntity } from "@/lib/charts/palette";
 import { describeSelection, periodLabel } from "@/lib/occupancy/filters";
-import { METRICS, type Scope } from "@/lib/occupancy/analytics/types";
+import { METRICS } from "@/lib/occupancy/analytics/types";
 import { occupancySeriesId } from "@/lib/occupancy/analytics/types";
 import { cn } from "@/lib/cn";
 import { useOccupancyData } from "./occupancy-data-provider";
@@ -23,15 +22,13 @@ const PERIOD_CELL =
   "rounded-lg border border-border bg-surface px-2 py-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:bg-canvas";
 const PERIOD_CELL_ON = "border-brand bg-brand-soft text-brand";
 
-const SCOPES: { value: Scope; label: string }[] = [
-  { value: "mes", label: "Mes" },
-  { value: "dia", label: "Día" },
-];
-
 /**
- * Ocupaciones' filter row: Métrica · Sucursal · Año · Periodo, with «Ver por» pinned right and
- * the active-mark chips below. The comparison is never declared — marking two sucursales, two
- * years or two months is itself what produces it.
+ * Ocupaciones' filter row: Métrica · Sucursal · Año · Periodo, with the active-mark chips below.
+ * The comparison is never declared — marking two sucursales, two years or two months is itself
+ * what produces it.
+ *
+ * «Ver por» is deliberately NOT here: it only swaps the axis of the series card, and every
+ * control in this bar feeds every card on the tab. It lives in that card's own header.
  *
  * The métrica is the one single-choice control here: ocupación is a %, ADR is money and PAX is
  * a count, so a card holding two of them at once would need a second Y axis.
@@ -43,7 +40,6 @@ export function OccupancyToolbar() {
     allYears,
     filters,
     setMetric,
-    setChartScope,
     toggleCenterMark,
     toggleYearMark,
     toggleMonthMark,
@@ -243,11 +239,6 @@ export function OccupancyToolbar() {
             </DropdownFooter>
           </DropdownPanel>
         </Dropdown>
-
-        <div className="ml-auto flex items-center gap-2.5">
-          <ToolbarLabel>Ver por</ToolbarLabel>
-          <SegmentedControl value={filters.scope} options={SCOPES} onChange={setChartScope} />
-        </div>
       </Toolbar>
 
       <p className="px-7 pb-2 text-[11.5px] text-muted">

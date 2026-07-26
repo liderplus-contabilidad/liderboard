@@ -40,7 +40,6 @@ interface PendingReplace {
   hotelName: string;
   previousHotel: string;
   centerCount: number;
-  errors: string[];
 }
 
 interface OccupancyDataValue {
@@ -84,10 +83,10 @@ interface OccupancyDataValue {
   deleteYear: (year: number) => Promise<void>;
   deleteCenter: (centerId: string) => Promise<void>;
   /**
-   * Every file is parsed BEFORE anything is written, so the workspace-wide check (all files
-   * from one hotel) cannot leave the base half-updated.
+   * Commits an already-parsed selection: the staging modal reads the files, so what arrives
+   * here is the whole upload, checked as one before anything is written.
    */
-  importWorkbooks: (files: File[]) => Promise<void>;
+  importParsed: (results: OccupancyParseResult[]) => Promise<void>;
   /**
    * Last upload failure, in Spanish. Held here because the upload button lives in the module
    * tab bar while its error banner belongs above the grid.
@@ -318,41 +317,17 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const report = useCallback((errors: string[]) => {
-    if (errors.length === 1) {
-      setImportError(errors[0]);
-      setImportErrorDetails([]);
-    } else if (errors.length > 1) {
-      setImportError(`${errors.length} archivos no se pudieron cargar.`);
-      setImportErrorDetails(errors);
-    }
-  }, []);
-
-  const importWorkbooks = useCallback(
-    async (files: File[]) => {
+  const importParsed = useCallback(
+    async (results: OccupancyParseResult[]) => {
       setImportError(null);
       setImportErrorDetails([]);
-      // Dynamic import keeps SheetJS out of the initial bundle.
-      const { parseOccupancyWorkbook } = await import("@/lib/occupancy/parse");
-
-      const results: OccupancyParseResult[] = [];
-      const errors: string[] = [];
-      for (const file of files) {
-        try {
-          results.push(parseOccupancyWorkbook(await file.arrayBuffer(), file.name));
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : "no se pudo procesar el archivo.";
-          errors.push(`${file.name}: ${reason}`);
-        }
-      }
-
       if (results.length === 0) {
-        report(errors);
         return;
       }
 
       // Nothing is written until the whole selection is known to belong to ONE hotel: a mixed
-      // upload half-applied would leave two companies sharing one set of tabs.
+      // upload half-applied would leave two companies sharing one set of tabs. The staging modal
+      // blocks this before it gets here; the check stays because this is what writes.
       const hotels = [...new Map(results.map((r) => [normalize(r.dataset.hotelName), r])).values()];
       if (hotels.length > 1) {
         setImportError(
@@ -360,7 +335,6 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
             .map((r) => r.dataset.hotelName)
             .join(", ")}); cárgalos por separado.`,
         );
-        setImportErrorDetails([]);
         return;
       }
 
@@ -372,15 +346,13 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
           hotelName: incoming,
           previousHotel: current,
           centerCount: centers.length,
-          errors,
         });
         return;
       }
 
       await commit(results);
-      report(errors);
     },
-    [centers.length, commit, datasets.length, meta?.hotelName, report],
+    [centers.length, commit, datasets.length, meta?.hotelName],
   );
 
   const centerUniverse = useMemo(() => centers.map((center) => center.id), [centers]);
@@ -453,7 +425,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       addYear,
       deleteYear,
       deleteCenter,
-      importWorkbooks,
+      importParsed,
       importError,
       importErrorDetails,
       dismissImportError,
@@ -497,7 +469,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       addYear,
       deleteYear,
       deleteCenter,
-      importWorkbooks,
+      importParsed,
       importError,
       importErrorDetails,
       dismissImportError,
@@ -539,7 +511,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
           const pending = pendingReplace;
           setPendingReplace(null);
           if (pending) {
-            void commit(pending.results, pending.hotelName).then(() => report(pending.errors));
+            void commit(pending.results, pending.hotelName);
           }
         }}
         onCancel={() => setPendingReplace(null)}

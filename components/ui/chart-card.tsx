@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart3, FileSpreadsheet, Table2 } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
@@ -30,6 +30,12 @@ export interface ChartCardProps {
    * already sit above the chart as metrics, and a single-series bar reads fine on its own.
    */
   tableToggle?: boolean;
+  /**
+   * Control that acts on THIS card only, rendered in its header beside the table toggle. A
+   * control that shapes one chart belongs over that chart: in the module filter bar it would
+   * read as applying to every card there.
+   */
+  headerSlot?: ReactNode;
 }
 
 /**
@@ -53,6 +59,7 @@ export const ChartCard = memo(function ChartCard({
   height = 260,
   empty = false,
   tableToggle = true,
+  headerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
@@ -66,21 +73,26 @@ export const ChartCard = memo(function ChartCard({
           <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
           {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
         </div>
-        {showToggle && (
-          <button
-            type="button"
-            aria-pressed={asTable}
-            onClick={() => setAsTable((value) => !value)}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
-              asTable
-                ? "border-brand bg-brand-soft text-brand"
-                : "border-border bg-surface text-muted hover:bg-canvas",
+        {(headerSlot || showToggle) && (
+          <div className="flex shrink-0 items-center gap-2.5">
+            {headerSlot}
+            {showToggle && (
+              <button
+                type="button"
+                aria-pressed={asTable}
+                onClick={() => setAsTable((value) => !value)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                  asTable
+                    ? "border-brand bg-brand-soft text-brand"
+                    : "border-border bg-surface text-muted hover:bg-canvas",
+                )}
+              >
+                {asTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
+                {asTable ? "Ver como gráfica" : "Ver como tabla"}
+              </button>
             )}
-          >
-            {asTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
-            {asTable ? "Ver como gráfica" : "Ver como tabla"}
-          </button>
+          </div>
         )}
       </header>
 

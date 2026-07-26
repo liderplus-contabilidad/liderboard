@@ -4,8 +4,10 @@ import { BedDouble } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatTile } from "@/components/ui/stat-tile";
 import { colorForEntity } from "@/lib/charts/palette";
+import type { Scope } from "@/lib/occupancy/analytics/types";
 
 import {
   channelTotals,
@@ -36,6 +38,12 @@ import { useOccupancyData } from "../occupancy-data-provider";
 import { DayPanel } from "./day-panel";
 import { HeatmapCard } from "./heatmap-card";
 
+/** «Ver por»: the axis of the series card, and of nothing else on the tab. */
+const SCOPES: { value: Scope; label: string }[] = [
+  { value: "mes", label: "Mes" },
+  { value: "dia", label: "Día" },
+];
+
 /** Which day the side panel is showing, if any. */
 interface OpenDay {
   centerId: string;
@@ -53,8 +61,16 @@ interface OpenDay {
  * next to loaded data hands the reader the job of guessing what can be asked.
  */
 export function GraficosView() {
-  const { datasets, ready, filters, activeCenterId, activeYear, isConsolidated, drillIntoMonth } =
-    useOccupancyData();
+  const {
+    datasets,
+    ready,
+    filters,
+    activeCenterId,
+    activeYear,
+    isConsolidated,
+    drillIntoMonth,
+    setChartScope,
+  } = useOccupancyData();
   const [openDay, setOpenDay] = useState<OpenDay | null>(null);
 
   const universe = useMemo(
@@ -154,6 +170,17 @@ export function GraficosView() {
         warnings={bundle.warnings}
         onSelect={onSelectColumn}
         height={300}
+        headerSlot={
+          <span className="flex items-center gap-2">
+            <span className="text-[11.5px] font-semibold text-faint">Ver por</span>
+            <SegmentedControl
+              value={filters.scope}
+              options={SCOPES}
+              onChange={setChartScope}
+              ariaLabel="Ver por"
+            />
+          </span>
+        }
       />
 
       <HeatmapCard result={heatmaps} onSelectDay={onSelectDay} />

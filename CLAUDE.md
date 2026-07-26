@@ -133,10 +133,15 @@ and an imported month is shown VERBATIM until its first edit, which flips the wh
 computed at once. `consolidate.ts` sums the sucursales of a year into a synthetic read-only
 dataset: **raw inputs only**, so `derive.ts` recomputes the indicators as ratios of sums (the
 one definition under which ADR × Ocupación = RevPAR survives the sum); it is never stored and
-never shown verbatim. Uploads are two-phase — every file is parsed before anything is written,
-so the "all files from one hotel" check cannot half-apply; files from another hotel raise a
-replace confirmation, rendered by `OccupancyDataProvider` itself because the upload button
-lives in the tab bar. Datos stacks three strips, **Sucursal → Año → Mes**; the sucursal strip
+never shown verbatim. Uploads go through `occupancy-upload-modal.tsx`, a staging modal shaped like
+PyG's: it parses each file as it is dropped, lists the sucursal-año it declares (or why it
+failed), and hands the provider an already-parsed selection (`importParsed`) — so the provider
+keeps the rules and the modal owns reading files. `addFiles` materializes the `FileList` BEFORE
+its first `await`, because clearing `input.value` empties the live list. Uploads are still
+two-phase — every file is parsed before anything is written, so the "all files from one hotel"
+check cannot half-apply; it is enforced in the modal (which can still explain itself) and kept in
+the provider, which is what writes. Files from another hotel raise a replace confirmation,
+rendered by `OccupancyDataProvider` itself because the upload button lives in the tab bar. Datos stacks three strips, **Sucursal → Año → Mes**; the sucursal strip
 renders nothing with a single sucursal, and the Consolidado tab appears only with two or more.
 The MES strip ends in an **«Año»** button: `toAnnualGrid` returns the same `OccupancyGrid` with
 one column per month instead of per day (the type speaks in `columns`/`columnLabels`/`scope`,
@@ -150,8 +155,11 @@ holds the marks, `charts/selection.ts` is the ONE translation into an `Occupancy
 `analytics/series.ts` builds the series and `charts/option.ts` turns them into options. The
 métrica is **single-choice** (ocupación is %, ADR is $, PAX is a count — two units in one card
 would need the second `yAxis` the types forbid); what compares is the sucursales, años and
-periodos marked, exactly as in PyG. «Ver por» switches the axis between months and days, and a
-marked periodo NARROWS that axis rather than adding series — in two levels, months and days of
+periodos marked, exactly as in PyG. «Ver por» switches the axis between months and days; it is
+the ONLY control read by a single card (`query.scope` reaches just `analytics/series.ts` — the
+KPIs, heatmap, canales and weekday cards aggregate the marked period whatever the axis), so it
+sits in that card's own header via `ChartCard`'s `headerSlot` and NOT in the filter bar, where
+every control feeds every card. A marked periodo NARROWS that axis rather than adding series — in two levels, months and days of
 the month, so «Manor, 2025 y 2026, enero, día 5» is two bars over a single column. A day mark
 drops «Ver por» to días by itself, and a comparison narrow enough to fit a few columns is drawn
 as grouped bars because a line of one point draws nothing. Coverage carries over: a month the

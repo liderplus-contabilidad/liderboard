@@ -364,10 +364,16 @@ export + persistencia Dexie) y está cubierta por vitest; los componentes solo m
 
 ### Carga
 
-- **Varios Excel a la vez**, mezclando sucursales y años; cada uno cae en su propio registro.
+- **Modal de staging** (como el de PyG): "Cargar Excel de ocupación" abre un modal donde
+  arrastras o eliges **varios Excel a la vez**, mezclando sucursales y años; cada uno se parsea
+  al vuelo y se lista con lo que declara —`CULTURA MANOR · 2026 · 7 meses`, la sucursal-año que
+  va a escribir y cuántos meses reemplaza— o con su motivo de fallo, y se puede quitar de la
+  lista. Nada se escribe hasta confirmar.
 - Se **parsea todo antes de escribir nada**: así la verificación de "todos los archivos son del
-  mismo hotel" no puede dejar la base a medias. Si los archivos discrepan entre sí, no se
-  guarda ninguno; si el archivo falla al leerse, se reporta por su nombre y los demás entran.
+  mismo hotel" no puede dejar la base a medias. Si los archivos discrepan entre sí, el modal lo
+  avisa nombrando ambos hoteles y no deja cargar; si un archivo falla al leerse, se marca en la
+  lista con su motivo y los demás entran igual. Los avisos de lectura se ven en el modal, antes
+  de confirmar.
 - Recargar una sucursal-año **fusiona mes a mes**: los meses que el archivo trae se reemplazan y
   los escritos a mano sobreviven. El catálogo de canales guardado gana en el nombre (un canal
   renombrado lo conserva) y los canales nuevos del archivo se añaden.
@@ -417,9 +423,15 @@ mes, o el año consolidado de todas.
 
 ### Gráficos
 
-La pestaña tiene su propia **barra de filtros** — Métrica · Sucursal · Año · Periodo, con **Ver
-por** (Mes / Día) a la derecha y la franja de chips activos debajo. Como en PyG, **la comparación
-no se declara**: marcar dos sucursales, dos años o dos meses es lo que la produce.
+La pestaña tiene su propia **barra de filtros** — Métrica · Sucursal · Año · Periodo, con la
+franja de chips activos debajo. Como en PyG, **la comparación no se declara**: marcar dos
+sucursales, dos años o dos meses es lo que la produce.
+
+**Ver por** (Mes / Día) **no está en esa barra**, sino en el encabezado de la serie principal,
+junto a «Ver como tabla»: es lo único que cambia el eje de esa tarjeta y no toca ninguna otra —el
+mapa de calor es siempre día a día, los canales y el ritmo semanal son totales del periodo—,
+mientras que todo lo que sí está en la barra alimenta a todas. Un control que gobierna una
+tarjeta vive sobre esa tarjeta (`ChartCard` lo recibe como `headerSlot`).
 
 - **La métrica es de selección única.** Ocupación es %, ADR y RevPAR son $, vendidas y PAX son
   conteos; mezclarlas en una tarjeta pediría un segundo eje Y, que el proyecto no permite. Lo que
