@@ -20,8 +20,10 @@ import {
   CHART_SIGN,
   CHART_SURFACE,
 } from "@/lib/charts/palette";
+export type { ChartTable, ChartTableRow } from "@/lib/charts/types";
 import type {
   ChartAxis,
+  ChartTable,
   ChartLabel,
   ChartLegend,
   ChartOption,
@@ -662,20 +664,6 @@ export function seriesTableFor(
 }
 
 /* -------------------------------------------------------------------- table twin */
-
-export interface ChartTableRow {
-  /** `seriesKeyId` for a series, the account code for an entry — stable across renders. */
-  id: string;
-  label: string;
-  color: string;
-  /** Already formatted; `null` is a period with no coverage and must render EMPTY, not `$0`. */
-  values: (string | null)[];
-}
-
-export interface ChartTable {
-  columns: string[];
-  rows: ChartTableRow[];
-}
 
 /**
  * The same series as rows and the same periods as columns. Three of the eight palette slots

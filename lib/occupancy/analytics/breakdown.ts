@@ -1,0 +1,255 @@
+/**
+ * The aggregations that are not a time series: the tab's four indicators, the nights each sales
+ * channel brought, and the rhythm of the week.
+ *
+ * All three read the SAME query the main card does, so «marzo de Cultura Manor» means the same
+ * thing in every corner of the tab.
+ */
+import { MONTHS_SHORT_ES } from "@/lib/date";
+import { ROOM_ROW_IDS } from "../derive";
+import type { OccupancyDataset, OccupancyMonth } from "../types";
+import { metricSpec, type MetricUnit, type OccupancyQuery } from "./types";
+
+const ROOM_PAX = { simples: 1, dobles: 2, triples: 3 } as const;
+
+/** Lunes-first, the way a hotel reads its week. `Date.getDay()` is Sunday-first. */
+export const WEEKDAYS_ES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function monthHasData(month: OccupancyMonth | undefined): month is OccupancyMonth {
+  if (!month) {
+    return false;
+  }
+  const { available, revenue, sold } = month.inputs;
+  return month.fromFile || [available, revenue, sold].some((s) => s.some((v) => v !== 0));
+}
+
+/** The datasets the query selects, in the order it names them. */
+export function scopedDatasets(
+  datasets: readonly OccupancyDataset[],
+  query: OccupancyQuery,
+): OccupancyDataset[] {
+  const found: OccupancyDataset[] = [];
+  for (const centerId of query.centerIds) {
+    for (const year of query.years) {
+      const match = datasets.find((d) => d.centerId === centerId && d.year === year);
+      if (match) {
+        found.push(match);
+      }
+    }
+  }
+  return found;
+}
+
+/** The months of a dataset the query covers, skipping the ones with no data at all. */
+function scopedMonths(dataset: OccupancyDataset, query: OccupancyQuery): OccupancyMonth[] {
+  const wanted = query.months.length > 0 ? new Set(query.months) : null;
+  return dataset.months.filter(
+    (month) => (!wanted || wanted.has(month.index)) && monthHasData(month),
+  );
+}
+
+/** The days of a month the query covers: all of them, or only the marked ones. */
+function scopedDays(month: OccupancyMonth, query: OccupancyQuery): number[] {
+  if (query.days.length === 0) {
+    return Array.from({ length: month.days }, (_, day) => day);
+  }
+  return [...new Set(query.days)]
+    .filter((day) => day >= 0 && day < month.days)
+    .sort((a, b) => a - b);
+}
+
+function sumDays(values: number[] | undefined, days: readonly number[]): number {
+  let total = 0;
+  for (const day of days) {
+    total += values?.[day] ?? 0;
+  }
+  return total;
+}
+
+function ratio(numerator: number, denominator: number): number | null {
+  return denominator === 0 ? null : numerator / denominator;
+}
+
+export interface Kpi {
+  id: string;
+  label: string;
+  value: number | null;
+  unit: MetricUnit;
+}
+
+/**
+ * The four figures that describe the marked scope. They are ratios of the SUMS across
+ * everything marked — the same definition the grid's own totals use, so the tab and the table
+ * never disagree.
+ */
+export function occupancyKpis(datasets: readonly OccupancyDataset[], query: OccupancyQuery): Kpi[] {
+  let revenue = 0;
+  let sold = 0;
+  let available = 0;
+  for (const dataset of scopedDatasets(datasets, query)) {
+    for (const month of scopedMonths(dataset, query)) {
+      const days = scopedDays(month, query);
+      revenue += sumDays(month.inputs.revenue, days);
+      sold += sumDays(month.inputs.sold, days);
+      available += sumDays(month.inputs.available, days);
+    }
+  }
+  return [
+    { id: "occupancy", label: "Ocupación media", value: ratio(sold, available), unit: "percent" },
+    { id: "adr", label: "ADR", value: ratio(revenue, sold), unit: "currency" },
+    { id: "revpar", label: "RevPAR", value: ratio(revenue, available), unit: "currency" },
+    {
+      id: "revenue",
+      label: "Ingresos habitaciones",
+      value: available === 0 && revenue === 0 ? null : revenue,
+      unit: "currency",
+    },
+  ];
+}
+
+export interface ChannelEntry {
+  id: string;
+  name: string;
+  nights: number;
+}
+
+/**
+ * Nights per sales channel over the marked scope, largest first. Channels are unioned by id
+ * across everything marked, so comparing two sucursales adds their Booking rather than showing
+ * it twice.
+ */
+export function channelTotals(
+  datasets: readonly OccupancyDataset[],
+  query: OccupancyQuery,
+): { entries: ChannelEntry[]; total: number } {
+  const nights = new Map<string, number>();
+  const names = new Map<string, string>();
+
+  for (const dataset of scopedDatasets(datasets, query)) {
+    for (const channel of dataset.channels) {
+      names.set(channel.id, names.get(channel.id) ?? channel.name);
+    }
+    for (const month of scopedMonths(dataset, query)) {
+      const days = scopedDays(month, query);
+      for (const [id, series] of Object.entries(month.inputs.channels)) {
+        nights.set(id, (nights.get(id) ?? 0) + sumDays(series, days));
+      }
+    }
+  }
+
+  const entries = [...nights.entries()]
+    .map(([id, value]) => ({ id, name: names.get(id) ?? id, nights: value }))
+    .filter((entry) => entry.nights > 0)
+    .sort((a, b) => b.nights - a.nights);
+  return { entries, total: entries.reduce((all, entry) => all + entry.nights, 0) };
+}
+
+/**
+ * The active metric by day of the week. Every day of the marked scope falls into its weekday
+ * and the metric is aggregated there under its own rule — a ratio stays a ratio of sums, so
+ * «los domingos llenan al 60%» is a real 60%, not an average of daily percentages.
+ */
+export function weekdayRhythm(
+  datasets: readonly OccupancyDataset[],
+  query: OccupancyQuery,
+): { labels: string[]; values: (number | null)[] } {
+  const metric = metricSpec(query.metric);
+  const numerator = new Array<number>(7).fill(0);
+  const denominator = new Array<number>(7).fill(0);
+  const seen = new Array<boolean>(7).fill(false);
+
+  for (const dataset of scopedDatasets(datasets, query)) {
+    for (const month of scopedMonths(dataset, query)) {
+      for (const day of scopedDays(month, query)) {
+        // getDay() is Sunday-first; the hotel's week starts on Monday.
+        const slot = (new Date(dataset.year, month.index, day + 1).getDay() + 6) % 7;
+        seen[slot] = true;
+        const revenue = month.inputs.revenue[day] ?? 0;
+        const sold = month.inputs.sold[day] ?? 0;
+        const available = month.inputs.available[day] ?? 0;
+        const pax =
+          month.inputs.pax[day] ??
+          ROOM_ROW_IDS.reduce(
+            (guests, id) => guests + (month.inputs.rooms[id]?.[day] ?? 0) * ROOM_PAX[id],
+            0,
+          );
+        const [num, den] =
+          metric.id === "occupancy"
+            ? [sold, available]
+            : metric.id === "adr"
+              ? [revenue, sold]
+              : metric.id === "revpar"
+                ? [revenue, available]
+                : metric.id === "revenue"
+                  ? [revenue, 1]
+                  : metric.id === "sold"
+                    ? [sold, 1]
+                    : [pax, 1];
+        numerator[slot] += num;
+        denominator[slot] += den;
+      }
+    }
+  }
+
+  return {
+    labels: WEEKDAYS_ES,
+    values: numerator.map((value, slot) =>
+      !seen[slot] || denominator[slot] === 0 ? null : value / denominator[slot],
+    ),
+  };
+}
+
+/** Label for a day the panel opens on, e.g. "14 mar 2026". */
+export function dayLabel(year: number, monthIndex: number, day: number): string {
+  return `${day + 1} ${MONTHS_SHORT_ES[monthIndex].toLowerCase()} ${year}`;
+}
+
+export interface DayDetail {
+  label: string;
+  indicators: { id: string; label: string; value: number | null; unit: MetricUnit }[];
+  channels: ChannelEntry[];
+}
+
+/** Everything one day says about itself — what the heatmap opens when a cell is clicked. */
+export function dayDetail(
+  dataset: OccupancyDataset,
+  monthIndex: number,
+  day: number,
+): DayDetail | null {
+  const month = dataset.months[monthIndex];
+  if (!month || day < 0 || day >= month.days) {
+    return null;
+  }
+  const revenue = month.inputs.revenue[day] ?? 0;
+  const sold = month.inputs.sold[day] ?? 0;
+  const available = month.inputs.available[day] ?? 0;
+  const complimentary = month.inputs.complimentary[day] ?? 0;
+  const pax =
+    month.inputs.pax[day] ??
+    ROOM_ROW_IDS.reduce(
+      (guests, id) => guests + (month.inputs.rooms[id]?.[day] ?? 0) * ROOM_PAX[id],
+      0,
+    );
+
+  return {
+    label: dayLabel(dataset.year, monthIndex, day),
+    indicators: [
+      { id: "occupancy", label: "Ocupación", value: ratio(sold, available), unit: "percent" },
+      { id: "adr", label: "ADR", value: ratio(revenue, sold), unit: "currency" },
+      { id: "revpar", label: "RevPAR", value: ratio(revenue, available), unit: "currency" },
+      { id: "revenue", label: "Ingresos", value: revenue, unit: "currency" },
+      { id: "sold", label: "Vendidas", value: sold, unit: "count" },
+      { id: "complimentary", label: "Complementarias", value: complimentary, unit: "count" },
+      { id: "available", label: "Disponibles", value: available, unit: "count" },
+      { id: "pax", label: "PAX", value: pax, unit: "count" },
+    ],
+    channels: dataset.channels
+      .map((channel) => ({
+        id: channel.id,
+        name: channel.name,
+        nights: month.inputs.channels[channel.id]?.[day] ?? 0,
+      }))
+      .filter((entry) => entry.nights > 0)
+      .sort((a, b) => b.nights - a.nights),
+  };
+}

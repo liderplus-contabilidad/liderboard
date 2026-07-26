@@ -5,7 +5,7 @@ import type { AnalyticsSource, PeriodRef } from "@/lib/profit-loss/analytics/typ
 import { waterfallOption, waterfallTable, type ChartTable } from "@/lib/profit-loss/charts/option";
 import { buildWaterfall, waterfallRangeLabel } from "@/lib/profit-loss/charts/waterfall";
 import type { Frequency } from "@/lib/profit-loss/types";
-import { ChartCard } from "./chart-card";
+import { ChartCard } from "@/components/ui/chart-card";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 

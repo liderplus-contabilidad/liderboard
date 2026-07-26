@@ -8,7 +8,7 @@ import { db } from "@/lib/profit-loss/db";
 import { PygParseError } from "@/lib/profit-loss/errors";
 import { parseWorkbookFile } from "@/lib/profit-loss/parse";
 import { buildWorkspace, type StagedParse } from "@/lib/profit-loss/workspace";
-import { NoticeBanner } from "./notice-banner";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { usePygData } from "./pyg-data-provider";
 
 interface StagedFile {

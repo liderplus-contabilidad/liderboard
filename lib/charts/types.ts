@@ -198,3 +198,21 @@ export interface ChartOption {
   tooltip?: ChartTooltip;
   series: ChartSeries[];
 }
+
+export interface ChartTableRow {
+  /** Stable across renders: a series key id, or the entity's own code. */
+  id: string;
+  label: string;
+  color: string;
+  /** Already formatted; `null` is a period with no coverage and must render EMPTY, not `$0`. */
+  values: (string | null)[];
+}
+
+/**
+ * The numeric twin every chart card carries. Three of the eight palette slots fall below 3:1
+ * against white — unavoidable in a categorical eight — so a readable table is not a nicety.
+ */
+export interface ChartTable {
+  columns: string[];
+  rows: ChartTableRow[];
+}

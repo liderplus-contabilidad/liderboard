@@ -2,7 +2,7 @@
 
 import { BedDouble } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { NoticeBanner } from "@/components/profit-loss/notice-banner";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,8 +57,8 @@ export function OccupancyDatosView() {
     setActiveYear,
     monthIndex,
     setMonthIndex,
-    scope,
-    setScope,
+    gridScope,
+    setGridScope,
     dataset,
     grid,
     canEdit,
@@ -156,8 +156,8 @@ export function OccupancyDatosView() {
   }
 
   const warnings = dataset?.warnings ?? [];
-  const details = grid ? mismatchDetails(grid.channelMismatch, grid.roomMismatch, scope) : [];
-  const isAnnual = scope === "year";
+  const details = grid ? mismatchDetails(grid.channelMismatch, grid.roomMismatch, gridScope) : [];
+  const isAnnual = gridScope === "year";
   // In the annual view the title already says "Detalle anual", so the year stands alone.
   const monthLabel = isAnnual
     ? String(activeYear ?? "")
@@ -205,13 +205,13 @@ export function OccupancyDatosView() {
         <MonthTabs
           dataset={dataset}
           activeIndex={monthIndex}
-          scope={scope}
+          scope={gridScope}
           onSelect={(index) => {
             // Picking a month is itself the way back from the annual view.
-            setScope("month");
+            setGridScope("month");
             setMonthIndex(index);
           }}
-          onSelectScope={setScope}
+          onSelectScope={setGridScope}
           onSaveNights={canEdit ? (nights) => void saveNights(nights) : undefined}
         />
       )}

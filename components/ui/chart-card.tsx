@@ -6,8 +6,8 @@ import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
 import type { ChartOption } from "@/lib/charts/types";
-import type { ChartTable } from "@/lib/profit-loss/charts/option";
-import { NoticeBanner } from "../notice-banner";
+import type { ChartTable } from "@/lib/charts/types";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 
 export interface ChartCardProps {
   title: string;
@@ -23,6 +23,8 @@ export interface ChartCardProps {
   height?: number;
   /** No workspace loaded at all — the tab-wide empty state rather than a card-level one. */
   empty?: boolean;
+  /** Passed to the chart: clicking a category is how the reader goes one level down. */
+  onSelect?: (dataIndex: number) => void;
   /**
    * Offer the "Ver como tabla" twin. Default true. The account ficha turns it off: its numbers
    * already sit above the chart as metrics, and a single-series bar reads fine on its own.
@@ -51,6 +53,7 @@ export const ChartCard = memo(function ChartCard({
   height = 260,
   empty = false,
   tableToggle = true,
+  onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
@@ -106,7 +109,12 @@ export const ChartCard = memo(function ChartCard({
               asTable ? (
                 <TableTwin table={table} />
               ) : (
-                <Chart option={option as ChartOption} height={height} ariaLabel={title} />
+                <Chart
+                  option={option as ChartOption}
+                  onSelect={onSelect}
+                  height={height}
+                  ariaLabel={title}
+                />
               )
             ) : (
               // Never an empty plot: the warnings above already say why, and when there are

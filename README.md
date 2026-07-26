@@ -46,7 +46,8 @@ components/ui/           primitivas reutilizables (Button, Dropdown, SegmentedCo
 components/dashboard/    shell: sidebar, header, tabs de módulo
 components/profit-loss/  composiciones específicas de Pérdidas y Ganancias
   └ charts/              tarjetas y vistas de Gráficos y Análisis
-components/occupancy/    composiciones específicas de Ocupaciones (tabs y grilla diaria/anual)
+components/occupancy/    composiciones específicas de Ocupaciones (tabs, grilla y gráficas)
+  └ charts/              vista de Gráficos, mapa de calor y panel del día
 lib/modules.ts           registro de módulos (única fuente de verdad de la navegación)
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
@@ -54,6 +55,8 @@ lib/charts/              paleta categórica y sistema de marcas, comunes a toda 
 lib/profit-loss/analytics/  motor analítico puro (series, transformaciones, Pareto, pastel)
 lib/profit-loss/charts/  traducción pura: selección → consulta → opción de ECharts
 lib/occupancy/           capa pura de Ocupaciones (parse, derive, consolidate, export) + Dexie
+lib/occupancy/analytics/ motor de Ocupaciones (series por métrica, KPIs, canales, semana)
+lib/occupancy/charts/    traducción pura: marcas → consulta → opción de ECharts
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
 
@@ -153,8 +156,7 @@ propio. (Ver "Gráficos y Análisis" para las reglas de cobertura y doble eje.)
 
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
 **Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Dos módulos
-tienen datos reales hoy: **PyG** (Datos, Gráficos y Análisis) y **Ocupaciones** (Datos; su
-pestaña Gráficos sigue en "próximamente").
+tienen datos reales hoy: **PyG** (Datos, Gráficos y Análisis) y **Ocupaciones** (Datos y Gráficos).
 
 Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
 `ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
@@ -412,3 +414,41 @@ mes, o el año consolidado de todas.
   sucursal** sin crear una nueva ni pedir confirmación.
 - En el **Consolidado** el botón se deshabilita y explica por qué: es un cálculo de la app, y
   devolverlo como Excel invitaría a re-subirlo como una sucursal fantasma.
+
+### Gráficos
+
+La pestaña tiene su propia **barra de filtros** — Métrica · Sucursal · Año · Periodo, con **Ver
+por** (Mes / Día) a la derecha y la franja de chips activos debajo. Como en PyG, **la comparación
+no se declara**: marcar dos sucursales, dos años o dos meses es lo que la produce.
+
+- **La métrica es de selección única.** Ocupación es %, ADR y RevPAR son $, vendidas y PAX son
+  conteos; mezclarlas en una tarjeta pediría un segundo eje Y, que el proyecto no permite. Lo que
+  se compara son sucursales, años y periodos, siempre en la misma unidad.
+- **El periodo se marca en dos niveles: mes y día del mes.** Con «Ver por: Día» y ningún mes
+  marcado el eje es el año corrido; marcando marzo, son sus 31 días; marcando además el día 5, el
+  eje es **una sola columna**. Marcar acota el eje y nunca multiplica las series, así que
+  «Cultura Manor, 2025 y 2026, enero, día 5» son dos barras: el 5 de enero de un año contra el
+  del otro. Un día marcado vale para **cada** mes marcado («el 5» de enero y de marzo), y un día
+  que el mes no tiene simplemente no aparece. Marcar un día pasa «Ver por» a Día por su cuenta:
+  sobre el eje mensual no querría decir nada.
+- **Cobertura:** un mes que el espacio nunca recibió no dibuja punto; un día dentro de un mes con
+  datos que no vendió nada es un cero real y sí se dibuja.
+- **Tarjetas:** cuatro indicadores del alcance marcado (ocupación media, ADR, RevPAR, ingresos),
+  la serie principal, el mapa de calor día×mes, los canales de venta y el ritmo por día de la
+  semana.
+- **La selección se lee en una frase.** Bajo los controles hay una línea «Mostrando Ocupación ·
+  5 de enero · 2025 y 2026 · Cultura Manor», y el control de Periodo se rotula con el periodo
+  («5 de enero»), no con cuántas casillas hay marcadas. La rejilla de días se ve desde el
+  principio, deshabilitada hasta que eliges un mes, para que se sepa que existe.
+- **Cuando el eje queda en una sola columna, el eje pasa a ser la entidad:** «el 5 de enero de
+  2025 contra el de 2026» son dos barras rotuladas con su año, y la fecha se dice en el
+  subtítulo. Dejar «5 ene» en el eje rotularía las dos barras con la misma fecha y escondería la
+  comparación en la leyenda.
+- **Drill-down, dos movimientos distintos:** clic en la barra de un mes **escribe los filtros**
+  (marca ese periodo y baja «Ver por» a Día), y se deshace quitando el chip; clic en un día del
+  mapa de calor **abre un panel lateral** con sus indicadores y canales, sin tocar nada — un día
+  suelto es un punto, no un nivel del eje.
+- **El mapa de calor no es una gráfica de ECharts:** son celdas de color, una cuadrícula por
+  sucursal-año marcada (hasta cuatro) y **una sola escala para todas**, que es lo que las hace
+  comparables de un vistazo. Es el único consumidor de la rampa secuencial `CHART_HEAT_RAMP`,
+  separada de la paleta categórica.

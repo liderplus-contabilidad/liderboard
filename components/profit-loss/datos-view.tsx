@@ -10,7 +10,7 @@ import type { Frequency } from "@/lib/profit-loss/types";
 import { AccountDetailPanel } from "./account-detail-panel";
 import { CellEditor, type EditorAnchor } from "./cell-editor";
 import { flattenSorted } from "./datos-utils";
-import { NoticeBanner } from "./notice-banner";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
 import { usePygData } from "./pyg-data-provider";
 

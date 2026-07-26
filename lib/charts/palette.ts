@@ -110,3 +110,32 @@ export const CHART_SIGN = {
  * ever does not.
  */
 export const CHART_FONT = "var(--font-ibm-plex-sans), system-ui, sans-serif";
+
+/**
+ * The sequential ramp of a density grid — the occupancy heatmap's only source of color. It is
+ * NOT part of the categorical palette: those eight slots exist to be told APART, this ramp
+ * exists to be read as one quantity rising. The steps climb the brand's own family and are
+ * monotonic in lightness, so the grid still reads printed in greyscale.
+ *
+ * A cell with no data takes `CHART_HEAT_EMPTY` and never a ramp step: an empty day and a day at
+ * zero are different statements.
+ */
+export const CHART_HEAT_RAMP = ["#eaf1f7", "#c3d8e9", "#8fb4d3", "#4f7fab", "#1e3a5f"] as const;
+
+export const CHART_HEAT_EMPTY = "#f6f8fa";
+
+/**
+ * Picks a ramp step for `value` within `[min, max]`. The scale is handed in rather than derived
+ * per grid on purpose: two grids side by side must mean the same thing by the same tone.
+ */
+export function heatStep(value: number | null, min: number, max: number): string {
+  if (value === null || !Number.isFinite(value)) {
+    return CHART_HEAT_EMPTY;
+  }
+  if (max <= min) {
+    return CHART_HEAT_RAMP[CHART_HEAT_RAMP.length - 1];
+  }
+  const share = (value - min) / (max - min);
+  const slot = Math.min(CHART_HEAT_RAMP.length - 1, Math.floor(share * CHART_HEAT_RAMP.length));
+  return CHART_HEAT_RAMP[Math.max(0, slot)];
+}

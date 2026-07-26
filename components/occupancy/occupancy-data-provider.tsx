@@ -6,6 +6,24 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { consolidate } from "@/lib/occupancy/consolidate";
 import * as occupancyDb from "@/lib/occupancy/db";
 import { toAnnualGrid, toOccupancyGrid, type OccupancyGrid } from "@/lib/occupancy/derive";
+import {
+  clearMarks,
+  emptyFilters,
+  sanitizeFilters,
+  withCenterToggled,
+  withCentersCleared,
+  withDrillIntoMonth,
+  withMetric,
+  withDayToggled,
+  withDaysCleared,
+  withMonthToggled,
+  withMonthsCleared,
+  withScope,
+  withYearToggled,
+  withYearsCleared,
+  type OccupancyFilters,
+} from "@/lib/occupancy/filters";
+import type { OccupancyMetricId, Scope } from "@/lib/occupancy/analytics/types";
 import { normalize } from "@/lib/occupancy/slug";
 import {
   CONSOLIDATED_CENTER_ID,
@@ -39,13 +57,15 @@ interface OccupancyDataValue {
   setActiveCenter: (centerId: string) => void;
   /** Years of the active sucursal (all years, in the consolidated view), ascending. */
   years: number[];
+  /** Every year the workspace holds — the universe the Gráficos filter bar offers. */
+  allYears: number[];
   activeYear: number | undefined;
   setActiveYear: (year: number) => void;
   monthIndex: number;
   setMonthIndex: (index: number) => void;
-  /** Whether the grid shows one month by days, or the whole year by months. */
-  scope: "month" | "year";
-  setScope: (scope: "month" | "year") => void;
+  /** Whether the DATOS grid shows one month by days, or the whole year by months. */
+  gridScope: "month" | "year";
+  setGridScope: (scope: "month" | "year") => void;
   /** The active view's dataset: a stored sucursal-year, or the consolidated sum. */
   dataset: OccupancyDataset | undefined;
   /** The active month's grid; null while there is nothing to show. */
@@ -75,6 +95,26 @@ interface OccupancyDataValue {
   importError: string | null;
   importErrorDetails: string[];
   dismissImportError: () => void;
+  /**
+   * What the Gráficos filter bar has marked. Datos keeps its own three strips: those answer
+   * «cuál edito» — a single sucursal-year-month — while these answer «cuáles comparo». The bar
+   * falls back to whatever Datos has open, so moving between tabs keeps the context.
+   */
+  filters: OccupancyFilters;
+  setMetric: (metric: OccupancyMetricId) => void;
+  setChartScope: (scope: Scope) => void;
+  toggleCenterMark: (centerId: string) => void;
+  toggleYearMark: (year: number) => void;
+  toggleMonthMark: (month: number) => void;
+  /** Marking a day narrows the axis to it — and drops «Ver por» to días. */
+  toggleDayMark: (day: number) => void;
+  clearCenterMarks: () => void;
+  clearYearMarks: () => void;
+  clearMonthMarks: () => void;
+  clearDayMarks: () => void;
+  clearAllMarks: () => void;
+  /** Clicking a month's bar: narrows to that month and drops the axis to days. */
+  drillIntoMonth: (month: number) => void;
 }
 
 const OccupancyDataContext = createContext<OccupancyDataValue | null>(null);
@@ -94,10 +134,11 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const [selected, setSelected] = useState<{ centerId?: string; year?: number }>({});
   const [monthIndex, setMonthIndex] = useState(0);
   // The month is kept while looking at the year, so coming back lands where you left.
-  const [scope, setScope] = useState<"month" | "year">("month");
+  const [gridScope, setGridScope] = useState<"month" | "year">("month");
   const [importError, setImportError] = useState<string | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<string[]>([]);
   const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(null);
+  const [rawFilters, setRawFilters] = useState<OccupancyFilters>(emptyFilters);
 
   const datasets = stored ?? EMPTY_DATASETS;
   const ready = stored !== undefined;
@@ -140,15 +181,25 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     ? dataset?.centerName
     : centers.find((c) => c.id === activeCenterId)?.name;
 
+  const allYears = useMemo(
+    () => [...new Set(datasets.map((d) => d.year))].sort((a, b) => a - b),
+    [datasets],
+  );
+  // Pruned on read, never in an effect: the marks are never a render behind the workspace.
+  const filters = useMemo(
+    () => sanitizeFilters(rawFilters, { centerIds: centers.map((c) => c.id), years: allYears }),
+    [rawFilters, centers, allYears],
+  );
+
   const grid = useMemo(() => {
     if (!dataset) {
       return null;
     }
-    return scope === "year" ? toAnnualGrid(dataset) : toOccupancyGrid(dataset, monthIndex);
-  }, [dataset, monthIndex, scope]);
+    return gridScope === "year" ? toAnnualGrid(dataset) : toOccupancyGrid(dataset, monthIndex);
+  }, [dataset, monthIndex, gridScope]);
 
   // The annual grid aggregates days into months: there is no cell to write back to.
-  const canEdit = !isConsolidated && dataset !== undefined && scope === "month";
+  const canEdit = !isConsolidated && dataset !== undefined && gridScope === "month";
   /** The record every mutation writes to; undefined in the consolidated view. */
   const activeKey = useMemo(
     () =>
@@ -332,6 +383,41 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     [centers.length, commit, datasets.length, meta?.hotelName, report],
   );
 
+  const centerUniverse = useMemo(() => centers.map((center) => center.id), [centers]);
+  const setMetric = useCallback(
+    (metric: OccupancyMetricId) => setRawFilters((f) => withMetric(f, metric)),
+    [],
+  );
+  const setChartScope = useCallback(
+    (scope: Scope) => setRawFilters((f) => withScope(f, scope)),
+    [],
+  );
+  const toggleCenterMark = useCallback(
+    (centerId: string) => setRawFilters((f) => withCenterToggled(f, centerId, centerUniverse)),
+    [centerUniverse],
+  );
+  const toggleYearMark = useCallback(
+    (year: number) => setRawFilters((f) => withYearToggled(f, year, allYears)),
+    [allYears],
+  );
+  const toggleMonthMark = useCallback(
+    (month: number) => setRawFilters((f) => withMonthToggled(f, month)),
+    [],
+  );
+  const toggleDayMark = useCallback(
+    (day: number) => setRawFilters((f) => withDayToggled(f, day)),
+    [],
+  );
+  const clearCenterMarks = useCallback(() => setRawFilters(withCentersCleared), []);
+  const clearYearMarks = useCallback(() => setRawFilters(withYearsCleared), []);
+  const clearMonthMarks = useCallback(() => setRawFilters(withMonthsCleared), []);
+  const clearDayMarks = useCallback(() => setRawFilters(withDaysCleared), []);
+  const clearAllMarks = useCallback(() => setRawFilters(clearMarks), []);
+  const drillIntoMonth = useCallback(
+    (month: number) => setRawFilters((f) => withDrillIntoMonth(f, month)),
+    [],
+  );
+
   const dismissImportError = useCallback(() => {
     setImportError(null);
     setImportErrorDetails([]);
@@ -348,12 +434,13 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       hasConsolidated,
       setActiveCenter,
       years,
+      allYears,
       activeYear,
       setActiveYear,
       monthIndex,
       setMonthIndex,
-      scope,
-      setScope,
+      gridScope,
+      setGridScope,
       dataset,
       grid,
       canEdit,
@@ -370,6 +457,19 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       importError,
       importErrorDetails,
       dismissImportError,
+      filters,
+      setMetric,
+      setChartScope,
+      toggleCenterMark,
+      toggleYearMark,
+      toggleMonthMark,
+      toggleDayMark,
+      clearCenterMarks,
+      clearYearMarks,
+      clearMonthMarks,
+      clearDayMarks,
+      clearAllMarks,
+      drillIntoMonth,
     }),
     [
       datasets,
@@ -384,7 +484,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       activeYear,
       setActiveYear,
       monthIndex,
-      scope,
+      gridScope,
       dataset,
       grid,
       canEdit,
@@ -401,6 +501,20 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       importError,
       importErrorDetails,
       dismissImportError,
+      allYears,
+      filters,
+      setMetric,
+      setChartScope,
+      toggleCenterMark,
+      toggleYearMark,
+      toggleMonthMark,
+      toggleDayMark,
+      clearCenterMarks,
+      clearYearMarks,
+      clearMonthMarks,
+      clearDayMarks,
+      clearAllMarks,
+      drillIntoMonth,
     ],
   );
 

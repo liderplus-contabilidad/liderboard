@@ -143,7 +143,31 @@ one column per month instead of per day (the type speaks in `columns`/`columnLab
 never in days), always computed and always read-only — a month's cell is an aggregate of days,
 and «Habitaciones disponibles» sums habitaciones-noche there because that is what the occupancy
 of each month divides by. Both axes compose: the year of a sucursal, or the year of the
-Consolidado. Gráficos is still `ComingSoon`.
+Consolidado.
+
+**Ocupaciones › Gráficos** mirrors PyG's shape with its own engine: `lib/occupancy/filters.ts`
+holds the marks, `charts/selection.ts` is the ONE translation into an `OccupancyQuery`,
+`analytics/series.ts` builds the series and `charts/option.ts` turns them into options. The
+métrica is **single-choice** (ocupación is %, ADR is $, PAX is a count — two units in one card
+would need the second `yAxis` the types forbid); what compares is the sucursales, años and
+periodos marked, exactly as in PyG. «Ver por» switches the axis between months and days, and a
+marked periodo NARROWS that axis rather than adding series — in two levels, months and days of
+the month, so «Manor, 2025 y 2026, enero, día 5» is two bars over a single column. A day mark
+drops «Ver por» to días by itself, and a comparison narrow enough to fit a few columns is drawn
+as grouped bars because a line of one point draws nothing. Coverage carries over: a month the
+workspace never received is `null`, a day inside a covered month that sold nothing is `0`.
+**Drill-down** has two moves: clicking a month's bar writes `months=[m]` + `scope="dia"` into the
+same filter bar (undo = remove the chip), while clicking a heatmap day opens the `SidePanel` and
+touches nothing. The heatmap is deliberately NOT an ECharts chart — one grid per marked
+sucursal-year, all sharing one scale so a tone means the same thing in both — and it is the only
+consumer of the sequential `CHART_HEAT_RAMP`, which is separate from the categorical palette.
+`filters.ts` also owns `periodLabel`/`describeSelection`, the plain-Spanish wording of the
+selection: the bar carries a «Mostrando …» line and every KPI and card subtitle reads its period
+from there, so nothing says «Enero» under a «5 de enero». When the axis collapses to ONE column
+the option builder swaps what the axis means — each series becomes a labelled bar and the date
+moves to the subtitle, because two bars under a single «5 ene» would read as the same date.
+Datos keeps its own three strips: those answer «cuál edito», the bar answers «cuáles comparo»,
+and the bar falls back to whatever Datos has open.
 
 **PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders, in
 order, Cuenta contable · Nivel · Centro de costo · Periodo, "Ver por" pinned right, and an

@@ -49,6 +49,11 @@ function resolvedFont(): string {
 
 export interface ChartProps {
   option: ChartOption;
+  /**
+   * Fires with the clicked category's index. It is what makes a chart a place to explore FROM
+   * rather than only to read: the caller decides what going down one level means.
+   */
+  onSelect?: (dataIndex: number) => void;
   /** Plot height in px; the width always follows the container. */
   height?: number;
   /** What a screen reader announces. The card's table twin carries the actual numbers. */
@@ -70,7 +75,7 @@ export interface ChartProps {
  *   `notMerge` is on because a narrower selection has FEWER series than the last one, and a
  *   merge would leave the dropped ones on screen.
  */
-export function Chart({ option, height = 260, ariaLabel, className }: ChartProps) {
+export function Chart({ option, onSelect, height = 260, ariaLabel, className }: ChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const instance = useRef<ECharts | null>(null);
 
@@ -108,6 +113,25 @@ export function Chart({ option, height = 260, ariaLabel, className }: ChartProps
     };
     chart.setOption(withFont as unknown as EChartsCoreOption, { notMerge: true });
   }, [option]);
+
+  useEffect(() => {
+    const chart = instance.current;
+    if (!chart) {
+      return;
+    }
+    const handler = (params: { dataIndex?: number }) => {
+      if (onSelect && typeof params.dataIndex === "number") {
+        onSelect(params.dataIndex);
+      }
+    };
+    chart.on("click", handler);
+    return () => {
+      // Teardown order puts the dispose effect first, so by now the instance may be gone.
+      if (!chart.isDisposed()) {
+        chart.off("click", handler);
+      }
+    };
+  }, [onSelect]);
 
   // The SVG is hidden from assistive tech on purpose: read aloud, an axis of twelve numbers and
   // eight legend entries is noise. The name goes out as text and the numbers live in the card's

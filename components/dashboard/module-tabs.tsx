@@ -2,7 +2,9 @@
 
 import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { GraficosView as OccupancyGraficosView } from "@/components/occupancy/charts/graficos-view";
 import { OccupancyDatosView } from "@/components/occupancy/occupancy-datos-view";
+import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
 import { OccupancyDownloadButton } from "@/components/occupancy/occupancy-download-button";
 import { OccupancyUploadButton } from "@/components/occupancy/occupancy-upload-button";
 import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
@@ -58,7 +60,18 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
         <OccupancyUploadButton />
       </div>
     ),
-    panel: (tab) => (tab === "datos" ? <OccupancyDatosView /> : null),
+    // The filter bar belongs to Gráficos: Datos selects what to EDIT with its own three strips.
+    toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <OccupancyDatosView />;
+        case "graficos":
+          return <OccupancyGraficosView />;
+        default:
+          return null;
+      }
+    },
   },
 };
 
