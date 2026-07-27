@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ButtonsSection } from "./_sections/buttons";
 import { DataGridSection } from "./_sections/data-grid";
 import { DropdownsSection } from "./_sections/dropdowns";
+import { ExcelActionsSection } from "./_sections/excel-actions";
 import { InputsSection } from "./_sections/inputs";
 
 export const metadata: Metadata = {
@@ -13,6 +14,7 @@ const NAV = [
   { id: "buttons", label: "Botones y toggles" },
   { id: "inputs", label: "Selects y búsqueda" },
   { id: "dropdowns", label: "Desplegables y chips" },
+  { id: "excel-actions", label: "Acciones de Excel" },
   { id: "data-grid", label: "Grilla y celdas" },
 ];
 
@@ -53,6 +55,7 @@ export default function ComponentsDocsPage() {
           <ButtonsSection />
           <InputsSection />
           <DropdownsSection />
+          <ExcelActionsSection />
           <DataGridSection />
         </div>
       </main>

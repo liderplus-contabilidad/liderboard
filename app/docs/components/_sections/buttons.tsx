@@ -25,7 +25,7 @@ export function ButtonsSection() {
     <DocSection
       id="buttons"
       title="Botones y toggles"
-      description="Botón en sus cuatro variantes y dos tamaños, control segmentado (barra y pastillas de nivel) y badges."
+      description="Botón en sus cuatro variantes y tres tamaños, control segmentado (barra y pastillas de nivel) y badges."
     >
       <Demo label="Variantes">
         <Button variant="primary" icon={<Download size={15} />}>
@@ -46,6 +46,10 @@ export function ButtonsSection() {
       <Demo label="Tamaños e íconos">
         <Button size="md" icon={<Plus size={15} />}>
           Grande
+        </Button>
+        {/* 34px: la escala de los controles que viven en una barra (filtros, acciones de tab). */}
+        <Button size="toolbar" icon={<Plus size={14} />}>
+          Barra
         </Button>
         <Button size="sm" icon={<Plus size={13} />}>
           Pequeño

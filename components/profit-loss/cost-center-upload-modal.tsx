@@ -6,9 +6,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/cn";
 import { db } from "@/lib/profit-loss/db";
 import { PygParseError } from "@/lib/profit-loss/errors";
-import { parseWorkbookFile } from "@/lib/profit-loss/parse";
 import { buildWorkspace, type StagedParse } from "@/lib/profit-loss/workspace";
-import { NoticeBanner } from "./notice-banner";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { usePygData } from "./pyg-data-provider";
 
 interface StagedFile {
@@ -51,11 +50,17 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   }, [open]);
 
   const addFiles = useCallback(async (list: FileList | null) => {
-    if (!list) {
+    // Materialized BEFORE the first await: the caller clears `input.value` right after, which
+    // empties the live FileList.
+    const picked = list ? Array.from(list) : [];
+    if (picked.length === 0) {
       return;
     }
+    // Dynamic import keeps SheetJS out of the initial bundle (see `errors.ts`: the typed
+    // failures live apart precisely so this import can be deferred).
+    const { parseWorkbookFile } = await import("@/lib/profit-loss/parse");
     const staged = await Promise.all(
-      Array.from(list).map(async (file): Promise<StagedFile> => {
+      picked.map(async (file): Promise<StagedFile> => {
         try {
           const parsed = await parseWorkbookFile(file);
           return { fileName: file.name, parsed, badge: describe(parsed) };

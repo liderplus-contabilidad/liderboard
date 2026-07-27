@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGrid } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
 import { CONSOLIDADO_ID } from "@/lib/profit-loss/filters";
 import type { Frequency } from "@/lib/profit-loss/types";
-import { AccountDetailPanel } from "./account-detail-panel";
 import { CellEditor, type EditorAnchor } from "./cell-editor";
 import { flattenSorted } from "./datos-utils";
-import { NoticeBanner } from "./notice-banner";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
 import { usePygData } from "./pyg-data-provider";
 
@@ -19,6 +19,15 @@ interface EditingState extends EditorAnchor {
   col: number;
   valueEditable: boolean;
 }
+
+/**
+ * The ficha is the ONLY thing in Datos that draws a chart, and it mounts on demand — so loading
+ * ECharts with the table would mean paying ~700 KB for a panel most readings never open.
+ */
+const AccountDetailPanel = dynamic(
+  () => import("./account-detail-panel").then((mod) => mod.AccountDetailPanel),
+  { ssr: false },
+);
 
 const EMPTY_GRID: DatosGrid = {
   id: "default",
@@ -65,10 +74,19 @@ export function DatosView() {
     ? frequency
     : (dataset?.baseFrequency ?? frequency);
 
-  const grid = useMemo(
-    () => (dataset ? toDatosGrid(dataset, edits, effectiveFrequency) : EMPTY_GRID),
-    [dataset, edits, effectiveFrequency],
-  );
+  // The grid this one replaces, so `toDatosGrid` can hand back the rows that did not change
+  // (see its doc): editing one cell then re-renders that row and its ancestors instead of all
+  // ~500. Written during render on purpose — it is a cache of the last computed value, and the
+  // sharing is an optimization, so a render React throws away can only cost us the reuse, never
+  // correctness.
+  const previousGrid = useRef<DatosGrid | undefined>(undefined);
+  const grid = useMemo(() => {
+    const next = dataset
+      ? toDatosGrid(dataset, edits, effectiveFrequency, previousGrid.current)
+      : EMPTY_GRID;
+    previousGrid.current = next;
+    return next;
+  }, [dataset, edits, effectiveFrequency]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).

@@ -265,6 +265,75 @@ describe("toDatosGrid", () => {
   });
 });
 
+/**
+ * The rows the table renders are memoized on identity, so what a rebuild REUSES is what
+ * decides whether editing one cell re-renders one row or five hundred.
+ */
+describe("toDatosGrid: reutilización de filas", () => {
+  it("devuelve las mismas filas y los mismos meses cuando nada cambió", () => {
+    const first = toDatosGrid(monthlyDataset(), [], "mensual");
+    const second = toDatosGrid(monthlyDataset(), [], "mensual", first);
+    expect(second.months).toBe(first.months);
+    for (const [code, row] of flattenGrid(first)) {
+      expect(flattenGrid(second).get(code)).toBe(row);
+    }
+    expect(second.rows.find((r) => r.isResult)).toBe(first.rows.find((r) => r.isResult));
+  });
+
+  it("renueva solo la cuenta editada, sus ancestros y la Utilidad", () => {
+    const first = toDatosGrid(monthlyDataset(), [], "mensual");
+    const edits = [{ datasetId: "d1", code: "4.1.1", monthIndex: 0, value: 0, updatedAt: 0 }];
+    const second = toDatosGrid(monthlyDataset(), edits, "mensual", first);
+
+    const before = flattenGrid(first);
+    const after = flattenGrid(second);
+    // La hoja editada y su cadena de padres cambian de valor, luego de identidad.
+    expect(after.get("4.1.1")).not.toBe(before.get("4.1.1"));
+    expect(after.get("4.1")).not.toBe(before.get("4.1"));
+    expect(after.get("4")).not.toBe(before.get("4"));
+    expect(second.rows.find((r) => r.isResult)).not.toBe(first.rows.find((r) => r.isResult));
+    // La rama de costos no participa del cambio y conserva su objeto.
+    expect(after.get("5")).toBe(before.get("5"));
+    expect(after.get("5.1")).toBe(before.get("5.1"));
+    expect(after.get("5.1.1")).toBe(before.get("5.1.1"));
+    // Y una hoja hermana de la editada tampoco se toca.
+    expect(after.get("4.2")).toBe(before.get("4.2"));
+  });
+
+  it("un comentario renueva su fila y su cadena de padres, no las ramas ajenas", () => {
+    const first = toDatosGrid(monthlyDataset(), [], "mensual");
+    const edits = [
+      { datasetId: "d1", code: "4.1.1", monthIndex: 1, comment: "Revisar", updatedAt: 0 },
+    ];
+    const second = toDatosGrid(monthlyDataset(), edits, "mensual", first);
+    expect(flattenGrid(second).get("4.1.1")).not.toBe(flattenGrid(first).get("4.1.1"));
+    // Un comentario no mueve importes, pero el padre SÍ cambia de objeto: su `children` pasa a
+    // contener otra referencia, y una fila que dice "estos son mis hijos" no puede reutilizarse
+    // cuando esos hijos ya no son los mismos.
+    expect(flattenGrid(second).get("4.1")).not.toBe(flattenGrid(first).get("4.1"));
+    expect(flattenGrid(second).get("4.1")?.cells).toEqual(flattenGrid(first).get("4.1")?.cells);
+    // La rama de costos no comparte ningún hijo con la comentada y conserva su objeto.
+    expect(flattenGrid(second).get("5")).toBe(flattenGrid(first).get("5"));
+    expect(flattenGrid(second).get("4.2")).toBe(flattenGrid(first).get("4.2"));
+  });
+
+  it("no reutiliza nada al cambiar de frecuencia: las celdas ya no son las mismas", () => {
+    const monthly = toDatosGrid(monthlyDataset(), [], "mensual");
+    const quarterly = toDatosGrid(monthlyDataset(), [], "trimestral", monthly);
+    expect(quarterly.months).not.toBe(monthly.months);
+    expect(quarterly.months).toEqual(["T1", "T2", "T3", "T4"]);
+    expect(flattenGrid(quarterly).get("4")).not.toBe(flattenGrid(monthly).get("4"));
+  });
+
+  it("produce el mismo grid con o sin predecesor — reutilizar no cambia lo que dice", () => {
+    const edits = [{ datasetId: "d1", code: "4.1.1", monthIndex: 0, value: 7, updatedAt: 0 }];
+    const first = toDatosGrid(monthlyDataset(), [], "mensual");
+    const withPrevious = toDatosGrid(monthlyDataset(), edits, "mensual", first);
+    const withoutPrevious = toDatosGrid(monthlyDataset(), edits, "mensual");
+    expect(withPrevious).toEqual(withoutPrevious);
+  });
+});
+
 /** Test helper: flatten a DatosGrid's tree into a code → row map. */
 function flattenGrid(grid: ReturnType<typeof toDatosGrid>) {
   const map = new Map<string, (typeof grid.rows)[number]>();

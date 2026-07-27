@@ -1,15 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import dynamic from "next/dynamic";
+import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
-import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
-import { GraficosView } from "@/components/profit-loss/charts/graficos-view";
-import { DatosToolbar } from "@/components/profit-loss/datos-toolbar";
-import { DatosView } from "@/components/profit-loss/datos-view";
+import { OccupancyExcelActions } from "@/components/occupancy/occupancy-excel-actions";
+import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
+import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
-import { Semaforo } from "@/components/profit-loss/semaforo";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
+
+/**
+ * The panels are the ONLY thing here that is code-split, and it is this registry that makes it
+ * worth doing: importing them statically put ECharts (~700 KB) in the shared client chunk of
+ * EVERY route — including `/salaries` and `/sales`, which render `ComingSoon` and draw nothing.
+ * Each panel now arrives when its tab is first opened.
+ *
+ * `ssr: false` because every panel reads the workspace from IndexedDB: on the server they can
+ * only render their own empty state, so prerendering them buys nothing and costs a hydration
+ * pass. The shell, the tab bar and the toolbars stay static — they are what the reader sees
+ * first, and none of them pull a chart or a parser.
+ */
+const PanelFallback = () => <div className="px-7 py-5" aria-busy="true" />;
+
+const DatosView = dynamic(
+  () => import("@/components/profit-loss/datos-view").then((mod) => mod.DatosView),
+  { ssr: false, loading: PanelFallback },
+);
+const GraficosView = dynamic(
+  () => import("@/components/profit-loss/charts/graficos-view").then((mod) => mod.GraficosView),
+  { ssr: false, loading: PanelFallback },
+);
+const AnalisisView = dynamic(
+  () => import("@/components/profit-loss/charts/analisis-view").then((mod) => mod.AnalisisView),
+  { ssr: false, loading: PanelFallback },
+);
+const OccupancyDatosView = dynamic(
+  () => import("@/components/occupancy/occupancy-datos-view").then((mod) => mod.OccupancyDatosView),
+  { ssr: false, loading: PanelFallback },
+);
+const OccupancyGraficosView = dynamic(
+  () => import("@/components/occupancy/charts/graficos-view").then((mod) => mod.GraficosView),
+  { ssr: false, loading: PanelFallback },
+);
+
+interface ModuleViews {
+  rightSlot?: (tab: ModuleTabId) => ReactNode;
+  toolbar?: (tab: ModuleTabId) => ReactNode;
+  panel?: (tab: ModuleTabId) => ReactNode;
+}
+
+const MODULE_VIEWS: Record<string, ModuleViews> = {
+  "profit-loss": {
+    rightSlot: (tab) => (tab === "datos" ? <PygExcelActions /> : null),
+    toolbar: () => <PygToolbar />,
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <DatosView />;
+        case "graficos":
+          return <GraficosView />;
+        case "analisis":
+          return <AnalisisView />;
+      }
+    },
+  },
+  occupancy: {
+    rightSlot: (tab) => (tab === "datos" ? <OccupancyExcelActions /> : null),
+    toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <OccupancyDatosView />;
+        case "graficos":
+          return <OccupancyGraficosView />;
+        default:
+          return null;
+      }
+    },
+  },
+};
 
 export function ModuleTabs({ slug }: { slug: string }) {
   const mod = findModuleBySlug(slug);
@@ -20,7 +90,8 @@ export function ModuleTabs({ slug }: { slug: string }) {
   }
 
   const activeTab = mod.tabs.find((tab) => tab.id === activeId) ?? mod.tabs[0];
-  const isPyg = mod.slug === "profit-loss";
+  const views = MODULE_VIEWS[mod.slug] ?? {};
+  const panel = views.panel?.(activeTab.id) ?? <ComingSoon mod={mod} tab={activeTab} />;
 
   return (
     <div className="flex h-full flex-col">
@@ -54,11 +125,12 @@ export function ModuleTabs({ slug }: { slug: string }) {
           })}
         </div>
 
-        {isPyg && <Semaforo />}
+        {/* La barra alinea el slot una sola vez, a la altura de las etiquetas: así el mismo
+            componente sirve fuera de ella (el vacío de PyG) sin arrastrar la compensación. */}
+        <div className="pb-[11px]">{views.rightSlot?.(activeTab.id)}</div>
       </div>
 
-      {isPyg && <PygToolbar />}
-      {isPyg && activeTab.id === "datos" && <DatosToolbar />}
+      {views.toolbar?.(activeTab.id)}
 
       <div
         id={`panel-${mod.slug}`}
@@ -66,15 +138,7 @@ export function ModuleTabs({ slug }: { slug: string }) {
         aria-labelledby={`tab-${mod.slug}-${activeTab.id}`}
         className="flex-1 overflow-auto bg-canvas"
       >
-        {isPyg && activeTab.id === "datos" ? (
-          <DatosView />
-        ) : isPyg && activeTab.id === "graficos" ? (
-          <GraficosView />
-        ) : isPyg && activeTab.id === "analisis" ? (
-          <AnalisisView />
-        ) : (
-          <ComingSoon mod={mod} tab={activeTab} />
-        )}
+        {panel}
       </div>
     </div>
   );

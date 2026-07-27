@@ -5,8 +5,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PygExcelActions } from "./pyg-excel-actions";
 
 /**
- * El vacío de Gráficas y Análisis. Esas dos pestañas no montan `DatosToolbar`, así que sin
- * dataset se quedaban sin ninguna acción: las acciones de Excel van aquí, hermanas del
+ * El vacío de Gráficas y Análisis. La fila de tabs solo monta las acciones de Excel en Datos, así
+ * que esas dos pestañas sin dataset se quedaban sin ninguna acción: van aquí, hermanas del
  * `EmptyState` (que envuelve sus children en un `span`, y el menú de descarga es un `div`).
  */
 export function PygEmptyState() {

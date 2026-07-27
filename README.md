@@ -46,12 +46,17 @@ components/ui/           primitivas reutilizables (Button, Dropdown, SegmentedCo
 components/dashboard/    shell: sidebar, header, tabs de módulo
 components/profit-loss/  composiciones específicas de Pérdidas y Ganancias
   └ charts/              tarjetas y vistas de Gráficos y Análisis
+components/occupancy/    composiciones específicas de Ocupaciones (tabs, grilla y gráficas)
+  └ charts/              vista de Gráficos, mapa de calor y panel del día
 lib/modules.ts           registro de módulos (única fuente de verdad de la navegación)
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
 lib/charts/              paleta categórica y sistema de marcas, comunes a toda la app
 lib/profit-loss/analytics/  motor analítico puro (series, transformaciones, Pareto, pastel)
 lib/profit-loss/charts/  traducción pura: selección → consulta → opción de ECharts
+lib/occupancy/           capa pura de Ocupaciones (parse, derive, consolidate, export) + Dexie
+lib/occupancy/analytics/ motor de Ocupaciones (series por métrica, KPIs, canales, semana)
+lib/occupancy/charts/    traducción pura: marcas → consulta → opción de ECharts
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
 
@@ -82,24 +87,25 @@ token y una primitiva de `components/ui/`; no escribas hex sueltos ni estilos en
 
 ### Color
 
-| Token                          | Valor                             | Uso                                                              |
-| ------------------------------ | --------------------------------- | ---------------------------------------------------------------- |
-| `brand`                        | `#1e3a5f`                         | Azul de marca: acción primaria, textos activos, código de cuenta |
-| `brand-hover`                  | `#16324f`                         | Hover de la acción primaria                                      |
-| `brand-soft`                   | `rgba(30,58,95,.08)`              | Fondo tenue de un control/fila activos                           |
-| `canvas`                       | `#f4f6f8`                         | Fondo de la app (detrás de las tarjetas)                         |
-| `surface`                      | `#ffffff`                         | Fondo de tarjeta, tabla, panel                                   |
-| `surface-header`               | `#fafbfc`                         | Cabeceras y pies de tarjeta/tabla                                |
-| `surface-muted`                | `#f8fafc`                         | Hover de fila, franja de descanso                                |
-| `surface-sunken`               | `#f3f6f9`                         | Barra hundida (toolbar `tone="sunken"`)                          |
-| `border`                       | `#e5e9ee`                         | Borde estándar de tarjeta/control                                |
-| `border-soft` / `border-faint` | `#edf1f5` / `#f1f4f7`             | Separadores internos de tabla, cada vez más tenues               |
-| `ink` / `ink-soft`             | `#1e293b` / `#334155`             | Texto principal y su variante suave                              |
-| `muted` / `faint` / `faintest` | `#64748b` / `#94a3b8` / `#b4bec9` | Texto secundario → terciario → placeholder                       |
-| `positive` / `negative`        | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
-| `warning`                      | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
-| `zero`                         | `#c2cbd5`                         | El `–` de una celda en cero                                      |
-| `chip` / `chip-border`         | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
+| Token                           | Valor                             | Uso                                                              |
+| ------------------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| `brand`                         | `#1e3a5f`                         | Azul de marca: acción primaria, textos activos, código de cuenta |
+| `brand-hover`                   | `#16324f`                         | Hover de la acción primaria                                      |
+| `brand-soft`                    | `rgba(30,58,95,.08)`              | Fondo tenue de un control/fila activos                           |
+| `canvas`                        | `#f4f6f8`                         | Fondo de la app (detrás de las tarjetas)                         |
+| `surface`                       | `#ffffff`                         | Fondo de tarjeta, tabla, panel                                   |
+| `surface-header`                | `#fafbfc`                         | Cabeceras y pies de tarjeta/tabla                                |
+| `surface-muted`                 | `#f8fafc`                         | Hover de fila, franja de descanso                                |
+| `surface-sunken`                | `#f3f6f9`                         | Barra hundida (toolbar `tone="sunken"`)                          |
+| `surface-calc` / `-calc-strong` | `#f2f6fa` / `#eaf0f6`             | Relleno azulado de una fila **calculada** (Ocupaciones)          |
+| `border`                        | `#e5e9ee`                         | Borde estándar de tarjeta/control                                |
+| `border-soft` / `border-faint`  | `#edf1f5` / `#f1f4f7`             | Separadores internos de tabla, cada vez más tenues               |
+| `ink` / `ink-soft`              | `#1e293b` / `#334155`             | Texto principal y su variante suave                              |
+| `muted` / `faint` / `faintest`  | `#64748b` / `#94a3b8` / `#b4bec9` | Texto secundario → terciario → placeholder                       |
+| `positive` / `negative`         | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
+| `warning`                       | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
+| `zero`                          | `#c2cbd5`                         | El `–` de una celda en cero                                      |
+| `chip` / `chip-border`          | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
 
 **Verde y rojo son señal de signo, no colores de serie.** Nunca pintan una categoría, y nunca
 viajan solos: siempre acompañados de flecha (`▲`/`▼`) y del valor con signo, porque el color
@@ -129,7 +135,9 @@ solo no es una lectura para todos.
 - **Radios:** `13px` tarjeta/tabla/panel · `9px` botón y control de toolbar · `8–12px`
   popovers y campos · `rounded-full` chips y badges.
 - **Alturas de control:** toolbar `34px` · botón `md` `38px` / `sm` `32px` (`h-8`) · input de
-  popover `h-9` · botón de popover `h-8`.
+  popover `h-9` · botón de popover `h-8`. Las tres son tamaños del primitivo `Button`
+  (`md` · `toolbar` · `sm`): un control de barra se pide con `size="toolbar"`, no se escribe a
+  mano.
 - **Padding de contenido:** `px-7 py-5` en el cuerpo de una vista · `px-[18px] py-3` en
   cabeceras de tarjeta · `gap-2.5` entre controles de una toolbar.
 - **Sombras:** siempre `rgba(15,23,42,…)` (nunca negro puro). Popover
@@ -149,7 +157,14 @@ propio. (Ver "Gráficos y Análisis" para las reglas de cobertura y doble eje.)
 ## Estado actual
 
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
-**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**.
+**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Dos módulos
+tienen datos reales hoy: **PyG** (Datos, Gráficos y Análisis) y **Ocupaciones** (Datos y Gráficos).
+
+Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
+`ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
+"próximamente", así que añadir uno es puramente aditivo. **El estado no vive ahí**: cada
+proveedor de datos se monta en el layout del dashboard, porque el header lee lo mismo que el
+panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
 
 **Pérdidas y Ganancias (PyG)** tiene su capa de filtros conectada a los datos:
 
@@ -168,13 +183,13 @@ Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las
   activa, más "Quitar todo") aparece solo cuando hay algo marcado y es la misma en las tres
   pestañas. Las listas de cuentas y centros salen del Excel cargado; el estado vacío solo
   aparece cuando no hay datos.
-- Leyenda de **semáforo** en la fila de tabs.
-- **Barra de acciones de Datos** (`DatosToolbar`, solo en la tab Datos, bajo la fila de
-  filtros): barra **fija** de una fila con las acciones de Excel — **Cargar Excel** (abre el
-  modal de carga multi-centro), menú **Descargar Excel** (Excel con tus datos · Plantilla
-  vacía, ambos conectados al pipeline de exportación) e ícono de **información** con los
-  formatos aceptados. Ya no lleva selector de centro propio: qué centro lee y si es editable
-  sale del filtro **Centro de costo** de la fila de filtros (ver abajo).
+- **Acciones de Excel** (`PygExcelActions`, solo en la tab Datos): el bloque compartido
+  `ExcelActions` (ver "Acciones de Excel" más abajo) en el `rightSlot` de la fila de tabs —
+  **Cargar Excel** (abre el modal de carga multi-centro), menú **Descargar Excel** (Excel con
+  tus datos · Plantilla vacía, ambos conectados al pipeline de exportación) e ícono de
+  **información** con los formatos aceptados. No llevan selector de centro propio: qué centro
+  lee Datos y si es editable sale del filtro **Centro de costo** de la fila de filtros (ver
+  abajo).
 
 **Tabla de Datos de PyG** (`DatosView` en la tab Datos) — el estado de resultados editable:
 
@@ -276,6 +291,31 @@ ventana) y la destruye al desmontar. Solo se registran `BarChart`, `LineChart`, 
 los componentes de rejilla, tooltip, leyenda, etiquetas y línea de referencia; el paquete
 completo ronda el megabyte y el chunk de `/profit-loss` entero pesa menos que eso.
 
+## Acciones de Excel (todos los módulos)
+
+Cargar y descargar Excel se ve **igual en toda la app**: un solo primitivo,
+`components/ui/excel-actions.tsx`, rinde la fila **Cargar Excel** (brand) · **Descargar Excel**
+(secundario) · **ⓘ** (opcional). Los módulos no escriben markup de botón; aportan solo su
+dominio. La galería viva está en `/docs/components#excel-actions`.
+
+- **La forma del control de descarga se deriva de las opciones**, no se declara: una sola
+  opción rinde un **botón plano** que la ejecuta directo (PyG › Ocupaciones), dos o más rinden
+  el **menú** (PyG). Añadir una segunda descarga a un módulo es añadir un elemento al array.
+- **El progreso y el error viven en el primitivo.** Un módulo aporta `run: () => Promise<void>`
+  —construye el workbook y lo entrega al navegador— y nada más: el bloque bloquea reentradas,
+  cambia el icono por un spinner y, si la promesa rechaza, muestra un panel de error bajo el
+  control que deja reintentar. Por eso el `try/catch` y el `import()` dinámico de `exceljs` no
+  están duplicados por módulo.
+- **`disabled` + `disabledReason`** es cómo un módulo dice que una descarga no está disponible
+  (el Consolidado de Ocupaciones, PyG sin dataset); la razón se lee al apuntar el control.
+- **La barra de tabs alinea el bloque una sola vez** (`ModuleTabs` envuelve el `rightSlot`), de
+  modo que el mismo componente sirve fuera de ella — es lo que monta `PygEmptyState`.
+
+**Para un módulo nuevo:** escribe `components/<módulo>/<módulo>-excel-actions.tsx` que cablee
+tu proveedor y tu modal de carga sobre `<ExcelActions/>`, y decláralo en el `rightSlot` de
+`MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de que el
+caso es general y va en la API, no en tu módulo.
+
 ## Carga de Excel (PyG › Datos)
 
 - **Formatos soportados:** reporte mensual (con o sin línea "Centro de Costo"), reporte
@@ -329,3 +369,125 @@ completo ronda el megabyte y el chunk de `/profit-loss` entero pesa menos que es
   parsea la prosa de las notas. Los value-edits no se "reviven": los valores editados quedan
   como nueva base.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
+
+## Ocupaciones (análisis hotelero)
+
+La pestaña **Datos** carga los `OCUPACION_*.xlsx` reales del contador y los deja navegables por
+**Sucursal → Año → Mes**. La capa pura vive en `lib/occupancy/` (parse, derive, consolidate,
+export + persistencia Dexie) y está cubierta por vitest; los componentes solo montan.
+
+### Cómo se clasifican los datos
+
+- **La unidad de guardado es la sucursal-año**, con clave compuesta `[centerId+year]` en
+  IndexedDB: el contador exporta **un Excel por sucursal y por año**, así que ese par es lo que
+  se escribe, se fusiona y se borra.
+- El archivo **se declara a sí mismo**: bajo el título lleva dos líneas, el **hotel** y el
+  **centro de costo** (sucursal). Se leen **por posición**, no por etiqueta. Un archivo sin
+  línea de centro cae en la sucursal reservada `principal`, rotulada con el nombre del hotel;
+  así un hotel de una sola propiedad no es un caso especial en ningún otro sitio.
+- El **hotel activo** se muestra en el header (`ActiveClient`), con el año y la sucursal debajo.
+- El espacio de trabajo es de **un hotel**. Subir archivos de otro pide confirmación y
+  **reemplaza todo** — mezclar dos empresas en un mismo juego de pestañas no se avisaría solo.
+
+### Carga
+
+- **Modal de staging** (como el de PyG): "Cargar Excel" abre un modal donde
+  arrastras o eliges **varios Excel a la vez**, mezclando sucursales y años; cada uno se parsea
+  al vuelo y se lista con lo que declara —`CULTURA MANOR · 2026 · 7 meses`, la sucursal-año que
+  va a escribir y cuántos meses reemplaza— o con su motivo de fallo, y se puede quitar de la
+  lista. Nada se escribe hasta confirmar.
+- Se **parsea todo antes de escribir nada**: así la verificación de "todos los archivos son del
+  mismo hotel" no puede dejar la base a medias. Si los archivos discrepan entre sí, el modal lo
+  avisa nombrando ambos hoteles y no deja cargar; si un archivo falla al leerse, se marca en la
+  lista con su motivo y los demás entran igual. Los avisos de lectura se ven en el modal, antes
+  de confirmar.
+- Recargar una sucursal-año **fusiona mes a mes**: los meses que el archivo trae se reemplazan y
+  los escritos a mano sobreviven. El catálogo de canales guardado gana en el nombre (un canal
+  renombrado lo conserva) y los canales nuevos del archivo se añaden.
+- Solo se leen **insumos crudos**. ADR, ocupación, RevPAR, PAX y todos los totales se
+  **recalculan**: en los archivos originales son fórmulas sin resultado cacheado y sus
+  agregados mezclan "promedio de ratios" con "ratio de sumas".
+
+### Grilla diaria
+
+- Conceptos a la izquierda, días arriba, **Total / prom.** fijo a la derecha; la columna de
+  concepto y la de total son _sticky_. **Todas las columnas de día se ven igual**: intentos
+  previos de marcar el fin de semana se leían como "esos días están deshabilitados".
+- El **relleno azulado** (`surface-calc`) significa una sola cosa: **esta fila es calculada**.
+- Un mes importado se muestra **tal cual del Excel** —con su insignia— hasta la primera edición;
+  esa edición pasa **el mes entero** a calculado de golpe, para que nunca se mezclen las dos
+  procedencias en una misma tabla.
+- **Edición en sitio** con navegación de hoja de cálculo (flechas entre celdas, Enter baja,
+  Escape descarta). Los canales de venta son **por mes**: se dan de alta y de baja en el mes que
+  se está viendo, sin tocar los demás.
+- Avisos de **cuadre** (la suma de canales o de tipos de habitación no coincide con vendidas +
+  complementarias) y de **PAX declarado a mano**, en un `NoticeBanner` expandible.
+
+### Consolidado y vista anual
+
+Son dos ejes distintos que se combinan libremente: el año de una sucursal, el consolidado de un
+mes, o el año consolidado de todas.
+
+- **Consolidado** (aparece con dos o más sucursales): suma los **insumos crudos** de todas y
+  deja que `derive.ts` recalcule los indicadores como **ratio de sumas** — la única definición
+  bajo la que `ADR × Ocupación = RevPAR` sigue siendo cierta al sumar. No se guarda: se deriva
+  al leer, así que ninguna edición puede dejarlo obsoleto. Es de solo lectura.
+- **Vista anual** (botón «Año» al final de la tira de MES): las mismas filas con **un mes por
+  columna** y **Total año**. Siempre calculada y de solo lectura — una celda de mes es un
+  agregado de días, no hay dónde escribirla. Volver a un mes es tan simple como pulsarlo.
+- En la vista anual, **«Habitaciones disponibles» suma habitaciones-noche** (682 en enero) en
+  vez del promedio redondeado que muestra la mensual (22): es el denominador real de la
+  ocupación de ese mes. Es la única fila que agrega distinto según el alcance, y lo declara en
+  su propio subtítulo.
+
+### Descarga
+
+- Exporta la **sucursal-año activa** en el mismo formato de bloques que el parser lee, con las
+  dos líneas de cabecera, de modo que el archivo descargado **vuelve a entrar en su misma
+  sucursal** sin crear una nueva ni pedir confirmación.
+- En el **Consolidado** el botón se deshabilita y explica por qué: es un cálculo de la app, y
+  devolverlo como Excel invitaría a re-subirlo como una sucursal fantasma.
+
+### Gráficos
+
+La pestaña tiene su propia **barra de filtros** — Métrica · Sucursal · Año · Periodo, con la
+franja de chips activos debajo. Como en PyG, **la comparación no se declara**: marcar dos
+sucursales, dos años o dos meses es lo que la produce.
+
+**Ver por** (Mes / Día) **no está en esa barra**, sino en el encabezado de la serie principal,
+junto a «Ver como tabla»: es lo único que cambia el eje de esa tarjeta y no toca ninguna otra —el
+mapa de calor es siempre día a día, los canales y el ritmo semanal son totales del periodo—,
+mientras que todo lo que sí está en la barra alimenta a todas. Un control que gobierna una
+tarjeta vive sobre esa tarjeta (`ChartCard` lo recibe como `headerSlot`).
+
+- **La métrica es de selección única.** Ocupación es %, ADR y RevPAR son $, vendidas y PAX son
+  conteos; mezclarlas en una tarjeta pediría un segundo eje Y, que el proyecto no permite. Lo que
+  se compara son sucursales, años y periodos, siempre en la misma unidad.
+- **El periodo se marca en dos niveles: mes y día del mes.** Con «Ver por: Día» y ningún mes
+  marcado el eje es el año corrido; marcando marzo, son sus 31 días; marcando además el día 5, el
+  eje es **una sola columna**. Marcar acota el eje y nunca multiplica las series, así que
+  «Cultura Manor, 2025 y 2026, enero, día 5» son dos barras: el 5 de enero de un año contra el
+  del otro. Un día marcado vale para **cada** mes marcado («el 5» de enero y de marzo), y un día
+  que el mes no tiene simplemente no aparece. Marcar un día pasa «Ver por» a Día por su cuenta:
+  sobre el eje mensual no querría decir nada.
+- **Cobertura:** un mes que el espacio nunca recibió no dibuja punto; un día dentro de un mes con
+  datos que no vendió nada es un cero real y sí se dibuja.
+- **Tarjetas:** cuatro indicadores del alcance marcado (ocupación media, ADR, RevPAR, ingresos),
+  la serie principal, el mapa de calor día×mes, los canales de venta y el ritmo por día de la
+  semana.
+- **La selección se lee en una frase.** Bajo los controles hay una línea «Mostrando Ocupación ·
+  5 de enero · 2025 y 2026 · Cultura Manor», y el control de Periodo se rotula con el periodo
+  («5 de enero»), no con cuántas casillas hay marcadas. La rejilla de días se ve desde el
+  principio, deshabilitada hasta que eliges un mes, para que se sepa que existe.
+- **Cuando el eje queda en una sola columna, el eje pasa a ser la entidad:** «el 5 de enero de
+  2025 contra el de 2026» son dos barras rotuladas con su año, y la fecha se dice en el
+  subtítulo. Dejar «5 ene» en el eje rotularía las dos barras con la misma fecha y escondería la
+  comparación en la leyenda.
+- **Drill-down, dos movimientos distintos:** clic en la barra de un mes **escribe los filtros**
+  (marca ese periodo y baja «Ver por» a Día), y se deshace quitando el chip; clic en un día del
+  mapa de calor **abre un panel lateral** con sus indicadores y canales, sin tocar nada — un día
+  suelto es un punto, no un nivel del eje.
+- **El mapa de calor no es una gráfica de ECharts:** son celdas de color, una cuadrícula por
+  sucursal-año marcada (hasta cuatro) y **una sola escala para todas**, que es lo que las hace
+  comparables de un vistazo. Es el único consumidor de la rampa secuencial `CHART_HEAT_RAMP`,
+  separada de la paleta categórica.
