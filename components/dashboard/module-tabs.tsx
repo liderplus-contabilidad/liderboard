@@ -9,10 +9,9 @@ import { OccupancyDownloadButton } from "@/components/occupancy/occupancy-downlo
 import { OccupancyUploadButton } from "@/components/occupancy/occupancy-upload-button";
 import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
 import { GraficosView } from "@/components/profit-loss/charts/graficos-view";
-import { DatosToolbar } from "@/components/profit-loss/datos-toolbar";
 import { DatosView } from "@/components/profit-loss/datos-view";
+import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
-import { Semaforo } from "@/components/profit-loss/semaforo";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
 
@@ -24,13 +23,8 @@ interface ModuleViews {
 
 const MODULE_VIEWS: Record<string, ModuleViews> = {
   "profit-loss": {
-    rightSlot: () => <Semaforo />,
-    toolbar: (tab) => (
-      <>
-        <PygToolbar />
-        {tab === "datos" && <DatosToolbar />}
-      </>
-    ),
+    rightSlot: (tab) => (tab === "datos" ? <PygExcelActions /> : null),
+    toolbar: () => <PygToolbar />,
     panel: (tab) => {
       switch (tab) {
         case "datos":

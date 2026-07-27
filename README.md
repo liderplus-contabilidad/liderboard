@@ -181,13 +181,12 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   activa, más "Quitar todo") aparece solo cuando hay algo marcado y es la misma en las tres
   pestañas. Las listas de cuentas y centros salen del Excel cargado; el estado vacío solo
   aparece cuando no hay datos.
-- Leyenda de **semáforo** en la fila de tabs.
-- **Barra de acciones de Datos** (`DatosToolbar`, solo en la tab Datos, bajo la fila de
-  filtros): barra **fija** de una fila con las acciones de Excel — **Cargar Excel** (abre el
-  modal de carga multi-centro), menú **Descargar Excel** (Excel con tus datos · Plantilla
-  vacía, ambos conectados al pipeline de exportación) e ícono de **información** con los
-  formatos aceptados. Ya no lleva selector de centro propio: qué centro lee y si es editable
-  sale del filtro **Centro de costo** de la fila de filtros (ver abajo).
+- **Acciones de Excel** (`PygExcelActions`, solo en la tab Datos): viven en el `rightSlot` de
+  la fila de tabs, igual que las de Ocupaciones — **Cargar Excel** (abre el modal de carga
+  multi-centro), menú **Descargar Excel** (Excel con tus datos · Plantilla vacía, ambos
+  conectados al pipeline de exportación) e ícono de **información** con los formatos
+  aceptados. No llevan selector de centro propio: qué centro lee Datos y si es editable sale
+  del filtro **Centro de costo** de la fila de filtros (ver abajo).
 
 **Tabla de Datos de PyG** (`DatosView` en la tab Datos) — el estado de resultados editable:
 

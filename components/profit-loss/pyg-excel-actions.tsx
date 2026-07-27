@@ -10,14 +10,15 @@ import { usePygData } from "./pyg-data-provider";
 
 /**
  * Las acciones de Excel de Pérdidas y Ganancias — cargar, el menú de descarga y el info tip de
- * archivos aceptados. Viven aquí porque las monta la barra de Datos (`DatosToolbar`) y también
- * el vacío de Gráficas/Análisis (`PygEmptyState`), donde son la única forma de cargar un archivo.
+ * archivos aceptados. Viven aquí porque las monta la fila de tabs (`ModuleTabs`, solo en Datos) y
+ * también el vacío de Gráficas/Análisis (`PygEmptyState`), donde son la única forma de cargar un
+ * archivo.
  */
 export function PygExcelActions() {
   const [uploadOpen, setUploadOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5 my-2.5">
       <button
         type="button"
         onClick={() => setUploadOpen(true)}
