@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGrid } from "@/lib/profit-loss/derive";
@@ -74,10 +74,19 @@ export function DatosView() {
     ? frequency
     : (dataset?.baseFrequency ?? frequency);
 
-  const grid = useMemo(
-    () => (dataset ? toDatosGrid(dataset, edits, effectiveFrequency) : EMPTY_GRID),
-    [dataset, edits, effectiveFrequency],
-  );
+  // The grid this one replaces, so `toDatosGrid` can hand back the rows that did not change
+  // (see its doc): editing one cell then re-renders that row and its ancestors instead of all
+  // ~500. Written during render on purpose — it is a cache of the last computed value, and the
+  // sharing is an optimization, so a render React throws away can only cost us the reuse, never
+  // correctness.
+  const previousGrid = useRef<DatosGrid | undefined>(undefined);
+  const grid = useMemo(() => {
+    const next = dataset
+      ? toDatosGrid(dataset, edits, effectiveFrequency, previousGrid.current)
+      : EMPTY_GRID;
+    previousGrid.current = next;
+    return next;
+  }, [dataset, edits, effectiveFrequency]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).

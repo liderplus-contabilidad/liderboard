@@ -192,6 +192,25 @@ describe("saneamiento de los filtros", () => {
     expect(sanitized.periods).toEqual([{ year: 2026, frequency: "mensual", index: 3 }]);
   });
 
+  it("devuelve el MISMO objeto cuando no hay nada que podar", () => {
+    // La tabla de Datos memoiza sus columnas contra `filters.periods`, y esto corre con un
+    // contexto reconstruido en cada edición: un objeto nuevo aquí re-renderiza el estado entero.
+    const vacio = makeFilters();
+    expect(sanitizeFilters(vacio, makeContext())).toBe(vacio);
+
+    const conMarcas = makeFilters({
+      codes: [HABITACIONES, RESTAURANTE],
+      centerIds: ["cultura-manor"],
+      periods: [{ year: 2026, frequency: "mensual", index: 3 }],
+    });
+    expect(sanitizeFilters(conMarcas, makeContext())).toBe(conMarcas);
+  });
+
+  it("devuelve un objeto nuevo en cuanto poda algo", () => {
+    const filters = makeFilters({ centerIds: ["cultura-manor", "centro-que-ya-no-existe"] });
+    expect(sanitizeFilters(filters, makeContext())).not.toBe(filters);
+  });
+
   it("empties everything a different workspace's views cannot resolve", () => {
     const filters = makeFilters({
       codes: [HABITACIONES, RESTAURANTE],

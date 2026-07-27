@@ -188,11 +188,19 @@ export function aggregate(values: number[], base: Frequency, target: Frequency):
  * The full pipeline the Datos view renders: tree → leaf edits → rollups → aggregate →
  * grid. Comments stay keyed by base month; an aggregated cell inherits (joined) the
  * comments of the months it covers, as a read-only indicator.
+ *
+ * `previous` is the grid this one replaces, and it is what makes editing a cell cheap:
+ * every row whose content came out identical is returned AS THE SAME OBJECT, so the
+ * memoized table rows bail out instead of re-rendering. Without it a 500-account
+ * statement re-renders all of its rows on every keystroke, edit, frequency change and
+ * filter — the derivation itself is not what costs, the reconciliation is. Passing it is
+ * optional; omitting it only forfeits the sharing, never changes what the grid says.
  */
 export function toDatosGrid(
   dataset: PygDataset,
   edits: CellEdit[],
   frequency: Frequency,
+  previous?: DatosGrid,
 ): DatosGrid {
   const { roots } = buildAccountTree(dataset.accounts);
   const rolled = computeRollups(applyLeafEdits(roots, edits));
@@ -208,17 +216,31 @@ export function toDatosGrid(
     comments.set(item.code, byMonth);
   }
 
+  const reusable = indexRows(previous?.rows);
   const base = dataset.baseFrequency;
-  const rows: DatosRow[] = rolled.map((node) => toDatosRow(node, base, frequency, comments));
+  const rows: DatosRow[] = rolled.map((node) =>
+    toDatosRow(node, base, frequency, comments, reusable),
+  );
   const resultValues = aggregate(result.values, base, frequency);
-  rows.push({
-    code: "",
-    name: "Utilidad o Pérdida",
-    level: 1,
-    movement: false,
-    isResult: true,
-    cells: resultValues.map((value) => ({ value })),
-  });
+  rows.push(
+    reuse(
+      {
+        code: "",
+        name: "Utilidad o Pérdida",
+        level: 1,
+        movement: false,
+        isResult: true,
+        cells: resultValues.map((value) => ({ value })),
+      },
+      previous?.rows.find((row) => row.isResult),
+    ),
+  );
+
+  // The labels are a module constant, but the copy is not: a fresh `months` array would
+  // invalidate whatever the view memoizes against it (the visible columns) and re-render
+  // every row anyway, undoing the row sharing above.
+  const labels = [...periodLabels(base === "anual" ? "anual" : frequency)];
+  const months = previous && sameStrings(previous.months, labels) ? previous.months : labels;
 
   const total = result.values.reduce((sum, v) => sum + v, 0);
   const positive = total >= 0;
@@ -229,9 +251,68 @@ export function toDatosGrid(
       label: `${positive ? "Utilidad" : "Pérdida"} ${formatCurrency(total, { cents: true })}`,
       positive,
     },
-    months: [...periodLabels(base === "anual" ? "anual" : frequency)],
+    months,
     rows,
   };
+}
+
+/** Every account row of a grid by code, so a rebuild can look up its own predecessor. */
+function indexRows(rows: DatosRow[] | undefined): Map<string, DatosRow> {
+  const byCode = new Map<string, DatosRow>();
+  const walk = (list: DatosRow[]) => {
+    for (const row of list) {
+      if (!row.isResult) {
+        byCode.set(row.code, row);
+      }
+      if (row.children) {
+        walk(row.children);
+      }
+    }
+  };
+  if (rows) {
+    walk(rows);
+  }
+  return byCode;
+}
+
+/** The predecessor when it says exactly the same thing, otherwise the fresh row. */
+function reuse(next: DatosRow, previous: DatosRow | undefined): DatosRow {
+  return previous && sameRow(previous, next) ? previous : next;
+}
+
+/**
+ * Whether two rows are indistinguishable to the renderer. Children compare BY REFERENCE
+ * on purpose: they were rebuilt bottom-up through `reuse`, so an identical child already
+ * carries the previous object — a deep re-comparison here would repeat that work per level.
+ */
+function sameRow(a: DatosRow, b: DatosRow): boolean {
+  if (
+    a.name !== b.name ||
+    a.level !== b.level ||
+    a.movement !== b.movement ||
+    a.isResult !== b.isResult ||
+    a.cells.length !== b.cells.length ||
+    (a.children?.length ?? -1) !== (b.children?.length ?? -1)
+  ) {
+    return false;
+  }
+  for (let i = 0; i < a.cells.length; i++) {
+    if (a.cells[i].value !== b.cells[i].value || a.cells[i].comment !== b.cells[i].comment) {
+      return false;
+    }
+  }
+  if (a.children && b.children) {
+    for (let i = 0; i < a.children.length; i++) {
+      if (a.children[i] !== b.children[i]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function toDatosRow(
@@ -239,6 +320,7 @@ function toDatosRow(
   base: Frequency,
   frequency: Frequency,
   comments: Map<string, Map<number, string>>,
+  reusable: Map<string, DatosRow>,
 ): DatosRow {
   const values = aggregate(node.values, base, frequency);
   const byMonth = comments.get(node.code);
@@ -249,16 +331,23 @@ function toDatosRow(
     return joined ? { value, comment: joined } : { value };
   });
 
-  return {
-    code: node.code,
-    name: node.name,
-    level: node.level,
-    movement: node.children.length === 0,
-    cells,
-    ...(node.children.length > 0
-      ? { children: node.children.map((child) => toDatosRow(child, base, frequency, comments)) }
-      : {}),
-  };
+  return reuse(
+    {
+      code: node.code,
+      name: node.name,
+      level: node.level,
+      movement: node.children.length === 0,
+      cells,
+      ...(node.children.length > 0
+        ? {
+            children: node.children.map((child) =>
+              toDatosRow(child, base, frequency, comments, reusable),
+            ),
+          }
+        : {}),
+    },
+    reusable.get(node.code),
+  );
 }
 
 /** Joins the comments of every base month a period covers ("" → undefined). */

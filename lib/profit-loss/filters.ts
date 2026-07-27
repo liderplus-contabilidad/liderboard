@@ -143,6 +143,11 @@ export interface FilterSanitizeContext {
  * Loading an entirely different workspace is the provider's job (it resets the raw state before
  * this ever runs) — by construction, though, an old selection almost never survives this prune
  * either: a different Excel means different account codes and different center ids.
+ *
+ * Pruning NOTHING returns the very same object, which is the common case and is what keeps the
+ * Datos table cheap: this runs against a context rebuilt on every edit, and a fresh `periods`
+ * array — even an identically empty one — invalidates the visible columns and re-renders every
+ * row of the statement. Comparing lengths is enough: filtering only ever removes, in order.
  */
 export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeContext): PygFilters {
   const centerIds = new Set(context.views.map((view) => view.id));
@@ -164,5 +169,12 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
       period.index < axis.length,
   );
 
+  if (
+    prunedCodes.length === filters.codes.length &&
+    prunedCenterIds.length === filters.centerIds.length &&
+    prunedPeriods.length === filters.periods.length
+  ) {
+    return filters;
+  }
   return { codes: prunedCodes, centerIds: prunedCenterIds, periods: prunedPeriods };
 }
