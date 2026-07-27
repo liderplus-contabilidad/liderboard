@@ -1,15 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
+import { GraficosView as OccupancyGraficosView } from "@/components/occupancy/charts/graficos-view";
+import { OccupancyDatosView } from "@/components/occupancy/occupancy-datos-view";
+import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
+import { OccupancyDownloadButton } from "@/components/occupancy/occupancy-download-button";
+import { OccupancyUploadButton } from "@/components/occupancy/occupancy-upload-button";
 import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
 import { GraficosView } from "@/components/profit-loss/charts/graficos-view";
-import { DatosToolbar } from "@/components/profit-loss/datos-toolbar";
 import { DatosView } from "@/components/profit-loss/datos-view";
+import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
-import { Semaforo } from "@/components/profit-loss/semaforo";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
+
+interface ModuleViews {
+  rightSlot?: (tab: ModuleTabId) => ReactNode;
+  toolbar?: (tab: ModuleTabId) => ReactNode;
+  panel?: (tab: ModuleTabId) => ReactNode;
+}
+
+const MODULE_VIEWS: Record<string, ModuleViews> = {
+  "profit-loss": {
+    rightSlot: (tab) => (tab === "datos" ? <PygExcelActions /> : null),
+    toolbar: () => <PygToolbar />,
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <DatosView />;
+        case "graficos":
+          return <GraficosView />;
+        case "analisis":
+          return <AnalisisView />;
+      }
+    },
+  },
+  occupancy: {
+    rightSlot: (tab) =>
+      tab === "datos" ? (
+        <div className="flex items-center gap-2.5">
+          <OccupancyDownloadButton />
+          <OccupancyUploadButton />
+        </div>
+      ) : null,
+    toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
+    panel: (tab) => {
+      switch (tab) {
+        case "datos":
+          return <OccupancyDatosView />;
+        case "graficos":
+          return <OccupancyGraficosView />;
+        default:
+          return null;
+      }
+    },
+  },
+};
 
 export function ModuleTabs({ slug }: { slug: string }) {
   const mod = findModuleBySlug(slug);
@@ -20,7 +67,8 @@ export function ModuleTabs({ slug }: { slug: string }) {
   }
 
   const activeTab = mod.tabs.find((tab) => tab.id === activeId) ?? mod.tabs[0];
-  const isPyg = mod.slug === "profit-loss";
+  const views = MODULE_VIEWS[mod.slug] ?? {};
+  const panel = views.panel?.(activeTab.id) ?? <ComingSoon mod={mod} tab={activeTab} />;
 
   return (
     <div className="flex h-full flex-col">
@@ -54,11 +102,10 @@ export function ModuleTabs({ slug }: { slug: string }) {
           })}
         </div>
 
-        {isPyg && <Semaforo />}
+        {views.rightSlot?.(activeTab.id)}
       </div>
 
-      {isPyg && <PygToolbar />}
-      {isPyg && activeTab.id === "datos" && <DatosToolbar />}
+      {views.toolbar?.(activeTab.id)}
 
       <div
         id={`panel-${mod.slug}`}
@@ -66,15 +113,7 @@ export function ModuleTabs({ slug }: { slug: string }) {
         aria-labelledby={`tab-${mod.slug}-${activeTab.id}`}
         className="flex-1 overflow-auto bg-canvas"
       >
-        {isPyg && activeTab.id === "datos" ? (
-          <DatosView />
-        ) : isPyg && activeTab.id === "graficos" ? (
-          <GraficosView />
-        ) : isPyg && activeTab.id === "analisis" ? (
-          <AnalisisView />
-        ) : (
-          <ComingSoon mod={mod} tab={activeTab} />
-        )}
+        {panel}
       </div>
     </div>
   );

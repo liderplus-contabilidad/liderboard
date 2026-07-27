@@ -6,8 +6,8 @@ import { periodNoun, buildAccountDetail } from "@/lib/profit-loss/charts/account
 import { barOption, seriesTable } from "@/lib/profit-loss/charts/option";
 import { codeColorResolver } from "@/lib/profit-loss/charts/selection";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { ChartCard } from "./charts/chart-card";
-import { NoticeBanner } from "./notice-banner";
+import { ChartCard } from "@/components/ui/chart-card";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { usePygAnalytics } from "./pyg-analytics-provider";
 import { usePygData } from "./pyg-data-provider";
 

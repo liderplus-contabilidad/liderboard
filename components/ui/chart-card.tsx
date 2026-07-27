@@ -1,13 +1,13 @@
 "use client";
 
 import { BarChart3, FileSpreadsheet, Table2 } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
 import type { ChartOption } from "@/lib/charts/types";
-import type { ChartTable } from "@/lib/profit-loss/charts/option";
-import { NoticeBanner } from "../notice-banner";
+import type { ChartTable } from "@/lib/charts/types";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 
 export interface ChartCardProps {
   title: string;
@@ -23,23 +23,21 @@ export interface ChartCardProps {
   height?: number;
   /** No workspace loaded at all — the tab-wide empty state rather than a card-level one. */
   empty?: boolean;
-  /**
-   * Offer the "Ver como tabla" twin. Default true. The account ficha turns it off: its numbers
-   * already sit above the chart as metrics, and a single-series bar reads fine on its own.
-   */
+  /** Passed to the chart: clicking a category is how the reader goes one level down. */
+  onSelect?: (dataIndex: number) => void;
+  /** Default true. The account ficha turns it off: its numbers already sit above the chart. */
   tableToggle?: boolean;
+  /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
+  headerSlot?: ReactNode;
 }
 
 /**
- * One chart, its warnings, and its table twin behind a switch.
- *
- * The twin is not an accessibility afterthought: three of the eight palette slots fall below
- * 3:1 against the white surface — unavoidable in a categorical eight — and a transformed chart
- * (índice 100, variación, YTD) holds numbers that exist nowhere else in the app, least of all
- * in the Datos tab. It costs nothing: the table is built from the same `Series[]`.
+ * The table twin is not an afterthought: three of the eight palette slots fall below 3:1 against
+ * white, and a transformed chart holds numbers that exist nowhere else in the app. It costs
+ * nothing — the table is built from the same `Series[]`.
  *
  * Memoized because a tab draws several of these and the provider rebuilds its sources on every
- * cell edit; the props are memoized objects, so an unrelated edit re-renders nothing here.
+ * cell edit.
  */
 export const ChartCard = memo(function ChartCard({
   title,
@@ -51,6 +49,8 @@ export const ChartCard = memo(function ChartCard({
   height = 260,
   empty = false,
   tableToggle = true,
+  headerSlot,
+  onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
@@ -63,21 +63,26 @@ export const ChartCard = memo(function ChartCard({
           <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
           {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
         </div>
-        {showToggle && (
-          <button
-            type="button"
-            aria-pressed={asTable}
-            onClick={() => setAsTable((value) => !value)}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
-              asTable
-                ? "border-brand bg-brand-soft text-brand"
-                : "border-border bg-surface text-muted hover:bg-canvas",
+        {(headerSlot || showToggle) && (
+          <div className="flex shrink-0 items-center gap-2.5">
+            {headerSlot}
+            {showToggle && (
+              <button
+                type="button"
+                aria-pressed={asTable}
+                onClick={() => setAsTable((value) => !value)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
+                  asTable
+                    ? "border-brand bg-brand-soft text-brand"
+                    : "border-border bg-surface text-muted hover:bg-canvas",
+                )}
+              >
+                {asTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
+                {asTable ? "Ver como gráfica" : "Ver como tabla"}
+              </button>
             )}
-          >
-            {asTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
-            {asTable ? "Ver como gráfica" : "Ver como tabla"}
-          </button>
+          </div>
         )}
       </header>
 
@@ -106,12 +111,16 @@ export const ChartCard = memo(function ChartCard({
               asTable ? (
                 <TableTwin table={table} />
               ) : (
-                <Chart option={option as ChartOption} height={height} ariaLabel={title} />
+                <Chart
+                  option={option as ChartOption}
+                  onSelect={onSelect}
+                  height={height}
+                  ariaLabel={title}
+                />
               )
             ) : (
-              // Never an empty plot: the warnings above already say why, and when there are
-              // none this line is the explanation. The note below often completes it — a
-              // period whose accounts are all at zero has nothing positive to compose.
+              // Never an empty plot: the warnings above say why, and when there are none this
+              // line is the explanation.
               <EmptyState className="py-8">
                 {warnings.length > 0
                   ? "No se pudo construir ninguna serie con estos datos."

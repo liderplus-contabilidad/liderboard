@@ -4,12 +4,7 @@ import { AlertTriangle, ChevronDown, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { cn } from "@/lib/cn";
 
-/**
- * Inline warning for cuadre/sum-mismatch notices. `children` is the summary line. When
- * `details` is given, a "Ver detalle" toggle expands the individual messages below (scrolls
- * past a few). Pass `onDismiss` to show a close button — omit it for non-dismissible contexts
- * like the upload preview. `className` sets the outer spacing per caller.
- */
+/** `children` is the summary line; `details` adds a "Ver detalle" toggle under it. */
 export function NoticeBanner({
   children,
   details,

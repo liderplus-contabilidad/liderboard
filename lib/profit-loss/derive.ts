@@ -3,8 +3,14 @@
  * result, and edit overlays. Parents are ALWAYS recomputed from movement (leaf)
  * accounts — the file's parent values are validation input, never display truth.
  */
-import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
+import {
+  allowedFrequencies,
+  FREQUENCY_ORDER,
+  MONTHS_PER_PERIOD,
+  periodLabels,
+  sumByPeriod,
+} from "@/lib/period";
 import type { DatosCell, DatosGrid, DatosRow } from "./datos-types";
 import type { AccountRow, CellEdit, Frequency, PygDataset } from "./types";
 
@@ -158,36 +164,11 @@ export function computeResult(roots: AccountNode[]): { values: number[]; warning
   return { values, warnings };
 }
 
-/** Coarseness order. A file's base frequency floors the UI options (aggregate up only). */
-export const FREQUENCY_ORDER: readonly Frequency[] = [
-  "mensual",
-  "trimestral",
-  "semestral",
-  "anual",
-];
-
-/** Months each period spans, in a 12-month year. */
-const MONTHS_PER_PERIOD: Record<Frequency, number> = {
-  mensual: 1,
-  trimestral: 3,
-  semestral: 6,
-  anual: 12,
-};
-
-const PERIOD_LABELS: Record<Frequency, readonly string[]> = {
-  mensual: MONTHS_SHORT_ES,
-  trimestral: ["T1", "T2", "T3", "T4"],
-  semestral: ["S1", "S2"],
-  anual: ["Total"],
-};
-
-export function allowedFrequencies(base: Frequency): Frequency[] {
-  return FREQUENCY_ORDER.slice(FREQUENCY_ORDER.indexOf(base));
-}
-
-export function periodLabels(target: Frequency): readonly string[] {
-  return PERIOD_LABELS[target];
-}
+/**
+ * The frequency ladder itself is shared with Ocupaciones (`lib/period.ts`); re-exported here so
+ * every PyG caller keeps importing period naming from the module that owns PyG's derivations.
+ */
+export { allowedFrequencies, FREQUENCY_ORDER, periodLabels };
 
 /**
  * Period SUMS — a P&L is a flow statement, so quarters/semesters/years add their
@@ -200,11 +181,7 @@ export function aggregate(values: number[], base: Frequency, target: Frequency):
   if (base !== "mensual") {
     throw new Error(`No se puede desagregar de ${base} a ${target}.`);
   }
-  const span = MONTHS_PER_PERIOD[target];
-  const periods = 12 / span;
-  return Array.from({ length: periods }, (_, p) =>
-    values.slice(p * span, (p + 1) * span).reduce((sum, v) => sum + v, 0),
-  );
+  return sumByPeriod(values, target);
 }
 
 /**

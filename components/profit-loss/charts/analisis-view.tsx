@@ -54,7 +54,7 @@ import {
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
-import { ChartCard } from "./chart-card";
+import { ChartCard } from "@/components/ui/chart-card";
 import { entryColor } from "./graficos-view";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };

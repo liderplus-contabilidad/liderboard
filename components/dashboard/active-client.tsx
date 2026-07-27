@@ -7,13 +7,26 @@ export interface ActiveClientInfo {
   period?: string;
 }
 
+export interface ActiveClientProps {
+  client?: ActiveClientInfo;
+  /** What the module is showing, first item of the subline. */
+  caption?: string;
+  /** Shown in place of the name when there is nothing loaded. */
+  emptyLabel?: string;
+}
+
 /**
- * Active-client block for the module header (Pérdidas y Ganancias). With no
- * `client` it renders the empty state; pass parsed Excel metadata to populate it.
+ * Active-client block for a module header. With no `client` it renders the empty state; pass
+ * parsed Excel metadata to populate it. Used by Pérdidas y Ganancias for its empresa and by
+ * Ocupaciones for its hotel.
  */
-export function ActiveClient({ client }: { client?: ActiveClientInfo }) {
+export function ActiveClient({
+  client,
+  caption = "Estado de resultados",
+  emptyLabel = "Sin cliente seleccionado",
+}: ActiveClientProps) {
   const hasClient = Boolean(client?.name);
-  const name = client?.name ?? "Sin cliente seleccionado";
+  const name = client?.name ?? emptyLabel;
   const period = client?.period ?? "N/A";
 
   return (
@@ -27,7 +40,7 @@ export function ActiveClient({ client }: { client?: ActiveClientInfo }) {
         {name}
       </span>
       <div className="flex items-center gap-[7px] text-[11.5px] font-medium text-faint">
-        <span>Estado de resultados</span>
+        <span>{caption}</span>
         <span className="text-faintest">·</span>
         <span>{period}</span>
       </div>

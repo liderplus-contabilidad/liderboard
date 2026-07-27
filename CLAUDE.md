@@ -92,10 +92,12 @@ from it — there is no duplicated module list. **To add a module:** add an entr
 English; the Spanish name goes in `label`/`title`.
 
 **Components.** Reusable primitives live in `components/ui/` — prefer them over ad-hoc
-markup. Module-specific compositions live in `components/<module>/` (currently
-`components/profit-loss/`). `ModuleTabs` renders a module's toolbar between the tabs and
-the content panel when one exists (only PyG today); `ActiveClient` shows the client name
-in the header for PyG. PyG › Datos now loads real Excel data: `lib/profit-loss/` holds
+markup. Module-specific compositions live in `components/<module>/` (`components/profit-loss/`,
+`components/occupancy/`). `ModuleTabs` holds a `MODULE_VIEWS` registry of per-module
+`rightSlot`/`toolbar`/`panel`; a module absent from it renders `ComingSoon`, so adding one is
+purely additive. **Module state never lives there** — each data provider is mounted in the
+dashboard layout, because the header reads from the same state the panel does (`ActiveClient`
+shows PyG's empresa and Ocupaciones' hotel). PyG › Datos now loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
 `PygDataProvider` — mounted in the dashboard layout — shares `dataset`/`edits`/
 `frequency` between the header (`ActiveClient`) and the Datos content. `DatosView`
@@ -119,6 +121,61 @@ The panel runs ONE analytics query for the account and formats `buildAccountDeta
 average of active periods, best period, share of parent, last-period variation, plan level. It
 inherits the engine's coverage (a `null` never counts as `0`), follows the active frequency (no
 chart in Anual), reuses `barOption`+`ChartCard`, and skips only the derived «Utilidad» row.
+
+**Ocupaciones (hotel occupancy).** `lib/occupancy/` is the pure layer — `parse.ts` reads the
+`OCUPACION_*.xlsx` exports (month blocks stacked on one sheet), `derive.ts` builds the daily
+grid, `export.ts` writes a file that re-imports cleanly, `db.ts` persists in Dexie. **A record
+is one SUCURSAL-YEAR**, keyed `[centerId+year]`: the accountant exports one workbook per
+sucursal per year, and the file declares its own hotel and cost center on two lines under the
+title (read BY POSITION; a file with no cost-center line falls into the reserved `principal`).
+A record stores ONLY raw inputs — ADR, ocupación, RevPAR, PAX and every total are recomputed,
+and an imported month is shown VERBATIM until its first edit, which flips the whole month to
+computed at once. `consolidate.ts` sums the sucursales of a year into a synthetic read-only
+dataset: **raw inputs only**, so `derive.ts` recomputes the indicators as ratios of sums (the
+one definition under which ADR × Ocupación = RevPAR survives the sum); it is never stored and
+never shown verbatim. Uploads go through `occupancy-upload-modal.tsx`, a staging modal shaped like
+PyG's: it parses each file as it is dropped, lists the sucursal-año it declares (or why it
+failed), and hands the provider an already-parsed selection (`importParsed`) — so the provider
+keeps the rules and the modal owns reading files. `addFiles` materializes the `FileList` BEFORE
+its first `await`, because clearing `input.value` empties the live list. Uploads are still
+two-phase — every file is parsed before anything is written, so the "all files from one hotel"
+check cannot half-apply; it is enforced in the modal (which can still explain itself) and kept in
+the provider, which is what writes. Files from another hotel raise a replace confirmation,
+rendered by `OccupancyDataProvider` itself because the upload button lives in the tab bar. Datos stacks three strips, **Sucursal → Año → Mes**; the sucursal strip
+renders nothing with a single sucursal, and the Consolidado tab appears only with two or more.
+The MES strip ends in an **«Año»** button: `toAnnualGrid` returns the same `OccupancyGrid` with
+one column per month instead of per day (the type speaks in `columns`/`columnLabels`/`scope`,
+never in days), always computed and always read-only — a month's cell is an aggregate of days,
+and «Habitaciones disponibles» sums habitaciones-noche there because that is what the occupancy
+of each month divides by. Both axes compose: the year of a sucursal, or the year of the
+Consolidado.
+
+**Ocupaciones › Gráficos** mirrors PyG's shape with its own engine: `lib/occupancy/filters.ts`
+holds the marks, `charts/selection.ts` is the ONE translation into an `OccupancyQuery`,
+`analytics/series.ts` builds the series and `charts/option.ts` turns them into options. The
+métrica is **single-choice** (ocupación is %, ADR is $, PAX is a count — two units in one card
+would need the second `yAxis` the types forbid); what compares is the sucursales, años and
+periodos marked, exactly as in PyG. «Ver por» switches the axis between months and days; it is
+the ONLY control read by a single card (`query.scope` reaches just `analytics/series.ts` — the
+KPIs, heatmap, canales and weekday cards aggregate the marked period whatever the axis), so it
+sits in that card's own header via `ChartCard`'s `headerSlot` and NOT in the filter bar, where
+every control feeds every card. A marked periodo NARROWS that axis rather than adding series — in two levels, months and days of
+the month, so «Manor, 2025 y 2026, enero, día 5» is two bars over a single column. A day mark
+drops «Ver por» to días by itself, and a comparison narrow enough to fit a few columns is drawn
+as grouped bars because a line of one point draws nothing. Coverage carries over: a month the
+workspace never received is `null`, a day inside a covered month that sold nothing is `0`.
+**Drill-down** has two moves: clicking a month's bar writes `months=[m]` + `scope="dia"` into the
+same filter bar (undo = remove the chip), while clicking a heatmap day opens the `SidePanel` and
+touches nothing. The heatmap is deliberately NOT an ECharts chart — one grid per marked
+sucursal-year, all sharing one scale so a tone means the same thing in both — and it is the only
+consumer of the sequential `CHART_HEAT_RAMP`, which is separate from the categorical palette.
+`filters.ts` also owns `periodLabel`/`describeSelection`, the plain-Spanish wording of the
+selection: the bar carries a «Mostrando …» line and every KPI and card subtitle reads its period
+from there, so nothing says «Enero» under a «5 de enero». When the axis collapses to ONE column
+the option builder swaps what the axis means — each series becomes a labelled bar and the date
+moves to the subtitle, because two bars under a single «5 ene» would read as the same date.
+Datos keeps its own three strips: those answer «cuál edito», the bar answers «cuáles comparo»,
+and the bar falls back to whatever Datos has open.
 
 **PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders, in
 order, Cuenta contable · Nivel · Centro de costo · Periodo, "Ver por" pinned right, and an

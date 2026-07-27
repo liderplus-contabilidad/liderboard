@@ -15,14 +15,12 @@ import type { ChartOption } from "@/lib/charts/types";
 import { cn } from "@/lib/cn";
 
 /**
- * The ONLY registration of ECharts in the app, and the only partial import list. The full
- * package is close to a megabyte and this dashboard draws bars, lines and pies — registering
- * from `echarts/core` is what keeps the rest out of the client bundle. Adding a chart type
+ * The ONLY registration of ECharts in the app. The full package is close to a megabyte, so
+ * registering from `echarts/core` is what keeps the rest out of the bundle; adding a chart type
  * means adding it here, deliberately.
  *
- * `LabelLayout` is not decoration: it is what `labelLayout.hideOverlap` in the option builders
- * needs to drop a label that does not fit instead of drawing it clipped. `MarkLineComponent`
- * draws the 80% cut of the Pareto card.
+ * `LabelLayout` is what `labelLayout.hideOverlap` needs to DROP a label that does not fit instead
+ * of drawing it clipped. `MarkLineComponent` draws the 80% cut of the Pareto card.
  */
 use([
   BarChart,
@@ -36,10 +34,7 @@ use([
   SVGRenderer,
 ]);
 
-/**
- * The concrete family `next/font` generated, read off `:root`. `CHART_FONT` keeps the pure
- * layer honest with a `var()`, but only a real family name can be measured on a canvas.
- */
+/** `CHART_FONT` keeps the pure layer honest with a `var()`; only a real family measures. */
 function resolvedFont(): string {
   const generated = getComputedStyle(document.documentElement)
     .getPropertyValue("--font-ibm-plex-sans")
@@ -49,6 +44,8 @@ function resolvedFont(): string {
 
 export interface ChartProps {
   option: ChartOption;
+  /** Fires with the clicked category's index; the caller decides what one level down means. */
+  onSelect?: (dataIndex: number) => void;
   /** Plot height in px; the width always follows the container. */
   height?: number;
   /** What a screen reader announces. The card's table twin carries the actual numbers. */
@@ -57,20 +54,15 @@ export interface ChartProps {
 }
 
 /**
- * Mounts one ECharts instance, keeps it fed and tears it down. No other component calls
- * `init`, so there is exactly one place where an instance can leak.
+ * No other component calls `init`, so there is exactly one place an instance can leak.
  *
- * Two decisions worth keeping:
- *
- * - **SVG, not Canvas.** Text stays crisp at desktop density, the 2px gaps and the rounded bar
- *   caps come out exact, and eight series of twelve points is nowhere near the volume where
- *   Canvas starts to win.
- * - **`setOption` on the live instance.** Changing the frequency or the selection re-renders
- *   the plot without remounting it, so there is no flash of an empty box on every keystroke.
- *   `notMerge` is on because a narrower selection has FEWER series than the last one, and a
- *   merge would leave the dropped ones on screen.
+ * - **SVG, not Canvas.** Crisp at desktop density, exact 2px gaps and bar caps, and eight series
+ *   of twelve points is nowhere near where Canvas starts to win.
+ * - **`setOption` on the live instance**, so a re-render is not a flash of an empty box.
+ *   `notMerge` is on because a narrower selection has FEWER series and a merge would leave the
+ *   dropped ones on screen.
  */
-export function Chart({ option, height = 260, ariaLabel, className }: ChartProps) {
+export function Chart({ option, onSelect, height = 260, ariaLabel, className }: ChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const instance = useRef<ECharts | null>(null);
 
@@ -98,10 +90,9 @@ export function Chart({ option, height = 260, ariaLabel, className }: ChartProps
     if (!chart) {
       return;
     }
-    // The font is resolved HERE and not in the option builders because ECharts measures text on
-    // a canvas, and a canvas font string cannot resolve a CSS variable: it silently falls back
-    // to a narrower family, under-measures, and truncates a long axis label to a width that
-    // renders wider than its own cap — which is how a label ends up clipped at the start.
+    // Resolved HERE, not in the option builders: ECharts measures text on a canvas, and a canvas
+    // font string cannot resolve a CSS variable. It falls back to a narrower family,
+    // under-measures, and clips a long axis label AT THE START.
     const withFont = {
       ...option,
       textStyle: { ...option.textStyle, fontFamily: resolvedFont() },
@@ -109,9 +100,27 @@ export function Chart({ option, height = 260, ariaLabel, className }: ChartProps
     chart.setOption(withFont as unknown as EChartsCoreOption, { notMerge: true });
   }, [option]);
 
-  // The SVG is hidden from assistive tech on purpose: read aloud, an axis of twelve numbers and
-  // eight legend entries is noise. The name goes out as text and the numbers live in the card's
-  // table twin, which is the readable form of the same data.
+  useEffect(() => {
+    const chart = instance.current;
+    if (!chart) {
+      return;
+    }
+    const handler = (params: { dataIndex?: number }) => {
+      if (onSelect && typeof params.dataIndex === "number") {
+        onSelect(params.dataIndex);
+      }
+    };
+    chart.on("click", handler);
+    return () => {
+      // Teardown order puts the dispose effect first, so by now the instance may be gone.
+      if (!chart.isDisposed()) {
+        chart.off("click", handler);
+      }
+    };
+  }, [onSelect]);
+
+  // Hidden from assistive tech on purpose: read aloud, an axis of twelve numbers and eight legend
+  // entries is noise. The numbers live in the card's table twin.
   return (
     <div className={cn("w-full", className)}>
       <span className="sr-only">{ariaLabel}</span>

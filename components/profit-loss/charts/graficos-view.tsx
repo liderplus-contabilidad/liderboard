@@ -34,8 +34,8 @@ import {
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
-import { ChartCard } from "./chart-card";
-import { StatTile } from "./stat-tile";
+import { ChartCard } from "@/components/ui/chart-card";
+import { StatTile } from "@/components/ui/stat-tile";
 import { WaterfallCard } from "./waterfall-card";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
