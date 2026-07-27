@@ -95,7 +95,15 @@ English; the Spanish name goes in `label`/`title`.
 markup. Module-specific compositions live in `components/<module>/` (`components/profit-loss/`,
 `components/occupancy/`). `ModuleTabs` holds a `MODULE_VIEWS` registry of per-module
 `rightSlot`/`toolbar`/`panel`; a module absent from it renders `ComingSoon`, so adding one is
-purely additive. **Module state never lives there** — each data provider is mounted in the
+purely additive; `ModuleTabs` also owns the `rightSlot`'s vertical alignment, so the same
+component works outside the bar. **Excel actions are one component for the whole app**:
+`components/ui/excel-actions.tsx` renders `Cargar Excel` · `Descargar Excel` · optional `ⓘ`, and
+a module only writes a thin wrapper (`<module>-excel-actions.tsx`) that wires its provider and
+upload modal — never its own button markup. The FORM of the download control is derived from how
+many options it gets (one → plain button, two or more → menu), never declared; `busy`, the error
+panel and the reentrancy guard live in the primitive, so a module supplies just
+`run: () => Promise<void>` plus `disabled`/`disabledReason`. Live gallery at
+`/docs/components#excel-actions`. **Module state never lives there** — each data provider is mounted in the
 dashboard layout, because the header reads from the same state the panel does (`ActiveClient`
 shows PyG's empresa and Ocupaciones' hotel). PyG › Datos now loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
@@ -232,7 +240,8 @@ UI are:
   and editable values. **Every number carries `tabular-nums`.** Sizing is fixed px (desktop-only
   density), not `rem`. Micro-labels are `uppercase tracking-[0.5px] font-semibold text-faint`.
 - **Shape:** radii `13px` card/table/panel · `9px` toolbar control/button · `rounded-full`
-  chip/badge. Control heights: toolbar `34px`, button `38px`/`h-8`. Shadows are always
+  chip/badge. Control heights are the three `Button` sizes — `toolbar` `34px`, `md` `38px`,
+  `sm` `h-8` — so a bar control is `size="toolbar"`, never hand-written markup. Shadows are always
   `rgba(15,23,42,…)`, never pure black. Icons from `lucide-react`.
 - **Charts consume `lib/charts/palette.ts` only** — `colorForEntity` is the one way a series gets
   a color, the eight slots never re-order or cycle, and no option builder writes a hex. The

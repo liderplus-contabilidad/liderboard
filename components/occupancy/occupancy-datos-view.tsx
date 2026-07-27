@@ -145,7 +145,7 @@ export function OccupancyDatosView() {
         <div className="rounded-[13px] border border-border bg-surface">
           <EmptyState icon={<BedDouble size={22} />} className="py-14">
             Sin datos de ocupación. Carga uno o varios Excel a la vez (uno por sucursal y año) con
-            «Cargar Excel de ocupación», o empieza un año en blanco y escríbelo a mano.
+            «Cargar Excel», o empieza un año en blanco y escríbelo a mano.
           </EmptyState>
           <div className="flex justify-center pb-8">
             <Button

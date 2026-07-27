@@ -1,19 +1,48 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
-import { GraficosView as OccupancyGraficosView } from "@/components/occupancy/charts/graficos-view";
-import { OccupancyDatosView } from "@/components/occupancy/occupancy-datos-view";
+import { OccupancyExcelActions } from "@/components/occupancy/occupancy-excel-actions";
 import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
-import { OccupancyDownloadButton } from "@/components/occupancy/occupancy-download-button";
-import { OccupancyUploadButton } from "@/components/occupancy/occupancy-upload-button";
-import { AnalisisView } from "@/components/profit-loss/charts/analisis-view";
-import { GraficosView } from "@/components/profit-loss/charts/graficos-view";
-import { DatosView } from "@/components/profit-loss/datos-view";
 import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
+
+/**
+ * The panels are the ONLY thing here that is code-split, and it is this registry that makes it
+ * worth doing: importing them statically put ECharts (~700 KB) in the shared client chunk of
+ * EVERY route — including `/salaries` and `/sales`, which render `ComingSoon` and draw nothing.
+ * Each panel now arrives when its tab is first opened.
+ *
+ * `ssr: false` because every panel reads the workspace from IndexedDB: on the server they can
+ * only render their own empty state, so prerendering them buys nothing and costs a hydration
+ * pass. The shell, the tab bar and the toolbars stay static — they are what the reader sees
+ * first, and none of them pull a chart or a parser.
+ */
+const PanelFallback = () => <div className="px-7 py-5" aria-busy="true" />;
+
+const DatosView = dynamic(
+  () => import("@/components/profit-loss/datos-view").then((mod) => mod.DatosView),
+  { ssr: false, loading: PanelFallback },
+);
+const GraficosView = dynamic(
+  () => import("@/components/profit-loss/charts/graficos-view").then((mod) => mod.GraficosView),
+  { ssr: false, loading: PanelFallback },
+);
+const AnalisisView = dynamic(
+  () => import("@/components/profit-loss/charts/analisis-view").then((mod) => mod.AnalisisView),
+  { ssr: false, loading: PanelFallback },
+);
+const OccupancyDatosView = dynamic(
+  () => import("@/components/occupancy/occupancy-datos-view").then((mod) => mod.OccupancyDatosView),
+  { ssr: false, loading: PanelFallback },
+);
+const OccupancyGraficosView = dynamic(
+  () => import("@/components/occupancy/charts/graficos-view").then((mod) => mod.GraficosView),
+  { ssr: false, loading: PanelFallback },
+);
 
 interface ModuleViews {
   rightSlot?: (tab: ModuleTabId) => ReactNode;
@@ -37,13 +66,7 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
     },
   },
   occupancy: {
-    rightSlot: (tab) =>
-      tab === "datos" ? (
-        <div className="flex items-center gap-2.5">
-          <OccupancyDownloadButton />
-          <OccupancyUploadButton />
-        </div>
-      ) : null,
+    rightSlot: (tab) => (tab === "datos" ? <OccupancyExcelActions /> : null),
     toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
     panel: (tab) => {
       switch (tab) {
@@ -102,7 +125,9 @@ export function ModuleTabs({ slug }: { slug: string }) {
           })}
         </div>
 
-        {views.rightSlot?.(activeTab.id)}
+        {/* La barra alinea el slot una sola vez, a la altura de las etiquetas: así el mismo
+            componente sirve fuera de ella (el vacío de PyG) sin arrastrar la compensación. */}
+        <div className="pb-[11px]">{views.rightSlot?.(activeTab.id)}</div>
       </div>
 
       {views.toolbar?.(activeTab.id)}

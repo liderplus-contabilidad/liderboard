@@ -2,7 +2,8 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-solid";
-type ButtonSize = "sm" | "md";
+/** `toolbar` is the 34px bar-control scale — what sits in the tab bar next to filters. */
+type ButtonSize = "sm" | "toolbar" | "md";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -25,11 +26,13 @@ const VARIANTS: Record<ButtonVariant, string> = {
 
 const SIZES: Record<ButtonSize, string> = {
   sm: "h-8 gap-1.5 px-3 text-xs",
+  toolbar: "h-[34px] gap-2 px-[13px] text-[12.5px]",
   md: "h-[38px] gap-2 px-[15px] text-[13px]",
 };
 
 const ICON_ONLY_SIZES: Record<ButtonSize, string> = {
   sm: "h-8 w-8",
+  toolbar: "h-[34px] w-[34px]",
   md: "h-[38px] w-[38px]",
 };
 

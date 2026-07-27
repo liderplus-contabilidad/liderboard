@@ -35,7 +35,7 @@ export function InfoTip({
         aria-label={label}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] border border-border bg-surface text-faint transition-colors hover:text-muted"
+        className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border border-border bg-surface text-faint transition-colors hover:text-muted"
       >
         <Info size={16} />
       </button>

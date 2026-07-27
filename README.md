@@ -135,7 +135,9 @@ solo no es una lectura para todos.
 - **Radios:** `13px` tarjeta/tabla/panel · `9px` botón y control de toolbar · `8–12px`
   popovers y campos · `rounded-full` chips y badges.
 - **Alturas de control:** toolbar `34px` · botón `md` `38px` / `sm` `32px` (`h-8`) · input de
-  popover `h-9` · botón de popover `h-8`.
+  popover `h-9` · botón de popover `h-8`. Las tres son tamaños del primitivo `Button`
+  (`md` · `toolbar` · `sm`): un control de barra se pide con `size="toolbar"`, no se escribe a
+  mano.
 - **Padding de contenido:** `px-7 py-5` en el cuerpo de una vista · `px-[18px] py-3` en
   cabeceras de tarjeta · `gap-2.5` entre controles de una toolbar.
 - **Sombras:** siempre `rgba(15,23,42,…)` (nunca negro puro). Popover
@@ -181,12 +183,13 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   activa, más "Quitar todo") aparece solo cuando hay algo marcado y es la misma en las tres
   pestañas. Las listas de cuentas y centros salen del Excel cargado; el estado vacío solo
   aparece cuando no hay datos.
-- **Acciones de Excel** (`PygExcelActions`, solo en la tab Datos): viven en el `rightSlot` de
-  la fila de tabs, igual que las de Ocupaciones — **Cargar Excel** (abre el modal de carga
-  multi-centro), menú **Descargar Excel** (Excel con tus datos · Plantilla vacía, ambos
-  conectados al pipeline de exportación) e ícono de **información** con los formatos
-  aceptados. No llevan selector de centro propio: qué centro lee Datos y si es editable sale
-  del filtro **Centro de costo** de la fila de filtros (ver abajo).
+- **Acciones de Excel** (`PygExcelActions`, solo en la tab Datos): el bloque compartido
+  `ExcelActions` (ver "Acciones de Excel" más abajo) en el `rightSlot` de la fila de tabs —
+  **Cargar Excel** (abre el modal de carga multi-centro), menú **Descargar Excel** (Excel con
+  tus datos · Plantilla vacía, ambos conectados al pipeline de exportación) e ícono de
+  **información** con los formatos aceptados. No llevan selector de centro propio: qué centro
+  lee Datos y si es editable sale del filtro **Centro de costo** de la fila de filtros (ver
+  abajo).
 
 **Tabla de Datos de PyG** (`DatosView` en la tab Datos) — el estado de resultados editable:
 
@@ -288,6 +291,31 @@ ventana) y la destruye al desmontar. Solo se registran `BarChart`, `LineChart`, 
 los componentes de rejilla, tooltip, leyenda, etiquetas y línea de referencia; el paquete
 completo ronda el megabyte y el chunk de `/profit-loss` entero pesa menos que eso.
 
+## Acciones de Excel (todos los módulos)
+
+Cargar y descargar Excel se ve **igual en toda la app**: un solo primitivo,
+`components/ui/excel-actions.tsx`, rinde la fila **Cargar Excel** (brand) · **Descargar Excel**
+(secundario) · **ⓘ** (opcional). Los módulos no escriben markup de botón; aportan solo su
+dominio. La galería viva está en `/docs/components#excel-actions`.
+
+- **La forma del control de descarga se deriva de las opciones**, no se declara: una sola
+  opción rinde un **botón plano** que la ejecuta directo (PyG › Ocupaciones), dos o más rinden
+  el **menú** (PyG). Añadir una segunda descarga a un módulo es añadir un elemento al array.
+- **El progreso y el error viven en el primitivo.** Un módulo aporta `run: () => Promise<void>`
+  —construye el workbook y lo entrega al navegador— y nada más: el bloque bloquea reentradas,
+  cambia el icono por un spinner y, si la promesa rechaza, muestra un panel de error bajo el
+  control que deja reintentar. Por eso el `try/catch` y el `import()` dinámico de `exceljs` no
+  están duplicados por módulo.
+- **`disabled` + `disabledReason`** es cómo un módulo dice que una descarga no está disponible
+  (el Consolidado de Ocupaciones, PyG sin dataset); la razón se lee al apuntar el control.
+- **La barra de tabs alinea el bloque una sola vez** (`ModuleTabs` envuelve el `rightSlot`), de
+  modo que el mismo componente sirve fuera de ella — es lo que monta `PygEmptyState`.
+
+**Para un módulo nuevo:** escribe `components/<módulo>/<módulo>-excel-actions.tsx` que cablee
+tu proveedor y tu modal de carga sobre `<ExcelActions/>`, y decláralo en el `rightSlot` de
+`MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de que el
+caso es general y va en la API, no en tu módulo.
+
 ## Carga de Excel (PyG › Datos)
 
 - **Formatos soportados:** reporte mensual (con o sin línea "Centro de Costo"), reporte
@@ -363,7 +391,7 @@ export + persistencia Dexie) y está cubierta por vitest; los componentes solo m
 
 ### Carga
 
-- **Modal de staging** (como el de PyG): "Cargar Excel de ocupación" abre un modal donde
+- **Modal de staging** (como el de PyG): "Cargar Excel" abre un modal donde
   arrastras o eliges **varios Excel a la vez**, mezclando sucursales y años; cada uno se parsea
   al vuelo y se lista con lo que declara —`CULTURA MANOR · 2026 · 7 meses`, la sucursal-año que
   va a escribir y cuántos meses reemplaza— o con su motivo de fallo, y se puede quitar de la

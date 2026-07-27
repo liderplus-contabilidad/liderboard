@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
@@ -7,7 +8,6 @@ import { toDatosGrid } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
 import { CONSOLIDADO_ID } from "@/lib/profit-loss/filters";
 import type { Frequency } from "@/lib/profit-loss/types";
-import { AccountDetailPanel } from "./account-detail-panel";
 import { CellEditor, type EditorAnchor } from "./cell-editor";
 import { flattenSorted } from "./datos-utils";
 import { NoticeBanner } from "@/components/ui/notice-banner";
@@ -19,6 +19,15 @@ interface EditingState extends EditorAnchor {
   col: number;
   valueEditable: boolean;
 }
+
+/**
+ * The ficha is the ONLY thing in Datos that draws a chart, and it mounts on demand — so loading
+ * ECharts with the table would mean paying ~700 KB for a panel most readings never open.
+ */
+const AccountDetailPanel = dynamic(
+  () => import("./account-detail-panel").then((mod) => mod.AccountDetailPanel),
+  { ssr: false },
+);
 
 const EMPTY_GRID: DatosGrid = {
   id: "default",

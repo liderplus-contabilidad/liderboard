@@ -140,8 +140,8 @@ export function GraficosView() {
       <div className="px-7 py-5">
         <div className="rounded-[13px] border border-border bg-surface">
           <EmptyState icon={<BedDouble size={22} />} className="py-14">
-            Sin datos de ocupación. Cárgalos desde la pestaña Datos, con «Cargar Excel de
-            ocupación», y vuelve aquí para comparar sucursales, años y periodos.
+            Sin datos de ocupación. Cárgalos desde la pestaña Datos, con «Cargar Excel», y vuelve
+            aquí para comparar sucursales, años y periodos.
           </EmptyState>
         </div>
       </div>
