@@ -28,6 +28,8 @@ export interface DatosTableProps {
   /** Why editing is off, named for the banner; `null` while `editable` is true. */
   readOnlyReason: string | null;
   showTotal: boolean;
+  /** Which columns the by-centers workspace has actually loaded; `null` = no restriction. */
+  loadedColumns: ReadonlySet<number> | null;
   /** Account whose ficha is open, so its row can stay marked; `null` when none is. */
   openDetailCode: string | null;
   onSort: (key: DatosSortKey) => void;
@@ -53,6 +55,7 @@ export function DatosTable({
   editable,
   readOnlyReason,
   showTotal,
+  loadedColumns,
   openDetailCode,
   onSort,
   onToggle,
@@ -147,6 +150,7 @@ export function DatosTable({
                     visibleColumns={visibleColumns}
                     editable={editable}
                     showTotal={showTotal}
+                    loadedColumns={loadedColumns}
                     detailOpen={openDetailCode === flat.row.code}
                     onToggle={onToggle}
                     onEditCell={onEditCell}
@@ -171,6 +175,10 @@ export function DatosTable({
                 }}
               />
               Celda con comentario
+            </LegendItem>
+            <LegendItem>
+              <span className="w-[14px] border-b-2 border-dotted border-brand" />
+              Celda con ajuste de valor
             </LegendItem>
             {editable ? (
               <LegendItem>

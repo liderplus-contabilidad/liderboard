@@ -13,7 +13,16 @@ export function PygEmptyState() {
   return (
     <div className="flex flex-col items-center gap-4 px-7 py-20">
       <EmptyState icon={<FileSpreadsheet size={22} />} className="py-0">
-        Carga un Excel para ver el estado de resultados.
+        <span className="flex flex-col items-center gap-1 text-center">
+          <span>
+            Carga un mes por centros de costo, un estado único o el Excel completo de la app.
+          </span>
+          <span className="text-[12px] text-faint">
+            El archivo mensual por centros no trae fecha: el mes sale del nombre, con el patrón{" "}
+            <span className="font-mono">PyG-AAAA-MM-…</span> (ej.{" "}
+            <span className="font-mono">PyG-2026-01-…</span>).
+          </span>
+        </span>
       </EmptyState>
       <PygExcelActions />
     </div>

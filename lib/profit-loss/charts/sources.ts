@@ -35,15 +35,21 @@ export interface AnalyticsView {
  * has no stored edits (its dataset id matches none), which is correct: `buildViews` already
  * merged every center's edits into its accounts, so filtering here is what stops them from
  * being applied twice.
+ *
+ * `coveredIndices` is the workspace's declared `loadedMonths` (by-centers mode) — the SAME set
+ * for every view, since one file is a month and brings every center at once, Consolidado
+ * included. Omitted for a single-statement workspace, whose coverage `buildAnalyticsSource`
+ * still infers from values.
  */
 export function sourcesFromViews(
   views: readonly AnalyticsView[],
   edits: readonly CellEdit[],
+  coveredIndices?: ReadonlySet<number>,
 ): AnalyticsSource[] {
   return views.map((view) => {
     const own = edits.filter((edit) => edit.datasetId === view.dataset.id);
     return {
-      ...buildAnalyticsSource(view.dataset, own),
+      ...buildAnalyticsSource(view.dataset, own, coveredIndices),
       centerId: view.id,
       centerName: view.name,
     };

@@ -238,6 +238,38 @@ describe("toDatosGrid", () => {
     expect(flattenGrid(quarterly).get("4.1.1")?.cells[1]?.comment).toBeUndefined();
   });
 
+  it("marks a leaf cell with a value edit as edited", () => {
+    const edits = [{ datasetId: "d1", code: "4.1.1", monthIndex: 0, value: 999, updatedAt: 0 }];
+    const grid = toDatosGrid(monthlyDataset(), edits, "mensual");
+    const rows = flattenGrid(grid);
+    expect(rows.get("4.1.1")?.cells[0]?.edited).toBe(true);
+    expect(rows.get("4.1.1")?.cells[1]?.edited).toBeUndefined();
+  });
+
+  it("never marks a parent row or the result row as edited", () => {
+    const edits = [{ datasetId: "d1", code: "4.1.1", monthIndex: 0, value: 999, updatedAt: 0 }];
+    const grid = toDatosGrid(monthlyDataset(), edits, "mensual");
+    const rows = flattenGrid(grid);
+    expect(rows.get("4.1")?.cells[0]?.edited).toBeUndefined();
+    expect(rows.get("4")?.cells[0]?.edited).toBeUndefined();
+    expect(grid.rows.find((row) => row.isResult)?.cells[0]?.edited).toBeUndefined();
+  });
+
+  it("does not mark a comment-only edit as edited", () => {
+    const edits = [
+      { datasetId: "d1", code: "4.1.1", monthIndex: 0, comment: "revisar", updatedAt: 0 },
+    ];
+    const grid = toDatosGrid(monthlyDataset(), edits, "mensual");
+    expect(flattenGrid(grid).get("4.1.1")?.cells[0]?.edited).toBeUndefined();
+  });
+
+  it("marks an aggregated cell edited when any base month it spans was edited", () => {
+    const edits = [{ datasetId: "d1", code: "4.1.1", monthIndex: 1, value: 999, updatedAt: 0 }];
+    const quarterly = toDatosGrid(monthlyDataset(), edits, "trimestral");
+    expect(flattenGrid(quarterly).get("4.1.1")?.cells[0]?.edited).toBe(true);
+    expect(flattenGrid(quarterly).get("4.1.1")?.cells[1]?.edited).toBeUndefined();
+  });
+
   it("marks leaf accounts as movement and parents/result as not", () => {
     const grid = toDatosGrid(monthlyDataset(), [], "mensual");
     const rows = flattenGrid(grid);

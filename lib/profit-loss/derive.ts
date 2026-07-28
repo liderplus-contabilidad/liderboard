@@ -207,19 +207,26 @@ export function toDatosGrid(
   const result = computeResult(rolled);
 
   const comments = new Map<string, Map<number, string>>();
+  const editedMonths = new Map<string, Set<number>>();
   for (const item of edits) {
-    if (!item.comment) {
-      continue;
+    if (item.comment) {
+      const byMonth = comments.get(item.code) ?? new Map<number, string>();
+      byMonth.set(item.monthIndex, item.comment);
+      comments.set(item.code, byMonth);
     }
-    const byMonth = comments.get(item.code) ?? new Map<number, string>();
-    byMonth.set(item.monthIndex, item.comment);
-    comments.set(item.code, byMonth);
+    // Only LEAF accounts ever hold a value edit (`CellEdit`'s own contract), so this map never
+    // reaches a parent row below — no separate "skip parents" check is needed.
+    if (item.value !== undefined) {
+      const months = editedMonths.get(item.code) ?? new Set<number>();
+      months.add(item.monthIndex);
+      editedMonths.set(item.code, months);
+    }
   }
 
   const reusable = indexRows(previous?.rows);
   const base = dataset.baseFrequency;
   const rows: DatosRow[] = rolled.map((node) =>
-    toDatosRow(node, base, frequency, comments, reusable),
+    toDatosRow(node, base, frequency, comments, editedMonths, reusable),
   );
   const resultValues = aggregate(result.values, base, frequency);
   rows.push(
@@ -297,7 +304,11 @@ function sameRow(a: DatosRow, b: DatosRow): boolean {
     return false;
   }
   for (let i = 0; i < a.cells.length; i++) {
-    if (a.cells[i].value !== b.cells[i].value || a.cells[i].comment !== b.cells[i].comment) {
+    if (
+      a.cells[i].value !== b.cells[i].value ||
+      a.cells[i].comment !== b.cells[i].comment ||
+      a.cells[i].edited !== b.cells[i].edited
+    ) {
       return false;
     }
   }
@@ -320,15 +331,22 @@ function toDatosRow(
   base: Frequency,
   frequency: Frequency,
   comments: Map<string, Map<number, string>>,
+  editedMonths: Map<string, Set<number>>,
   reusable: Map<string, DatosRow>,
 ): DatosRow {
   const values = aggregate(node.values, base, frequency);
   const byMonth = comments.get(node.code);
+  const editedSet = editedMonths.get(node.code);
   const span = base === "mensual" ? MONTHS_PER_PERIOD[frequency] : 1;
 
   const cells: DatosCell[] = values.map((value, period) => {
     const joined = byMonth ? joinComments(byMonth, period, span) : undefined;
-    return joined ? { value, comment: joined } : { value };
+    const edited = editedSet ? overlapsSpan(editedSet, period, span) : false;
+    return {
+      value,
+      ...(joined ? { comment: joined } : {}),
+      ...(edited ? { edited: true } : {}),
+    };
   });
 
   return reuse(
@@ -341,7 +359,7 @@ function toDatosRow(
       ...(node.children.length > 0
         ? {
             children: node.children.map((child) =>
-              toDatosRow(child, base, frequency, comments, reusable),
+              toDatosRow(child, base, frequency, comments, editedMonths, reusable),
             ),
           }
         : {}),
@@ -364,6 +382,16 @@ function joinComments(
     }
   }
   return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+/** Whether any base month a period covers is in `months` — same span logic as `joinComments`. */
+function overlapsSpan(months: ReadonlySet<number>, period: number, span: number): boolean {
+  for (let m = period * span; m < (period + 1) * span; m++) {
+    if (months.has(m)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

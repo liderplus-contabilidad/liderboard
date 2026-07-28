@@ -10,7 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { db, getWorkspaceMeta, replaceWorkspace, saveCellEdit } from "@/lib/profit-loss/db";
+import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
+import {
+  applyMonthSlice,
+  db,
+  getWorkspaceMeta,
+  replaceWorkspace,
+  saveCellEdit,
+} from "@/lib/profit-loss/db";
 import {
   allowedFrequencies,
   applyEditsToLeafAccounts,
@@ -42,13 +49,22 @@ import {
 } from "@/lib/profit-loss/filters";
 import { periodsForYear } from "@/lib/profit-loss/analytics/period";
 import type { PeriodRef } from "@/lib/profit-loss/analytics/types";
-import type { CellEdit, Frequency, PygDataset } from "@/lib/profit-loss/types";
+import type { CellEdit, Frequency, PygDataset, WorkspaceMeta } from "@/lib/profit-loss/types";
+import { applyBatch, type MonthSlice } from "@/lib/profit-loss/upload/batch";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
 import { PygAnalyticsProvider } from "./pyg-analytics-provider";
 
 const EMPTY_EDITS: CellEdit[] = [];
 const EMPTY_DATASETS: PygDataset[] = [];
+const EMPTY_MONTHS: number[] = [];
 const CONSOLIDADO_COLOR = "#334155";
+
+export interface MonthlyBatchOutcome {
+  datasets: PygDataset[];
+  loadedMonths: number[];
+  warnings: string[];
+  conflicts: ReloadConflict[];
+}
 
 /** One entry in the "Centro de costos" filter: Consolidado, a center, or Sin-centro. */
 export interface CenterView {
@@ -62,6 +78,8 @@ export interface CenterView {
 
 interface PygDataValue {
   dataset: PygDataset | undefined;
+  /** Every dataset in the current workspace — what a monthly batch merges onto. */
+  datasets: PygDataset[];
   edits: CellEdit[];
   frequency: Frequency;
   allowed: Frequency[];
@@ -72,7 +90,21 @@ interface PygDataValue {
   views: CenterView[];
   /** The resolved center — Consolidado when none or several are marked. */
   activeCenterId: string;
+  /** Month indices (0–11) declared loaded in the by-centers workspace; [] in single mode. */
+  loadedMonths: number[];
   commitWorkspace: (built: BuiltWorkspace) => Promise<void>;
+  /**
+   * Merges a validated month-slice batch onto the CURRENT by-centers workspace — one write,
+   * edits untouched. Throws if the batch mixes years/repeats a month, or if it belongs to a
+   * different year than what's already loaded (the caller must confirm and use
+   * `replaceMonthlyWorkspace` instead — see the modal, which owns that confirmation).
+   */
+  commitMonthlyBatch: (slices: MonthSlice[]) => Promise<MonthlyBatchOutcome>;
+  /** Starts a brand-new by-centers workspace for a different year, discarding the current one
+   * and its edits — the destructive path the modal gates behind an explicit confirmation. */
+  replaceMonthlyWorkspace: (
+    slices: MonthSlice[],
+  ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
   /** Workspace-level cuadre warnings (from meta). */
   warnings: string[];
   saveEdit: (
@@ -276,6 +308,65 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     setRawFilters({ ...emptyFilters(), centerIds: seedCenterIds(built.meta.activeCenterId) });
   }, []);
 
+  const commitMonthlyBatch = useCallback(
+    async (slices: MonthSlice[]): Promise<MonthlyBatchOutcome> => {
+      const centerDatasets = datasets.filter((d) => d.role === "center" || d.role === "sin-centro");
+      const currentYear = centerDatasets[0]?.year;
+      const batchYear = slices[0]?.year;
+      if (
+        centerDatasets.length > 0 &&
+        currentYear != null &&
+        batchYear != null &&
+        currentYear !== batchYear
+      ) {
+        // The modal is expected to have already routed a different year through
+        // `replaceMonthlyWorkspace` after an explicit confirmation — this only guards against
+        // ever silently mixing years into the same columns.
+        throw new Error(
+          `El workspace tiene ${currentYear} cargado; este archivo es de ${batchYear}.`,
+        );
+      }
+      const result = applyBatch(centerDatasets, metaRow?.loadedMonths ?? EMPTY_MONTHS, slices);
+      const conflicts = detectReloadConflicts(
+        centerDatasets,
+        result.datasets,
+        slices.map((s) => s.month),
+        allEdits,
+      );
+      const nextMeta: WorkspaceMeta = {
+        companyName: result.datasets[0]?.companyName || metaRow?.companyName || "",
+        warnings: result.warnings,
+        activeCenterId: metaRow?.activeCenterId ?? CONSOLIDADO_ID,
+        loadedMonths: result.loadedMonths,
+      };
+      await applyMonthSlice(result.datasets, nextMeta);
+      return {
+        datasets: result.datasets,
+        loadedMonths: result.loadedMonths,
+        warnings: result.warnings,
+        conflicts,
+      };
+    },
+    [datasets, metaRow, allEdits],
+  );
+
+  const replaceMonthlyWorkspace = useCallback(async (slices: MonthSlice[]) => {
+    const result = applyBatch([], [], slices);
+    const meta: WorkspaceMeta = {
+      companyName: result.datasets[0]?.companyName || "",
+      warnings: result.warnings,
+      activeCenterId: CONSOLIDADO_ID,
+      loadedMonths: result.loadedMonths,
+    };
+    await replaceWorkspace(result.datasets, meta);
+    setRawFilters(emptyFilters());
+    return {
+      datasets: result.datasets,
+      loadedMonths: result.loadedMonths,
+      warnings: result.warnings,
+    };
+  }, []);
+
   const saveEdit = useCallback(
     async (code: string, monthIndex: number, value: number | null | undefined, comment: string) => {
       if (!dataset?.id || !activeView?.editable) {
@@ -295,6 +386,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<PygDataValue>(
     () => ({
       dataset,
+      datasets,
       edits,
       frequency,
       allowed,
@@ -302,7 +394,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       mode,
       views,
       activeCenterId: resolvedActiveId,
+      loadedMonths: metaRow?.loadedMonths ?? EMPTY_MONTHS,
       commitWorkspace,
+      commitMonthlyBatch,
+      replaceMonthlyWorkspace,
       warnings: metaRow?.warnings ?? [],
       saveEdit,
       deepestLevel: deepest,
@@ -322,6 +417,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     }),
     [
       dataset,
+      datasets,
       edits,
       frequency,
       allowed,
@@ -329,7 +425,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       mode,
       views,
       resolvedActiveId,
+      metaRow?.loadedMonths,
       commitWorkspace,
+      commitMonthlyBatch,
+      replaceMonthlyWorkspace,
       metaRow?.warnings,
       saveEdit,
       deepest,
@@ -388,10 +487,12 @@ function buildViews(datasets: PygDataset[], allEdits: CellEdit[]): CenterView[] 
     ];
   }
 
+  // "Sin centro de costo" is an ordinary monthly, editable center now (see design.md decision
+  // 6) — its `role` tag survives only for its distinct color and its position at the end of
+  // the list, so it joins the same sort/merge/editable treatment as every other center.
   const centers = datasets
-    .filter((d) => d.role === "center")
+    .filter((d) => d.role === "center" || d.role === "sin-centro")
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  const sin = datasets.find((d) => d.role === "sin-centro");
   const views: CenterView[] = [];
 
   if (centers.length > 0) {
@@ -429,20 +530,9 @@ function buildViews(datasets: PygDataset[], allEdits: CellEdit[]): CenterView[] 
       id: center.centerId as string,
       name: center.costCenterName || (center.centerId as string),
       color: center.centerColor,
-      role: "center",
+      role: center.role === "sin-centro" ? "sin-centro" : "center",
       dataset: center,
       editable: center.baseFrequency !== "anual",
-    });
-  }
-
-  if (sin) {
-    views.push({
-      id: "sin-centro",
-      name: "Sin centro de costo",
-      color: sin.centerColor,
-      role: "sin-centro",
-      dataset: sin,
-      editable: false,
     });
   }
   return views;

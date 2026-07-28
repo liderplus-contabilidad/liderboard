@@ -1,11 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import {
-  buildBlankTemplate,
-  buildMultiCenterWorkbook,
-  buildPygWorkbook,
-  pygExportFilename,
-} from "./export";
+import { buildMultiCenterWorkbook, buildPygWorkbook, pygExportFilename } from "./export";
 import { parsePygWorkbook } from "./parse";
 import { aoaToXlsxBuffer, MONTHLY_AOA, SUCURSAL_AOA, SUCURSAL_SUR_AOA } from "./parse.fixtures";
 import type { CellEdit } from "./types";
@@ -51,14 +46,6 @@ function allNotes(ws: ExcelJS.Worksheet): string[] {
   return notes;
 }
 
-function rowByCode(ws: ExcelJS.Worksheet, code: string): ExcelJS.Row | undefined {
-  let found: ExcelJS.Row | undefined;
-  ws.eachRow((row) => {
-    if (String(row.getCell(1).value ?? "") === code) found = row;
-  });
-  return found;
-}
-
 describe("buildPygWorkbook — value round-trip", () => {
   it("re-parses with the edited values and no sum mismatch", async () => {
     const wb = buildPygWorkbook(dataset, edits);
@@ -96,64 +83,44 @@ describe("buildPygWorkbook — cell notes", () => {
   });
 });
 
-describe("buildBlankTemplate", () => {
-  it("seeds account rows with empty values, no result row and no notes", async () => {
-    const ws = await reload(buildBlankTemplate(dataset));
-
-    const hab = rowByCode(ws, "4.1.1");
-    expect(hab?.getCell(2).value).toBe("Ventas Habitaciones");
-    for (let col = 3; col <= 14; col++) {
-      expect(hab?.getCell(col).value ?? null).toBeNull();
-    }
-
-    let hasResult = false;
-    ws.eachRow((row) => {
-      if (
-        String(row.getCell(2).value ?? "")
-          .toLowerCase()
-          .includes("utilidad")
-      )
-        hasResult = true;
-    });
-    expect(hasResult).toBe(false);
-    expect(allNotes(ws)).toEqual([]);
-  });
-});
-
 describe("pygExportFilename", () => {
   it("derives a data filename from company and period", () => {
-    const name = pygExportFilename(dataset, "data");
+    const name = pygExportFilename(dataset);
     expect(name).toContain("HOTELERA ANDES S.A.");
     expect(name).toContain("Ene–Dic 2026");
     expect(name.endsWith(".xlsx")).toBe(true);
   });
 
-  it("derives a template filename and tolerates a missing dataset", () => {
-    expect(pygExportFilename(undefined, "template").endsWith(".xlsx")).toBe(true);
-    expect(pygExportFilename(dataset, "template")).toContain("Plantilla");
+  it("tolerates a missing dataset", () => {
+    expect(pygExportFilename(undefined).endsWith(".xlsx")).toBe(true);
+    expect(pygExportFilename(undefined)).toContain("LiderPlus");
   });
 });
 
+const ALL_MONTHS = Array.from({ length: 12 }, (_, i) => i);
+
 describe("buildMultiCenterWorkbook", () => {
-  it("emits a Consolidado sheet, one sheet per center, and a Sin-centro sheet", async () => {
+  it("emits a Consolidado sheet, one sheet per center, and Sin centro de costo as one more", () => {
     const sinCentro = {
       ...sur,
       id: "sin",
       role: "sin-centro" as const,
-      baseFrequency: "anual" as const,
-      accounts: [{ code: "4", name: "Ingresos", values: [7] }],
-      resultFromFile: [7],
+      costCenterName: "Sin centro de costo",
+      accounts: [{ code: "4", name: "Ingresos", values: [7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }],
+      resultFromFile: [],
     };
     const wb = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
+      year: 2026,
+      loadedMonths: ALL_MONTHS,
       centers: [
         {
           dataset: { ...norte, role: "center" as const, costCenterName: "SUCURSAL NORTE" },
           edits: [],
         },
         { dataset: { ...sur, role: "center" as const, costCenterName: "SUCURSAL SUR" }, edits: [] },
+        { dataset: sinCentro, edits: [] },
       ],
-      sinCentro,
     });
     const names = wb.worksheets.map((w) => w.name);
     expect(names).toContain("Consolidado");
@@ -173,6 +140,8 @@ describe("buildMultiCenterWorkbook", () => {
     };
     const wb = buildMultiCenterWorkbook({
       companyName: "X",
+      year: 2026,
+      loadedMonths: ALL_MONTHS,
       centers: [
         { dataset: { ...norte, role: "center" as const, costCenterName: "NORTE" }, edits: [edit] },
       ],
@@ -187,10 +156,32 @@ describe("buildMultiCenterWorkbook", () => {
     expect(enero).toBe(999);
   });
 
+  it("leaves unloaded months empty instead of 0", () => {
+    const wb = buildMultiCenterWorkbook({
+      companyName: "X",
+      year: 2026,
+      loadedMonths: [0, 1], // only Enero–Febrero loaded
+      centers: [
+        { dataset: { ...norte, role: "center" as const, costCenterName: "NORTE" }, edits: [] },
+      ],
+    });
+    const ws = wb.getWorksheet("NORTE");
+    let row4: ExcelJS.Row | undefined;
+    ws?.eachRow((row) => {
+      if (String(row.getCell(1).value ?? "") === "4") {
+        row4 = row;
+      }
+    });
+    expect(row4?.getCell(3).value ?? null).toBe(130); // Enero: loaded, from the fixture
+    expect(row4?.getCell(5).value ?? null).toBeNull(); // Marzo: NOT loaded → empty, not 0
+  });
+
   it("truncates and de-duplicates over-long / colliding sheet names", async () => {
     const long = "CENTRO CON UN NOMBRE EXTREMADAMENTE LARGO QUE SUPERA EL LIMITE";
     const wb = buildMultiCenterWorkbook({
       companyName: "X",
+      year: 2026,
+      loadedMonths: ALL_MONTHS,
       centers: [
         { dataset: { ...norte, costCenterName: long }, edits: [] },
         { dataset: { ...sur, costCenterName: long }, edits: [] },

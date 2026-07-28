@@ -9,7 +9,12 @@ import type { Frequency } from "@/lib/period";
 /** The ladder is shared with Ocupaciones; re-exported so PyG's callers keep one import. */
 export type { Frequency };
 
-/** How a dataset participates in a workspace. "single" = a standalone statement. */
+/**
+ * How a dataset participates in a workspace. "single" = a standalone statement. "sin-centro"
+ * is otherwise an ordinary monthly, editable center — the tag exists only for its distinct
+ * selector color and its position at the end of the list, never for a base-frequency or
+ * read-only implication (unlike the retired annual, read-only "Sin centro de costo" dataset).
+ */
 export type DatasetRole = "single" | "center" | "sin-centro";
 
 /** One account row exactly as parsed — original values, never mutated. */
@@ -49,14 +54,20 @@ export interface PygDataset {
 }
 
 /**
- * A comment carried in an exported workbook's hidden metadata sheet, reconstructed on
- * re-upload. Value edits fold into the new baseline; only comments round-trip.
+ * One cell's imported edit, carried in an exported workbook's hidden metadata sheet and
+ * reconstructed on re-upload. The single-statement export bakes value edits into the new
+ * baseline, so its entries always carry `comment` and never `value`; the "Excel completo"
+ * (app-workbook) round-trip restores adjustments as real edits too, so `value` is set there
+ * instead — either field may be present alone, or both (a cell can carry an adjustment and a
+ * comment together).
  */
 export interface ImportedComment {
   code: string;
   /** Base-frequency column index (month for a monthly base). */
   monthIndex: number;
-  comment: string;
+  comment?: string;
+  /** A restored value adjustment (app-workbook round-trip only). */
+  value?: number;
 }
 
 /** What `parsePygWorkbook` yields: the dataset plus any comments to re-seed as edits. */
@@ -76,4 +87,18 @@ export interface CellEdit {
   value?: number | null;
   comment?: string;
   updatedAt: number;
+}
+
+/** Singleton workspace metadata: company, cuadre warnings, the active selector id. */
+export interface WorkspaceMeta {
+  companyName: string;
+  warnings: string[];
+  activeCenterId: string;
+  /**
+   * Month indices (0–11) actually loaded into the by-centers workspace — declared, not
+   * inferred: a loaded month with all-zero values is covered, an unloaded one is not, and the
+   * two produce the same zeros. Empty for a single-statement workspace, whose coverage is
+   * still derived from values (a whole year always arrives in one file).
+   */
+  loadedMonths: number[];
 }

@@ -4,10 +4,14 @@
  * wiring real data in is a matter of swapping the source, not touching the components.
  */
 
-/** One month/account intersection. `value` is `null` when the account has no entry. */
+/** One month/account intersection. `value` is `null` when the account has no entry (including
+ * a month the by-centers workspace never loaded — distinct from a loaded month valued at 0). */
 export interface DatosCell {
   value: number | null;
   comment?: string;
+  /** True when the shown value comes from a user value-adjustment, not the file — leaf
+   * (movement) cells only; a parent's rollup and the Total column never carry this. */
+  edited?: boolean;
 }
 
 /** A row in the account tree. Rows nest via `children`; leaves omit it. */

@@ -93,25 +93,6 @@ export const SUCURSAL_SUR_AOA: FixtureCell[][] = [
   [null, "Utilidad o Perdida", ...months(20, 20), 40],
 ];
 
-/** SUCURSAL NORTE but with every value at 0 — the "wrong (empty) file loaded" case. */
-export const SUCURSAL_NORTE_EMPTY_AOA: FixtureCell[][] = [
-  ["HOTELERA ANDES S.A."],
-  ["Estado de Resultados"],
-  ["Centro de Costo: SUCURSAL NORTE"],
-  ["Desde el 01/01/2026 hasta el 31/12/2026"],
-  [null],
-  [null],
-  [null, null, ...MONTH_HEADERS, "Total"],
-  [null],
-  monthlyRow("4", "Ingresos", months(), 0),
-  monthlyRow("4.1", "Ventas", months(), 0),
-  monthlyRow("4.1.1", "Ventas Habitaciones", months(), 0),
-  monthlyRow("5", "Costos y Gastos", months(), 0),
-  monthlyRow("5.1", "Gastos Operativos", months(), 0),
-  monthlyRow("5.1.1", "Sueldos", months(), 0),
-  [null, "Utilidad o Perdida", ...months(), 0],
-];
-
 /** Annual export: a single "Total" value column. */
 export const ANNUAL_AOA: FixtureCell[][] = [
   ["HOTELERA ANDES S.A."],

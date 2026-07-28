@@ -18,6 +18,10 @@ export interface DatosTableRowProps {
   visibleColumns: number[];
   editable: boolean;
   showTotal: boolean;
+  /** Which columns the by-centers workspace has actually loaded; `null` = no restriction
+   * (single-statement mode). An unloaded column renders empty and never opens for editing,
+   * regardless of `editable` or `row.movement`. */
+  loadedColumns: ReadonlySet<number> | null;
   /** The ficha panel is currently showing this row. */
   detailOpen: boolean;
   onToggle: (code: string) => void;
@@ -37,6 +41,7 @@ function DatosTableRowImpl({
   visibleColumns,
   editable,
   showTotal,
+  loadedColumns,
   detailOpen,
   onToggle,
   onEditCell,
@@ -95,13 +100,15 @@ function DatosTableRowImpl({
       </td>
 
       {visibleColumns.map((col) => {
-        const cell = row.cells[col];
+        const loaded = !loadedColumns || loadedColumns.has(col);
+        const cell = loaded ? row.cells[col] : undefined;
         return (
           <DataCell
             key={col}
             value={cell?.value ?? null}
             hasComment={Boolean(cell?.comment)}
-            openable={openable}
+            edited={Boolean(cell?.edited)}
+            openable={openable && loaded}
             onEdit={(anchor) => onEditCell(row.code, col, anchor, valueEditable)}
           />
         );
@@ -163,15 +170,18 @@ function DetailCell({
   );
 }
 
-/** One month cell: negatives red, empty/zero an en-dash, comment → corner mark. */
+/** One month cell: negatives red, empty/zero an en-dash, comment → corner mark, a value
+ * adjustment → dotted brand underline under the figure (the two marks coexist). */
 function DataCell({
   value,
   hasComment,
+  edited,
   openable,
   onEdit,
 }: {
   value: number | null;
   hasComment: boolean;
+  edited: boolean;
   openable: boolean;
   onEdit: (anchor: EditorAnchor) => void;
 }) {
@@ -188,6 +198,13 @@ function DataCell({
       style={{ borderTop: "8px solid var(--color-warning)", borderLeft: "8px solid transparent" }}
     />
   ) : null;
+  const amount = (
+    <span
+      className={cn(edited && "underline decoration-brand decoration-dotted underline-offset-4")}
+    >
+      {formatAmount(value)}
+    </span>
+  );
 
   if (!openable) {
     return (
@@ -198,7 +215,7 @@ function DataCell({
         )}
       >
         {mark}
-        {formatAmount(value)}
+        {amount}
       </td>
     );
   }
@@ -214,7 +231,7 @@ function DataCell({
           tone,
         )}
       >
-        {formatAmount(value)}
+        {amount}
       </button>
     </td>
   );
