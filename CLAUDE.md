@@ -114,14 +114,28 @@ edit/comment); editing/commenting is monthly-view-only. The Datos toolbar downlo
 the edited state or a seeded blank template via `exceljs` (`export.ts`, dynamic
 import); the "con tus datos" file re-uploads cleanly and restores its comments from a
 hidden metadata sheet. Only leaf (movement) accounts
-edit their value; parent accounts comment-only. **Cost centers** are supported: a staging
-upload modal (`cost-center-upload-modal.tsx`) accepts several files at once (monthly
-sucursal statements + the annual `consolidado`), grouped by each file's internal
-`Centro de Costo:` line — never by filename (the real exports prove filenames unreliable).
-`workspace.ts` assembles them into a multi-dataset workspace (Dexie v2 + a `meta` singleton)
-and validates cuadres. `parse.ts` routes consolidated files via
-`parseWorkbook`/`parseConsolidatedWorkbook` instead of rejecting them; the multi-center
-download writes one sheet per center + the Consolidado (`buildMultiCenterWorkbook`).
+edit their value; parent accounts comment-only. **Cost centers load monthly and incrementally:**
+one file = one month = every center at once (`GENERAL` + a column per center + `SIN CENTRO DE
+COSTO`, the same grid the accounting system always exports); uploading June writes column 5 of
+every center and leaves every other month untouched. The file carries no date, so the filename
+declares the period — `PyG-YYYY-MM[-libre].(xlsx|xls)` — and is validated as such.
+`lib/profit-loss/upload/` is a strategy registry (`registry.ts`, first-match-wins over an
+ordered list) that replaces a format `if`: `monthly-centers.ts`, `single-statement.ts` (wraps
+`parse.ts` unchanged) and `app-workbook.ts` (reads the app's own "Excel completo" back) each own
+their sheet shape, account-code convention and sign rule; `grid.ts` holds only the
+convention-free reading utilities. `merge-month.ts` is the pure merge — new center/account →
+zero-filled everywhere but the arriving month, cuadre against `GENERAL` (one aviso per month,
+never per account), and an acumulado-file heuristic (≥20 pairs up, ≤5% down, comparing against
+the prior loaded month). `WorkspaceMeta.loadedMonths` is the declared coverage — a month never
+loaded reads `null` through the whole engine (`buildAnalyticsSource`'s `coveredIndices` param),
+never the same as a loaded month valued at 0. Edits survive every reload (`applyMonthSlice`
+never touches `edits`); an adjusted cell gets a dotted `brand` underline in Datos, and reloading
+a month whose file value changed under an adjustment surfaces as a conflict in the upload
+summary, removable from there. `Sin centro de costo` is an ordinary editable monthly center now
+(just its own selector color/position), so the Consolidado equals `GENERAL` by construction.
+Downloads: "Excel completo" (`buildMultiCenterWorkbook`, one sheet per center + Consolidado,
+round-trips through `app-workbook.ts`) and "un mes en crudo" (`buildMonthSliceWorkbook`, re-enters
+through `monthly-centers.ts`); no blank template in this mode (single-statement keeps its own).
 **Account ficha:** each account row exposes a hover "ficha" trigger (own column, `sticky
 right-0` so it survives horizontal scroll) that opens `AccountDetailPanel` in a `SidePanel`.
 The panel runs ONE analytics query for the account and formats `buildAccountDetail`

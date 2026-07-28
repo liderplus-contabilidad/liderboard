@@ -69,9 +69,9 @@ export function CenterFilter({ views, selected, onToggle, onSelectAll }: CenterF
         </div>
         <div className="mt-1.5 flex justify-end border-t border-border-soft pt-[9px]">
           <InfoTip label="¿Cómo funcionan los centros de costo?" align="right">
-            El Consolidado suma los centros mensuales. "Sin centro de costo" viene del archivo
-            consolidado (anual, solo lectura). Marcar varios los compara; no marcar ninguno equivale
-            al Consolidado.
+            El Consolidado suma todos los centros mensuales, "Sin centro de costo" incluido — es un
+            centro más, editable en vista mensual. Marcar varios los compara; no marcar ninguno
+            equivale al Consolidado.
           </InfoTip>
         </div>
       </DropdownPanel>

@@ -5,8 +5,7 @@
  */
 import Dexie, { type Table } from "dexie";
 import { segmentAccounts } from "./segment";
-import type { CellEdit, ImportedComment, PygDataset } from "./types";
-import type { WorkspaceMeta } from "./workspace";
+import type { CellEdit, ImportedComment, PygDataset, WorkspaceMeta } from "./types";
 
 /** Singleton workspace metadata row (company, warnings, active selector id). */
 interface WorkspaceMetaRow extends WorkspaceMeta {
@@ -42,6 +41,29 @@ class PygDb extends Dexie {
             }
           });
       });
+    // v3: the by-centers formats that produced "center"/"sin-centro" datasets are retired
+    // (see the monthly-cost-center-upload change) — no strategy can read them back under the
+    // new model, so they and their edits are discarded. "single" datasets, and their edits,
+    // are untouched: the single-statement flow doesn't change.
+    this.version(3)
+      .stores({
+        datasets: "id, role, order",
+        edits: "++id, datasetId, &[datasetId+code+monthIndex]",
+        meta: "key",
+      })
+      .upgrade(async (tx) => {
+        const datasetsTable = tx.table<PygDataset>("datasets");
+        const retired = await datasetsTable
+          .filter((d) => d.role === "center" || d.role === "sin-centro")
+          .toArray();
+        if (retired.length === 0) {
+          return;
+        }
+        const retiredIds = retired.map((d) => d.id);
+        await datasetsTable.bulkDelete(retiredIds);
+        await tx.table<CellEdit>("edits").where("datasetId").anyOf(retiredIds).delete();
+        await tx.table("meta").clear();
+      });
   }
 }
 
@@ -69,13 +91,27 @@ export async function replaceWorkspace(
         datasetId,
         code: c.code,
         monthIndex: c.monthIndex,
-        comment: c.comment,
+        ...(c.value !== undefined ? { value: c.value } : {}),
+        ...(c.comment ? { comment: c.comment } : {}),
         updatedAt: now,
       })),
     );
     if (seeds.length > 0) {
       await db.edits.bulkAdd(seeds);
     }
+  });
+}
+
+/**
+ * Applies a merged month onto the by-centers workspace: upserts `datasets` (existing centers
+ * overwritten, new ones added — `mergeMonthSlice` already produced the complete set, nothing
+ * is ever deleted here) and writes `meta`, WITHOUT touching `edits`. This is what lets a
+ * reload survive the user's adjustments: the base changes, the overlay does not.
+ */
+export async function applyMonthSlice(datasets: PygDataset[], meta: WorkspaceMeta): Promise<void> {
+  await db.transaction("rw", db.datasets, db.meta, async () => {
+    await db.datasets.bulkPut(datasets);
+    await db.meta.put({ key: "workspace", ...meta });
   });
 }
 

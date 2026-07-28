@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MONTHS_SHORT_ES } from "@/lib/date";
+import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGrid } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
@@ -59,6 +60,8 @@ export function DatosView() {
     warnings,
     collapsed,
     toggleCollapsed,
+    mode,
+    loadedMonths,
   } = usePygData();
 
   const [sort, setSort] = useState<DatosSort | null>(null);
@@ -88,6 +91,14 @@ export function DatosView() {
     previousGrid.current = next;
     return next;
   }, [dataset, edits, effectiveFrequency]);
+  // The by-centers workspace declares which periods it loaded; a single-statement workspace
+  // has no such restriction (its whole year always arrives in one file).
+  const loadedColumns = useMemo(() => {
+    if (mode !== "multi" || !dataset) {
+      return null;
+    }
+    return aggregateCoverage(new Set(loadedMonths), dataset.baseFrequency, effectiveFrequency);
+  }, [mode, dataset, loadedMonths, effectiveFrequency]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).
@@ -186,6 +197,7 @@ export function DatosView() {
         editable={editable}
         readOnlyReason={readOnlyReason}
         showTotal={showTotal}
+        loadedColumns={loadedColumns}
         openDetailCode={detailCode}
         onSort={onSort}
         onToggle={toggleCollapsed}

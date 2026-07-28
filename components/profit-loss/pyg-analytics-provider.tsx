@@ -53,12 +53,23 @@ export function PygAnalyticsProvider({
   allEdits: CellEdit[];
   children: ReactNode;
 }) {
-  const { views, frequency, activeCenterId, dataset, filters } = usePygData();
+  const { views, frequency, activeCenterId, dataset, filters, mode, loadedMonths } = usePygData();
+
+  // The by-centers workspace declares its coverage; every view shares the SAME set, since one
+  // file is a month and brings every center at once, Consolidado included. Single mode omits
+  // it so `buildAnalyticsSource` keeps inferring coverage from values, as before this change.
+  const coveredIndices = useMemo(
+    () => (mode === "multi" ? new Set(loadedMonths) : undefined),
+    [mode, loadedMonths],
+  );
 
   // Rebuilding the sources is the cost of an edit: the numbers changed, so must the series.
   // Memoizing against `views`/`allEdits` keeps every OTHER render — a filter, a tab, a
   // frequency — from walking the account tree again.
-  const sources = useMemo(() => sourcesFromViews(views, allEdits), [views, allEdits]);
+  const sources = useMemo(
+    () => sourcesFromViews(views, allEdits, coveredIndices),
+    [views, allEdits, coveredIndices],
+  );
   const year = dataset?.year ?? 0;
 
   const context = useMemo<SelectionContext>(

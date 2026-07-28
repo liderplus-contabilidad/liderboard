@@ -1,6 +1,13 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { db, getWorkspaceMeta, replaceWorkspace, saveCellEdit, saveCellEdits } from "./db";
+import {
+  applyMonthSlice,
+  db,
+  getWorkspaceMeta,
+  replaceWorkspace,
+  saveCellEdit,
+  saveCellEdits,
+} from "./db";
 import type { PygDataset } from "./types";
 
 function dataset(id: string): PygDataset {
@@ -25,7 +32,12 @@ function center(id: string, centerId: string): PygDataset {
 
 /** Seed a single dataset (single-mode workspace) as edit-test setup. */
 function seed(id: string): Promise<void> {
-  return replaceWorkspace([dataset(id)], { companyName: "X", warnings: [], activeCenterId: id });
+  return replaceWorkspace([dataset(id)], {
+    companyName: "X",
+    warnings: [],
+    activeCenterId: id,
+    loadedMonths: [],
+  });
 }
 
 beforeEach(async () => {
@@ -109,7 +121,7 @@ describe("replaceWorkspace", () => {
   it("stores several datasets + meta and clears the previous workspace", async () => {
     await replaceWorkspace(
       [center("a", "norte"), center("b", "sur")],
-      { companyName: "ACME", warnings: ["w"], activeCenterId: "consolidado" },
+      { companyName: "ACME", warnings: ["w"], activeCenterId: "consolidado", loadedMonths: [] },
       [
         { datasetId: "a", comments: [{ code: "4", monthIndex: 0, comment: "hola" }] },
         { datasetId: "b", comments: [] },
@@ -130,6 +142,7 @@ describe("replaceWorkspace", () => {
       companyName: "X",
       warnings: [],
       activeCenterId: "s1",
+      loadedMonths: [],
     });
     // The provider must query toArray(): both rows come back.
     expect((await db.datasets.toArray()).map((d) => d.id).sort()).toEqual(["c1", "s1"]);
@@ -140,17 +153,64 @@ describe("replaceWorkspace", () => {
   it("wipes datasets, edits and meta of the prior workspace", async () => {
     await replaceWorkspace(
       [center("a", "norte")],
-      { companyName: "ACME", warnings: [], activeCenterId: "consolidado" },
+      { companyName: "ACME", warnings: [], activeCenterId: "consolidado", loadedMonths: [] },
       [{ datasetId: "a", comments: [] }],
     );
     await saveCellEdit({ datasetId: "a", code: "4", monthIndex: 0, value: 1 });
     await replaceWorkspace(
       [center("z", "z")],
-      { companyName: "OTHER", warnings: [], activeCenterId: "consolidado" },
+      { companyName: "OTHER", warnings: [], activeCenterId: "consolidado", loadedMonths: [] },
       [{ datasetId: "z", comments: [] }],
     );
     expect((await db.datasets.toArray()).map((d) => d.id)).toEqual(["z"]);
     expect(await db.edits.count()).toBe(0);
     expect((await getWorkspaceMeta())?.companyName).toBe("OTHER");
+  });
+});
+
+describe("applyMonthSlice", () => {
+  it("upserts datasets and meta without touching edits", async () => {
+    await replaceWorkspace(
+      [center("a", "norte")],
+      { companyName: "ACME", warnings: [], activeCenterId: "consolidado", loadedMonths: [0] },
+      [{ datasetId: "a", comments: [] }],
+    );
+    await saveCellEdit({ datasetId: "a", code: "4", monthIndex: 0, value: 42 });
+
+    const updated = {
+      ...center("a", "norte"),
+      accounts: [{ code: "4", name: "Ingresos", values: [1, 2] }],
+    };
+    await applyMonthSlice([updated], {
+      companyName: "ACME",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonths: [0, 1],
+    });
+
+    const stored = await db.datasets.get("a");
+    expect(stored?.accounts[0].values).toEqual([1, 2]);
+    // The prior adjustment is still there — applyMonthSlice never clears `edits`.
+    const edits = await db.edits.toArray();
+    expect(edits).toHaveLength(1);
+    expect(edits[0].value).toBe(42);
+    const meta = await getWorkspaceMeta();
+    expect(meta?.loadedMonths).toEqual([0, 1]);
+  });
+
+  it("adds a brand-new center dataset alongside the existing ones", async () => {
+    await replaceWorkspace([center("a", "norte")], {
+      companyName: "ACME",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonths: [0],
+    });
+    await applyMonthSlice([center("a", "norte"), center("b", "sur")], {
+      companyName: "ACME",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonths: [0],
+    });
+    expect((await db.datasets.toArray()).map((d) => d.id).sort()).toEqual(["a", "b"]);
   });
 });

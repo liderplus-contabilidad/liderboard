@@ -14,7 +14,9 @@ export const META_SHEET_NAME = "_liderplus_meta";
 const META_HEADER = ["code", "monthIndex", "comment"] as const;
 
 /** Comments → the sheet's rows (header first). Callers pass only edits that have text. */
-export function commentsToMetaRows(comments: ImportedComment[]): (string | number)[][] {
+export function commentsToMetaRows(
+  comments: { code: string; monthIndex: number; comment: string }[],
+): (string | number)[][] {
   return [
     [...META_HEADER],
     ...comments.map(({ code, monthIndex, comment }) => [code, monthIndex, comment]),
@@ -42,4 +44,92 @@ export function metaRowsToComments(rows: unknown[][]): ImportedComment[] {
     }
   }
   return comments;
+}
+
+/**
+ * The "Excel completo" (app-workbook) round-trip's hidden metadata sheet — one sheet for the
+ * WHOLE workspace, not one per center, because `loadedMonths` is workspace-wide (a file is a
+ * month and brings every center) and a cell needs its center named to be placed back. Each
+ * row is tagged by kind so the three concerns (workspace period, comments, adjustments) share
+ * one sheet without a fixed row order.
+ */
+export const APP_WORKBOOK_META_SHEET = "_liderplus_workspace_meta";
+
+export interface CenterCellComment {
+  centerId: string;
+  code: string;
+  monthIndex: number;
+  comment: string;
+}
+
+export interface CenterCellAdjustment {
+  centerId: string;
+  code: string;
+  monthIndex: number;
+  /** The file's value before the adjustment — the base a reload needs to detect conflicts. */
+  originalValue: number;
+}
+
+export interface AppWorkbookMeta {
+  year: number;
+  loadedMonths: number[];
+  comments: CenterCellComment[];
+  adjustments: CenterCellAdjustment[];
+}
+
+export function appWorkbookMetaToRows(meta: AppWorkbookMeta): (string | number)[][] {
+  const rows: (string | number)[][] = [["workspace", meta.year, meta.loadedMonths.join(",")]];
+  for (const c of meta.comments) {
+    rows.push(["comment", c.centerId, c.code, c.monthIndex, c.comment]);
+  }
+  for (const a of meta.adjustments) {
+    rows.push(["adjustment", a.centerId, a.code, a.monthIndex, a.originalValue]);
+  }
+  return rows;
+}
+
+/** Rows → `AppWorkbookMeta`, dropping any row whose kind or shape isn't recognized. */
+export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
+  let year = 0;
+  let loadedMonths: number[] = [];
+  const comments: CenterCellComment[] = [];
+  const adjustments: CenterCellAdjustment[] = [];
+
+  for (const row of rows) {
+    const [kind, ...rest] = row;
+    if (kind === "workspace") {
+      const [rawYear, rawMonths] = rest;
+      if (typeof rawYear === "number") {
+        year = rawYear;
+      }
+      if (typeof rawMonths === "string" && rawMonths !== "") {
+        loadedMonths = rawMonths
+          .split(",")
+          .map(Number)
+          .filter((n) => Number.isInteger(n));
+      }
+    } else if (kind === "comment") {
+      const [centerId, code, monthIndex, comment] = rest;
+      if (
+        typeof centerId === "string" &&
+        typeof code === "string" &&
+        typeof monthIndex === "number" &&
+        typeof comment === "string" &&
+        comment !== ""
+      ) {
+        comments.push({ centerId, code, monthIndex, comment });
+      }
+    } else if (kind === "adjustment") {
+      const [centerId, code, monthIndex, originalValue] = rest;
+      if (
+        typeof centerId === "string" &&
+        typeof code === "string" &&
+        typeof monthIndex === "number" &&
+        typeof originalValue === "number"
+      ) {
+        adjustments.push({ centerId, code, monthIndex, originalValue });
+      }
+    }
+  }
+  return { year, loadedMonths, comments, adjustments };
 }

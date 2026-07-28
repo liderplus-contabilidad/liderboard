@@ -78,6 +78,30 @@ describe("coverage", () => {
   });
 });
 
+describe("coverage — recibida vs. omitida (por-centros vs. estado único)", () => {
+  it("wins outright when passed, even over a source that is entirely zero", () => {
+    // months: 0 makes every value 0 — the value-based heuristic would say "uncovered"
+    // everywhere; a workspace that DECLARES month 0 loaded must still show it covered.
+    const allZero = makeDataset({ months: 0 });
+    const source = buildAnalyticsSource(allZero, [], new Set([0]));
+    expect([...source.coverage]).toEqual([0]);
+  });
+
+  it("leaves a declared-but-not-loaded month uncovered even though other sources have values", () => {
+    const withValues = makeDataset({ months: 7 });
+    // Declare only month 0 loaded — August (index 7) has real values in the dataset, but the
+    // workspace never received it, so it must stay uncovered regardless.
+    const source = buildAnalyticsSource(withValues, [], new Set([0]));
+    expect(source.coverage.has(7)).toBe(false);
+    expect([...source.coverage]).toEqual([0]);
+  });
+
+  it("is derived from values, unchanged, when coveredIndices is omitted (single-statement path)", () => {
+    const source = buildAnalyticsSource(CULTURA_MANOR);
+    expect([...source.coverage].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+});
+
 describe("aggregateCoverage", () => {
   it("covers a coarse period when any of its base periods is covered", () => {
     const covered = aggregateCoverage(new Set([0, 1, 2, 3, 4, 5, 6]), "mensual", "trimestral");

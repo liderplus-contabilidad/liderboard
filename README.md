@@ -52,6 +52,7 @@ lib/modules.ts           registro de módulos (única fuente de verdad de la nav
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
 lib/charts/              paleta categórica y sistema de marcas, comunes a toda la app
+lib/profit-loss/upload/  registry de estrategias de carga (una por sistema contable) + merge
 lib/profit-loss/analytics/  motor analítico puro (series, transformaciones, Pareto, pastel)
 lib/profit-loss/charts/  traducción pura: selección → consulta → opción de ECharts
 lib/occupancy/           capa pura de Ocupaciones (parse, derive, consolidate, export) + Dexie
@@ -206,11 +207,15 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   las **cuentas padre** se calculan desde sus movimientos y solo admiten comentario. Ediciones
   y comentarios persisten en IndexedDB (Dexie) y solo están disponibles en la vista Mensual.
 - **Centro de costo, derivado del filtro** (no un selector propio de Datos): ningún centro
-  marcado o varios marcados resuelven al **Consolidado** (suma de los centros mensuales, solo
-  lectura); exactamente un centro marcado resuelve a **ese** centro (editable en vista Mensual,
-  salvo **Sin centro de costo**, que es anual y por tanto solo lectura). La tabla nombra la
-  causa cuando no se puede editar (Consolidado, varios centros marcados, o vista no mensual).
-  El subtítulo del header nombra el centro resuelto.
+  marcado o varios marcados resuelven al **Consolidado** (suma de todos los centros mensuales,
+  **Sin centro de costo** incluido — solo lectura); exactamente un centro marcado resuelve a
+  **ese** centro, editable en vista Mensual (Sin centro de costo también, es un centro más). La
+  tabla nombra la causa cuando no se puede editar (Consolidado, varios centros marcados, o vista
+  no mensual). El subtítulo del header nombra el centro resuelto.
+- **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó
+  (`loadedMonths`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar, distinto
+  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** lleva un
+  subrayado punteado `brand` bajo la cifra, conviviendo con el triángulo de comentario.
 - **Ficha de cuenta** (panel lateral): cada fila de cuenta trae un enlace **«ficha»** que
   aparece al pasar el mouse (columna fija a la derecha, para que no se pierda con el scroll
   horizontal; alcanzable con teclado). Abre un `SidePanel` derecho —sin velo, para leerse
@@ -326,8 +331,9 @@ Cargar y descargar Excel se ve **igual en toda la app**: un solo primitivo,
 dominio. La galería viva está en `/docs/components#excel-actions`.
 
 - **La forma del control de descarga se deriva de las opciones**, no se declara: una sola
-  opción rinde un **botón plano** que la ejecuta directo (PyG › Ocupaciones), dos o más rinden
-  el **menú** (PyG). Añadir una segunda descarga a un módulo es añadir un elemento al array.
+  opción rinde un **botón plano** que la ejecuta directo (Ocupaciones, y PyG en estado único),
+  dos o más rinden el **menú** (PyG multi-centro: «Excel completo» + «Un mes en crudo»). Añadir
+  una segunda descarga a un módulo es añadir un elemento al array.
 - **El progreso y el error viven en el primitivo.** Un módulo aporta `run: () => Promise<void>`
   —construye el workbook y lo entrega al navegador— y nada más: el bloque bloquea reentradas,
   cambia el icono por un spinner y, si la promesa rechaza, muestra un panel de error bajo el
@@ -345,42 +351,75 @@ caso es general y va en la API, no en tu módulo.
 
 ## Carga de Excel (PyG › Datos)
 
-- **Formatos soportados:** reporte mensual (con o sin línea "Centro de Costo"), reporte
-  anual (solo columna Total) y el **consolidado por centros de costo** (columnas GENERAL +
-  centros + Sin centro de costo, valores anuales).
-- **Carga multi-centro (modal de staging):** "Cargar Excel" abre un modal donde arrastras o
-  eliges **varios archivos a la vez**; cada uno se parsea al vuelo y se muestra con su rol
-  detectado (centro / consolidado / estado único). Los archivos se agrupan por **contenido**
-  (línea "Centro de Costo:" + empresa), **nunca por el nombre de archivo** — los reportes
-  reales tienen nombres poco confiables. Los centros salen de las sucursales mensuales; el
-  **Consolidado** se calcula sumándolas; el archivo consolidado aporta **Sin centro de costo**
-  (anual) y valida los cuadres (`Σ centros + Sin-centro = GENERAL`, descuadre por cuentas de
-  cada centro, y un aviso claro cuando un centro entra **vacío** —todo en 0— pero el
-  consolidado sí trae datos, señal típica de haber cargado el archivo mensual equivocado). Los
-  avisos salen en un banner **expandible** (`NoticeBanner`, con "Ver detalle" para leer cada
-  mensaje) tanto en la vista Datos como en el preview del modal de carga.
-- **Mapeo genérico:** el parser lee el esqueleto (preámbulo → cabecera → filas
-  `código, nombre, valores` → fila Utilidad), no un plan de cuentas fijo. Las sumas de
-  cuentas padre y la fila "Utilidad o Pérdida" (raíces 4 − raíces 5) **siempre se
-  recalculan desde las cuentas de movimiento**; los valores del archivo solo validan el
-  parseo (los descuadres se avisan).
+- **Un registry de estrategias, no un `if`.** `lib/profit-loss/upload/registry.ts` resuelve
+  cada archivo probando una lista **ordenada** de estrategias y quedándose con la primera que
+  detecta su forma (nunca el nombre); ninguna acierta → el error enumera los formatos
+  aceptados, leídos del propio registry (también alimenta el `ⓘ` de "Archivos aceptados").
+  Agregar un sistema contable nuevo es un archivo de estrategia + una línea en la lista, sin
+  tocar el resto.
+  - `monthly-centers.ts` — el reporte mensual por centros de costo (ver abajo).
+  - `single-statement.ts` — envuelve el `parse.ts` de siempre (estado sin centros, mensual o
+    anual), sin cambios de comportamiento.
+  - `app-workbook.ts` — reconoce el «Excel completo» que la propia app descarga (por su hoja de
+    metadatos oculta) y reconstruye el workspace completo.
+- **Carga mensual e incremental por centros.** Un archivo = **un mes** = todos los centros a la
+  vez: la rejilla es `GENERAL` + una columna por centro + `SIN CENTRO DE COSTO` (la misma que
+  siempre exporta el sistema contable), y el archivo **no trae fecha** — el periodo sale del
+  **nombre del archivo**, patrón obligatorio `PyG-AAAA-MM[-libre].(xlsx|xls)`. Subir el archivo
+  de junio escribe la columna 5 de cada centro y **no toca ningún otro mes**; un centro o una
+  cuenta nuevos se dan de alta con ceros en los meses anteriores. Se pueden soltar varios meses
+  de golpe: se parsean **todos antes de escribir nada**, se validan como conjunto (un solo año,
+  sin meses repetidos) y se aplican en una sola escritura.
+- **Las ediciones sobreviven la recarga.** Volver a subir un mes reemplaza los valores del
+  archivo pero conserva íntegra la capa de ajustes y comentarios — nunca se limpia `edits`. Si
+  un ajuste queda encima de un valor que el archivo cambió, la carga lo reporta como
+  **conflicto** en el resumen (centro, cuenta, mes, valor anterior/nuevo, valor del ajuste), con
+  la opción de quitarlo ahí mismo; el ajuste sigue aplicándose mientras tanto.
+- **Cobertura explícita, no adivinada.** El workspace declara qué meses cargó
+  (`WorkspaceMeta.loadedMonths`): un mes nunca cargado y un mes cargado en cero producen los
+  mismos ceros pero significan cosas distintas, y solo el primero se rinde vacío en Datos y
+  descubierto en Gráficos/Análisis.
+- **Avisos, nunca bloqueos:** cuadre contra `GENERAL` (un aviso por mes con cuántas cuentas no
+  cuadran, nunca uno por cuenta) y un aviso de **archivo acumulado** — el sistema contable puede
+  exportar el año entero en vez del mes, y la forma es idéntica; se detecta comparando contra el
+  mes anterior cargado (≥20 pares que suben, ≤5 % que bajan) y solo avisa, no corrige.
+- **Un año por workspace.** Cargar un archivo de otro año pide confirmación explícita
+  (avisando cuántos ajustes y comentarios se descartan); mezclar años en una misma carga se
+  rechaza nombrando ambos.
+- **Mapeo genérico:** cada estrategia lee su propio esqueleto (preámbulo → cabecera → filas
+  `código, nombre, valores`), no un plan de cuentas fijo. Las sumas de cuentas padre y la fila
+  "Utilidad o Pérdida" (raíces 4 − raíces 5) **siempre se recalculan desde las cuentas de
+  movimiento**.
 - **Frecuencias:** el archivo define la frecuencia base y la vista puede agregar hacia
   arriba (mensual → trimestral → semestral → anual, sumas de períodos); nunca se
   desagrega. Un archivo anual queda bloqueado en Anual.
-- **Persistencia:** IndexedDB (Dexie). El dataset original y las ediciones/comentarios
-  viven en tablas separadas — la comparación "original vs editado" llegará sin
-  migraciones. Subir otro archivo reemplaza todo (con confirmación si hay ediciones); si
-  el archivo fue exportado por la app, sus **comentarios se restauran** al recargarlo.
+- **Persistencia:** IndexedDB (Dexie). Los valores de archivo y las ediciones/comentarios viven
+  en tablas separadas. Un mes nuevo se aplica con `applyMonthSlice` (nunca toca `edits`); un
+  estado único o un «Excel completo» **reemplazan** el workspace entero (con confirmación si hay
+  ediciones), igual que antes.
 - **Decisión — edición solo en vista mensual:** editar valores y comentar celdas solo
   está disponible en la frecuencia Mensual, porque una celda agregada cubre varios
-  meses y la edición sería ambigua. Si a futuro se quiere editar en vistas agregadas
-  (p. ej. prorrateando entre meses), esta decisión es el punto a revisitar.
+  meses y la edición sería ambigua.
 
 ## Descarga de Excel (PyG › Datos)
 
-- **Dos exportaciones** (menú "Descargar Excel"), generadas con **`exceljs`** (formato +
-  notas de celda, que SheetJS no escribe), cargada por _dynamic import_ para no engordar el
-  bundle inicial:
+Generadas con **`exceljs`** (formato + notas de celda, que SheetJS no escribe), cargado por
+_dynamic import_ para no engordar el bundle inicial. El menú cambia por modo:
+
+- **Modo multi-centro** (menú "Descargar Excel"):
+  - **Excel completo:** el workspace entero — una hoja **Consolidado** (suma de todos los
+    centros, Sin centro de costo incluido, con los ajustes ya aplicados) más una hoja por
+    centro; los meses no cargados quedan **vacíos**, no en cero. Se **vuelve a subir tal
+    cual**: una hoja de metadatos oculta (`_liderplus_workspace_meta`, `veryHidden`) lleva el
+    año, los meses cargados y el **valor de archivo original** de cada celda ajustada — así el
+    reimport separa la base del ajuste en vez de hornearlo. Nombre: `PyG-<año>-completo.xlsx`,
+    deliberadamente fuera del patrón mensual para que nunca se lea como un mes.
+  - **Un mes en crudo:** el mes más reciente cargado, en la misma rejilla del sistema contable
+    (`GENERAL` + centros + Sin centro de costo) con los ajustes aplicados y `GENERAL` como la
+    suma de las demás columnas. Nombre: `PyG-<año>-<mes>-liderboard.xlsx`, dentro del patrón
+    mensual para que reentre sin renombrarlo. No hay plantilla vacía en este modo: llenar a
+    mano doce meses por centro no es un flujo real.
+- **Modo estado único** (botón plano, una sola opción):
   - **Excel con tus datos:** el Estado de Resultados con los **valores editados** y los
     **comentarios** actuales, con formato (preámbulo, cabecera y cuentas padre en negrita,
     sangría por nivel, moneda a 2 decimales, columna Total, paneles congelados). Cada celda
@@ -394,10 +433,7 @@ caso es general y va en la API, no en tu módulo.
   conservan y los **comentarios se restauran**. El re-import usa una **hoja de metadatos
   oculta** (`_liderplus_meta`, `veryHidden`) con el texto exacto del comentario — no se
   parsea la prosa de las notas. Los value-edits no se "reviven": los valores editados quedan
-  como nueva base. Un estado **segmentado** exporta su sección 6 y sus cuatro filas de resumen,
-  y se re-sube sin duplicar nada: la raíz 6 ya presente es en sí misma la marca de "ya
-  segmentado". El cuadre lee la **última** fila de utilidad —la del ejercicio—, y «Total Gastos
-  del Ejercicio» se ignora por no ser ni cuenta ni utilidad.
+  como nueva base.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
 
 ## Ocupaciones (análisis hotelero)
