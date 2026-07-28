@@ -140,7 +140,7 @@ export function DatosTable({
               <tbody>
                 {rows.map((flat) => (
                   <DatosTableRow
-                    key={flat.row.code || "resultado"}
+                    key={flat.row.code || flat.row.resultKind}
                     row={flat.row}
                     hasChildren={flat.hasChildren}
                     isCollapsed={flat.isCollapsed}

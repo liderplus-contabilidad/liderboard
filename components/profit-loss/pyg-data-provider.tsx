@@ -10,7 +10,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { db, getWorkspaceMeta, replaceWorkspace, saveCellEdit } from "@/lib/profit-loss/db";
+import {
+  db,
+  getWorkspaceMeta,
+  replaceWorkspace,
+  saveCellEdits,
+  segmentWorkspace,
+} from "@/lib/profit-loss/db";
+import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
 import {
   allowedFrequencies,
   applyEditsToLeafAccounts,
@@ -73,6 +80,12 @@ interface PygDataValue {
   /** The resolved center — Consolidado when none or several are marked. */
   activeCenterId: string;
   commitWorkspace: (built: BuiltWorkspace) => Promise<void>;
+  /** Whether the workspace already carries the non-operating block. Segmenting is one-way. */
+  segmented: boolean;
+  /** Whether some dataset still has a 5.2 subtree to split out. */
+  segmentable: boolean;
+  /** «Segmentar utilidad» — resolves with the datasets it could not segment, by name. */
+  segment: () => Promise<string[]>;
   /** Workspace-level cuadre warnings (from meta). */
   warnings: string[];
   saveEdit: (
@@ -281,16 +294,24 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       if (!dataset?.id || !activeView?.editable) {
         return;
       }
-      await saveCellEdit({
-        datasetId: dataset.id,
-        code,
-        monthIndex,
-        ...(value !== undefined ? { value } : {}),
-        ...(comment ? { comment } : {}),
-      });
+      const twin = twinWriteFor(dataset.accounts, edits, code, monthIndex, value);
+      await saveCellEdits([
+        {
+          datasetId: dataset.id,
+          code,
+          monthIndex,
+          ...(value !== undefined ? { value } : {}),
+          ...(comment ? { comment } : {}),
+        },
+        ...(twin ? [{ datasetId: dataset.id, ...twin }] : []),
+      ]);
     },
-    [dataset?.id, activeView?.editable],
+    [dataset?.id, dataset?.accounts, activeView?.editable, edits],
   );
+
+  const segmented = useMemo(() => datasets.some((d) => isSegmented(d.accounts)), [datasets]);
+  const segmentable = useMemo(() => datasets.some((d) => canSegment(d.accounts)), [datasets]);
+  const segment = useCallback(async () => (await segmentWorkspace()).skipped, []);
 
   const value = useMemo<PygDataValue>(
     () => ({
@@ -303,6 +324,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       views,
       activeCenterId: resolvedActiveId,
       commitWorkspace,
+      segmented,
+      segmentable,
+      segment,
       warnings: metaRow?.warnings ?? [],
       saveEdit,
       deepestLevel: deepest,
@@ -330,6 +354,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       views,
       resolvedActiveId,
       commitWorkspace,
+      segmented,
+      segmentable,
+      segment,
       metaRow?.warnings,
       saveEdit,
       deepest,

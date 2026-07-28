@@ -9,9 +9,12 @@ import {
   computeRollups,
   mergeCenters,
   periodLabels,
+  planSummaries,
   toDatosGrid,
 } from "./derive";
+import type { DatosRow } from "./datos-types";
 import { MONTHLY_ACCOUNTS, MONTHLY_RESULT } from "./parse.fixtures";
+import { segmentAccounts } from "./segment";
 import type { AccountRow, CellEdit, PygDataset } from "./types";
 
 function edit(partial: Partial<CellEdit> & Pick<CellEdit, "code" | "monthIndex">): CellEdit {
@@ -90,17 +93,120 @@ describe("computeResult", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("excludes roots outside 4*/5* with a warning", () => {
+  it("excludes roots outside 4*/5*/6* with a warning", () => {
     const rows: AccountRow[] = [
       { code: "4", name: "Ingresos", values: [100] },
       { code: "5", name: "Gastos", values: [30] },
-      { code: "6", name: "Otras cuentas", values: [999] },
+      { code: "9", name: "Otras cuentas", values: [999] },
     ];
     const { roots } = buildAccountTree(rows);
     const { values, warnings } = computeResult(roots);
     expect(values).toEqual([70]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("6");
+    expect(warnings[0]).toContain("9");
+  });
+
+  it("reports no split while the statement carries no non-operating block", () => {
+    const { roots } = buildAccountTree(MONTHLY_ACCOUNTS);
+    const result = computeResult(computeRollups(roots));
+    expect(result.operating).toEqual(result.values);
+    expect(result.nonOperating).toBeNull();
+    expect(result.expenses).toBeNull();
+  });
+
+  it("splits the result once the non-operating block exists", () => {
+    const rows: AccountRow[] = [
+      { code: "4", name: "Ingresos", values: [100] },
+      { code: "5", name: "Gastos", values: [30] },
+      { code: "6", name: "Gastos No Operacionales", values: [12] },
+    ];
+    const { roots } = buildAccountTree(rows);
+    const result = computeResult(roots);
+
+    expect(result.operating).toEqual([70]);
+    expect(result.nonOperating).toEqual([-12]);
+    expect(result.expenses).toEqual([42]);
+    expect(result.values).toEqual([58]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("keeps the exercise's result fixed: reclassifying only redistributes it", () => {
+    const before = computeResult(
+      buildAccountTree([
+        { code: "4", name: "Ingresos", values: [100] },
+        { code: "5", name: "Gastos", values: [30] },
+      ]).roots,
+    );
+    const after = computeResult(
+      buildAccountTree([
+        { code: "4", name: "Ingresos", values: [100] },
+        { code: "5", name: "Gastos", values: [18] },
+        { code: "6", name: "Gastos No Operacionales", values: [12] },
+      ]).roots,
+    );
+
+    expect(after.values).toEqual(before.values);
+    expect(after.operating).toEqual([82]);
+  });
+});
+
+describe("planSummaries", () => {
+  const summary = (resultKind: DatosRow["resultKind"], anchorCode?: string): DatosRow => ({
+    code: "",
+    name: String(resultKind),
+    level: 1,
+    isResult: true,
+    resultKind,
+    ...(anchorCode ? { anchorCode } : {}),
+    cells: [],
+  });
+  const account = (code: string): DatosRow => ({ code, name: code, level: 1, cells: [] });
+  const rows = [
+    account("4"),
+    account("5"),
+    account("6"),
+    summary("operacional", "5"),
+    summary("no-operacional", "6"),
+    summary("total-gastos"),
+    summary("ejercicio"),
+  ];
+  const roots = new Set(["4", "5", "6"]);
+
+  it("closes each block with its own summary and the grid with the rest", () => {
+    const { byAnchor, trailing } = planSummaries(rows, false, roots);
+
+    expect(byAnchor.get("5")?.map((row) => row.resultKind)).toEqual(["operacional"]);
+    expect(byAnchor.get("6")?.map((row) => row.resultKind)).toEqual(["no-operacional"]);
+    expect(trailing.map((row) => row.resultKind)).toEqual(["total-gastos", "ejercicio"]);
+  });
+
+  it("sends every summary to the tail once a sort reorders the roots", () => {
+    const { byAnchor, trailing } = planSummaries(rows, true, roots);
+
+    expect(byAnchor.size).toBe(0);
+    expect(trailing).toHaveLength(4);
+  });
+
+  it("keeps a summary whose anchor the account filter hid, at the tail", () => {
+    const { byAnchor, trailing } = planSummaries(rows, false, new Set(["4", "5"]));
+
+    expect(byAnchor.get("5")?.map((row) => row.resultKind)).toEqual(["operacional"]);
+    expect(trailing.map((row) => row.resultKind)).toEqual([
+      "no-operacional",
+      "total-gastos",
+      "ejercicio",
+    ]);
+  });
+
+  it("leaves an unsegmented grid's single summary at the tail", () => {
+    const { byAnchor, trailing } = planSummaries(
+      [account("4"), account("5"), summary("ejercicio")],
+      false,
+      roots,
+    );
+
+    expect(byAnchor.size).toBe(0);
+    expect(trailing.map((row) => row.resultKind)).toEqual(["ejercicio"]);
   });
 });
 
@@ -155,6 +261,27 @@ function monthlyDataset(): PygDataset {
     accounts: MONTHLY_ACCOUNTS,
     resultFromFile: MONTHLY_RESULT,
     warnings: [],
+  };
+}
+
+/**
+ * A statement carrying a 5.2 subtree, already segmented — the shape Datos renders after the
+ * «Segmentar utilidad» button ran. Only Enero is set, so every summary is hand-checkable:
+ * leaves are 4 (130), 5.1 (60) and 5.2.1.1 (30), which rolls 5 up to 90.
+ */
+function segmentedDataset(): PygDataset {
+  const month = (value: number) => [value, ...Array.from({ length: 11 }, () => 0)];
+  return {
+    ...monthlyDataset(),
+    accounts: segmentAccounts([
+      { code: "4", name: "Ingresos", values: month(130) },
+      { code: "5", name: "Costos y Gastos", values: month(90) },
+      { code: "5.1", name: "Gastos Operativos", values: month(60) },
+      { code: "5.2", name: "Gastos Administrativos", values: month(30) },
+      { code: "5.2.1", name: "Servicios", values: month(30) },
+      { code: "5.2.1.1", name: "Energía Eléctrica", values: month(30) },
+    ]),
+    resultFromFile: month(40),
   };
 }
 
@@ -262,6 +389,52 @@ describe("toDatosGrid", () => {
     expect(grid.months).toEqual(["Total"]);
     expect(flattenGrid(grid).get("4")?.cells).toHaveLength(1);
     expect(flattenGrid(grid).get("4")?.cells[0]?.value).toBe(355);
+  });
+
+  it("closes on a single «Utilidad o Pérdida» while unsegmented", () => {
+    const grid = toDatosGrid(monthlyDataset(), [], "mensual");
+    const results = grid.rows.filter((row) => row.isResult);
+    expect(results.map((row) => row.name)).toEqual(["Utilidad o Pérdida"]);
+    expect(results[0].resultKind).toBe("ejercicio");
+  });
+
+  it("closes on the four summaries once segmented, each anchored to its block", () => {
+    const dataset = segmentedDataset();
+    const grid = toDatosGrid(dataset, [], "mensual");
+    const results = grid.rows.filter((row) => row.isResult);
+
+    expect(results.map((row) => [row.name, row.anchorCode])).toEqual([
+      ["Utilidad Operacional", "5"],
+      ["Utilidad No Operacional", "6"],
+      ["Total Gastos del Ejercicio", undefined],
+      ["Utilidad del Ejercicio", undefined],
+    ]);
+    // Nothing typed yet: the block is at 0, so the exercise still reads as the operating result.
+    const value = (kind: string) => results.find((row) => row.resultKind === kind)?.cells[0]?.value;
+    expect(value("operacional")).toBe(40);
+    expect(value("no-operacional")).toBe(0);
+    expect(value("total-gastos")).toBe(90);
+    expect(value("ejercicio")).toBe(40);
+  });
+
+  it("moves the split, not the exercise, when a non-operating amount is typed", () => {
+    // The pair as `twinWriteFor` writes it: 10 into 6.1.1, the same 10 out of its twin 5.2.1.1.
+    const grid = toDatosGrid(
+      segmentedDataset(),
+      [
+        { datasetId: "d1", code: "6.1.1", monthIndex: 0, value: 10, updatedAt: 0 },
+        { datasetId: "d1", code: "5.2.1.1", monthIndex: 0, value: 20, updatedAt: 0 },
+      ],
+      "mensual",
+    );
+    const value = (kind: string) =>
+      grid.rows.find((row) => row.resultKind === kind)?.cells[0]?.value;
+
+    expect(value("operacional")).toBe(50);
+    expect(value("no-operacional")).toBe(-10);
+    expect(value("total-gastos")).toBe(90);
+    expect(value("ejercicio")).toBe(40);
+    expect(grid.utilidad?.label).toContain("Utilidad");
   });
 });
 

@@ -36,10 +36,10 @@ import {
   amountsAt,
   compositionQuery,
   excludedNote,
-  EXPENSE_ROOT,
+  expenseRootsOf,
   intersectWithMarked,
   lastCoveredIndex,
-  leavesOf,
+  leavesOfAny,
   topByMagnitude,
   topEntries,
 } from "@/lib/profit-loss/charts/presets";
@@ -80,7 +80,7 @@ export function AnalisisView() {
   // `toPctOfRevenue` takes the engine's own mutable array; the context keeps its list readonly.
   const sources = useMemo<AnalyticsSource[]>(() => [...context.sources], [context.sources]);
 
-  const expenseLeaves = leavesOf(source, EXPENSE_ROOT);
+  const expenseLeaves = leavesOfAny(source, expenseRootsOf(source));
   const expenseCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = useMemo(
     () => runQuery(compositionQuery(expenseCodes, context, { periods: filters.periods })),

@@ -130,6 +130,26 @@ average of active periods, best period, share of parent, last-period variation, 
 inherits the engine's coverage (a `null` never counts as `0`), follows the active frequency (no
 chart in Anual), reuses `barOption`+`ChartCard`, and skips only the derived «Utilidad» row.
 
+**Segmentar utilidad** splits the statement into operating and non-operating. A button under the
+Datos card (`segment-actions.tsx`) copies the **5.2** subtree as root **6**, re-levelling the code
+(`5.2.1.1 → 6.1.1`), keeping each account's name and zeroing every value, across EVERY dataset in
+one transaction (`segmentWorkspace` in `db.ts`; the Consolidado re-sums itself). It is ONE-WAY, so
+the control disappears once there is nothing left to segment instead of sitting disabled — and the
+presence of root 6 IS the flag, so there is no dataset field to migrate. `lib/profit-loss/
+segment.ts` (pure + tested) owns the rules: the 5.2→6 mapping, `twinCode` (6.1.1 ↔ 5.2.1.1) and
+`twinWriteFor`, which is what makes the pair hold — writing a non-operating amount ALSO writes its
+twin inside 5.2, discounted **by difference** against what the twin holds right now, so a manual
+correction on 5.2 survives and re-typing a cell moves only the delta. Section 5 keeps behaving
+exactly as before (still editable); nothing clamps, so over-classifying leaves the twin negative.
+`computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
+`toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
+`anchorCode`d to the block it closes, an anchor `flattenSorted` honors only while unsorted (a
+month sort reorders the roots, so every summary falls to the end). Because 6 takes what 5 gives
+up, **the exercise's result never moves** — only its split does. `rootSign` in `derive.ts` is the
+ONE sign definition (4 adds, 5 and 6 subtract) and `analytics/series.ts` re-exports it, so the
+cascade follows; `expenseRootsOf` in `charts/presets.ts` reads the expense roots off the SOURCE so
+the tiles and the ranking don't shrink by whatever was reclassified.
+
 **Ocupaciones (hotel occupancy).** `lib/occupancy/` is the pure layer — `parse.ts` reads the
 `OCUPACION_*.xlsx` exports (month blocks stacked on one sheet), `derive.ts` builds the daily
 grid, `export.ts` writes a file that re-imports cleanly, `db.ts` persists in Dexie. **A record

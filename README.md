@@ -223,6 +223,28 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   no cuenta como movimiento. Sigue la **frecuencia activa** (en Anual, sin gráfica). Las reglas
   viven en `lib/profit-loss/charts/account-detail.ts` (puro, testeado); el panel solo formatea.
   Aplica a todas las cuentas salvo «Utilidad o Pérdida», que es derivada.
+- **Segmentar utilidad** (botón bajo la tarjeta, solo en Datos): parte el estado en operacional
+  y no operacional. Copia el subárbol **5.2** como la raíz **6** de gastos no operacionales,
+  re-nivelando el código (`5.2.1.1 → 6.1.1`) y conservando el nombre de cada cuenta, con todos
+  los montos en **0**; alcanza a **todos los centros a la vez** en una sola transacción (el
+  Consolidado se recalcula solo, porque suma hojas). Es **de un solo sentido** —para volver
+  atrás se re-suben los archivos—, así que el control **desaparece** en cuanto no hay nada que
+  segmentar, en vez de quedarse deshabilitado. Su rastro es la sección 6 misma: la presencia de
+  la raíz 6 **es** el flag, no hay campo de dataset que migrar.
+- **El par 6.x ↔ 5.2.x.** Escribir en una cuenta de la sección 6 hace **dos escrituras**: el
+  monto en la 6 y el mismo monto **de menos** en su gemela dentro de 5.2, **por diferencia**
+  contra lo que la gemela tenga en ese momento (respeta una corrección manual previa, y
+  re-editar `25 → 40` mueve solo los 15). La sección 5 **no cambia su comportamiento**: sigue
+  editándose igual que siempre. Nada topa en cero: clasificar de más deja la gemela negativa,
+  que la tabla ya sabe mostrar. Las reglas viven en `lib/profit-loss/segment.ts` (puro, testeado).
+- **Cómo cierra el estado.** Sin segmentar, una sola fila **«Utilidad o Pérdida»**, exactamente
+  como antes. Segmentado, cuatro: **Utilidad Operacional** (Σ4 − Σ5) tras la sección 5,
+  **Utilidad No Operacional** (−Σ6) tras la sección 6, y **Total Gastos del Ejercicio** (Σ5 + Σ6)
+  y **Utilidad del Ejercicio** (Σ4 − Σ5 − Σ6) cerrando la grilla. Como la 6 descuenta de la 5,
+  **la utilidad del ejercicio no se mueve al reclasificar** — lo que se mueve es el reparto, y el
+  badge del header sigue mostrándola. Cada resumen se ancla tras su bloque solo en el orden
+  natural: con un orden por mes activo las cuatro caen al final, porque ahí las secciones se
+  reacomodan y "después de la sección 5" deja de significar algo.
 - Rendimiento: filas memoizadas (`React.memo`), derivaciones con `useMemo` y
   `content-visibility` en las filas; sin virtualización (aún no hace falta).
 
@@ -279,6 +301,11 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   daltonismo y **no se ciclan**: la consulta topa en 8 series y el motor avisa cuántas descartó.
   Verde y rojo quedan **reservados** para el signo de una variación, y siempre con flecha y
   valor con signo — nunca color solo.
+- **Un gasto reclasificado sigue siendo un gasto.** Las tarjetas leen **todas** las raíces de
+  gasto que el estado tenga (`expenseRootsOf`, leído del propio origen y no declarado), así que
+  segmentar no encoge el tile de Costos y Gastos ni el ranking por lo que se movió a la sección
+  6, y la Utilidad de Gráficos sigue coincidiendo con el badge de Datos. La cascada y el signo
+  contable lo heredan de `rootSign` en `derive.ts`, la **única** definición: 4 suma, 5 y 6 restan.
 - **Cada tarjeta tiene su gemela en tabla** ("Ver como tabla"): las mismas series como filas y
   los periodos como columnas, con los valores **ya transformados** (índice 100, variación, YTD)
   y el periodo sin cobertura en blanco. Las advertencias del motor salen **completas** antes de
@@ -367,7 +394,10 @@ caso es general y va en la API, no en tu módulo.
   conservan y los **comentarios se restauran**. El re-import usa una **hoja de metadatos
   oculta** (`_liderplus_meta`, `veryHidden`) con el texto exacto del comentario — no se
   parsea la prosa de las notas. Los value-edits no se "reviven": los valores editados quedan
-  como nueva base.
+  como nueva base. Un estado **segmentado** exporta su sección 6 y sus cuatro filas de resumen,
+  y se re-sube sin duplicar nada: la raíz 6 ya presente es en sí misma la marca de "ya
+  segmentado". El cuadre lee la **última** fila de utilidad —la del ejercicio—, y «Total Gastos
+  del Ejercicio» se ignora por no ser ni cuenta ni utilidad.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
 
 ## Ocupaciones (análisis hotelero)

@@ -13,6 +13,7 @@ import { flattenSorted } from "./datos-utils";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
 import { usePygData } from "./pyg-data-provider";
+import { SegmentActions } from "./segment-actions";
 
 interface EditingState extends EditorAnchor {
   code: string;
@@ -191,6 +192,8 @@ export function DatosView() {
         onEditCell={onEditCell}
         onOpenDetail={onOpenDetail}
       />
+
+      <SegmentActions />
 
       {detailCode !== null && <AccountDetailPanel code={detailCode} onClose={onCloseDetail} />}
 

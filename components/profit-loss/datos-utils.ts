@@ -5,6 +5,7 @@
  */
 import { formatCurrency } from "@/lib/format";
 import type { DatosRow, DatosSort } from "@/lib/profit-loss/datos-types";
+import { planSummaries } from "@/lib/profit-loss/derive";
 
 /** A tree row, flattened for rendering, with the display flags a row needs. */
 export interface FlatRow {
@@ -47,9 +48,9 @@ function compareRows(a: DatosRow, b: DatosRow, sort: DatosSort): number {
 }
 
 /**
- * Depth-first flatten, honoring collapsed nodes and the active sort. Sorting reorders
- * siblings within each parent (never across levels). Result rows are pinned to the end
- * regardless of sort so "Utilidad o Pérdida" always closes the grid.
+ * Flatten rows depth-first, respecting collapsed nodes and sort. Sorting only affects
+ * siblings within the same parent. Anchored summary rows close their root unless sorting
+ * or filtering applies. Unanchored summaries go at the end.
  */
 export function flattenSorted(
   rows: DatosRow[],
@@ -58,23 +59,29 @@ export function flattenSorted(
 ): FlatRow[] {
   const out: FlatRow[] = [];
   const normal = rows.filter((row) => !row.isResult);
-  const results = rows.filter((row) => row.isResult);
+  const summary = (row: DatosRow): FlatRow => ({ row, hasChildren: false, isCollapsed: false });
+  const { byAnchor, trailing } = planSummaries(
+    rows,
+    sort !== null,
+    new Set(normal.map((row) => row.code)),
+  );
 
-  const walk = (list: DatosRow[]) => {
+  const walk = (list: DatosRow[], top: boolean) => {
     const ordered = sort ? [...list].sort((a, b) => compareRows(a, b, sort)) : list;
     for (const row of ordered) {
       const hasChildren = Boolean(row.children?.length);
       const isCollapsed = collapsed.has(row.code);
       out.push({ row, hasChildren, isCollapsed });
       if (hasChildren && !isCollapsed && row.children) {
-        walk(row.children);
+        walk(row.children, false);
+      }
+      if (top) {
+        out.push(...(byAnchor.get(row.code) ?? []).map(summary));
       }
     }
   };
 
-  walk(normal);
-  for (const row of results) {
-    out.push({ row, hasChildren: false, isCollapsed: false });
-  }
+  walk(normal, true);
+  out.push(...trailing.map(summary));
   return out;
 }

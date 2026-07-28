@@ -3,7 +3,7 @@
  * returns comparable series: coverage already applied, container totals already computed, and
  * a hard cap so a wide selection degrades explicitly instead of silently.
  */
-import { aggregate } from "../derive";
+import { aggregate, rootSign } from "../derive";
 import { comparePeriodRefs, periodsAlign, periodsForYear } from "./period";
 import { aggregateCoverage, canReexpress } from "./source";
 import type {
@@ -23,13 +23,12 @@ import type {
 export const MAX_SERIES = 24;
 
 /**
- * The single definition of accounting sign — the same rule `computeResult` applies when it
- * subtracts costs instead of flipping them. Series always carry the file's own sign; applying
- * this one is an explicit decision of whoever mixes income and expenses on one axis.
+ * The single definition of accounting sign, owned by `derive` — the same rule `computeResult`
+ * applies when it subtracts costs instead of flipping them, non-operating block included. Series
+ * always carry the file's own sign; applying this one is an explicit decision of whoever mixes
+ * income and expenses on one axis.
  */
-export function signFor(code: string): 1 | -1 | 0 {
-  return code.startsWith("4") ? 1 : code.startsWith("5") ? -1 : 0;
-}
+export { rootSign as signFor };
 
 export function buildSeries(sources: AnalyticsSource[], query: SeriesQuery): SeriesBundle {
   const byCenterYear = new Map<string, AnalyticsSource>();
