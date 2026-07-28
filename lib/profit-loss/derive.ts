@@ -159,13 +159,16 @@ export function rootSign(code: string): 1 | -1 | 0 {
   return 0;
 }
 
-/** What the statement closes on, split in two once a non-operating block exists. */
+/**
+ * What the statement closes on. The two block results read the SAME income against their own
+ * expenses — they are parallel readings, NOT two halves that add up to `values`.
+ */
 export interface StatementResult {
   /** Σ4 − Σ5 − Σ6: the result of the exercise — what the file's own row must match. */
   values: number[];
   /** Σ4 − Σ5. Identical to `values` while the statement has no non-operating block. */
   operating: number[];
-  /** −Σ6, or null when the statement was never segmented. */
+  /** Σ4 − Σ6 — the same income read against the non-operating block; null when unsegmented. */
   nonOperating: number[] | null;
   /** Σ5 + Σ6, or null when the statement was never segmented. */
   expenses: number[] | null;
@@ -174,8 +177,8 @@ export interface StatementResult {
 
 /**
  * The statement's results. Segmenting only ever REDISTRIBUTES: what a 6 account takes, its twin
- * inside 5.2 gives up, so `values` is the same number before and after — the operating result is
- * what moves. Call AFTER computeRollups so root values are trustworthy.
+ * inside 5.2 gives up, so `values` is the same number before and after — what moves is each
+ * block's own result. Call AFTER computeRollups so root values are trustworthy.
  */
 export function computeResult(roots: AccountNode[]): StatementResult {
   const warnings: string[] = [];
@@ -207,7 +210,9 @@ export function computeResult(roots: AccountNode[]): StatementResult {
   return {
     values,
     operating,
-    nonOperating: segmented ? nonOperatingCost.map((value) => (value === 0 ? 0 : -value)) : null,
+    // The SAME income, read against the other block — not the negation of it. The two results
+    // are parallel readings, so they are not meant to add up to `values`.
+    nonOperating: segmented ? income.map((value, col) => value - nonOperatingCost[col]) : null,
     expenses: segmented ? operatingCost.map((value, col) => value + nonOperatingCost[col]) : null,
     warnings,
   };

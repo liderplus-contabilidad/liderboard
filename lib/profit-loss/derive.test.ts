@@ -124,10 +124,24 @@ describe("computeResult", () => {
     const result = computeResult(roots);
 
     expect(result.operating).toEqual([70]);
-    expect(result.nonOperating).toEqual([-12]);
+    // The SAME income against the other block — 100 − 12 — not the negation of the block.
+    expect(result.nonOperating).toEqual([88]);
     expect(result.expenses).toEqual([42]);
     expect(result.values).toEqual([58]);
     expect(result.warnings).toEqual([]);
+  });
+
+  it("reads both blocks against the same income, so they do not add up to the exercise", () => {
+    const { roots } = buildAccountTree([
+      { code: "4", name: "Ingresos", values: [100] },
+      { code: "5", name: "Gastos", values: [30] },
+      { code: "6", name: "Gastos No Operacionales", values: [12] },
+    ]);
+    const result = computeResult(roots);
+
+    expect(result.operating[0] + (result.nonOperating as number[])[0]).not.toBe(result.values[0]);
+    // Each row is income minus ITS OWN block; the exercise is income minus every block.
+    expect(result.values).toEqual([100 - 30 - 12]);
   });
 
   it("keeps the exercise's result fixed: reclassifying only redistributes it", () => {
@@ -441,10 +455,11 @@ describe("toDatosGrid", () => {
       ["Total Gastos del Ejercicio", undefined],
       ["Utilidad del Ejercicio", undefined],
     ]);
-    // Nothing typed yet: the block is at 0, so the exercise still reads as the operating result.
+    // Nothing typed yet: the block is at 0, so the exercise still reads as the operating result
+    // and the non-operating row is the untouched income (130 − 0).
     const value = (kind: string) => results.find((row) => row.resultKind === kind)?.cells[0]?.value;
     expect(value("operacional")).toBe(40);
-    expect(value("no-operacional")).toBe(0);
+    expect(value("no-operacional")).toBe(130);
     expect(value("total-gastos")).toBe(90);
     expect(value("ejercicio")).toBe(40);
   });
@@ -463,7 +478,8 @@ describe("toDatosGrid", () => {
       grid.rows.find((row) => row.resultKind === kind)?.cells[0]?.value;
 
     expect(value("operacional")).toBe(50);
-    expect(value("no-operacional")).toBe(-10);
+    // Income (130) against the non-operating block (10) — the same income the row above read.
+    expect(value("no-operacional")).toBe(120);
     expect(value("total-gastos")).toBe(90);
     expect(value("ejercicio")).toBe(40);
     expect(grid.utilidad?.label).toContain("Utilidad");

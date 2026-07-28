@@ -244,10 +244,12 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   que la tabla ya sabe mostrar. Las reglas viven en `lib/profit-loss/segment.ts` (puro, testeado).
 - **Cómo cierra el estado.** Sin segmentar, una sola fila **«Utilidad o Pérdida»**, exactamente
   como antes. Segmentado, cuatro: **Utilidad Operacional** (Σ4 − Σ5) tras la sección 5,
-  **Utilidad No Operacional** (−Σ6) tras la sección 6, y **Total Gastos del Ejercicio** (Σ5 + Σ6)
-  y **Utilidad del Ejercicio** (Σ4 − Σ5 − Σ6) cerrando la grilla. Como la 6 descuenta de la 5,
-  **la utilidad del ejercicio no se mueve al reclasificar** — lo que se mueve es el reparto, y el
-  badge del header sigue mostrándola. Cada resumen se ancla tras su bloque solo en el orden
+  **Utilidad No Operacional** (Σ4 − Σ6) tras la sección 6, y **Total Gastos del Ejercicio**
+  (Σ5 + Σ6) y **Utilidad del Ejercicio** (Σ4 − Σ5 − Σ6) cerrando la grilla. Las dos primeras leen
+  **los mismos ingresos** contra su propio bloque de gastos: son lecturas paralelas, **no dos
+  mitades que suman** la del ejercicio. Como la 6 descuenta de la 5, **la utilidad del ejercicio
+  no se mueve al reclasificar** — lo que se mueve es el resultado de cada bloque, y el badge del
+  header sigue mostrando la del ejercicio. Cada resumen se ancla tras su bloque solo en el orden
   natural: con un orden por mes activo las cuatro caen al final, porque ahí las secciones se
   reacomodan y "después de la sección 5" deja de significar algo.
 - Rendimiento: filas memoizadas (`React.memo`), derivaciones con `useMemo` y

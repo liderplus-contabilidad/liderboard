@@ -158,8 +158,11 @@ exactly as before (still editable); nothing clamps, so over-classifying leaves t
 `computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
 `toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
 `anchorCode`d to the block it closes, an anchor `flattenSorted` honors only while unsorted (a
-month sort reorders the roots, so every summary falls to the end). Because 6 takes what 5 gives
-up, **the exercise's result never moves** — only its split does. `rootSign` in `derive.ts` is the
+month sort reorders the roots, so every summary falls to the end). The two block results read the
+SAME income against their own expenses (`operating` = Σ4 − Σ5, `nonOperating` = Σ4 − Σ6) — they are
+PARALLEL readings and deliberately do NOT add up to `values`; the accountant asked for it that way
+after seeing the netted version. Because 6 takes what 5 gives up, **the exercise's result never
+moves** — only each block's does. `rootSign` in `derive.ts` is the
 ONE sign definition (4 adds, 5 and 6 subtract) and `analytics/series.ts` re-exports it, so the
 cascade follows; `expenseRootsOf` in `charts/presets.ts` reads the expense roots off the SOURCE so
 the tiles and the ranking don't shrink by whatever was reclassified.
