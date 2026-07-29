@@ -88,6 +88,18 @@ a mano. `parseCurrency` es su inverso exacto y **valida la forma antes de limpia
 separadores**: un importe tecleado al revés (`17.338,85`) se rechaza en vez de leerse como
 17,33885.
 
+**Los Excel que descarga la app no pasan por esos formateadores, y no pueden.** Una celda
+guarda un número real más un código de formato, y la `,` y el `.` de ese código son
+_marcadores_: el carácter que sale lo elige la configuración regional **de quien abre el
+archivo**, y con el sistema en Ecuador es otra vez la convención equivocada de CLDR.
+`CURRENCY_FMT` en `lib/profit-loss/export.ts` pide el locale en-US con `[$$-409]` porque es
+lo único que el archivo puede declarar sobre sí mismo, y Sheets y LibreOffice sí lo
+respetan — pero **Excel para Mac lo ignora**: en macOS `en_EC` los montos solo salieron
+bien tras cambiar System Settings › Language & Region › Number format. Es decir: el formato
+del Excel descargado **no está bajo el control de la app**. La alternativa determinista
+sería escribir los montos como texto, y cuesta que las celdas dejen de sumar y que
+`app-workbook.ts` pierda el round-trip, así que no se hace.
+
 ## Sistema visual
 
 Los tokens viven una sola vez en el bloque `@theme` de `app/globals.css` y se consumen como

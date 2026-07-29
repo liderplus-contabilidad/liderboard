@@ -95,6 +95,23 @@ describe("buildPygWorkbook — value round-trip", () => {
   });
 });
 
+describe("buildPygWorkbook — currency format", () => {
+  // The separators in a format code are placeholders Excel fills from the READER's locale, and
+  // CLDR's Ecuador writes them backwards. Without the `[$$-409]` pin the file contradicts the
+  // screen it was downloaded from, so the LCID is part of the contract, not a style choice.
+  it("pins the amount cells to the en-US locale so the reader's region cannot flip them", async () => {
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
+    const formats = new Set<string | undefined>();
+    ws.eachRow((row) => {
+      if (String(row.getCell(1).value ?? "").startsWith("4.1.1")) {
+        formats.add(row.getCell(3).numFmt);
+      }
+    });
+
+    expect(formats).toEqual(new Set(["[$$-409]#,##0.00;-[$$-409]#,##0.00"]));
+  });
+});
+
 describe("buildPygWorkbook — metadata sheet", () => {
   it("writes mode, year, comments and value adjustments for the round-trip", async () => {
     const wb = buildPygWorkbook([{ dataset, edits }], { 2026: [0, 1] });
