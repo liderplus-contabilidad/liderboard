@@ -170,8 +170,11 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
 
 **Pérdidas y Ganancias (PyG)** tiene su capa de filtros conectada a los datos:
 
-- El **nombre del cliente activo** se muestra en el header del módulo (`ActiveClient`),
-  con estado vacío mientras no se carga un Excel.
+- El bloque del header (`ActiveClient`) es el **selector de clientes** del módulo (ver "Clientes
+  de PyG" más abajo): nombre del cliente abierto, y al desplegarlo la lista completa con buscador,
+  `⌘K`, `+ Agregar cliente` y un menú `⋯` por fila para renombrar o eliminar. Sigue siendo
+  **prop-driven**: sin lista de clientes se rinde como el bloque de solo lectura de siempre, que
+  es como lo usa Ocupaciones.
 - **La fila de filtros es la única selección del módulo** — no hay un segundo control (ni
   "Comparar por", ni un selector de centro propio de Datos) donde elegir lo mismo distinto.
   En orden: **Cuenta contable** (marca varias; son a la vez el foco de la tabla de Datos y el
@@ -471,9 +474,11 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
 - **Avisos, nunca bloqueos:** cuadre contra `GENERAL` en modo por centros (un aviso por mes con
   cuántas cuentas no cuadran, nunca uno por cuenta); en estado único se valida en cambio la fila
   «Utilidad o Pérdida» del archivo contra el cálculo.
-- **Identidad del workspace: `(sistema, empresa, modo)`** (`workspace-identity.ts`). Un
-  archivo que contradiga cualquiera de los tres pide **una sola** confirmación de reemplazo
-  (nombrando qué cambia y cuántos ajustes y comentarios se descartan); mezclar identidades en una
+- **Identidad del workspace: `(sistema, empresa, modo)`** (`workspace-identity.ts`), **derivada**
+  de los datasets y el `meta` del cliente, nunca guardada — por eso un cliente vacío no tiene
+  identidad y su primera carga la **adopta**. Un archivo que contradiga cualquiera de los tres
+  abre el **diálogo de choque** con tres salidas (ver "Clientes de PyG"), y lo que reemplace, lo
+  reemplaza solo en el cliente abierto; mezclar identidades en una
   misma carga se rechaza nombrándolas. **El año no está en la identidad**: un dataset es un
   centro-año, así que un archivo de otro año no contradice nada — se suma al workspace sin
   preguntar, y una misma carga puede mezclar años mientras no repita un `(año, mes)`. El
