@@ -14,6 +14,7 @@ import { flattenSorted } from "./datos-utils";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
 import { usePygData } from "./pyg-data-provider";
+import { SegmentActions } from "./segment-actions";
 
 interface EditingState extends EditorAnchor {
   code: string;
@@ -29,6 +30,9 @@ const AccountDetailPanel = dynamic(
   () => import("./account-detail-panel").then((mod) => mod.AccountDetailPanel),
   { ssr: false },
 );
+
+/** How long the twin cell stays lit. Long enough to find it, short enough not to linger. */
+const FLASH_MS = 2200;
 
 const EMPTY_GRID: DatosGrid = {
   id: "default",
@@ -69,6 +73,9 @@ export function DatosView() {
   // Which account's ficha is open. Memory only, like the analytics selection: it means nothing
   // without the workspace that produced it.
   const [detailCode, setDetailCode] = useState<string | null>(null);
+  // The twin cell a reclassification just moved, flashed briefly so the change doesn't happen
+  // out of sight. Memory only — it means nothing after the edit that produced it.
+  const [flash, setFlash] = useState<{ code: string; monthIndex: number } | null>(null);
 
   // A newly loaded dataset can be coarser than the current view (its base floors the
   // options), but the provider resets `frequency` to the base one render later. Until it
@@ -124,6 +131,16 @@ export function DatosView() {
     setWarningsDismissed(false);
   }, [warnings]);
 
+  // The flash is a pointer, not a state of the data: it fades on its own so the table doesn't
+  // end up with several cells marked from edits the reader already saw.
+  useEffect(() => {
+    if (!flash) {
+      return;
+    }
+    const timer = setTimeout(() => setFlash(null), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [flash]);
+
   // Aggregating to fewer columns (e.g. Mensual → Trimestral) can strand a month-column
   // sort on a column that no longer exists; clear it so the grid isn't "sorted" by nothing.
   useEffect(() => {
@@ -166,7 +183,7 @@ export function DatosView() {
           editing.col,
           editing.valueEditable ? value : undefined,
           comment,
-        );
+        ).then(setFlash);
       }
       setEditing(null);
     },
@@ -196,6 +213,7 @@ export function DatosView() {
         editable={editable}
         readOnlyReason={readOnlyReason}
         showTotal={showTotal}
+        flash={flash}
         loadedColumns={loadedColumns}
         openDetailCode={detailCode}
         onSort={onSort}
@@ -203,6 +221,8 @@ export function DatosView() {
         onEditCell={onEditCell}
         onOpenDetail={onOpenDetail}
       />
+
+      <SegmentActions />
 
       {detailCode !== null && <AccountDetailPanel code={detailCode} onClose={onCloseDetail} />}
 

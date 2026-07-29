@@ -16,8 +16,10 @@ import {
   db,
   getWorkspaceMeta,
   replaceWorkspace,
-  saveCellEdit,
+  saveCellEdits,
+  segmentWorkspace,
 } from "@/lib/profit-loss/db";
+import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
 import {
   allowedFrequencies,
   applyEditsToLeafAccounts,
@@ -93,6 +95,12 @@ interface PygDataValue {
   /** Month indices (0–11) declared loaded in the by-centers workspace; [] in single mode. */
   loadedMonths: number[];
   commitWorkspace: (built: BuiltWorkspace) => Promise<void>;
+  /** Whether the workspace already carries the non-operating block. Segmenting is one-way. */
+  segmented: boolean;
+  /** Whether some dataset still has a 5.2 subtree to split out. */
+  segmentable: boolean;
+  /** «Segmentar gastos» — resolves with the datasets it could not segment, by name. */
+  segment: () => Promise<string[]>;
   /**
    * Merges a validated month-slice batch onto the CURRENT by-centers workspace — one write,
    * edits untouched. Throws if the batch mixes years/repeats a month, or if it belongs to a
@@ -107,12 +115,16 @@ interface PygDataValue {
   ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
   /** Workspace-level cuadre warnings (from meta). */
   warnings: string[];
+  /**
+   * Saves a cell. Resolves with the TWIN cell a reclassification also moved (inside 5.2), so
+   * the table can point at what changed out of sight; `null` when the edit moved nothing else.
+   */
   saveEdit: (
     code: string,
     monthIndex: number,
     value: number | null | undefined,
     comment: string,
-  ) => Promise<void>;
+  ) => Promise<{ code: string; monthIndex: number } | null>;
   /** Depth of the deepest movement account across ALL files in the workspace; 0 with no
    * dataset. Bounds the "Nivel" filter options. */
   deepestLevel: number;
@@ -370,18 +382,27 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const saveEdit = useCallback(
     async (code: string, monthIndex: number, value: number | null | undefined, comment: string) => {
       if (!dataset?.id || !activeView?.editable) {
-        return;
+        return null;
       }
-      await saveCellEdit({
-        datasetId: dataset.id,
-        code,
-        monthIndex,
-        ...(value !== undefined ? { value } : {}),
-        ...(comment ? { comment } : {}),
-      });
+      const twin = twinWriteFor(dataset.accounts, edits, code, monthIndex, value);
+      await saveCellEdits([
+        {
+          datasetId: dataset.id,
+          code,
+          monthIndex,
+          ...(value !== undefined ? { value } : {}),
+          ...(comment ? { comment } : {}),
+        },
+        ...(twin ? [{ datasetId: dataset.id, ...twin }] : []),
+      ]);
+      return twin && { code: twin.code, monthIndex: twin.monthIndex };
     },
-    [dataset?.id, activeView?.editable],
+    [dataset?.id, dataset?.accounts, activeView?.editable, edits],
   );
+
+  const segmented = useMemo(() => datasets.some((d) => isSegmented(d.accounts)), [datasets]);
+  const segmentable = useMemo(() => datasets.some((d) => canSegment(d.accounts)), [datasets]);
+  const segment = useCallback(async () => (await segmentWorkspace()).skipped, []);
 
   const value = useMemo<PygDataValue>(
     () => ({
@@ -396,6 +417,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       activeCenterId: resolvedActiveId,
       loadedMonths: metaRow?.loadedMonths ?? EMPTY_MONTHS,
       commitWorkspace,
+      segmented,
+      segmentable,
+      segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
       warnings: metaRow?.warnings ?? [],
@@ -427,6 +451,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       resolvedActiveId,
       metaRow?.loadedMonths,
       commitWorkspace,
+      segmented,
+      segmentable,
+      segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
       metaRow?.warnings,

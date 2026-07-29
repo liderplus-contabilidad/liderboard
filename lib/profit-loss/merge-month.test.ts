@@ -256,3 +256,32 @@ describe("mergeMonthSlice — aviso de archivo acumulado", () => {
     expect(warnings.some((w) => w.includes("acumulado"))).toBe(false);
   });
 });
+
+describe("un workspace segmentado sobrevive a cargar un mes", () => {
+  // The non-operating block lives only in the stored dataset — no file ever brings a root 6 —
+  // so a month merge that rebuilt accounts from the slice alone would silently erase it.
+  const segmented = center("norte", 0, [
+    { code: "5.2.1", value: 100 },
+    { code: "6.1", value: 40 },
+  ]);
+  const febrero = slice(
+    1,
+    [{ name: "NORTE", accounts: [{ code: "5.2.1", name: "Servicios", value: 70 }] }],
+    [{ code: "5.2.1", name: "Servicios", value: 70 }],
+  );
+
+  it("conserva las cuentas de la sección 6 y su clasificación anterior", () => {
+    const { datasets } = mergeMonthSlice([segmented], [0], febrero);
+    const byCode = new Map(datasets[0].accounts.map((a) => [a.code, a.values]));
+
+    expect(byCode.get("6.1")?.[0]).toBe(40);
+  });
+
+  it("entra el mes nuevo sin clasificar: la 6 en 0 y la 5.2 con lo que trae el archivo", () => {
+    const { datasets } = mergeMonthSlice([segmented], [0], febrero);
+    const byCode = new Map(datasets[0].accounts.map((a) => [a.code, a.values]));
+
+    expect(byCode.get("6.1")?.[1]).toBe(0);
+    expect(byCode.get("5.2.1")?.[1]).toBe(70);
+  });
+});

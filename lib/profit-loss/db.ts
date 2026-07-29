@@ -4,6 +4,7 @@
  * reads both sides as-is. One dataset at a time: uploading replaces everything.
  */
 import Dexie, { type Table } from "dexie";
+import { segmentAccounts } from "./segment";
 import type { CellEdit, ImportedComment, PygDataset, WorkspaceMeta } from "./types";
 
 /** Singleton workspace metadata row (company, warnings, active selector id). */
@@ -114,6 +115,28 @@ export async function applyMonthSlice(datasets: PygDataset[], meta: WorkspaceMet
   });
 }
 
+/**
+ * Segments non-operating utility for all datasets in the workspace. Adds a zeroed block
+ * to datasets with a 5.2 account. Consolidated data is derived from segmented centers.
+ * Returns names of skipped datasets for UI feedback.
+ */
+export async function segmentWorkspace(): Promise<{ segmented: number; skipped: string[] }> {
+  return db.transaction("rw", db.datasets, async () => {
+    const skipped: string[] = [];
+    const next: PygDataset[] = [];
+    for (const dataset of await db.datasets.toArray()) {
+      const accounts = segmentAccounts(dataset.accounts);
+      if (accounts === dataset.accounts) {
+        skipped.push(dataset.costCenterName || dataset.companyName);
+        continue;
+      }
+      next.push({ ...dataset, accounts });
+    }
+    await db.datasets.bulkPut(next);
+    return { segmented: next.length, skipped };
+  });
+}
+
 export async function getWorkspaceMeta(): Promise<WorkspaceMeta | undefined> {
   const row = await db.meta.get("workspace");
   if (!row) {
@@ -139,21 +162,40 @@ export async function saveActiveCenter(activeCenterId: string): Promise<void> {
  * &[datasetId+code+monthIndex] index (which two writes did in the browser).
  */
 export async function saveCellEdit(edit: Omit<CellEdit, "id" | "updatedAt">): Promise<void> {
-  const key: [string, string, number] = [edit.datasetId, edit.code, edit.monthIndex];
-  await db.transaction("rw", db.edits, async () => {
-    const existing = await db.edits.where("[datasetId+code+monthIndex]").equals(key).first();
+  await saveCellEdits([edit]);
+}
 
-    const isEmpty = edit.value === undefined && !edit.comment;
-    if (isEmpty) {
-      if (existing?.id !== undefined) {
-        await db.edits.delete(existing.id);
-      }
-      return;
+/**
+ * The same upsert over several cells in ONE transaction — what a reclassification needs: the
+ * non-operating amount and the discount on its twin are a single move, so a failure between them
+ * would leave the pair no longer adding up to what the file brought.
+ */
+export async function saveCellEdits(edits: Omit<CellEdit, "id" | "updatedAt">[]): Promise<void> {
+  if (edits.length === 0) {
+    return;
+  }
+  await db.transaction("rw", db.edits, async () => {
+    for (const edit of edits) {
+      await upsertCellEdit(edit);
     }
-    await db.edits.put({
-      ...(existing?.id !== undefined ? { id: existing.id } : {}),
-      ...edit,
-      updatedAt: Date.now(),
-    });
+  });
+}
+
+/** One cell's upsert. Caller owns the transaction. */
+async function upsertCellEdit(edit: Omit<CellEdit, "id" | "updatedAt">): Promise<void> {
+  const key: [string, string, number] = [edit.datasetId, edit.code, edit.monthIndex];
+  const existing = await db.edits.where("[datasetId+code+monthIndex]").equals(key).first();
+
+  const isEmpty = edit.value === undefined && !edit.comment;
+  if (isEmpty) {
+    if (existing?.id !== undefined) {
+      await db.edits.delete(existing.id);
+    }
+    return;
+  }
+  await db.edits.put({
+    ...(existing?.id !== undefined ? { id: existing.id } : {}),
+    ...edit,
+    updatedAt: Date.now(),
   });
 }
