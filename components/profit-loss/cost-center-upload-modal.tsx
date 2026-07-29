@@ -1,21 +1,36 @@
 "use client";
 
-import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CircleCheck,
+  CircleX,
+  FileSpreadsheet,
+  Loader2,
+  Upload,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { cn } from "@/lib/cn";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import {
+  findClientForIdentity,
+  normalizeClientName,
+  proposeClientName,
+  findClientByName,
+} from "@/lib/profit-loss/clients";
 import type { ReloadConflict } from "@/lib/profit-loss/conflicts";
-import { db, saveCellEdit } from "@/lib/profit-loss/db";
+import { countEditsForYears, getCellEdit, saveCellEdit } from "@/lib/profit-loss/db";
 import { PygParseError } from "@/lib/profit-loss/errors";
-import type { PygDataset } from "@/lib/profit-loss/types";
+import type { ParsedDataset } from "@/lib/profit-loss/types";
 import { validateBatch } from "@/lib/profit-loss/upload/batch";
 import type { StagedUpload } from "@/lib/profit-loss/upload/types";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
 import {
   compareIdentity,
   describeIdentityChange,
+  type IdentityCard,
   type IdentityMismatchReason,
   type WorkspaceIdentity,
 } from "@/lib/profit-loss/workspace-identity";
@@ -61,14 +76,28 @@ function stagedKinds(files: StagedFile[]): StagedUpload["kind"][] {
  * Staging modal for PyG's Excel uploads, resolved through the strategy registry: each dropped
  * file is parsed on the spot (its badge names the format and, for a month slice, the period and
  * mode), or shows its own concrete error. Month slices (either mode) are validated and merged as
- * ONE batch; an "Excel completo" file replaces the whole workspace. A batch whose identity
- * (sistema, empresa, año, modo) contradicts the loaded workspace triggers ONE replace
- * confirmation instead of merging (see `pyg-single-monthly-upload`'s "Identidad del workspace"
- * and `pyg-microplus-upload`'s "El sistema de origen forma parte de la identidad del workspace").
+ * ONE batch; an "Excel completo" file merges by year into the open client.
+ *
+ * A batch whose identity (sistema, empresa, modo) contradicts the ACTIVE CLIENT's opens the clash
+ * dialog, which has three exits rather than the old two — and which one is the RIGHT one depends
+ * on something this modal has to look up: whether another client already holds that identity. If
+ * one does, the file belongs there and loading there destroys nothing; if none does, creating a
+ * client is the recommendation and replacing the open one is the escape hatch for «se renombró o
+ * cambió de sistema». See `pyg-single-monthly-upload`'s "Identidad del workspace" and
+ * `pyg-clients`.
  */
 export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { commitWorkspace, commitMonthlyBatch, replaceMonthlyWorkspace, workspaceIdentity } =
-    usePygData();
+  const {
+    clients,
+    activeClientId,
+    activeClient,
+    commitWorkspace,
+    commitMonthlyBatch,
+    replaceMonthlyWorkspace,
+    createClientWithBatch,
+    commitBatchIntoClient,
+    workspaceIdentity,
+  } = usePygData();
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,7 +111,13 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     current: WorkspaceIdentity;
     incoming: WorkspaceIdentity;
     reasons: IdentityMismatchReason[];
+    fileName: string;
+    /** The client that already holds the incoming identity — 6A — or `null` for 6B. */
+    matching: { id: string; name: string } | null;
   } | null>(null);
+  /** 6B's editable proposal. The name comes from the file's razón social but stays the user's. */
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientError, setNewClientError] = useState<string | null>(null);
   const [summary, setSummary] = useState<UploadSummary | null>(null);
 
   // Reset everything once the modal is closed, so it never reopens on stale state.
@@ -90,6 +125,8 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     if (!open) {
       setConfirmReplaceYears(null);
       setConfirmIdentityChange(null);
+      setNewClientName("");
+      setNewClientError(null);
       setSummary(null);
       setFiles([]);
       setBatchError(null);
@@ -161,7 +198,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     (
       mode: "single" | "centers",
       outcome: {
-        datasets: PygDataset[];
+        datasets: ParsedDataset[];
         loadedMonthsByYear: Record<number, number[]>;
         years: number[];
         warnings: string[];
@@ -197,6 +234,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     }
   }, [commitMonthlyBatch, monthSlices, finishWithMonthlyOutcome]);
 
+  /** 6B's secondary exit: replace the OPEN client. The only destructive one of the three. */
   const runIdentityChangeReplace = useCallback(async () => {
     setBusy(true);
     try {
@@ -207,6 +245,52 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       setConfirmIdentityChange(null);
     }
   }, [replaceMonthlyWorkspace, monthSlices, finishWithMonthlyOutcome]);
+
+  /** 6A's primary exit: load into the client that DOES match, which becomes the active one. */
+  const runLoadIntoMatchingClient = useCallback(async () => {
+    const matching = confirmIdentityChange?.matching;
+    if (!matching) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const outcome = await commitBatchIntoClient(matching.id, monthSlices);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome);
+    } finally {
+      setBusy(false);
+      setConfirmIdentityChange(null);
+    }
+  }, [commitBatchIntoClient, confirmIdentityChange, monthSlices, finishWithMonthlyOutcome]);
+
+  /** 6B's primary exit: create the client the file belongs to and load it there. */
+  const runCreateClientAndLoad = useCallback(async () => {
+    const check = normalizeClientName(newClientName);
+    if (!check.ok) {
+      setNewClientError(check.message);
+      return;
+    }
+    const taken = findClientByName(check.name, clients);
+    if (taken) {
+      setNewClientError(`Ya existe un cliente llamado «${taken.name}».`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const outcome = await createClientWithBatch(check.name, monthSlices);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome);
+    } finally {
+      setBusy(false);
+      setConfirmIdentityChange(null);
+    }
+  }, [createClientWithBatch, clients, newClientName, monthSlices, finishWithMonthlyOutcome]);
+
+  /** «Elegir otro archivo»: nothing is written, the staged files are dropped and the picker
+   * reopens — the exit for «me equivoqué de archivo», which is most of the time. */
+  const chooseAnotherFile = useCallback(() => {
+    setConfirmIdentityChange(null);
+    setFiles([]);
+    inputRef.current?.click();
+  }, []);
 
   const runReplaceWorkspace = useCallback(
     async (built: BuiltWorkspace) => {
@@ -256,17 +340,28 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       };
       const reasons = workspaceIdentity ? compareIdentity(workspaceIdentity, incomingIdentity) : [];
       if (workspaceIdentity && reasons.length > 0) {
+        // Which form the dialog takes is decided HERE, by whether another client already holds
+        // the incoming identity — not by the copy, and not by the user.
+        const matching = findClientForIdentity(
+          clients.filter((client) => client.id !== activeClientId),
+          Object.fromEntries(clients.map((client) => [client.id, client.identity])),
+          incomingIdentity,
+        );
+        setNewClientName(proposeClientName(incomingIdentity.companyName, clients));
+        setNewClientError(null);
         setConfirmIdentityChange({
           current: workspaceIdentity,
           incoming: incomingIdentity,
           reasons,
+          fileName: validFiles[0]?.fileName ?? "",
+          matching: matching && { id: matching.id, name: matching.name },
         });
         return;
       }
       await runMonthlyCommit();
       return;
     }
-    if (!workspaceBuilt) {
+    if (!workspaceBuilt || !activeClientId) {
       return;
     }
     // The confirmation is about the years the file REPLACES — the ones it omits survive, so
@@ -275,14 +370,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     const replacedYears = [...new Set(workspaceBuilt.datasets.map((d) => d.year))].sort(
       (a, b) => a - b,
     );
-    const doomed = await db.datasets.where("year").anyOf(replacedYears).toArray();
-    const editCount =
-      doomed.length > 0
-        ? await db.edits
-            .where("datasetId")
-            .anyOf(doomed.map((d) => d.id))
-            .count()
-        : 0;
+    const editCount = await countEditsForYears(activeClientId, replacedYears);
     setBusy(false);
     if (editCount > 0) {
       setConfirmReplaceYears({ years: replacedYears, editCount });
@@ -295,6 +383,9 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     monthSlices,
     batchError,
     workspaceIdentity,
+    clients,
+    activeClientId,
+    validFiles,
     runMonthlyCommit,
     workspaceBuilt,
     runReplaceWorkspace,
@@ -307,16 +398,19 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
             confirmIdentityChange.current,
             confirmIdentityChange.incoming,
             confirmIdentityChange.reasons,
+            {
+              activeClientName: activeClient?.name ?? "el cliente abierto",
+              matchingClientName: confirmIdentityChange.matching?.name ?? null,
+              proposedClientName: newClientName,
+              activeClientContents: describeContents(activeClient),
+            },
           )
         : null,
-    [confirmIdentityChange],
+    [confirmIdentityChange, activeClient, newClientName],
   );
 
   const removeAdjustment = useCallback(async (conflict: ReloadConflict) => {
-    const existing = await db.edits
-      .where("[datasetId+code+monthIndex]")
-      .equals([conflict.datasetId, conflict.code, conflict.monthIndex])
-      .first();
+    const existing = await getCellEdit(conflict.datasetId, conflict.code, conflict.monthIndex);
     await saveCellEdit({
       datasetId: conflict.datasetId,
       code: conflict.code,
@@ -510,18 +604,196 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
         onCancel={() => setConfirmReplaceYears(null)}
       />
 
-      <ConfirmDialog
-        open={confirmIdentityChange !== null}
-        variant="destructive"
-        busy={busy}
-        title={identityChangeConfirmation?.title ?? "Reemplazar datos actuales"}
-        description={identityChangeConfirmation?.description}
-        confirmLabel={identityChangeConfirmation?.title ?? "Continuar"}
-        cancelLabel="Cancelar"
-        onConfirm={() => void runIdentityChangeReplace()}
-        onCancel={() => setConfirmIdentityChange(null)}
-      />
+      {identityChangeConfirmation && confirmIdentityChange && (
+        <IdentityClashDialog
+          confirmation={identityChangeConfirmation}
+          fileName={confirmIdentityChange.fileName}
+          busy={busy}
+          proposedName={newClientName}
+          proposedNameError={newClientError}
+          onProposedNameChange={(name) => {
+            setNewClientName(name);
+            setNewClientError(null);
+          }}
+          onCancel={() => setConfirmIdentityChange(null)}
+          onChooseAnotherFile={chooseAnotherFile}
+          onPrimary={() =>
+            void (confirmIdentityChange.matching
+              ? runLoadIntoMatchingClient()
+              : runCreateClientAndLoad())
+          }
+          onReplace={() => void runIdentityChangeReplace()}
+        />
+      )}
     </>
+  );
+}
+
+/** Los años y centros del cliente abierto en una frase — lo que el bloque de reemplazo descarta. */
+function describeContents(client: { years: number[]; identity: unknown } | undefined): string {
+  const years = client?.years ?? [];
+  if (years.length === 0) {
+    return "sin datos cargados";
+  }
+  return years.length === 1 ? `${years[0]}` : `${years[0]}–${years[years.length - 1]}`;
+}
+
+/**
+ * El diálogo de choque, en sus dos formas. Rinde lo que `describeIdentityChange` decidió: la copia
+ * y qué acción es la principal viven en `lib/`, y esto solo las pone en pantalla. Las tarjetas
+ * comparan empresa y sistema — nunca un NIT, que ninguna estrategia extrae.
+ */
+function IdentityClashDialog({
+  confirmation,
+  fileName,
+  busy,
+  proposedName,
+  proposedNameError,
+  onProposedNameChange,
+  onCancel,
+  onChooseAnotherFile,
+  onPrimary,
+  onReplace,
+}: {
+  confirmation: NonNullable<ReturnType<typeof describeIdentityChange>>;
+  fileName: string;
+  busy: boolean;
+  proposedName: string;
+  proposedNameError: string | null;
+  onProposedNameChange: (name: string) => void;
+  onCancel: () => void;
+  onChooseAnotherFile: () => void;
+  onPrimary: () => void;
+  onReplace: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-6">
+      <div className="w-full max-w-[600px] rounded-[13px] border border-border bg-surface p-6 shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-surface-muted">
+            <AlertTriangle size={18} className="text-warning" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-bold tracking-[-0.2px] text-ink">
+              {confirmation.title}
+            </h3>
+            {fileName && (
+              <p className="mt-0.5 truncate font-mono text-[12px] text-faint">{fileName}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-stretch gap-3">
+          <ComparisonCard card={confirmation.cards.current} />
+          <span className="flex shrink-0 items-center text-faintest">
+            <X size={16} />
+          </span>
+          <ComparisonCard card={confirmation.cards.incoming} />
+        </div>
+
+        <div className="mt-4 flex items-start gap-2.5 rounded-[9px] bg-surface-muted px-3.5 py-3">
+          <span className="mt-px shrink-0">
+            {confirmation.form === "other-client" ? (
+              <CircleCheck size={16} className="text-brand" />
+            ) : (
+              <CircleX size={16} className="text-muted" />
+            )}
+          </span>
+          <p className="text-[12.5px] leading-relaxed text-ink-soft">{confirmation.verdict}</p>
+        </div>
+
+        {confirmation.form === "no-match" && (
+          <label className="mt-4 flex flex-col gap-1.5">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+              Nombre del cliente
+            </span>
+            <input
+              value={proposedName}
+              onChange={(e) => onProposedNameChange(e.target.value)}
+              className="h-[38px] rounded-[9px] border border-border bg-surface px-3 text-[13px] text-ink outline-none focus:border-brand"
+            />
+            {proposedNameError && (
+              <span className="text-[11.5px] text-negative">{proposedNameError}</span>
+            )}
+          </label>
+        )}
+
+        {confirmation.replace && (
+          <div className="mt-4 overflow-hidden rounded-[9px] border border-border">
+            <div className="border-b border-border bg-surface-muted px-3.5 py-2 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+              {confirmation.replace.heading}
+            </div>
+            <p className="px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-soft">
+              {confirmation.replace.description}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="h-[34px] rounded-[9px] px-3.5 text-[12.5px] font-semibold text-muted hover:bg-canvas disabled:opacity-60"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={confirmation.replace ? onReplace : onChooseAnotherFile}
+            disabled={busy}
+            className="h-[34px] rounded-[9px] border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-muted hover:bg-canvas disabled:opacity-60"
+          >
+            {confirmation.replace ? confirmation.replace.label : "Elegir otro archivo"}
+          </button>
+          <button
+            type="button"
+            onClick={onPrimary}
+            disabled={busy}
+            className="inline-flex h-[34px] items-center gap-2 rounded-[9px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy && <Loader2 size={14} className="animate-spin" />}
+            {confirmation.primaryLabel}
+          </button>
+        </div>
+
+        {/* «Elegir otro archivo» no cabe en la fila de 6B, que ya lleva tres botones: va debajo,
+            junto a lo que la acción principal implica. */}
+        <div className="mt-2.5 flex items-center justify-between gap-3">
+          {confirmation.replace ? (
+            <button
+              type="button"
+              onClick={onChooseAnotherFile}
+              disabled={busy}
+              className="text-[11.5px] font-semibold text-brand hover:underline disabled:opacity-60"
+            >
+              Elegir otro archivo
+            </button>
+          ) : (
+            <span />
+          )}
+          {confirmation.primaryHint && (
+            <p className="text-right text-[11.5px] text-faint">{confirmation.primaryHint}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComparisonCard({ card }: { card: IdentityCard }) {
+  return (
+    <div className="min-w-0 flex-1 rounded-[9px] bg-surface-muted px-3.5 py-3">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+        {card.caption}
+      </p>
+      <p className="mt-1 truncate text-[13px] font-bold text-ink" title={card.name}>
+        {card.name}
+      </p>
+      <p className="mt-0.5 truncate font-mono text-[11.5px] text-faint" title={card.detail}>
+        {card.detail}
+      </p>
+    </div>
   );
 }
 

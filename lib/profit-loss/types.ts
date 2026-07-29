@@ -27,6 +27,12 @@ export interface AccountRow {
 
 export interface PygDataset {
   id: string;
+  /**
+   * The CLIENT this dataset belongs to. PyG holds several clients at once, and every read and
+   * write is bounded by this — a query without it would mix two accounting firms' clients in
+   * silence, which no other validation would catch (see `clients.ts` and `db.ts`).
+   */
+  clientId: string;
   fileName: string;
   uploadedAt: number;
   companyName: string;
@@ -57,6 +63,17 @@ export interface PygDataset {
   /** Spanish, human-readable parse/validation notes. */
   warnings: string[];
 }
+
+/**
+ * A dataset that does not belong to a client YET — what the pure layer produces before anything is
+ * persisted (a parsed workbook, a merged month).
+ *
+ * Which client a file belongs to is decided by which client is OPEN, and by the identity dialog
+ * when the two disagree — never by the file, which knows nothing about the user's list of
+ * clients. So `db.ts` stamps `clientId` at the door, and the layers in between never carry a
+ * value they could get wrong.
+ */
+export type ParsedDataset = Omit<PygDataset, "clientId">;
 
 /**
  * One cell's imported edit, carried in an exported workbook's hidden metadata sheet and

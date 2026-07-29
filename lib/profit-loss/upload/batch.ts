@@ -14,14 +14,14 @@
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { PygParseError } from "../errors";
 import { mergeMonthSlice } from "../merge-month";
-import type { PygDataset } from "../types";
+import type { ParsedDataset } from "../types";
 import { assignCenterSlots } from "../workspace";
 import type { StagedUpload } from "./types";
 
 export type MonthSlice = Extract<StagedUpload, { kind: "month-slice" }>;
 
 export interface BatchApplyResult {
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   /** The workspace's coverage after the batch, per year. */
   loadedMonthsByYear: Record<number, number[]>;
   warnings: string[];
@@ -90,7 +90,7 @@ export function validateBatch(slices: readonly MonthSlice[]): void {
  * come back untouched.
  */
 export function applyBatch(
-  current: readonly PygDataset[],
+  current: readonly ParsedDataset[],
   loadedMonthsByYear: Readonly<Record<number, number[]>>,
   slices: readonly MonthSlice[],
 ): BatchApplyResult {
@@ -102,7 +102,7 @@ export function applyBatch(
   }
 
   const untouched = current.filter((dataset) => !byYear.has(dataset.year));
-  const merged: PygDataset[] = [];
+  const merged: ParsedDataset[] = [];
   const coverage: Record<number, number[]> = { ...loadedMonthsByYear };
   const warnings: string[] = [];
 

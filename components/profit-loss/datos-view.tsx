@@ -12,6 +12,7 @@ import { CellEditor, type EditorAnchor } from "./cell-editor";
 import { flattenSorted } from "./datos-utils";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
+import { PygEmptyState } from "./pyg-empty-state";
 import { usePygData } from "./pyg-data-provider";
 import { SegmentActions } from "./segment-actions";
 
@@ -51,6 +52,7 @@ const EMPTY_GRID: DatosGrid = {
  */
 export function DatosView() {
   const {
+    activeClientId,
     dataset,
     frequency,
     allowed,
@@ -239,6 +241,11 @@ export function DatosView() {
   );
 
   const editingRow = editing ? findRow(grid.rows, editing.code) : null;
+
+  // Sin cliente no hay tabla que rendir vacía: el vacío nombra el paso que falta y lo ofrece.
+  if (activeClientId === null) {
+    return <PygEmptyState />;
+  }
 
   return (
     <div className="px-7 py-5">

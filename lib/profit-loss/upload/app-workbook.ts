@@ -14,7 +14,13 @@ import {
   type AppWorkbookMeta,
 } from "../excel-metadata";
 import { assignCenterSlots } from "../workspace";
-import type { AccountRow, DatasetRole, ImportedComment, PygDataset, WorkspaceMeta } from "../types";
+import type {
+  AccountRow,
+  DatasetRole,
+  ImportedComment,
+  ParsedDataset,
+  WorkspaceMeta,
+} from "../types";
 import { findFirstDataRow, findHeaderRow, normalizeLabel, readGrid, toNumber } from "./grid";
 import type { Cell } from "./grid";
 import { APP_WORKBOOK_SYSTEM } from "./systems";
@@ -116,7 +122,7 @@ function applyOriginals(
 
 interface Reconstructed {
   companyName: string;
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   /** Every dataset's id, keyed `centerId|year` — the same way the metadata tags its
    * comments and adjustments. `SINGLE_WORKBOOK_CENTER_KEY` stands in for the center in
    * single mode, where there is exactly one per year. */
@@ -148,7 +154,7 @@ function reconstruct(
 ): Reconstructed {
   const present = new Set(candidate.workbook.SheetNames);
   let companyName = "";
-  const datasets: PygDataset[] = [];
+  const datasets: ParsedDataset[] = [];
   const idByKey = new Map<string, string>();
 
   for (const sheet of meta.sheets) {

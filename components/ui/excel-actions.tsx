@@ -1,6 +1,14 @@
 "use client";
 
-import { ChevronDown, FileSpreadsheet, Loader2, Upload, X, type LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  FileSpreadsheet,
+  Info,
+  Loader2,
+  Upload,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -33,7 +41,18 @@ export interface ExcelDownloadOption {
 }
 
 interface ExcelActionsProps {
-  upload: { label?: string; onClick: () => void; disabled?: boolean };
+  upload: {
+    label?: string;
+    onClick: () => void;
+    disabled?: boolean;
+    /**
+     * Por qué no se puede cargar. A diferencia de las descargas, esto NO va en un tooltip: se
+     * rinde como una píldora junto al botón. Un control deshabilitado sin razón visible obliga a
+     * apuntarlo para descubrir qué falta, y aquí lo que falta es el paso anterior de todo el
+     * módulo.
+     */
+    disabledReason?: string;
+  };
   downloads: ExcelDownloadOption[];
   downloadLabel?: string;
   info?: { title?: string; children: ReactNode };
@@ -47,6 +66,12 @@ export function ExcelActions({
 }: ExcelActionsProps) {
   return (
     <div className="flex items-center gap-2.5">
+      {upload.disabled && upload.disabledReason && (
+        <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium text-muted">
+          <Info size={14} className="shrink-0 text-faint" />
+          {upload.disabledReason}
+        </span>
+      )}
       <Button
         size="toolbar"
         icon={<Upload size={14} />}

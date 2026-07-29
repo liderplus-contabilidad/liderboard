@@ -10,7 +10,7 @@
  * them (the merge, `replaceWorkspace`), and adding a strategy never touches that consumer.
  */
 import type * as XLSX from "xlsx";
-import type { AccountRow, ImportedComment, PygDataset, WorkspaceMeta } from "../types";
+import type { AccountRow, ImportedComment, ParsedDataset, WorkspaceMeta } from "../types";
 
 /** One file, read once: every strategy's `detect`/`parse` call shares this same instance. */
 export interface UploadCandidate {
@@ -50,7 +50,7 @@ export type StagedUpload =
     }
   | {
       kind: "workspace";
-      datasets: PygDataset[];
+      datasets: ParsedDataset[];
       meta: WorkspaceMeta;
       commentsByDataset: { datasetId: string; comments: ImportedComment[] }[];
     };

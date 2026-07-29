@@ -5,7 +5,7 @@
  * detectan y se reportan").
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
-import type { CellEdit, PygDataset } from "./types";
+import type { CellEdit, ParsedDataset } from "./types";
 
 const SUM_TOLERANCE = 0.011;
 
@@ -40,8 +40,8 @@ export interface TouchedMonth {
  * DATASET that carries the year.
  */
 export function detectReloadConflicts(
-  before: readonly PygDataset[],
-  after: readonly PygDataset[],
+  before: readonly ParsedDataset[],
+  after: readonly ParsedDataset[],
   touched: readonly TouchedMonth[],
   edits: readonly CellEdit[],
 ): ReloadConflict[] {

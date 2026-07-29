@@ -31,6 +31,7 @@ const GRANULARITIES: { value: Frequency; label: string }[] = [
  */
 export function PygToolbar() {
   const {
+    activeClientId,
     frequency,
     allowed,
     setFrequency,
@@ -60,9 +61,14 @@ export function PygToolbar() {
   const centerOptions = views.filter((view) => view.role !== "consolidado");
   const periods = dataset ? periodSlots(frequency) : [];
 
+  // With no client there is nothing to filter, and every dropdown would open on an empty list.
+  // `inert` is what says so properly: the controls stay in place (the bar does not reflow when
+  // the first client arrives) but leave the focus order and the accessibility tree entirely.
+  const idle = activeClientId === null;
+
   return (
     <div className="shrink-0 border-b border-border bg-surface">
-      <Toolbar>
+      <Toolbar inert={idle} className={cn(idle && "opacity-50")}>
         <ToolbarLabel icon={<SlidersHorizontal size={15} />}>Filtros</ToolbarLabel>
 
         <AccountFilter

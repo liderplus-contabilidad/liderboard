@@ -4,34 +4,17 @@ import { ChevronRight } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { ActiveClient, type ActiveClientInfo } from "@/components/dashboard/active-client";
 import { useOccupancyData } from "@/components/occupancy/occupancy-data-provider";
-import { usePygData } from "@/components/profit-loss/pyg-data-provider";
+import { PygClientActions } from "@/components/profit-loss/pyg-client-actions";
 import { DEFAULT_MODULE, findModuleBySlug } from "@/lib/modules";
 import { DEFAULT_CENTER_ID } from "@/lib/occupancy/types";
 
 export function DashboardHeader() {
   const pathname = usePathname();
-  const { dataset, mode, views, activeCenterId } = usePygData();
   const occupancy = useOccupancyData();
   const slug = pathname.split("/").filter(Boolean)[0];
   const current = findModuleBySlug(slug) ?? DEFAULT_MODULE;
   const isPyg = current.slug === "profit-loss";
   const isOccupancy = current.slug === "occupancy";
-
-  // In multi-center mode the subline names the active view (Consolidado / center / Sin-centro);
-  // a single statement falls back to its own cost-center line, if any.
-  const activeView = mode === "multi" ? views.find((v) => v.id === activeCenterId) : undefined;
-  const centerCount = views.filter((v) => v.role === "center").length;
-  const activeName = activeView
-    ? activeView.role === "consolidado"
-      ? `Consolidado (${centerCount} ${centerCount === 1 ? "centro" : "centros"})`
-      : activeView.name
-    : dataset?.costCenterName;
-  const client: ActiveClientInfo | undefined = dataset
-    ? {
-        name: dataset.companyName,
-        period: activeName ? `${dataset.periodLabel} · ${activeName}` : dataset.periodLabel,
-      }
-    : undefined;
 
   // `principal` is left out: it is labelled with the hotel's own name, so naming it here would
   // say the same thing twice.
@@ -58,7 +41,14 @@ export function DashboardHeader() {
         <h1 className="truncate text-xl font-bold tracking-tight text-brand">{current.title}</h1>
       </div>
 
-      {isPyg && <ActiveClient client={client} />}
+      {/* PyG passes its client list, so the block becomes a selector. Ocupaciones does NOT: it
+          has its own database and its own hotel, and until it grows the same shape the block
+          stays exactly the read-only summary it has always been. */}
+      {isPyg && (
+        <div className="ml-auto min-w-0">
+          <PygClientActions />
+        </div>
+      )}
       {isOccupancy && (
         <ActiveClient
           client={hotel}

@@ -2,13 +2,13 @@
  * Merges one month-slice onto the by-cost-centers workspace: a `mergeMonthSlice` call writes
  * exactly one column (the slice's month) across every center and leaves every other column
  * byte-for-byte the same. This is the pure heart of "an archivo is a month" (design.md
- * decision 2) — `PygDataset.values` stays a plain `number[12]`, so everything downstream
+ * decision 2) — `AccountRow.values` stays a plain `number[12]`, so everything downstream
  * (derive.ts, the analytics engine, export) keeps working unmodified.
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
 import type { CenterSlice, StagedUpload } from "./upload/types";
 import { CENTER_PALETTE } from "./workspace";
-import type { AccountRow, DatasetRole, PygDataset } from "./types";
+import type { AccountRow, DatasetRole, ParsedDataset } from "./types";
 
 type MonthSlice = Extract<StagedUpload, { kind: "month-slice" }>;
 
@@ -20,7 +20,7 @@ const SINGLE_KEY = "__single__";
 const SUM_TOLERANCE = 0.011;
 
 export interface MergeMonthResult {
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   loadedMonths: number[];
   /** Cuadre-against-GENERAL notices — never block the merge. */
   warnings: string[];
@@ -48,7 +48,7 @@ function blankValues(): number[] {
   return Array.from({ length: 12 }, () => 0);
 }
 
-function cloneDataset(dataset: PygDataset): PygDataset {
+function cloneDataset(dataset: ParsedDataset): ParsedDataset {
   return { ...dataset, accounts: dataset.accounts.map((a) => ({ ...a, values: [...a.values] })) };
 }
 
@@ -57,7 +57,7 @@ function roleFor(centerName: string): DatasetRole {
 }
 
 /** The key `mergeMonthSlice` keys its internal map by — never `null`, unlike the persisted
- * `PygDataset.centerId`, which "single" mode leaves unset. */
+ * `ParsedDataset.centerId`, which "single" mode leaves unset. */
 function keyFor(centerId: string | null | undefined): string {
   return centerId ?? SINGLE_KEY;
 }
@@ -67,7 +67,7 @@ function newCenterDataset(
   slice: MonthSlice,
   order: number,
   paletteIndex: number,
-): PygDataset {
+): ParsedDataset {
   const base = {
     id: crypto.randomUUID(),
     fileName: `PyG-${slice.year}-${String(slice.month + 1).padStart(2, "0")}`,
@@ -100,12 +100,12 @@ function newCenterDataset(
  * cloned first.
  */
 export function mergeMonthSlice(
-  current: readonly PygDataset[],
+  current: readonly ParsedDataset[],
   loadedMonths: readonly number[],
   slice: MonthSlice,
 ): MergeMonthResult {
   const month = slice.month;
-  const centersByCenterId = new Map<string, PygDataset>(
+  const centersByCenterId = new Map<string, ParsedDataset>(
     current.map((dataset) => [keyFor(dataset.centerId), cloneDataset(dataset)]),
   );
 
@@ -180,7 +180,7 @@ export function mergeMonthSlice(
 /** One warning per month naming how many accounts don't sum to GENERAL — never one per account.
  * Only ever called in "centers" mode (see `mergeMonthSlice`), where `slice.general` is set. */
 function cuadreWarnings(
-  datasets: readonly PygDataset[],
+  datasets: readonly ParsedDataset[],
   codes: readonly string[],
   slice: MonthSlice,
   month: number,

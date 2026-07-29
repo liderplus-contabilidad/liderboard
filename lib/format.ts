@@ -59,3 +59,16 @@ export function formatPercent(value: number, fractionDigits = 1): string {
     maximumFractionDigits: fractionDigits,
   })} %`;
 }
+
+/** A list read as a Spanish sentence: "A", "A y B", "A, B y C". */
+export function formatList(items: readonly string[]): string {
+  if (items.length <= 1) {
+    return items[0] ?? "";
+  }
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
+/** A count with its noun, singular or plural: `3 centros` / `1 centro`. */
+export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+}

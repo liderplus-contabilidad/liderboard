@@ -101,6 +101,7 @@ export function makeDataset(options: DatasetOptions = {}): PygDataset {
 
   return {
     id: `${centerId}-${year}`,
+    clientId: "cliente-de-prueba",
     fileName: `${centerId}-${year}.xlsx`,
     uploadedAt: 0,
     companyName: "NOMIK HOTELES S.A.S.",

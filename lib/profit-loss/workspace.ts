@@ -8,7 +8,7 @@
  * statement) no longer exist under the monthly-by-centers model. Loading a workspace now goes
  * through the upload registry (`upload/`) and `merge-month.ts` instead.
  */
-import type { ImportedComment, PygDataset, WorkspaceMeta } from "./types";
+import type { ImportedComment, ParsedDataset, WorkspaceMeta } from "./types";
 
 /** Center dot palette (from the design's `_ccColorMap`). */
 export const CENTER_PALETTE = ["#1e3a5f", "#0e7490", "#d97706", "#16a34a", "#7c3aed", "#dc2626"];
@@ -39,9 +39,11 @@ const SIN_CENTRO_ROLE = "sin-centro";
  * loading an older year later cannot renumber the centers the user already knows. `sin-centro`
  * is pinned at the end regardless.
  *
- * Pure: returns a new array, and only touches `order` and `centerColor`.
+ * Pure: returns a new array, and only touches `order` and `centerColor`. Generic in the dataset
+ * so it runs equally on what the merge just produced and on what came back out of Dexie —
+ * whatever goes in comes out, `clientId` included when there is one.
  */
-export function assignCenterSlots(datasets: readonly PygDataset[]): PygDataset[] {
+export function assignCenterSlots<T extends ParsedDataset>(datasets: readonly T[]): T[] {
   const firstSeen = new Map<string, { year: number; order: number }>();
   for (const dataset of [...datasets].sort(
     (a, b) => a.year - b.year || (a.order ?? 0) - (b.order ?? 0),
@@ -85,7 +87,7 @@ export function assignCenterSlots(datasets: readonly PygDataset[]): PygDataset[]
  */
 export interface BuiltWorkspace {
   mode: "single" | "multi";
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   commentsByDataset: { datasetId: string; comments: ImportedComment[] }[];
   meta: WorkspaceMeta;
 }

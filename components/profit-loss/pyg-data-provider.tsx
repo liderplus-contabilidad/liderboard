@@ -13,13 +13,21 @@ import {
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
   applyMonthSlice,
-  db,
+  clientDatasets,
+  clientEdits,
+  createClient as createClientRow,
+  deleteClient as deleteClientRow,
   deleteYear,
+  getActiveClientId,
   getWorkspaceMeta,
+  listClientSummaries,
   mergeWorkspaceYears,
-  replaceWorkspace,
+  renameClient as renameClientRow,
+  replaceClientWorkspace,
   saveCellEdits,
   segmentWorkspace,
+  setActiveClient,
+  type ClientSummary,
 } from "@/lib/profit-loss/db";
 import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
 import {
@@ -63,23 +71,29 @@ import {
   type AccountRow,
   type CellEdit,
   type Frequency,
+  type ParsedDataset,
   type PygDataset,
   type WorkspaceMeta,
 } from "@/lib/profit-loss/types";
 import { applyBatch, type MonthSlice } from "@/lib/profit-loss/upload/batch";
 import { LEGACY_SYSTEM } from "@/lib/profit-loss/upload/systems";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
-import { compareIdentity, type WorkspaceIdentity } from "@/lib/profit-loss/workspace-identity";
+import {
+  compareIdentity,
+  deriveWorkspaceIdentity,
+  type WorkspaceIdentity,
+} from "@/lib/profit-loss/workspace-identity";
 import { PygAnalyticsProvider } from "./pyg-analytics-provider";
 
 const EMPTY_EDITS: CellEdit[] = [];
 const EMPTY_DATASETS: PygDataset[] = [];
+const EMPTY_CLIENTS: ClientSummary[] = [];
 const EMPTY_COVERAGE: Record<number, number[]> = {};
 const EMPTY_SLICES: YearSlice[] = [];
 const CONSOLIDADO_COLOR = "#334155";
 
 export interface MonthlyBatchOutcome {
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   /** The workspace's coverage after the batch, per year. */
   loadedMonthsByYear: Record<number, number[]>;
   /** The years the batch brought, ascending — what the summary groups by. */
@@ -109,6 +123,19 @@ export interface CenterView {
 }
 
 interface PygDataValue {
+  /** Every client, by name, with what each one holds — the selector's list. */
+  clients: ClientSummary[];
+  /** The open client, or `null` with none (a new install, or the last one just deleted). */
+  activeClientId: string | null;
+  /** The open client's entry, for whoever needs its name without looking it up. */
+  activeClient: ClientSummary | undefined;
+  /** Creates an EMPTY client and opens it. Rejects nothing: the caller validates the name with
+   * `clients.ts` where it can say what is wrong. */
+  createClient: (name: string) => Promise<string>;
+  renameClient: (clientId: string, name: string) => Promise<void>;
+  /** Deletes a client with everything it holds; the first remaining one BY NAME takes over. */
+  deleteClient: (clientId: string) => Promise<void>;
+  selectClient: (clientId: string) => Promise<void>;
   dataset: PygDataset | undefined;
   /** Every dataset in the current workspace — what a monthly batch merges onto. */
   datasets: PygDataset[];
@@ -160,10 +187,20 @@ interface PygDataValue {
   /** Deletes a year — its datasets, its adjustments and its coverage. Resolves with how many
    * adjustments went with it. */
   removeYear: (year: number) => Promise<number>;
-  /** Starts a brand-new workspace (either mode) for a different identity, discarding the
-   * current one and its edits — the destructive path the modal gates behind an explicit
-   * confirmation. */
+  /** Starts a brand-new workspace (either mode) for a different identity in the ACTIVE CLIENT,
+   * discarding its statement and its adjustments — the destructive path the clash dialog gates
+   * behind an explicit confirmation, and now its SECONDARY action. No other client is touched. */
   replaceMonthlyWorkspace: (
+    slices: MonthSlice[],
+  ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
+  /** «Crear cliente y cargar» — the clash dialog's primary action when no client matches. */
+  createClientWithBatch: (
+    name: string,
+    slices: MonthSlice[],
+  ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
+  /** «Cargar en \<cliente\>» — the clash dialog's primary action when one does. */
+  commitBatchIntoClient: (
+    clientId: string,
     slices: MonthSlice[],
   ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
   /** Workspace-level cuadre warnings (from meta). */
@@ -218,12 +255,24 @@ const PygDataContext = createContext<PygDataValue | null>(null);
  * `charts/`, so this provider never has to import from that layer (verified: it doesn't).
  */
 export function PygDataProvider({ children }: { children: ReactNode }) {
-  // toArray() (NOT orderBy("order")): IndexedDB indexes exclude rows whose key is undefined,
-  // so `order`-less single/migrated datasets would vanish from an orderBy. buildViews sorts
-  // centers by `order` itself.
-  const datasets = useLiveQuery(() => db.datasets.toArray(), []) ?? EMPTY_DATASETS;
-  const allEdits = useLiveQuery(() => db.edits.toArray(), []) ?? EMPTY_EDITS;
-  const metaRow = useLiveQuery(() => getWorkspaceMeta(), []);
+  // Every read is bounded by the open client. `db.ts` owns the queries — a `toArray()` here
+  // would return every client's rows at once, and nothing downstream could tell.
+  const clients = useLiveQuery(() => listClientSummaries(), []) ?? EMPTY_CLIENTS;
+  const activeClientId = useLiveQuery(() => getActiveClientId(), []) ?? null;
+  const datasets =
+    useLiveQuery(
+      () => (activeClientId ? clientDatasets(activeClientId) : Promise.resolve(EMPTY_DATASETS)),
+      [activeClientId],
+    ) ?? EMPTY_DATASETS;
+  const allEdits =
+    useLiveQuery(
+      () => (activeClientId ? clientEdits(activeClientId) : Promise.resolve(EMPTY_EDITS)),
+      [activeClientId],
+    ) ?? EMPTY_EDITS;
+  const metaRow = useLiveQuery(
+    () => (activeClientId ? getWorkspaceMeta(activeClientId) : Promise.resolve(undefined)),
+    [activeClientId],
+  );
 
   const [frequency, setFrequencyState] = useState<Frequency>("mensual");
   const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
@@ -275,19 +324,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // present decides it.
   const sourceSystemId = datasets.length > 0 ? (metaRow?.sourceSystemId ?? LEGACY_SYSTEM) : null;
 
-  const workspaceIdentity: WorkspaceIdentity | null = useMemo(() => {
-    if (datasets.length === 0) {
-      return null;
-    }
-    const identityMode = datasets.some((d) => d.role === "center" || d.role === "sin-centro")
-      ? "centers"
-      : "single";
-    return {
-      system: metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
-      companyName: metaRow?.companyName || datasets[0].companyName,
-      mode: identityMode,
-    };
-  }, [datasets, metaRow?.companyName, metaRow?.sourceSystemId]);
+  // The ACTIVE CLIENT's identity, derived exactly as every other client's is
+  // (`listClientSummaries` uses the same function) — `null` while the client is empty, which is
+  // what makes a first upload adopt instead of clash.
+  const workspaceIdentity: WorkspaceIdentity | null = useMemo(
+    () => deriveWorkspaceIdentity(datasets, metaRow),
+    [datasets, metaRow],
+  );
 
   // Sanitizing on read rather than in an effect means the filters are NEVER out of step with
   // the workspace, the resolved center or the frequency — not even for the render in between.
@@ -438,21 +481,37 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [accounts],
   );
 
-  const commitWorkspace = useCallback(async (built: BuiltWorkspace) => {
-    // MERGES by year rather than replacing: the years this file does not carry survive.
-    await mergeWorkspaceYears(built.datasets, built.meta, built.commentsByDataset);
-    // `replaceWorkspace` already persisted `built.meta.activeCenterId`; this only seeds the
-    // in-memory filter selection from it (a real center marks it, the Consolidado marks none).
-    setRawFilters({
-      ...emptyFilters(),
-      centerIds: seedCenterIds(built.meta.activeCenterId),
-      // Same rule as a monthly batch: what just arrived is what the reader wants to look at.
-      years: [...new Set(built.datasets.map((dataset) => dataset.year))].sort((a, b) => a - b),
-    });
-  }, []);
+  const commitWorkspace = useCallback(
+    async (built: BuiltWorkspace) => {
+      if (!activeClientId) {
+        return;
+      }
+      // MERGES by year rather than replacing, INTO THE OPEN CLIENT: the years this file does not
+      // carry survive, and no other client is reachable from here whatever the file's metadata
+      // sheet declares.
+      await mergeWorkspaceYears(
+        activeClientId,
+        built.datasets,
+        built.meta,
+        built.commentsByDataset,
+      );
+      // The write already persisted `built.meta.activeCenterId`; this only seeds the in-memory
+      // filter selection from it (a real center marks it, the Consolidado marks none).
+      setRawFilters({
+        ...emptyFilters(),
+        centerIds: seedCenterIds(built.meta.activeCenterId),
+        // Same rule as a monthly batch: what just arrived is what the reader wants to look at.
+        years: [...new Set(built.datasets.map((dataset) => dataset.year))].sort((a, b) => a - b),
+      });
+    },
+    [activeClientId],
+  );
 
   const commitMonthlyBatch = useCallback(
     async (slices: MonthSlice[]): Promise<MonthlyBatchOutcome> => {
+      if (!activeClientId) {
+        throw new Error("Crea un cliente antes de cargar datos.");
+      }
       const batchMode = slices[0]?.mode;
       const relevant = datasets.filter((d) =>
         batchMode === "single"
@@ -496,7 +555,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         // Identity was just checked, so the batch's system IS the workspace's.
         sourceSystemId: slices[0]?.system ?? metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
       };
-      await applyMonthSlice(result.datasets, nextMeta);
+      await applyMonthSlice(activeClientId, result.datasets, nextMeta);
       // Marking what just arrived: loading a month is the clearest statement of which year the
       // user wants to look at, and without this a second year would land the table in read-only
       // right after the action that asked to edit it.
@@ -509,21 +568,75 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         conflicts,
       };
     },
-    [datasets, metaRow, allEdits, workspaceIdentity],
+    [activeClientId, datasets, metaRow, allEdits, workspaceIdentity],
   );
 
-  const replaceMonthlyWorkspace = useCallback(async (slices: MonthSlice[]) => {
-    const result = applyBatch([], {}, slices);
+  const replaceMonthlyWorkspace = useCallback(
+    async (slices: MonthSlice[], clientId: string = activeClientId ?? "") => {
+      if (!clientId) {
+        throw new Error("Crea un cliente antes de cargar datos.");
+      }
+      const result = applyBatch([], {}, slices);
+      const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
+      const meta: WorkspaceMeta = {
+        companyName: result.datasets[0]?.companyName || "",
+        warnings: result.warnings,
+        activeCenterId:
+          slices[0]?.mode === "single" ? (result.datasets[0]?.id ?? "") : CONSOLIDADO_ID,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        sourceSystemId: slices[0]?.system ?? LEGACY_SYSTEM,
+      };
+      // Only THIS client is emptied. Its comments survive on the accounts the new file also
+      // brings — see `replaceClientWorkspace`.
+      await replaceClientWorkspace(clientId, result.datasets, meta);
+      setRawFilters({ ...emptyFilters(), years: batchYears });
+      return {
+        datasets: result.datasets,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        years: batchYears,
+        warnings: result.warnings,
+      };
+    },
+    [activeClientId],
+  );
+
+  /**
+   * Creates a client, opens it and loads the batch there — the clash dialog's «Crear cliente y
+   * cargar». The client is born empty, so the load ADOPTS the file's identity and nothing can
+   * clash; the client that was open is not touched.
+   */
+  const createClientWithBatch = useCallback(
+    async (name: string, slices: MonthSlice[]) => {
+      const client = await createClientRow(name);
+      return replaceMonthlyWorkspace(slices, client.id);
+    },
+    [replaceMonthlyWorkspace],
+  );
+
+  /** «Cargar en \<cliente\>» — opens the client that DOES match and loads there, merging onto
+   * whatever it already holds. Nothing is replaced: the identities agree by construction. */
+  const commitBatchIntoClient = useCallback(async (clientId: string, slices: MonthSlice[]) => {
+    const [existing, meta] = await Promise.all([
+      clientDatasets(clientId),
+      getWorkspaceMeta(clientId),
+    ]);
+    const batchMode = slices[0]?.mode;
+    const relevant = existing.filter((d) =>
+      batchMode === "single" ? d.role === "single" : d.role === "center" || d.role === "sin-centro",
+    );
+    const result = applyBatch(relevant, meta?.loadedMonthsByYear ?? EMPTY_COVERAGE, slices);
     const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
-    const meta: WorkspaceMeta = {
-      companyName: result.datasets[0]?.companyName || "",
+    await applyMonthSlice(clientId, result.datasets, {
+      companyName: result.datasets[0]?.companyName || meta?.companyName || "",
       warnings: result.warnings,
       activeCenterId:
-        slices[0]?.mode === "single" ? (result.datasets[0]?.id ?? "") : CONSOLIDADO_ID,
+        batchMode === "single"
+          ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
+          : (meta?.activeCenterId ?? CONSOLIDADO_ID),
       loadedMonthsByYear: result.loadedMonthsByYear,
-      sourceSystemId: slices[0]?.system ?? LEGACY_SYSTEM,
-    };
-    await replaceWorkspace(result.datasets, meta);
+      sourceSystemId: slices[0]?.system ?? meta?.sourceSystemId ?? LEGACY_SYSTEM,
+    });
+    await setActiveClient(clientId);
     setRawFilters({ ...emptyFilters(), years: batchYears });
     return {
       datasets: result.datasets,
@@ -533,11 +646,25 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const removeYear = useCallback(async (year: number) => {
-    const { deletedEdits } = await deleteYear(year);
-    setRawFilters((prev) => ({ ...prev, years: prev.years.filter((y) => y !== year) }));
-    return deletedEdits;
-  }, []);
+  const removeYear = useCallback(
+    async (year: number) => {
+      if (!activeClientId) {
+        return 0;
+      }
+      const { deletedEdits } = await deleteYear(activeClientId, year);
+      setRawFilters((prev) => ({ ...prev, years: prev.years.filter((y) => y !== year) }));
+      return deletedEdits;
+    },
+    [activeClientId],
+  );
+
+  const createClient = useCallback(async (name: string) => (await createClientRow(name)).id, []);
+  const renameClient = useCallback(
+    (clientId: string, name: string) => renameClientRow(clientId, name),
+    [],
+  );
+  const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
+  const selectClient = useCallback((clientId: string) => setActiveClient(clientId), []);
 
   const saveEdit = useCallback(
     async (code: string, monthIndex: number, value: number | null | undefined, comment: string) => {
@@ -562,10 +689,25 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   const segmented = useMemo(() => datasets.some((d) => isSegmented(d.accounts)), [datasets]);
   const segmentable = useMemo(() => datasets.some((d) => canSegment(d.accounts)), [datasets]);
-  const segment = useCallback(async () => (await segmentWorkspace()).skipped, []);
+  const segment = useCallback(
+    async () => (activeClientId ? (await segmentWorkspace(activeClientId)).skipped : []),
+    [activeClientId],
+  );
+
+  const activeClient = useMemo(
+    () => clients.find((client) => client.id === activeClientId),
+    [clients, activeClientId],
+  );
 
   const value = useMemo<PygDataValue>(
     () => ({
+      clients,
+      activeClientId,
+      activeClient,
+      createClient,
+      renameClient,
+      deleteClient,
+      selectClient,
       dataset,
       datasets,
       edits,
@@ -591,6 +733,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
+      createClientWithBatch,
+      commitBatchIntoClient,
       removeYear,
       warnings: metaRow?.warnings ?? [],
       saveEdit,
@@ -612,6 +756,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       setExpandLevel,
     }),
     [
+      clients,
+      activeClientId,
+      activeClient,
+      createClient,
+      renameClient,
+      deleteClient,
+      selectClient,
       dataset,
       datasets,
       edits,
@@ -634,6 +785,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
+      createClientWithBatch,
+      commitBatchIntoClient,
       removeYear,
       saveEdit,
       deepest,

@@ -3,7 +3,7 @@
 import { FilePlus2, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
-import { db } from "@/lib/profit-loss/db";
+import { datasetEdits } from "@/lib/profit-loss/db";
 import { CostCenterUploadModal } from "./cost-center-upload-modal";
 import { usePygData } from "./pyg-data-provider";
 
@@ -25,6 +25,7 @@ import { usePygData } from "./pyg-data-provider";
  */
 export function PygExcelActions() {
   const {
+    activeClientId,
     dataset,
     datasets,
     views,
@@ -95,7 +96,7 @@ export function PygExcelActions() {
             const withEdits = await Promise.all(
               centersAllYears.map(async (d) => ({
                 dataset: d,
-                edits: await db.edits.where("datasetId").equals(d.id).toArray(),
+                edits: await datasetEdits(d.id),
               })),
             );
             const workbook = exportMod.buildMultiCenterWorkbook({
@@ -129,7 +130,7 @@ export function PygExcelActions() {
               centerViews.map(async (v) => ({
                 name: v.name,
                 dataset: v.dataset,
-                edits: await db.edits.where("datasetId").equals(v.dataset.id).toArray(),
+                edits: await datasetEdits(v.dataset.id),
               })),
             );
             const workbook = exportMod.buildMonthSliceWorkbook({
@@ -169,7 +170,7 @@ export function PygExcelActions() {
           const slices = await Promise.all(
             singlesAllYears.map(async (d) => ({
               dataset: d,
-              edits: await db.edits.where("datasetId").equals(d.id).toArray(),
+              edits: await datasetEdits(d.id),
             })),
           );
           const workbook = exportMod.buildPygWorkbook(
@@ -203,7 +204,7 @@ export function PygExcelActions() {
             year: rawYear,
             month: latestLoadedMonth,
             dataset,
-            edits: await db.edits.where("datasetId").equals(dataset.id).toArray(),
+            edits: await datasetEdits(dataset.id),
           });
           const blob = await exportMod.workbookToBlob(workbook);
           downloadBlob(blob, exportMod.monthSliceFilename(rawYear, latestLoadedMonth));
@@ -228,7 +229,13 @@ export function PygExcelActions() {
   return (
     <>
       <ExcelActions
-        upload={{ onClick: () => setUploadOpen(true) }}
+        upload={{
+          onClick: () => setUploadOpen(true),
+          disabled: activeClientId === null,
+          // Junto al botón, no en un tooltip: sin cliente, cargar no es lo siguiente que hay que
+          // hacer, y el vacío de al lado ya ofrece lo que sí.
+          disabledReason: "Crea un cliente antes de cargar datos.",
+        }}
         downloads={downloads}
         info={{
           title: "Archivos aceptados",
