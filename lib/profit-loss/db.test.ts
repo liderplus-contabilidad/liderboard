@@ -3,21 +3,23 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   applyMonthSlice,
   db,
+  deleteYear,
   getWorkspaceMeta,
+  mergeWorkspaceYears,
   replaceWorkspace,
   saveCellEdit,
   saveCellEdits,
 } from "./db";
 import type { PygDataset } from "./types";
 
-function dataset(id: string): PygDataset {
+function dataset(id: string, year = 2026): PygDataset {
   return {
     id,
     fileName: "reporte.xlsx",
     uploadedAt: 0,
     companyName: "HOTELERA ANDES S.A.",
-    periodLabel: "Ene–Dic 2026",
-    year: 2026,
+    periodLabel: `Ene–Dic ${year}`,
+    year,
     baseFrequency: "mensual",
     role: "single",
     accounts: [{ code: "4", name: "Ingresos", values: [1] }],
@@ -26,8 +28,8 @@ function dataset(id: string): PygDataset {
   };
 }
 
-function center(id: string, centerId: string): PygDataset {
-  return { ...dataset(id), role: "center", centerId, order: 0, centerColor: "#000" };
+function center(id: string, centerId: string, year = 2026): PygDataset {
+  return { ...dataset(id, year), role: "center", centerId, order: 0, centerColor: "#000" };
 }
 
 /** Seed a single dataset (single-mode workspace) as edit-test setup. */
@@ -241,5 +243,95 @@ describe("applyMonthSlice", () => {
       sourceSystemId: "monthly-single",
     });
     expect((await db.datasets.toArray()).map((d) => d.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("mergeWorkspaceYears — el «Excel completo» no borra los años que no trae", () => {
+  it("reemplaza solo los años del archivo y deja intactos los demás", async () => {
+    // El caso que motiva todo esto: ya tengo 2025 y 2026, y cargo un libro de 2027.
+    await replaceWorkspace([center("c25", "cartago", 2025), center("c26", "cartago", 2026)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2025: [0, 1], 2026: [0] },
+      sourceSystemId: "monthly-centers",
+    });
+    await saveCellEdit({ datasetId: "c25", code: "4", monthIndex: 0, value: 999 });
+
+    await mergeWorkspaceYears([center("c27", "cartago", 2027)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2027: [0, 1, 2] },
+      sourceSystemId: "monthly-centers",
+    });
+
+    const years = (await db.datasets.toArray()).map((d) => d.year).sort();
+    expect(years).toEqual([2025, 2026, 2027]);
+    // La cobertura de los años anteriores sobrevive junto a la del año nuevo.
+    expect((await getWorkspaceMeta())?.loadedMonthsByYear).toEqual({
+      2025: [0, 1],
+      2026: [0],
+      2027: [0, 1, 2],
+    });
+    // Y el ajuste de 2025 sigue ahí: el archivo no hablaba de ese año.
+    expect(await db.edits.where("datasetId").equals("c25").count()).toBe(1);
+  });
+
+  it("un año que el archivo SÍ trae se reemplaza entero, ajustes incluidos", async () => {
+    await replaceWorkspace([center("c26", "cartago", 2026)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2026: [0] },
+      sourceSystemId: "monthly-centers",
+    });
+    await saveCellEdit({ datasetId: "c26", code: "4", monthIndex: 0, value: 999 });
+
+    await mergeWorkspaceYears([center("c26-nuevo", "cartago", 2026)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2026: [0, 1] },
+      sourceSystemId: "monthly-centers",
+    });
+
+    expect(await db.datasets.toArray()).toHaveLength(1);
+    expect((await db.datasets.toArray())[0].id).toBe("c26-nuevo");
+    // El ajuste viejo se fue con su dataset; el archivo trae los suyos.
+    expect(await db.edits.where("datasetId").equals("c26").count()).toBe(0);
+  });
+});
+
+describe("deleteYear", () => {
+  it("borra un año con sus ajustes y deja los demás intactos", async () => {
+    await replaceWorkspace([center("c25", "cartago", 2025), center("c26", "cartago", 2026)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2025: [0], 2026: [0] },
+      sourceSystemId: "monthly-centers",
+    });
+    await saveCellEdit({ datasetId: "c25", code: "4", monthIndex: 0, value: 1 });
+    await saveCellEdit({ datasetId: "c26", code: "4", monthIndex: 0, value: 2 });
+
+    const { deletedEdits } = await deleteYear(2025);
+    expect(deletedEdits).toBe(1);
+    expect((await db.datasets.toArray()).map((d) => d.year)).toEqual([2026]);
+    expect(await db.edits.where("datasetId").equals("c26").count()).toBe(1);
+    expect((await getWorkspaceMeta())?.loadedMonthsByYear).toEqual({ 2026: [0] });
+  });
+
+  it("borrar el último año deja el workspace vacío", async () => {
+    await replaceWorkspace([center("c26", "cartago", 2026)], {
+      companyName: "HOTELERA ANDES S.A.",
+      warnings: [],
+      activeCenterId: "consolidado",
+      loadedMonthsByYear: { 2026: [0] },
+      sourceSystemId: "monthly-centers",
+    });
+    await deleteYear(2026);
+    expect(await db.datasets.count()).toBe(0);
+    expect(await getWorkspaceMeta()).toBeUndefined();
   });
 });

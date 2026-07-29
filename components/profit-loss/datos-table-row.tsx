@@ -4,8 +4,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo } from "react";
 import { cn } from "@/lib/cn";
 import type { EditorAnchor } from "./cell-editor";
-import type { DatosRow } from "@/lib/profit-loss/datos-types";
-import { formatAmount, rowTotal } from "./datos-utils";
+import type { DatosColumn, DatosRow } from "@/lib/profit-loss/datos-types";
+import { formatAmount } from "./datos-utils";
 
 const INDENT_STEP = 16;
 const BASE_INDENT = 14;
@@ -14,11 +14,12 @@ export interface DatosTableRowProps {
   row: DatosRow;
   hasChildren: boolean;
   isCollapsed: boolean;
-  /** Real column indices to render, in order — the "Periodo" filter's doing. */
+  /** The grid's whole column plan; `row.cells[i]` aligns to `columns[i]`. */
+  columns: DatosColumn[];
+  /** Positions in `columns` to render, in order — the "Periodo" filter's doing. */
   visibleColumns: number[];
   editable: boolean;
-  showTotal: boolean;
-  /** Which columns the by-centers workspace has actually loaded; `null` = no restriction
+  /** Which columns the workspace has actually loaded, by position; `null` = no restriction
    * (single-statement mode). An unloaded column renders empty and never opens for editing,
    * regardless of `editable` or `row.movement`. */
   loadedColumns: ReadonlySet<number> | null;
@@ -40,9 +41,9 @@ function DatosTableRowImpl({
   row,
   hasChildren,
   isCollapsed,
+  columns,
   visibleColumns,
   editable,
-  showTotal,
   loadedColumns,
   flashCol,
   detailOpen,
@@ -103,6 +104,17 @@ function DatosTableRowImpl({
       </td>
 
       {visibleColumns.map((col) => {
+        // A Total column is derived, so it is never editable and never carries a mark — it
+        // renders through its own cell exactly as it did when it lived outside this loop.
+        if (columns[col]?.kind === "total") {
+          return (
+            <TotalCell
+              key={col}
+              value={row.cells[col]?.value ?? 0}
+              emphasized={Boolean(row.isResult)}
+            />
+          );
+        }
         const loaded = !loadedColumns || loadedColumns.has(col);
         const cell = loaded ? row.cells[col] : undefined;
         return (
@@ -117,8 +129,6 @@ function DatosTableRowImpl({
           />
         );
       })}
-
-      {showTotal && <TotalCell value={rowTotal(row)} emphasized={Boolean(row.isResult)} />}
 
       <DetailCell
         code={row.code}

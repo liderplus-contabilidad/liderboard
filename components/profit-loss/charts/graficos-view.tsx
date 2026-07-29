@@ -30,6 +30,7 @@ import {
   activeSource,
   codeColorResolver,
   colorResolver,
+  expandSlots,
   toSeriesQuery,
 } from "@/lib/profit-loss/charts/selection";
 import { usePygAnalytics } from "../pyg-analytics-provider";
@@ -62,11 +63,17 @@ export function GraficosView() {
   const { dataset, filters } = usePygData();
   const { context, runQuery } = usePygAnalytics();
   const source = activeSource(context);
+  // A marked period is a year-less slot; the engine reads dated references. Gráficos still reads
+  // ONE year (`context.year`), so the expansion has a single year to stamp.
+  const periodRefs = useMemo(
+    () => expandSlots(filters.periods, [context.year]),
+    [filters.periods, context.year],
+  );
 
   const defaultCodes = useMemo(() => defaultEvolutionCodes(source), [source]);
   const totals = useMemo(
-    () => runQuery(presetQuery(defaultCodes, context, { periods: filters.periods })),
-    [runQuery, defaultCodes, context, filters.periods],
+    () => runQuery(presetQuery(defaultCodes, context, { periods: periodRefs })),
+    [runQuery, defaultCodes, context, periodRefs],
   );
   // ONE period for the whole tab. Every card names it in its subtitle, so they cannot be
   // allowed to each pick their own: a statement whose revenue stops in July but keeps booking
@@ -107,8 +114,8 @@ export function GraficosView() {
   const revenueLeaves = leavesOf(source, REVENUE_ROOT);
   const compositionCodes = intersectWithMarked(revenueLeaves, filters.codes);
   const composition = useMemo(
-    () => runQuery(compositionQuery(compositionCodes, context, { periods: filters.periods })),
-    [runQuery, compositionCodes, context, filters.periods],
+    () => runQuery(compositionQuery(compositionCodes, context, { periods: periodRefs })),
+    [runQuery, compositionCodes, context, periodRefs],
   );
   const slices = useMemo(() => toPieSlices(amountsAt(composition, period)), [composition, period]);
   const sliceColor = useMemo(() => entryColor(slices.slices.map((slice) => slice.code)), [slices]);
@@ -121,8 +128,8 @@ export function GraficosView() {
   const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
   const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = useMemo(
-    () => runQuery(compositionQuery(rankingCodes, context, { periods: filters.periods })),
-    [runQuery, rankingCodes, context, filters.periods],
+    () => runQuery(compositionQuery(rankingCodes, context, { periods: periodRefs })),
+    [runQuery, rankingCodes, context, periodRefs],
   );
   const ranking = useMemo(() => topEntries(amountsAt(expenses, period)), [expenses, period]);
   const rankingColor = useMemo(
@@ -220,7 +227,7 @@ export function GraficosView() {
       <WaterfallCard
         source={source}
         frequency={context.frequency}
-        periods={filters.periods.length > 0 ? filters.periods : undefined}
+        periods={periodRefs.length > 0 ? periodRefs : undefined}
       />
     </div>
   );

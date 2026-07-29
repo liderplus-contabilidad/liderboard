@@ -6,13 +6,14 @@ import { Dropdown, DropdownPanel, DropdownTrigger } from "@/components/ui/dropdo
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { cn } from "@/lib/cn";
-import { periodsForYear } from "@/lib/profit-loss/analytics/period";
+import { periodSlots } from "@/lib/profit-loss/filters";
 import { deepestLevel, matchExpandLevel } from "@/lib/profit-loss/filter";
 import type { AccountRow, Frequency } from "@/lib/profit-loss/types";
 import { AccountFilter } from "./account-filter";
 import { ActiveFilterChips } from "./active-filter-chips";
 import { CenterFilter } from "./center-filter";
 import { PeriodFilter } from "./period-filter";
+import { YearFilter } from "./year-filter";
 import { usePygData } from "./pyg-data-provider";
 
 const GRANULARITIES: { value: Frequency; label: string }[] = [
@@ -23,7 +24,7 @@ const GRANULARITIES: { value: Frequency; label: string }[] = [
 ];
 
 /**
- * PyG's filter row: Cuenta contable · Nivel · Centro de costo · Periodo, with "Ver por" pinned
+ * PyG's filter row: Cuenta contable · Nivel · Centro de costo · Año · Periodo, with "Ver por" pinned
  * to the right and the active-filter chip strip below. It is the ONLY place PyG selects data —
  * there is no separate "Comparar" box — and the same row (and the same marks) reaches Datos,
  * Gráficos and Análisis alike.
@@ -42,6 +43,10 @@ export function PygToolbar() {
     clearCenters,
     togglePeriod,
     clearPeriods,
+    toggleYear,
+    clearYears,
+    removeYear,
+    loadedYears,
     dataset,
     views,
     collapsed,
@@ -53,7 +58,7 @@ export function PygToolbar() {
   }));
 
   const centerOptions = views.filter((view) => view.role !== "consolidado");
-  const periods = dataset ? periodsForYear(dataset.year ?? 0, frequency) : [];
+  const periods = dataset ? periodSlots(frequency) : [];
 
   return (
     <div className="shrink-0 border-b border-border bg-surface">
@@ -77,6 +82,13 @@ export function PygToolbar() {
           selected={filters.centerIds}
           onToggle={toggleCenter}
           onSelectAll={clearCenters}
+        />
+        <YearFilter
+          years={loadedYears}
+          selected={filters.years}
+          onToggle={toggleYear}
+          onSelectAll={clearYears}
+          onDelete={removeYear}
         />
         <PeriodFilter
           periods={periods}

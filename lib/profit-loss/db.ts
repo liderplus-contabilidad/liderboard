@@ -5,6 +5,7 @@
  */
 import Dexie, { type Table } from "dexie";
 import { segmentAccounts } from "./segment";
+import { assignCenterSlots } from "./workspace";
 import type { CellEdit, ImportedComment, PygDataset, WorkspaceMeta } from "./types";
 import { LEGACY_SYSTEM } from "./upload/systems";
 
@@ -133,8 +134,44 @@ class PygDb extends Dexie {
             }
           });
       });
+    // v6: a dataset becomes a CENTER-YEAR (`pyg-multi-year`), so coverage moves onto the year
+    // axis. Purely ADDITIVE: nothing is deleted, because a workspace here is the user's only
+    // copy of its adjustments — the year that was already loaded simply becomes the first key
+    // of `loadedMonthsByYear`, and datasets that never got a year stamped adopt the
+    // workspace's. A workspace with no resolvable year is left empty rather than filed under
+    // an invented one.
+    this.version(6)
+      .stores({
+        datasets: "id, role, order, year",
+        edits: "++id, datasetId, &[datasetId+code+monthIndex]",
+        meta: "key",
+      })
+      .upgrade(async (tx) => {
+        const datasetsTable = tx.table<LegacyDataset>("datasets");
+        const datasets = await datasetsTable.toArray();
+        const metaRow = await tx.table<LegacyMetaRow>("meta").get("workspace");
+        if (!metaRow) {
+          return;
+        }
+        const year = datasets.find((d) => d.year != null)?.year ?? null;
+        if (year === null) {
+          await tx.table("meta").clear();
+          return;
+        }
+        await datasetsTable.toCollection().modify((dataset) => {
+          if (dataset.year == null) {
+            dataset.year = year;
+          }
+        });
+        const { loadedMonths, ...rest } = metaRow;
+        await tx.table("meta").put({ ...rest, loadedMonthsByYear: { [year]: loadedMonths ?? [] } });
+      });
   }
 }
+
+/** The pre-v6 shapes, needed only to read the old rows during the upgrade. */
+type LegacyDataset = Omit<PygDataset, "year"> & { year: number | null };
+type LegacyMetaRow = Omit<WorkspaceMetaRow, "loadedMonthsByYear"> & { loadedMonths?: number[] };
 
 export const db = new PygDb();
 
@@ -177,6 +214,102 @@ export async function applyMonthSlice(datasets: PygDataset[], meta: WorkspaceMet
   await db.transaction("rw", db.datasets, db.meta, async () => {
     await db.datasets.bulkPut(datasets);
     await db.meta.put({ key: "workspace", ...meta });
+  });
+}
+
+/**
+ * Loads the app's own workbook, MERGING BY YEAR: every year the file carries replaces that year
+ * whole (its datasets and its adjustments), and a year the file does NOT carry is left exactly
+ * as it was.
+ *
+ * This is the difference between «Excel completo» being a restore and being a wipe. With 2025,
+ * 2026 and 2027 loaded, re-uploading a backup taken when only 2025 and 2026 existed used to
+ * discard 2027 without ever naming it; now it does not touch it.
+ *
+ * The trade-off is deliberate and specified: the file stops being a faithful snapshot of the
+ * whole workspace — restoring it does not guarantee the exact state you had, because the years
+ * it omits survive. That is preferred to the alternative, where an old file silently destroys a
+ * year loaded after it.
+ */
+export async function mergeWorkspaceYears(
+  datasets: PygDataset[],
+  meta: WorkspaceMeta,
+  commentsByDataset: { datasetId: string; comments: ImportedComment[] }[] = [],
+): Promise<void> {
+  await db.transaction("rw", db.datasets, db.edits, db.meta, async () => {
+    const incomingYears = new Set(datasets.map((dataset) => dataset.year));
+
+    // Out with the years the file brings — datasets AND their adjustments, since the file
+    // carries its own and keeping both would double them.
+    const replaced = (await db.datasets.toArray()).filter((d) => incomingYears.has(d.year));
+    if (replaced.length > 0) {
+      const ids = replaced.map((d) => d.id);
+      await db.edits.where("datasetId").anyOf(ids).delete();
+      await db.datasets.bulkDelete(ids);
+    }
+    await db.datasets.bulkAdd(datasets);
+
+    // The slot pass sees the WHOLE workspace, surviving years included, so a re-upload cannot
+    // renumber the centers of a year it never touched.
+    const all = assignCenterSlots(await db.datasets.toArray());
+    await db.datasets.bulkPut(all);
+
+    const previous = await db.meta.get("workspace");
+    await db.meta.put({
+      key: "workspace",
+      ...meta,
+      loadedMonthsByYear: {
+        ...(previous?.loadedMonthsByYear ?? {}),
+        ...meta.loadedMonthsByYear,
+      },
+    });
+
+    const now = Date.now();
+    const seeds = commentsByDataset.flatMap(({ datasetId, comments }) =>
+      comments.map((c) => ({
+        datasetId,
+        code: c.code,
+        monthIndex: c.monthIndex,
+        ...(c.value !== undefined ? { value: c.value } : {}),
+        ...(c.comment ? { comment: c.comment } : {}),
+        updatedAt: now,
+      })),
+    );
+    if (seeds.length > 0) {
+      await db.edits.bulkAdd(seeds);
+    }
+  });
+}
+
+/**
+ * Deletes one year: its datasets, their edits, and its coverage entry — in one transaction, so
+ * a failure can never leave edits orphaned from the datasets they overlay. Deleting the last
+ * year clears the workspace, which is what makes PyG fall back to its empty state instead of
+ * showing a company with nothing in it.
+ *
+ * Returns how many adjustments went with it, so the caller can say what was lost.
+ */
+export async function deleteYear(year: number): Promise<{ deletedEdits: number }> {
+  return db.transaction("rw", db.datasets, db.edits, db.meta, async () => {
+    const doomed = await db.datasets.where("year").equals(year).toArray();
+    if (doomed.length === 0) {
+      return { deletedEdits: 0 };
+    }
+    const ids = doomed.map((dataset) => dataset.id);
+    const deletedEdits = await db.edits.where("datasetId").anyOf(ids).count();
+    await db.edits.where("datasetId").anyOf(ids).delete();
+    await db.datasets.bulkDelete(ids);
+
+    if ((await db.datasets.count()) === 0) {
+      await db.meta.clear();
+      return { deletedEdits };
+    }
+    const row = await db.meta.get("workspace");
+    if (row) {
+      const { [year]: _gone, ...rest } = row.loadedMonthsByYear;
+      await db.meta.put({ ...row, loadedMonthsByYear: rest });
+    }
+    return { deletedEdits };
   });
 }
 

@@ -2,10 +2,9 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MONTHS_SHORT_ES } from "@/lib/date";
 import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
-import { toDatosGrid } from "@/lib/profit-loss/derive";
+import { toDatosGridMultiYear } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
 import { CONSOLIDADO_ID } from "@/lib/profit-loss/filters";
 import type { Frequency } from "@/lib/profit-loss/types";
@@ -37,7 +36,7 @@ const FLASH_MS = 2200;
 const EMPTY_GRID: DatosGrid = {
   id: "default",
   title: "Estado de Resultados",
-  months: [...MONTHS_SHORT_ES],
+  columns: [],
   rows: [],
 };
 
@@ -53,7 +52,6 @@ const EMPTY_GRID: DatosGrid = {
 export function DatosView() {
   const {
     dataset,
-    edits,
     frequency,
     allowed,
     saveEdit,
@@ -64,7 +62,9 @@ export function DatosView() {
     collapsed,
     toggleCollapsed,
     mode,
-    loadedMonths,
+    loadedMonthsByYear,
+    visibleYears,
+    activeSlices,
   } = usePygData();
 
   const [sort, setSort] = useState<DatosSort | null>(null);
@@ -74,8 +74,9 @@ export function DatosView() {
   // without the workspace that produced it.
   const [detailCode, setDetailCode] = useState<string | null>(null);
   // The twin cell a reclassification just moved, flashed briefly so the change doesn't happen
-  // out of sight. Memory only — it means nothing after the edit that produced it.
-  const [flash, setFlash] = useState<{ code: string; monthIndex: number } | null>(null);
+  // out of sight. Held as a COLUMN POSITION, which is what the table renders against. Memory
+  // only — it means nothing after the edit that produced it.
+  const [flash, setFlash] = useState<{ code: string; col: number } | null>(null);
 
   // A newly loaded dataset can be coarser than the current view (its base floors the
   // options), but the provider resets `frequency` to the base one render later. Until it
@@ -91,20 +92,45 @@ export function DatosView() {
   // correctness.
   const previousGrid = useRef<DatosGrid | undefined>(undefined);
   const grid = useMemo(() => {
-    const next = dataset
-      ? toDatosGrid(dataset, edits, effectiveFrequency, previousGrid.current)
-      : EMPTY_GRID;
+    const next =
+      activeSlices.length > 0
+        ? toDatosGridMultiYear(activeSlices, effectiveFrequency, previousGrid.current)
+        : EMPTY_GRID;
     previousGrid.current = next;
     return next;
-  }, [dataset, edits, effectiveFrequency]);
+  }, [activeSlices, effectiveFrequency]);
   // The by-centers workspace declares which periods it loaded; a single-statement workspace
-  // has no such restriction (its whole year always arrives in one file).
+  // has no such restriction (its whole year always arrives in one file). Coverage is expressed
+  // in COLUMN POSITIONS, not period indices, because the Total columns sit in the same list.
   const loadedColumns = useMemo(() => {
     if (mode !== "multi" || !dataset) {
       return null;
     }
-    return aggregateCoverage(new Set(loadedMonths), dataset.baseFrequency, effectiveFrequency);
-  }, [mode, dataset, loadedMonths, effectiveFrequency]);
+    // Coverage is resolved PER COLUMN against its own year: a month loaded in 2025 says nothing
+    // about the same month of 2026.
+    const coveredByYear = new Map<number, ReadonlySet<number>>();
+    const positions = new Set<number>();
+    grid.columns.forEach((column, position) => {
+      // A Total is derived from whatever its year loaded, so it is never itself "unloaded".
+      if (column.kind === "total") {
+        positions.add(position);
+        return;
+      }
+      let covered = coveredByYear.get(column.year);
+      if (!covered) {
+        covered = aggregateCoverage(
+          new Set(loadedMonthsByYear[column.year] ?? []),
+          dataset.baseFrequency,
+          effectiveFrequency,
+        );
+        coveredByYear.set(column.year, covered);
+      }
+      if (covered.has(column.index)) {
+        positions.add(position);
+      }
+    });
+    return positions;
+  }, [mode, dataset, loadedMonthsByYear, effectiveFrequency, grid.columns]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).
@@ -116,14 +142,23 @@ export function DatosView() {
     () => flattenSorted(filteredRows, collapsed, sort),
     [filteredRows, collapsed, sort],
   );
-  // The "Periodo" filter bounds which columns render; the real index travels through so
-  // editing still writes to the right month. No periods marked shows the whole axis.
+  // The "Periodo" filter bounds which columns render; the column POSITION travels through, and
+  // the column itself carries the period index an edit writes against. No periods marked shows
+  // the whole axis.
   const visibleColumns = useMemo(() => {
     if (filters.periods.length === 0) {
-      return grid.months.map((_, index) => index);
+      return grid.columns.map((_, position) => position);
     }
-    return filters.periods.map((period) => period.index).sort((a, b) => a - b);
-  }, [filters.periods, grid.months]);
+    const marked = new Set(filters.periods.map((period) => period.index));
+    const positions: number[] = [];
+    grid.columns.forEach((column, position) => {
+      // A Total is never trimmed: it is the year's total, not one of its periods.
+      if (column.kind === "total" || marked.has(column.index)) {
+        positions.push(position);
+      }
+    });
+    return positions;
+  }, [filters.periods, grid.columns]);
 
   // A newly loaded workspace should surface its own warnings even if the previous banner
   // was dismissed.
@@ -141,13 +176,13 @@ export function DatosView() {
     return () => clearTimeout(timer);
   }, [flash]);
 
-  // Aggregating to fewer columns (e.g. Mensual → Trimestral) can strand a month-column
-  // sort on a column that no longer exists; clear it so the grid isn't "sorted" by nothing.
+  // Aggregating to fewer columns (e.g. Mensual → Trimestral) can strand a column sort on a
+  // column that no longer exists; clear it so the grid isn't "sorted" by nothing.
   useEffect(() => {
     setSort((prev) =>
-      prev && typeof prev.key === "object" && prev.key.col >= grid.months.length ? null : prev,
+      prev && typeof prev.key === "object" && prev.key.col >= grid.columns.length ? null : prev,
     );
-  }, [grid.months.length]);
+  }, [grid.columns.length]);
 
   // Value edits/comments only make sense on an editable center in the concrete monthly view;
   // `canEdit` already covers the center half, this adds the frequency half (see `PygDataProvider`
@@ -155,8 +190,12 @@ export function DatosView() {
   const editable = canEdit && effectiveFrequency === "mensual";
   const readOnlyReason = editable
     ? null
-    : readOnlyReasonFor(filters.centerIds.length, activeCenterId, effectiveFrequency);
-  const showTotal = effectiveFrequency !== "anual";
+    : readOnlyReasonFor(
+        filters.centerIds.length,
+        activeCenterId,
+        effectiveFrequency,
+        visibleYears.length,
+      );
 
   const onSort = useCallback((key: DatosSortKey) => {
     setSort((prev) => nextSort(prev, key));
@@ -177,17 +216,26 @@ export function DatosView() {
       // The persist call is a side effect, so it must live OUTSIDE the state updater:
       // React StrictMode double-invokes updaters, which would fire two concurrent writes
       // for the same cell and collide on the unique [datasetId+code+monthIndex] index.
-      if (editing) {
+      const column = editing ? grid.columns[editing.col] : undefined;
+      if (editing && column?.kind === "period") {
         void saveEdit(
           editing.code,
-          editing.col,
+          column.index,
           editing.valueEditable ? value : undefined,
           comment,
-        ).then(setFlash);
+        ).then((twin) => {
+          // The twin comes back keyed by period index; the table renders positions.
+          const col = twin
+            ? grid.columns.findIndex(
+                (candidate) => candidate.kind === "period" && candidate.index === twin.monthIndex,
+              )
+            : -1;
+          setFlash(twin && col >= 0 ? { code: twin.code, col } : null);
+        });
       }
       setEditing(null);
     },
-    [editing, saveEdit],
+    [editing, grid.columns, saveEdit],
   );
 
   const editingRow = editing ? findRow(grid.rows, editing.code) : null;
@@ -212,7 +260,6 @@ export function DatosView() {
         sort={sort}
         editable={editable}
         readOnlyReason={readOnlyReason}
-        showTotal={showTotal}
         flash={flash}
         loadedColumns={loadedColumns}
         openDetailCode={detailCode}
@@ -230,7 +277,7 @@ export function DatosView() {
         <CellEditor
           anchor={editing}
           title={editingRow.name}
-          subtitle={`${grid.months[editing.col] ?? ""} · ${grid.title}`}
+          subtitle={`${grid.columns[editing.col]?.label ?? ""} · ${grid.title}`}
           valueEditable={editing.valueEditable}
           initialValue={editingRow.cells[editing.col]?.value ?? null}
           initialComment={editingRow.cells[editing.col]?.comment ?? ""}
@@ -251,7 +298,13 @@ function readOnlyReasonFor(
   markedCenterCount: number,
   activeCenterId: string,
   effectiveFrequency: Frequency,
+  visibleYearCount: number,
 ): string {
+  // The year comes first: with two years on screen the table is read-only whatever the center
+  // resolves to, and "hay 2 años" is the reason the reader can act on.
+  if (visibleYearCount >= 2) {
+    return "hay varios años a la vista: marca uno solo para editarlo";
+  }
   if (markedCenterCount >= 2) {
     return "hay varios centros de costo marcados: se muestra el Consolidado";
   }

@@ -82,7 +82,7 @@ function allNotes(ws: ExcelJS.Worksheet): string[] {
 
 describe("buildPygWorkbook — value round-trip", () => {
   it("writes the edited values, not the file's original ones", async () => {
-    const ws = await reload(buildPygWorkbook(dataset, edits));
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
     let habitacionesEnero: unknown;
     let sueldosEnero: unknown;
     ws.eachRow((row) => {
@@ -97,7 +97,7 @@ describe("buildPygWorkbook — value round-trip", () => {
 
 describe("buildPygWorkbook — metadata sheet", () => {
   it("writes mode, year, comments and value adjustments for the round-trip", async () => {
-    const wb = buildPygWorkbook(dataset, edits, [0, 1]);
+    const wb = buildPygWorkbook([{ dataset, edits }], { 2026: [0, 1] });
     const buffer = await wb.xlsx.writeBuffer();
     const workbook = XLSX.read(buffer as unknown as ArrayBuffer);
     const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[APP_WORKBOOK_META_SHEET], {
@@ -108,8 +108,7 @@ describe("buildPygWorkbook — metadata sheet", () => {
     const meta = rowsToAppWorkbookMeta(rows);
 
     expect(meta.mode).toBe("single");
-    expect(meta.year).toBe(2026);
-    expect(meta.loadedMonths).toEqual([0, 1]);
+    expect(meta.years).toEqual([{ year: 2026, loadedMonths: [0, 1] }]);
     expect(meta.comments).toContainEqual(
       expect.objectContaining({ code: "4.1.1", monthIndex: 0, comment: "Ajuste de enero" }),
     );
@@ -127,7 +126,7 @@ describe("buildPygWorkbook — metadata sheet", () => {
 
 describe("buildPygWorkbook — cell notes", () => {
   it("annotates every edited cell with the original value, with or without a comment", async () => {
-    const ws = await reload(buildPygWorkbook(dataset, edits));
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
     const notes = allNotes(ws);
 
     // Two value edits (4.1.1 and 5.1.1) → two "Valor original" annotations, incl. the
@@ -166,8 +165,7 @@ describe("buildMultiCenterWorkbook", () => {
     };
     const wb = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
-      year: 2026,
-      loadedMonths: ALL_MONTHS,
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
       centers: [
         {
           dataset: { ...norte, role: "center" as const, costCenterName: "SUCURSAL NORTE" },
@@ -195,8 +193,7 @@ describe("buildMultiCenterWorkbook", () => {
     };
     const wb = buildMultiCenterWorkbook({
       companyName: "X",
-      year: 2026,
-      loadedMonths: ALL_MONTHS,
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
       centers: [
         { dataset: { ...norte, role: "center" as const, costCenterName: "NORTE" }, edits: [edit] },
       ],
@@ -214,8 +211,7 @@ describe("buildMultiCenterWorkbook", () => {
   it("leaves unloaded months empty instead of 0", () => {
     const wb = buildMultiCenterWorkbook({
       companyName: "X",
-      year: 2026,
-      loadedMonths: [0, 1], // only Enero–Febrero loaded
+      loadedMonthsByYear: { 2026: [0, 1] }, // only Enero–Febrero loaded
       centers: [
         { dataset: { ...norte, role: "center" as const, costCenterName: "NORTE" }, edits: [] },
       ],
@@ -235,8 +231,7 @@ describe("buildMultiCenterWorkbook", () => {
     const long = "CENTRO CON UN NOMBRE EXTREMADAMENTE LARGO QUE SUPERA EL LIMITE";
     const wb = buildMultiCenterWorkbook({
       companyName: "X",
-      year: 2026,
-      loadedMonths: ALL_MONTHS,
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
       centers: [
         { dataset: { ...norte, costCenterName: long }, edits: [] },
         { dataset: { ...sur, costCenterName: long }, edits: [] },

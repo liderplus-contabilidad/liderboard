@@ -9,7 +9,6 @@ function identity(overrides: Partial<WorkspaceIdentity> = {}): WorkspaceIdentity
   return {
     system: "monthly-single",
     companyName: "NOMIK HOTELS S.A.S.",
-    year: 2026,
     mode: "single",
     ...overrides,
   };
@@ -36,8 +35,10 @@ describe("compareIdentity", () => {
     ).toEqual([]);
   });
 
-  it("names the year when only the year differs", () => {
-    expect(compareIdentity(identity(), identity({ year: 2025 }))).toEqual(["year"]);
+  it("el año ya NO es parte de la identidad: un archivo de otro año no contradice nada", () => {
+    // Antes esto devolvía ["year"] y disparaba un reemplazo destructivo. Ahora un dataset es un
+    // centro-AÑO, así que 2025 junto a 2026 es más del mismo workspace, no otro workspace.
+    expect(compareIdentity(identity(), identity())).toEqual([]);
   });
 
   it("names the company when only the company differs", () => {
@@ -53,23 +54,22 @@ describe("compareIdentity", () => {
   it("names every reason at once when several differ", () => {
     const reasons = compareIdentity(
       identity(),
-      identity({ companyName: "DARWIN & WOLF", year: 2025, mode: "centers" }),
+      identity({ companyName: "DARWIN & WOLF", mode: "centers" }),
     );
-    expect(reasons).toEqual(expect.arrayContaining(["year", "company", "mode"]));
-    expect(reasons).toHaveLength(3);
+    expect(reasons).toEqual(expect.arrayContaining(["company", "mode"]));
+    expect(reasons).toHaveLength(2);
   });
 });
 
-describe("describeIdentityChange — cambia el año", () => {
-  it("conserva el texto de la confirmación de cambio de año", () => {
-    const current = identity({ year: 2026 });
-    const incoming = identity({ year: 2025 });
-    const confirmation = describeIdentityChange(current, incoming, ["year"]);
-    expect(confirmation.title).toBe("Cambiar de año");
-    expect(confirmation.description).toBe(
-      "El workspace tiene 2026 cargado. Este archivo es de 2025: cambiar de año descarta los " +
-        "datos, ajustes y comentarios de 2026. ¿Continuar?",
-    );
+describe("describeIdentityChange — el año ya no es un motivo", () => {
+  it("no queda ninguna razón que hable de años", () => {
+    // La confirmación «Cambiar de año» se retiró junto con el año de la identidad: no hay
+    // combinación de motivos que pueda producirla.
+    const confirmation = describeIdentityChange(identity(), identity({ mode: "centers" }), [
+      "mode",
+    ]);
+    expect(confirmation.title).not.toContain("año");
+    expect(confirmation.description).not.toContain("año");
   });
 });
 
@@ -108,24 +108,23 @@ describe("describeIdentityChange — cambia el sistema contable", () => {
 
   it("lo nombra junto a las demás razones cuando cambian varias", () => {
     const confirmation = describeIdentityChange(
-      identity({ system: "microplus", year: 2026 }),
-      identity({ system: "monthly-single", year: 2025 }),
-      ["system", "year"],
+      identity({ system: "microplus", companyName: "NOMIK HOTELS S.A.S." }),
+      identity({ system: "monthly-single", companyName: "DARWIN & WOLF" }),
+      ["system", "company"],
     );
     expect(confirmation.description).toContain("de sistema contable");
-    expect(confirmation.description).toContain("2026");
-    expect(confirmation.description).toContain("2025");
+    expect(confirmation.description).toContain("NOMIK HOTELS S.A.S.");
+    expect(confirmation.description).toContain("DARWIN & WOLF");
   });
 });
 
 describe("describeIdentityChange — varias razones a la vez", () => {
   it("nombra todo lo que cambia en una sola confirmación", () => {
-    const current = identity({ companyName: "NOMIK HOTELS S.A.S.", year: 2026 });
-    const incoming = identity({ companyName: "DARWIN & WOLF", year: 2025 });
-    const confirmation = describeIdentityChange(current, incoming, ["year", "company"]);
+    const current = identity({ companyName: "NOMIK HOTELS S.A.S.", mode: "single" });
+    const incoming = identity({ companyName: "DARWIN & WOLF", mode: "centers" });
+    const confirmation = describeIdentityChange(current, incoming, ["company", "mode"]);
     expect(confirmation.description).toContain("NOMIK HOTELS S.A.S.");
     expect(confirmation.description).toContain("DARWIN & WOLF");
-    expect(confirmation.description).toContain("2026");
-    expect(confirmation.description).toContain("2025");
+    expect(confirmation.description).toContain("de modo");
   });
 });

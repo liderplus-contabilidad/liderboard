@@ -30,7 +30,10 @@ interface StagedFile {
 
 interface UploadSummary {
   mode: "single" | "centers";
-  loadedMonths: number[];
+  /** Coverage per year — the summary names each year and the months it now holds. */
+  loadedMonthsByYear: Record<number, number[]>;
+  /** The years this upload brought, ascending; the rest of the workspace is not re-announced. */
+  years: number[];
   centersCount: number;
   accountsCount: number;
   warnings: string[];
@@ -71,7 +74,10 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [confirmDestructive, setConfirmDestructive] = useState(false);
+  const [confirmReplaceYears, setConfirmReplaceYears] = useState<{
+    years: number[];
+    editCount: number;
+  } | null>(null);
   const [confirmIdentityChange, setConfirmIdentityChange] = useState<{
     current: WorkspaceIdentity;
     incoming: WorkspaceIdentity;
@@ -82,7 +88,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   // Reset everything once the modal is closed, so it never reopens on stale state.
   useEffect(() => {
     if (!open) {
-      setConfirmDestructive(false);
+      setConfirmReplaceYears(null);
       setConfirmIdentityChange(null);
       setSummary(null);
       setFiles([]);
@@ -154,14 +160,24 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   const finishWithMonthlyOutcome = useCallback(
     (
       mode: "single" | "centers",
-      outcome: { datasets: PygDataset[]; loadedMonths: number[]; warnings: string[] },
+      outcome: {
+        datasets: PygDataset[];
+        loadedMonthsByYear: Record<number, number[]>;
+        years: number[];
+        warnings: string[];
+      },
       conflicts: ReloadConflict[] = [],
     ) => {
       const accountsCount = outcome.datasets[0]?.accounts.length ?? 0;
+      // Centers are counted per year, so a two-year batch would otherwise report double.
+      const centersCount = new Set(
+        outcome.datasets.map((dataset) => dataset.centerId ?? dataset.id),
+      ).size;
       setSummary({
         mode,
-        loadedMonths: outcome.loadedMonths,
-        centersCount: outcome.datasets.length,
+        loadedMonthsByYear: outcome.loadedMonthsByYear,
+        years: outcome.years,
+        centersCount,
         accountsCount,
         warnings: outcome.warnings,
         conflicts,
@@ -201,7 +217,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
         setFiles([]);
       } finally {
         setBusy(false);
-        setConfirmDestructive(false);
+        setConfirmReplaceYears(null);
       }
     },
     [commitWorkspace, onClose],
@@ -236,7 +252,6 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       const incomingIdentity: WorkspaceIdentity = {
         system: incoming.system,
         companyName: incoming.companyName,
-        year: incoming.year,
         mode: incoming.mode,
       };
       const reasons = workspaceIdentity ? compareIdentity(workspaceIdentity, incomingIdentity) : [];
@@ -254,14 +269,24 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     if (!workspaceBuilt) {
       return;
     }
-    if (workspaceBuilt.mode === "single") {
-      setBusy(true);
-      const editCount = await db.edits.count();
-      setBusy(false);
-      if (editCount > 0) {
-        setConfirmDestructive(true);
-        return;
-      }
+    // The confirmation is about the years the file REPLACES — the ones it omits survive, so
+    // asking about "the whole workspace" would overstate what is at stake.
+    setBusy(true);
+    const replacedYears = [...new Set(workspaceBuilt.datasets.map((d) => d.year))].sort(
+      (a, b) => a - b,
+    );
+    const doomed = await db.datasets.where("year").anyOf(replacedYears).toArray();
+    const editCount =
+      doomed.length > 0
+        ? await db.edits
+            .where("datasetId")
+            .anyOf(doomed.map((d) => d.id))
+            .count()
+        : 0;
+    setBusy(false);
+    if (editCount > 0) {
+      setConfirmReplaceYears({ years: replacedYears, editCount });
+      return;
     }
     await runReplaceWorkspace(workspaceBuilt);
   }, [
@@ -465,11 +490,16 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       </div>
 
       <ConfirmDialog
-        open={confirmDestructive}
+        open={confirmReplaceYears !== null}
         variant="destructive"
         busy={busy}
-        title="Reemplazar datos actuales"
-        description="Cargar reemplazará los datos actuales y descartará las ediciones y comentarios existentes. ¿Continuar?"
+        title={`Reemplazar ${confirmReplaceYears?.years.join(", ") ?? ""}`}
+        description={
+          `Cargar reemplaza ${confirmReplaceYears?.years.join(" y ") ?? ""} y descarta ` +
+          `${confirmReplaceYears?.editCount ?? 0} ajuste(s) y comentario(s) de ` +
+          `${(confirmReplaceYears?.years.length ?? 0) === 1 ? "ese año" : "esos años"}. ` +
+          `Los demás años quedan intactos. ¿Continuar?`
+        }
         confirmLabel="Cargar"
         cancelLabel="Cancelar"
         onConfirm={() => {
@@ -477,7 +507,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
             void runReplaceWorkspace(workspaceBuilt);
           }
         }}
-        onCancel={() => setConfirmDestructive(false)}
+        onCancel={() => setConfirmReplaceYears(null)}
       />
 
       <ConfirmDialog
@@ -502,11 +532,18 @@ function SummaryPanel({
   summary: UploadSummary;
   onRemoveAdjustment: (conflict: ReloadConflict) => void;
 }) {
-  const monthLabels = summary.loadedMonths.map((m) => MONTHS_FULL_ES[m] ?? `mes ${m + 1}`);
+  // Grouped by year: with two years loaded, one flat list of month names could not say which
+  // «marzo» it meant.
+  const byYear = summary.years.map((year) => {
+    const months = (summary.loadedMonthsByYear[year] ?? []).map(
+      (m) => MONTHS_FULL_ES[m] ?? `mes ${m + 1}`,
+    );
+    return `${year}: ${months.join(", ") || "ninguno"}`;
+  });
   return (
     <div className="flex flex-col gap-3 p-5">
       <p className="text-[13px] text-ink-soft">
-        Meses cargados: {monthLabels.join(", ") || "ninguno"}.{" "}
+        Meses cargados — {byYear.join(" · ") || "ninguno"}.{" "}
         {summary.mode === "centers" && (
           <>
             {summary.centersCount} centro{summary.centersCount === 1 ? "" : "s"},{" "}
@@ -534,9 +571,9 @@ function SummaryPanel({
                 <span className="min-w-0 flex-1">
                   <span className="font-semibold text-ink">{conflict.centerName}</span> ·{" "}
                   {conflict.code} {conflict.accountName} (
-                  {MONTHS_FULL_ES[conflict.monthIndex] ?? conflict.monthIndex + 1}): el archivo
-                  cambió de {conflict.previousFileValue} a {conflict.newFileValue}, el ajuste sigue
-                  en {conflict.adjustmentValue}.
+                  {MONTHS_FULL_ES[conflict.monthIndex] ?? conflict.monthIndex + 1} de{" "}
+                  {conflict.year}): el archivo cambió de {conflict.previousFileValue} a{" "}
+                  {conflict.newFileValue}, el ajuste sigue en {conflict.adjustmentValue}.
                 </span>
                 <button
                   type="button"

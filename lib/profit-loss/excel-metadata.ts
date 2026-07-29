@@ -1,8 +1,14 @@
 /**
- * The bridge that lets a workbook's comments, adjustments and period survive a download →
+ * The bridge that lets a workbook's comments, adjustments and coverage survive a download →
  * re-upload round-trip, for BOTH single-mode ("Excel con tus datos") and by-centers ("Excel
  * completo") workspaces — see `app-workbook.ts`, the one strategy that reads this sheet back
  * for either mode, told apart by `AppWorkbookMeta.mode`.
+ *
+ * The workbook covers EVERY year the workspace holds, so nothing here is scalar any more: the
+ * coverage is one row per year, every comment and adjustment names its year, and a `sheet` row
+ * maps each visible worksheet to the (year, centro) it holds. That mapping is what makes the
+ * sheet NAME free to be truncated and de-duplicated for Excel's 31-character limit — the year is
+ * read from the metadata, never parsed back out of the title.
  *
  * Pure and library-agnostic on purpose: it works on arrays-of-arrays, so `exceljs` (which
  * writes the sheet) and SheetJS `xlsx` (which reads it) both use these helpers without
@@ -11,9 +17,8 @@
 import { LEGACY_SYSTEM } from "./upload/systems";
 
 /** Obscure name so it can't collide with a real accounting sheet; hidden in the workbook. One
- * sheet for the WHOLE workspace (not one per center), because `loadedMonths` is workspace-wide
- * and a cell needs its center named to be placed back. Each row is tagged by kind so the three
- * concerns (workspace period, comments, adjustments) share one sheet without a fixed row order. */
+ * sheet for the WHOLE workbook (not one per center-year): a cell needs its year and its center
+ * named to be placed back, and both travel in the row. */
 export const APP_WORKBOOK_META_SHEET = "_liderplus_workspace_meta";
 
 /** The `centerId` a single-mode workbook's rows carry — there is exactly one "center" and it
@@ -22,8 +27,23 @@ export const SINGLE_WORKBOOK_CENTER_KEY = "";
 
 export type AppWorkbookMode = "single" | "centers";
 
+/** One year of the workbook and the months it actually holds. */
+export interface AppWorkbookYear {
+  year: number;
+  loadedMonths: number[];
+}
+
+/** Which (year, centro) a visible worksheet holds. */
+export interface AppWorkbookSheet {
+  sheetName: string;
+  year: number;
+  /** `SINGLE_WORKBOOK_CENTER_KEY` in single mode; the Consolidado sheets are not listed. */
+  centerId: string;
+}
+
 export interface CenterCellComment {
   centerId: string;
+  year: number;
   code: string;
   monthIndex: number;
   comment: string;
@@ -31,6 +51,7 @@ export interface CenterCellComment {
 
 export interface CenterCellAdjustment {
   centerId: string;
+  year: number;
   code: string;
   monthIndex: number;
   /** The file's value before the adjustment — the base a reload needs to detect conflicts. */
@@ -38,8 +59,9 @@ export interface CenterCellAdjustment {
 }
 
 export interface AppWorkbookMeta {
-  year: number;
-  loadedMonths: number[];
+  /** Ascending; a workbook always carries at least one. */
+  years: AppWorkbookYear[];
+  sheets: AppWorkbookSheet[];
   mode: AppWorkbookMode;
   /** The accounting system the workspace came from (`upload/systems.ts`) — carried so a
    * download → re-upload keeps the workspace's identity, MicroPlus included, instead of the
@@ -50,22 +72,26 @@ export interface AppWorkbookMeta {
 }
 
 export function appWorkbookMetaToRows(meta: AppWorkbookMeta): (string | number)[][] {
-  const rows: (string | number)[][] = [
-    ["workspace", meta.year, meta.loadedMonths.join(","), meta.mode, meta.system],
-  ];
+  const rows: (string | number)[][] = [["workspace", meta.mode, meta.system]];
+  for (const entry of meta.years) {
+    rows.push(["year", entry.year, entry.loadedMonths.join(",")]);
+  }
+  for (const sheet of meta.sheets) {
+    rows.push(["sheet", sheet.sheetName, sheet.year, sheet.centerId]);
+  }
   for (const c of meta.comments) {
-    rows.push(["comment", c.centerId, c.code, c.monthIndex, c.comment]);
+    rows.push(["comment", c.centerId, c.year, c.code, c.monthIndex, c.comment]);
   }
   for (const a of meta.adjustments) {
-    rows.push(["adjustment", a.centerId, a.code, a.monthIndex, a.originalValue]);
+    rows.push(["adjustment", a.centerId, a.year, a.code, a.monthIndex, a.originalValue]);
   }
   return rows;
 }
 
 /** Rows → `AppWorkbookMeta`, dropping any row whose kind or shape isn't recognized. */
 export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
-  let year = 0;
-  let loadedMonths: number[] = [];
+  const years: AppWorkbookYear[] = [];
+  const sheets: AppWorkbookSheet[] = [];
   let mode: AppWorkbookMode = "centers";
   // A workbook downloaded before the system was carried can only have come from the
   // single-statement format, the same reasoning the Dexie migration follows.
@@ -76,44 +102,67 @@ export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
   for (const row of rows) {
     const [kind, ...rest] = row;
     if (kind === "workspace") {
-      const [rawYear, rawMonths, rawMode, rawSystem] = rest;
-      if (typeof rawYear === "number") {
-        year = rawYear;
-      }
-      if (typeof rawMonths === "string" && rawMonths !== "") {
-        loadedMonths = rawMonths
-          .split(",")
-          .map(Number)
-          .filter((n) => Number.isInteger(n));
-      }
+      const [rawMode, rawSystem] = rest;
       if (rawMode === "single" || rawMode === "centers") {
         mode = rawMode;
       }
       if (typeof rawSystem === "string" && rawSystem !== "") {
         system = rawSystem;
       }
+    } else if (kind === "year") {
+      const [rawYear, rawMonths] = rest;
+      if (typeof rawYear === "number") {
+        years.push({
+          year: rawYear,
+          loadedMonths:
+            typeof rawMonths === "string" && rawMonths !== ""
+              ? rawMonths
+                  .split(",")
+                  .map(Number)
+                  .filter((n) => Number.isInteger(n))
+              : [],
+        });
+      }
+    } else if (kind === "sheet") {
+      const [sheetName, year, centerId] = rest;
+      if (
+        typeof sheetName === "string" &&
+        typeof year === "number" &&
+        typeof centerId === "string"
+      ) {
+        sheets.push({ sheetName, year, centerId });
+      }
     } else if (kind === "comment") {
-      const [centerId, code, monthIndex, comment] = rest;
+      const [centerId, year, code, monthIndex, comment] = rest;
       if (
         typeof centerId === "string" &&
+        typeof year === "number" &&
         typeof code === "string" &&
         typeof monthIndex === "number" &&
         typeof comment === "string" &&
         comment !== ""
       ) {
-        comments.push({ centerId, code, monthIndex, comment });
+        comments.push({ centerId, year, code, monthIndex, comment });
       }
     } else if (kind === "adjustment") {
-      const [centerId, code, monthIndex, originalValue] = rest;
+      const [centerId, year, code, monthIndex, originalValue] = rest;
       if (
         typeof centerId === "string" &&
+        typeof year === "number" &&
         typeof code === "string" &&
         typeof monthIndex === "number" &&
         typeof originalValue === "number"
       ) {
-        adjustments.push({ centerId, code, monthIndex, originalValue });
+        adjustments.push({ centerId, year, code, monthIndex, originalValue });
       }
     }
   }
-  return { year, loadedMonths, mode, system, comments, adjustments };
+  return {
+    years: years.sort((a, b) => a.year - b.year),
+    sheets,
+    mode,
+    system,
+    comments,
+    adjustments,
+  };
 }

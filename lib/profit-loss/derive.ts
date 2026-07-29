@@ -11,7 +11,7 @@ import {
   periodLabels,
   sumByPeriod,
 } from "@/lib/period";
-import type { DatosCell, DatosGrid, DatosResultKind, DatosRow } from "./datos-types";
+import type { DatosCell, DatosColumn, DatosGrid, DatosResultKind, DatosRow } from "./datos-types";
 import { isNonOperationalCode, NON_OPERATIONAL_ROOT } from "./segment";
 import type { AccountRow, CellEdit, Frequency, PygDataset } from "./types";
 
@@ -236,6 +236,66 @@ export function aggregate(values: number[], base: Frequency, target: Frequency):
 }
 
 /**
+ * The axis a grid renders against: which years, at which granularity. Kept as a list from the
+ * start —even though a single-year grid passes one entry— because every consumer below reads a
+ * column's year, and a one-year special case would be the thing that has to be undone.
+ */
+export interface GridAxis {
+  /** Years to render, ASCENDING. Column order is chronological regardless of how they arrive. */
+  years: number[];
+  /** The base frequency of the datasets; an annual base can only render itself. */
+  base: Frequency;
+  /** The granularity the user is looking at. */
+  frequency: Frequency;
+}
+
+/** The granularity the columns actually speak in: an annual base cannot be disaggregated. */
+function axisFrequency(axis: GridAxis): Frequency {
+  return axis.base === "anual" ? "anual" : axis.frequency;
+}
+
+/** Whether a year closes with a Total column. In annual granularity the year IS one column, so
+ * a Total beside it would repeat the same number under a different name. */
+function axisHasTotal(axis: GridAxis): boolean {
+  return axisFrequency(axis) !== "anual";
+}
+
+/**
+ * The column plan: each year's periods followed by that year's Total, years ascending. The
+ * two-digit year suffix appears only when there is more than one year to tell apart — with a
+ * single year the labels are exactly what the table showed before columns carried a year.
+ */
+export function buildColumns(axis: GridAxis): DatosColumn[] {
+  const labels = periodLabels(axisFrequency(axis));
+  const multiYear = axis.years.length > 1;
+  const columns: DatosColumn[] = [];
+  for (const year of [...axis.years].sort((a, b) => a - b)) {
+    const suffix = String(year).slice(-2);
+    labels.forEach((label, index) => {
+      columns.push({
+        kind: "period",
+        label: multiYear ? `${label} ${suffix}` : label,
+        year,
+        index,
+      });
+    });
+    if (axisHasTotal(axis)) {
+      columns.push({
+        kind: "total",
+        label: multiYear ? `Total ${suffix}` : "Total",
+        year,
+      });
+    }
+  }
+  return columns;
+}
+
+/** How many periods a year contributes before its Total — the span each row's cells follow. */
+function periodsPerYear(axis: GridAxis): number {
+  return periodLabels(axisFrequency(axis)).length;
+}
+
+/**
  * The full pipeline the Datos view renders: tree → leaf edits → rollups → aggregate →
  * grid. Comments stay keyed by base month; an aggregated cell inherits (joined) the
  * comments of the months it covers, as a read-only indicator.
@@ -253,10 +313,157 @@ export function toDatosGrid(
   frequency: Frequency,
   previous?: DatosGrid,
 ): DatosGrid {
-  const { roots } = buildAccountTree(dataset.accounts);
-  const rolled = computeRollups(applyLeafEdits(roots, edits));
-  const result = computeResult(rolled);
+  return toDatosGridMultiYear([{ dataset, edits }], frequency, previous);
+}
 
+/** One year's contribution to a grid: its dataset and that dataset's own edits. */
+export interface YearSlice {
+  dataset: PygDataset;
+  edits: CellEdit[];
+}
+
+/**
+ * The multi-year form of the pipeline: one `YearSlice` per year, laid side by side.
+ *
+ * The account tree is the UNION of the years' codes, so a cuenta that only 2025 reports still
+ * gets a row — with EMPTY cells in 2026 rather than zeros, because "the account does not exist
+ * there" and "it moved nothing there" are different readings and the app has always kept them
+ * apart. Each year's amounts come from its own rolled tree, so nothing is ever summed across
+ * years except inside that year's own Total column.
+ */
+export function toDatosGridMultiYear(
+  slices: readonly YearSlice[],
+  frequency: Frequency,
+  previous?: DatosGrid,
+): DatosGrid {
+  const ordered = [...slices].sort((a, b) => a.dataset.year - b.dataset.year);
+  const base = ordered[0]?.dataset.baseFrequency ?? "mensual";
+  const axis: GridAxis = { years: ordered.map((slice) => slice.dataset.year), base, frequency };
+
+  const perYear = ordered.map((slice) => {
+    const { roots } = buildAccountTree(slice.dataset.accounts);
+    const rolled = computeRollups(applyLeafEdits(roots, slice.edits));
+    return {
+      byCode: indexNodes(rolled),
+      result: computeResult(rolled),
+      ...editMaps(slice.edits),
+    };
+  });
+
+  // The union tree carries no values of its own — it exists to fix the SHAPE (which codes,
+  // nested how, at which level). Every amount below is read per year, by code.
+  const { roots: unionRoots } = buildAccountTree(unionAccounts(ordered));
+  const reusable = indexRows(previous?.rows);
+  const rows: DatosRow[] = unionRoots.map((node) => toDatosRow(node, axis, perYear, reusable));
+
+  const summary = (
+    name: string,
+    pick: (result: StatementResult) => number[] | null | undefined,
+    resultKind: DatosResultKind,
+    anchorCode?: string,
+  ): DatosRow =>
+    reuse(
+      {
+        code: "",
+        name,
+        level: 1,
+        movement: false,
+        isResult: true,
+        resultKind,
+        ...(anchorCode ? { anchorCode } : {}),
+        cells: appendTotals(
+          perYear.flatMap((year) => {
+            const values = pick(year.result);
+            // A year that does not report this summary (an unsegmented year beside a segmented
+            // one) leaves its block empty rather than claiming a zero.
+            return values
+              ? aggregate(values, base, frequency).map((value) => ({ value }))
+              : blankCells(axis);
+          }),
+          axis,
+        ),
+      },
+      previous?.rows.find((row) => row.resultKind === resultKind),
+    );
+
+  // Any segmented year opens the four-summary shape; a year that is not segmented shows those
+  // three rows empty and keeps its own «Utilidad del Ejercicio».
+  const segmented = perYear.some((year) => year.result.nonOperatingTotal && year.result.expenses);
+  if (segmented) {
+    rows.push(
+      summary("Utilidad Operacional", (r) => r.operating, "operacional", OPERATING_ROOT),
+      summary(
+        "Total No Operacional",
+        (r) => r.nonOperatingTotal,
+        "no-operacional",
+        NON_OPERATIONAL_ROOT,
+      ),
+      summary("Total Gastos del Ejercicio", (r) => r.expenses, "total-gastos"),
+      summary("Utilidad del Ejercicio", (r) => r.values, "ejercicio"),
+    );
+  } else {
+    rows.push(summary("Utilidad o Pérdida", (r) => r.values, "ejercicio"));
+  }
+
+  // The plan is derived from constants, but the copy is not: a fresh `columns` array would
+  // invalidate whatever the view memoizes against it (the visible columns) and re-render
+  // every row anyway, undoing the row sharing above.
+  const fresh = buildColumns(axis);
+  const columns = previous && sameColumns(previous.columns, fresh) ? previous.columns : fresh;
+
+  return {
+    id: "default",
+    title: "Estado de Resultados",
+    // The badge is one year's bottom line. With several on screen there is no single figure it
+    // could name without inviting the reader to add two exercises together, so it is dropped.
+    ...(ordered.length === 1 ? { utilidad: utilidadBadge(perYear[0].result.values) } : {}),
+    columns,
+    rows,
+  };
+}
+
+function utilidadBadge(values: number[]): NonNullable<DatosGrid["utilidad"]> {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const positive = total >= 0;
+  return {
+    label: `${positive ? "Utilidad" : "Pérdida"} ${formatCurrency(total, { cents: true })}`,
+    positive,
+  };
+}
+
+/** One year's worth of empty cells — the account (or summary) is not reported that year. */
+function blankCells(axis: GridAxis): DatosCell[] {
+  return Array.from({ length: periodsPerYear(axis) }, () => ({ value: null }));
+}
+
+/** Every code across the years, once, with the most recent year's spelling of its name. */
+function unionAccounts(slices: readonly YearSlice[]): AccountRow[] {
+  const byCode = new Map<string, AccountRow>();
+  for (const slice of slices) {
+    for (const account of slice.dataset.accounts) {
+      byCode.set(account.code, { code: account.code, name: account.name, values: [] });
+    }
+  }
+  return [...byCode.values()];
+}
+
+function indexNodes(roots: AccountNode[]): Map<string, AccountNode> {
+  const byCode = new Map<string, AccountNode>();
+  const walk = (nodes: AccountNode[]) => {
+    for (const node of nodes) {
+      byCode.set(node.code, node);
+      walk(node.children);
+    }
+  };
+  walk(roots);
+  return byCode;
+}
+
+/** The comment and value-adjustment lookups a year's cells are decorated with. */
+function editMaps(edits: readonly CellEdit[]): {
+  comments: Map<string, Map<number, string>>;
+  editedMonths: Map<string, Set<number>>;
+} {
   const comments = new Map<string, Map<number, string>>();
   const editedMonths = new Map<string, Set<number>>();
   for (const item of edits) {
@@ -273,66 +480,30 @@ export function toDatosGrid(
       editedMonths.set(item.code, months);
     }
   }
+  return { comments, editedMonths };
+}
 
-  const reusable = indexRows(previous?.rows);
-  const base = dataset.baseFrequency;
-  const rows: DatosRow[] = rolled.map((node) =>
-    toDatosRow(node, base, frequency, comments, editedMonths, reusable),
-  );
-  const summary = (
-    name: string,
-    values: number[],
-    resultKind: DatosResultKind,
-    anchorCode?: string,
-  ): DatosRow =>
-    reuse(
-      {
-        code: "",
-        name,
-        level: 1,
-        movement: false,
-        isResult: true,
-        resultKind,
-        ...(anchorCode ? { anchorCode } : {}),
-        cells: aggregate(values, base, frequency).map((value) => ({ value })),
-      },
-      previous?.rows.find((row) => row.resultKind === resultKind),
-    );
-
-  if (result.nonOperatingTotal && result.expenses) {
-    rows.push(
-      summary("Utilidad Operacional", result.operating, "operacional", OPERATING_ROOT),
-      summary(
-        "Total No Operacional",
-        result.nonOperatingTotal,
-        "no-operacional",
-        NON_OPERATIONAL_ROOT,
-      ),
-      summary("Total Gastos del Ejercicio", result.expenses, "total-gastos"),
-      summary("Utilidad del Ejercicio", result.values, "ejercicio"),
-    );
-  } else {
-    rows.push(summary("Utilidad o Pérdida", result.values, "ejercicio"));
+/**
+ * Appends each year's Total cell to a row's period cells, so `cells` aligns with `columns`
+ * position for position. The sum is over that year's own slice — which is the whole point of
+ * the total being a column: it cannot reach into the next year.
+ */
+function appendTotals(cells: DatosCell[], axis: GridAxis): DatosCell[] {
+  if (!axisHasTotal(axis)) {
+    return cells;
   }
-
-  // The labels are a module constant, but the copy is not: a fresh `months` array would
-  // invalidate whatever the view memoizes against it (the visible columns) and re-render
-  // every row anyway, undoing the row sharing above.
-  const labels = [...periodLabels(base === "anual" ? "anual" : frequency)];
-  const months = previous && sameStrings(previous.months, labels) ? previous.months : labels;
-
-  const total = result.values.reduce((sum, v) => sum + v, 0);
-  const positive = total >= 0;
-  return {
-    id: "default",
-    title: "Estado de Resultados",
-    utilidad: {
-      label: `${positive ? "Utilidad" : "Pérdida"} ${formatCurrency(total, { cents: true })}`,
-      positive,
-    },
-    months,
-    rows,
-  };
+  const span = periodsPerYear(axis);
+  const out: DatosCell[] = [];
+  for (let year = 0; year < axis.years.length; year++) {
+    const slice = cells.slice(year * span, (year + 1) * span);
+    // A year with nothing but empty cells totals to empty, not to zero — the account is not
+    // reported that year, and a 0 would read as "it moved nothing".
+    const total = slice.every((cell) => cell.value === null)
+      ? null
+      : slice.reduce((sum, cell) => sum + (cell.value ?? 0), 0);
+    out.push(...slice, { value: total });
+  }
+  return out;
 }
 
 /** Where each summary row goes: closing a root's block, or closing the grid. */
@@ -434,31 +605,51 @@ function sameRow(a: DatosRow, b: DatosRow): boolean {
   return true;
 }
 
-function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+function sameColumns(a: readonly DatosColumn[], b: readonly DatosColumn[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((column, index) => {
+      const other = b[index];
+      return (
+        column.kind === other.kind && column.label === other.label && column.year === other.year
+      );
+    })
+  );
+}
+
+/** What one year contributes when a row's cells are built: its amounts and its edit overlays. */
+interface YearLookup {
+  byCode: Map<string, AccountNode>;
+  comments: Map<string, Map<number, string>>;
+  editedMonths: Map<string, Set<number>>;
 }
 
 function toDatosRow(
   node: AccountNode,
-  base: Frequency,
-  frequency: Frequency,
-  comments: Map<string, Map<number, string>>,
-  editedMonths: Map<string, Set<number>>,
+  axis: GridAxis,
+  perYear: readonly YearLookup[],
   reusable: Map<string, DatosRow>,
 ): DatosRow {
-  const values = aggregate(node.values, base, frequency);
-  const byMonth = comments.get(node.code);
-  const editedSet = editedMonths.get(node.code);
+  const { base, frequency } = axis;
   const span = base === "mensual" ? MONTHS_PER_PERIOD[frequency] : 1;
 
-  const cells: DatosCell[] = values.map((value, period) => {
-    const joined = byMonth ? joinComments(byMonth, period, span) : undefined;
-    const edited = editedSet ? overlapsSpan(editedSet, period, span) : false;
-    return {
-      value,
-      ...(joined ? { comment: joined } : {}),
-      ...(edited ? { edited: true } : {}),
-    };
+  const cells = perYear.flatMap((year): DatosCell[] => {
+    const own = year.byCode.get(node.code);
+    // Absent from this year's chart of accounts entirely — empty, not zero.
+    if (!own) {
+      return blankCells(axis);
+    }
+    const byMonth = year.comments.get(node.code);
+    const editedSet = year.editedMonths.get(node.code);
+    return aggregate(own.values, base, frequency).map((value, period) => {
+      const joined = byMonth ? joinComments(byMonth, period, span) : undefined;
+      const edited = editedSet ? overlapsSpan(editedSet, period, span) : false;
+      return {
+        value,
+        ...(joined ? { comment: joined } : {}),
+        ...(edited ? { edited: true } : {}),
+      };
+    });
   });
 
   return reuse(
@@ -467,12 +658,10 @@ function toDatosRow(
       name: node.name,
       level: node.level,
       movement: node.children.length === 0,
-      cells,
+      cells: appendTotals(cells, axis),
       ...(node.children.length > 0
         ? {
-            children: node.children.map((child) =>
-              toDatosRow(child, base, frequency, comments, editedMonths, reusable),
-            ),
+            children: node.children.map((child) => toDatosRow(child, axis, perYear, reusable)),
           }
         : {}),
     },

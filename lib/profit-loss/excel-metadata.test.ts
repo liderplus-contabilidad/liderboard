@@ -16,10 +16,16 @@ describe("excel-metadata", () => {
     expect(SINGLE_WORKBOOK_CENTER_KEY).toBe("");
   });
 
-  it("round-trips year, loadedMonths and mode through the workspace row", () => {
+  it("round-trips every year's coverage, the sheet map and the mode", () => {
     const meta: AppWorkbookMeta = {
-      year: 2026,
-      loadedMonths: [0, 2, 5],
+      years: [
+        { year: 2025, loadedMonths: [0, 2, 5] },
+        { year: 2026, loadedMonths: [0] },
+      ],
+      sheets: [
+        { sheetName: "Estado de Resultados 2025", year: 2025, centerId: "" },
+        { sheetName: "Estado de Resultados 2026", year: 2026, centerId: "" },
+      ],
       mode: "single",
       system: "microplus",
       comments: [],
@@ -28,26 +34,75 @@ describe("excel-metadata", () => {
     expect(rowsToAppWorkbookMeta(appWorkbookMetaToRows(meta))).toEqual(meta);
   });
 
-  it("round-trips comments and adjustments tagged by centerId", () => {
+  it("una hoja se ata a su año por la metadata, no por su nombre", () => {
+    // El nombre de hoja se trunca a 31 caracteres y se desambigua, así que no puede ser el
+    // registro de a qué año pertenece.
     const meta: AppWorkbookMeta = {
-      year: 2026,
-      loadedMonths: [0],
+      years: [{ year: 2025, loadedMonths: [0] }],
+      sheets: [{ sheetName: "UN NOMBRE LARGUISIMO QUE SE (2)", year: 2025, centerId: "cartago" }],
+      mode: "centers",
+      system: "monthly-centers",
+      comments: [],
+      adjustments: [],
+    };
+    const read = rowsToAppWorkbookMeta(appWorkbookMetaToRows(meta));
+    expect(read.sheets[0]).toEqual({
+      sheetName: "UN NOMBRE LARGUISIMO QUE SE (2)",
+      year: 2025,
+      centerId: "cartago",
+    });
+  });
+
+  it("round-trips comments and adjustments tagged by centerId AND year", () => {
+    const meta: AppWorkbookMeta = {
+      years: [{ year: 2026, loadedMonths: [0] }],
+      sheets: [{ sheetName: "SUCURSAL NORTE", year: 2026, centerId: "sucursal-norte" }],
       mode: "centers",
       system: "monthly-centers",
       comments: [
-        { centerId: "sucursal-norte", code: "4.1.1", monthIndex: 0, comment: "Ajuste de enero" },
+        {
+          centerId: "sucursal-norte",
+          year: 2026,
+          code: "4.1.1",
+          monthIndex: 0,
+          comment: "Ajuste de enero",
+        },
       ],
       adjustments: [
-        { centerId: "sucursal-norte", code: "4.1.1", monthIndex: 0, originalValue: 100 },
+        {
+          centerId: "sucursal-norte",
+          year: 2026,
+          code: "4.1.1",
+          monthIndex: 0,
+          originalValue: 100,
+        },
       ],
     };
     expect(rowsToAppWorkbookMeta(appWorkbookMetaToRows(meta))).toEqual(meta);
   });
 
-  it("defaults to centers mode and empty months when the workspace row is missing", () => {
+  it("el mismo centro y mes de dos años son dos ajustes distintos", () => {
+    const meta: AppWorkbookMeta = {
+      years: [
+        { year: 2025, loadedMonths: [0] },
+        { year: 2026, loadedMonths: [0] },
+      ],
+      sheets: [],
+      mode: "centers",
+      system: "monthly-centers",
+      comments: [],
+      adjustments: [
+        { centerId: "cartago", year: 2025, code: "4", monthIndex: 0, originalValue: 100 },
+        { centerId: "cartago", year: 2026, code: "4", monthIndex: 0, originalValue: 700 },
+      ],
+    };
+    expect(rowsToAppWorkbookMeta(appWorkbookMetaToRows(meta)).adjustments).toHaveLength(2);
+  });
+
+  it("defaults to centers mode and no years when the workspace row is missing", () => {
     expect(rowsToAppWorkbookMeta([])).toEqual({
-      year: 0,
-      loadedMonths: [],
+      years: [],
+      sheets: [],
       mode: "centers",
       // Un libro anterior a que se llevara el sistema solo pudo salir del estado único.
       system: "monthly-single",
@@ -57,16 +112,14 @@ describe("excel-metadata", () => {
   });
 
   it("un libro sin la columna de sistema adopta el de estado único", () => {
-    expect(rowsToAppWorkbookMeta([["workspace", 2026, "0,1", "single"]]).system).toBe(
-      "monthly-single",
-    );
+    expect(rowsToAppWorkbookMeta([["workspace", "single"]]).system).toBe("monthly-single");
   });
 
   it("drops malformed comment and adjustment rows", () => {
     const rows: unknown[][] = [
-      ["workspace", 2026, "0", "single"],
-      ["comment", "", "4", "x", "mes no numérico"], // monthIndex not a number → dropped
-      ["adjustment", "", "4", 0], // missing originalValue → dropped
+      ["workspace", "single", "monthly-single"],
+      ["comment", "", 2026, "4", "x", "mes no numérico"], // monthIndex not a number → dropped
+      ["adjustment", "", 2026, "4", 0], // missing originalValue → dropped
     ];
     const meta = rowsToAppWorkbookMeta(rows);
     expect(meta.comments).toEqual([]);

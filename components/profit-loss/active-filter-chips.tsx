@@ -1,20 +1,29 @@
 "use client";
 
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
-import { periodLabel } from "@/lib/profit-loss/analytics/period";
+import { periodSlotLabel } from "@/lib/profit-loss/analytics/period";
 import { usePygData } from "./pyg-data-provider";
 
 /**
- * The active-filter strip under the FILTROS row: one removable chip per marked account, center
- * and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
+ * The active-filter strip under the FILTROS row: one removable chip per marked account, center,
+ * year and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
  * and only when something is actually marked — an ever-present empty strip would sit over the
  * table for no reason.
  */
 export function ActiveFilterChips() {
-  const { filters, accountOptions, views, toggleCode, toggleCenter, togglePeriod, clearFilters } =
-    usePygData();
+  const {
+    filters,
+    accountOptions,
+    views,
+    toggleCode,
+    toggleCenter,
+    toggleYear,
+    togglePeriod,
+    clearFilters,
+  } = usePygData();
 
-  const total = filters.codes.length + filters.centerIds.length + filters.periods.length;
+  const total =
+    filters.codes.length + filters.centerIds.length + filters.years.length + filters.periods.length;
   if (total === 0) {
     return null;
   }
@@ -42,10 +51,13 @@ export function ActiveFilterChips() {
           />
         );
       })}
+      {filters.years.map((year) => (
+        <FilterChip key={`year-${year}`} label={String(year)} onRemove={() => toggleYear(year)} />
+      ))}
       {filters.periods.map((period) => (
         <FilterChip
           key={`period-${period.index}`}
-          label={periodLabel(period)}
+          label={periodSlotLabel(period)}
           onRemove={() => togglePeriod(period)}
         />
       ))}

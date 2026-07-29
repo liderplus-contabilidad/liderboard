@@ -14,24 +14,29 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
 import type { EditorAnchor } from "./cell-editor";
 import { DatosTableRow } from "./datos-table-row";
-import type { DatosGrid, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
+import type {
+  DatosColumn,
+  DatosGrid,
+  DatosSort,
+  DatosSortKey,
+} from "@/lib/profit-loss/datos-types";
 import type { FlatRow } from "./datos-utils";
 
 export interface DatosTableProps {
   grid: DatosGrid;
   rows: FlatRow[];
-  /** Real column indices to render, in order — the "Periodo" filter's doing; every index when
-   * nothing is marked. */
+  /** Positions in `grid.columns` to render, in order — the "Periodo" filter's doing; every
+   * position when nothing is marked. */
   visibleColumns: number[];
   sort: DatosSort | null;
   editable: boolean;
   /** Why editing is off, named for the banner; `null` while `editable` is true. */
   readOnlyReason: string | null;
-  showTotal: boolean;
-  /** Which columns the by-centers workspace has actually loaded; `null` = no restriction. */
+  /** Which columns the workspace has actually loaded, by position; `null` = no restriction. */
   loadedColumns: ReadonlySet<number> | null;
-  /** Cell to light up briefly — the twin a reclassification moved; `null` when nothing did. */
-  flash: { code: string; monthIndex: number } | null;
+  /** Cell to light up briefly — the twin a reclassification moved, by column position; `null`
+   * when nothing did. */
+  flash: { code: string; col: number } | null;
   /** Account whose ficha is open, so its row can stay marked; `null` when none is. */
   openDetailCode: string | null;
   onSort: (key: DatosSortKey) => void;
@@ -40,12 +45,24 @@ export interface DatosTableProps {
   onOpenDetail: (code: string) => void;
 }
 
-/** Two sort keys point at the same column when both are the name / total sentinels. */
+/** Two sort keys point at the same column when both are the name sentinel or the same position. */
 function sameKey(a: DatosSortKey, b: DatosSortKey): boolean {
   if (typeof a === "object" && typeof b === "object") {
     return a.col === b.col;
   }
   return a === b;
+}
+
+/**
+ * A Total column stays the full year even when a period mark bounds the columns — relabeled so
+ * nobody reads it as the sum of what happens to be visible. With several years the suffix rides
+ * along ("Total 25" → "Total año 25").
+ */
+function headerLabel(column: DatosColumn, trimmed: boolean): string {
+  if (column.kind !== "total" || !trimmed) {
+    return column.label;
+  }
+  return column.label.replace(/^Total/, "Total año");
 }
 
 /** One editable Estado de Resultados grid — for the whole company or a cost center. */
@@ -56,7 +73,6 @@ export function DatosTable({
   sort,
   editable,
   readOnlyReason,
-  showTotal,
   loadedColumns,
   flash,
   openDetailCode,
@@ -66,9 +82,7 @@ export function DatosTable({
   onOpenDetail,
 }: DatosTableProps) {
   const accountCount = rows.filter((flat) => !flat.row.isResult).length;
-  // "Total" stays the full year even when a period mark bounds the columns — relabeled so
-  // nobody reads it as the sum of what happens to be visible.
-  const totalLabel = visibleColumns.length < grid.months.length ? "Total año" : "Total";
+  const trimmed = visibleColumns.length < grid.columns.length;
 
   return (
     <div className="mb-4 overflow-hidden rounded-[13px] border border-border bg-surface">
@@ -115,28 +129,22 @@ export function DatosTable({
                   >
                     Cuenta
                   </SortableTh>
-                  {visibleColumns.map((col) => (
-                    <SortableTh
-                      key={col}
-                      align="right"
-                      active={sort ? sameKey(sort.key, { col }) : false}
-                      dir={sort?.dir}
-                      onClick={() => onSort({ col })}
-                    >
-                      {grid.months[col]}
-                    </SortableTh>
-                  ))}
-                  {showTotal && (
-                    <SortableTh
-                      align="right"
-                      active={sort ? sameKey(sort.key, "total") : false}
-                      dir={sort?.dir}
-                      onClick={() => onSort("total")}
-                      className="border-l border-border"
-                    >
-                      {totalLabel}
-                    </SortableTh>
-                  )}
+                  {visibleColumns.map((col) => {
+                    const column = grid.columns[col];
+                    return (
+                      <SortableTh
+                        key={col}
+                        align="right"
+                        active={sort ? sameKey(sort.key, { col }) : false}
+                        dir={sort?.dir}
+                        onClick={() => onSort({ col })}
+                        // The rule that closes a year's block, and the one that opens the next.
+                        className={column.kind === "total" ? "border-l border-border" : undefined}
+                      >
+                        {headerLabel(column, trimmed)}
+                      </SortableTh>
+                    );
+                  })}
                   {/* Pinned above AND to the right, so it stacks over the other sticky headers. */}
                   <th className="sticky right-0 top-0 z-[3] w-[62px] border-b border-l border-border bg-surface-header px-2 py-2.5">
                     <span className="sr-only">Ficha</span>
@@ -150,11 +158,11 @@ export function DatosTable({
                     row={flat.row}
                     hasChildren={flat.hasChildren}
                     isCollapsed={flat.isCollapsed}
+                    columns={grid.columns}
                     visibleColumns={visibleColumns}
                     editable={editable}
-                    showTotal={showTotal}
                     loadedColumns={loadedColumns}
-                    flashCol={flash?.code === flat.row.code ? flash.monthIndex : null}
+                    flashCol={flash?.code === flat.row.code ? flash.col : null}
                     detailOpen={openDetailCode === flat.row.code}
                     onToggle={onToggle}
                     onEditCell={onEditCell}

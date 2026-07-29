@@ -13,7 +13,7 @@ import {
   SINGLE_WORKBOOK_CENTER_KEY,
   type AppWorkbookMeta,
 } from "../excel-metadata";
-import { CENTER_PALETTE, slugifyCenter } from "../workspace";
+import { assignCenterSlots } from "../workspace";
 import type { AccountRow, DatasetRole, ImportedComment, PygDataset, WorkspaceMeta } from "../types";
 import { findFirstDataRow, findHeaderRow, normalizeLabel, readGrid, toNumber } from "./grid";
 import type { Cell } from "./grid";
@@ -23,7 +23,6 @@ import type { StagedUpload, UploadCandidate, UploadStrategy } from "./types";
 const ACCOUNT_CODE = /^\d+(\.\d+)*$/;
 const RESULT_NAME = /utilidad|p[ée]rdida/i;
 const SIN_CENTRO = /sin\s+centro\s+de\s+costo/i;
-const CONSOLIDADO_SHEET = /^consolidado/i;
 
 const MONTH_INDEX_BY_LABEL = new Map(
   [
@@ -100,11 +99,12 @@ function applyOriginals(
   accounts: AccountRow[],
   originalValueByCell: Map<string, number>,
   centerId: string,
+  year: number,
   adjustedValueByCell: Map<string, number>,
 ): void {
   for (const account of accounts) {
     for (let monthIndex = 0; monthIndex < account.values.length; monthIndex++) {
-      const key = `${centerId}|${account.code}|${monthIndex}`;
+      const key = cellKey(centerId, year, account.code, monthIndex);
       const original = originalValueByCell.get(key);
       if (original !== undefined) {
         adjustedValueByCell.set(key, account.values[monthIndex]);
@@ -117,88 +117,81 @@ function applyOriginals(
 interface Reconstructed {
   companyName: string;
   datasets: PygDataset[];
-  /** Every dataset's id, keyed the same way the metadata tags its comments/adjustments —
-   * `SINGLE_WORKBOOK_CENTER_KEY` for the one single-mode dataset. */
-  idByCenterId: Map<string, string>;
+  /** Every dataset's id, keyed `centerId|year` — the same way the metadata tags its
+   * comments and adjustments. `SINGLE_WORKBOOK_CENTER_KEY` stands in for the center in
+   * single mode, where there is exactly one per year. */
+  idByKey: Map<string, string>;
 }
 
-function reconstructSingle(
+function cellKey(centerId: string, year: number, code: string, monthIndex: number): string {
+  return `${centerId}|${year}|${code}|${monthIndex}`;
+}
+
+function datasetKey(centerId: string, year: number): string {
+  return `${centerId}|${year}`;
+}
+
+/**
+ * Rebuilds every dataset the workbook carries, ONE PER SHEET, reading the (year, centro) each
+ * sheet holds from the metadata's `sheet` rows.
+ *
+ * The year is never parsed back out of the sheet title: Excel caps a title at 31 characters and
+ * the writer truncates and de-duplicates to fit, so the title is display text and the metadata
+ * is the record. A sheet the metadata does not list (the per-year Consolidado, which is derived)
+ * is skipped.
+ */
+function reconstruct(
   candidate: UploadCandidate,
   meta: AppWorkbookMeta,
   originalValueByCell: Map<string, number>,
   adjustedValueByCell: Map<string, number>,
 ): Reconstructed {
-  const sheetName = candidate.workbook.SheetNames.find((name) => name !== APP_WORKBOOK_META_SHEET);
-  const grid = sheetName ? readGrid(candidate.workbook, sheetName) : [];
-  const { companyName, accounts } = readCenterSheet(grid);
-  applyOriginals(accounts, originalValueByCell, SINGLE_WORKBOOK_CENTER_KEY, adjustedValueByCell);
-
-  const id = crypto.randomUUID();
-  const dataset: PygDataset = {
-    id,
-    fileName: candidate.fileName,
-    uploadedAt: Date.now(),
-    companyName,
-    periodLabel: meta.year ? `Ene–Dic ${meta.year}` : "—",
-    year: meta.year || null,
-    baseFrequency: "mensual",
-    role: "single",
-    accounts,
-    resultFromFile: [],
-    warnings: [],
-  };
-  return {
-    companyName,
-    datasets: [dataset],
-    idByCenterId: new Map([[SINGLE_WORKBOOK_CENTER_KEY, id]]),
-  };
-}
-
-function reconstructCenters(
-  candidate: UploadCandidate,
-  meta: AppWorkbookMeta,
-  originalValueByCell: Map<string, number>,
-  adjustedValueByCell: Map<string, number>,
-): Reconstructed {
-  const centerSheetNames = candidate.workbook.SheetNames.filter(
-    (name) => name !== APP_WORKBOOK_META_SHEET && !CONSOLIDADO_SHEET.test(name),
-  );
-
+  const present = new Set(candidate.workbook.SheetNames);
   let companyName = "";
   const datasets: PygDataset[] = [];
-  const idByCenterId = new Map<string, string>();
+  const idByKey = new Map<string, string>();
 
-  centerSheetNames.forEach((sheetName, index) => {
-    const grid = readGrid(candidate.workbook, sheetName);
+  for (const sheet of meta.sheets) {
+    if (!present.has(sheet.sheetName)) {
+      continue;
+    }
+    const grid = readGrid(candidate.workbook, sheet.sheetName);
     const { companyName: sheetCompany, accounts } = readCenterSheet(grid);
     if (!companyName && sheetCompany) {
       companyName = sheetCompany;
     }
-    const centerId = slugifyCenter(sheetName);
-    applyOriginals(accounts, originalValueByCell, centerId, adjustedValueByCell);
-    const role: DatasetRole = SIN_CENTRO.test(sheetName) ? "sin-centro" : "center";
+    applyOriginals(accounts, originalValueByCell, sheet.centerId, sheet.year, adjustedValueByCell);
+
     const id = crypto.randomUUID();
-    idByCenterId.set(centerId, id);
-    datasets.push({
+    idByKey.set(datasetKey(sheet.centerId, sheet.year), id);
+    const base = {
       id,
       fileName: candidate.fileName,
       uploadedAt: Date.now(),
       companyName,
-      periodLabel: meta.year ? `Ene–Dic ${meta.year}` : "—",
-      year: meta.year || null,
-      baseFrequency: "mensual",
-      role,
-      centerId,
-      centerColor: CENTER_PALETTE[index % CENTER_PALETTE.length],
-      order: index,
-      costCenterName: sheetName,
+      periodLabel: `Ene–Dic ${sheet.year}`,
+      year: sheet.year,
+      baseFrequency: "mensual" as const,
       accounts,
       resultFromFile: [],
       warnings: [],
+    };
+    if (meta.mode === "single") {
+      datasets.push({ ...base, role: "single" });
+      continue;
+    }
+    const role: DatasetRole = SIN_CENTRO.test(sheet.sheetName) ? "sin-centro" : "center";
+    datasets.push({
+      ...base,
+      role,
+      centerId: sheet.centerId,
+      costCenterName: sheet.sheetName.replace(new RegExp(`\\s+${sheet.year}$`), ""),
     });
-  });
+  }
 
-  return { companyName, datasets, idByCenterId };
+  // Color and order belong to the workspace, not to the sheet order of one year — the same rule
+  // the monthly merge follows, applied here so a re-upload cannot renumber the centers.
+  return { companyName, datasets: assignCenterSlots(datasets), idByKey };
 }
 
 function parse(candidate: UploadCandidate): StagedUpload {
@@ -210,35 +203,36 @@ function parse(candidate: UploadCandidate): StagedUpload {
   // cell was adjusted.
   const originalValueByCell = new Map<string, number>();
   for (const a of meta.adjustments) {
-    originalValueByCell.set(`${a.centerId}|${a.code}|${a.monthIndex}`, a.originalValue);
+    originalValueByCell.set(cellKey(a.centerId, a.year, a.code, a.monthIndex), a.originalValue);
   }
   // Filled while reading the sheets: the adjusted value each original displaced.
   const adjustedValueByCell = new Map<string, number>();
 
-  const { companyName, datasets, idByCenterId } =
-    meta.mode === "single"
-      ? reconstructSingle(candidate, meta, originalValueByCell, adjustedValueByCell)
-      : reconstructCenters(candidate, meta, originalValueByCell, adjustedValueByCell);
+  const { companyName, datasets, idByKey } = reconstruct(
+    candidate,
+    meta,
+    originalValueByCell,
+    adjustedValueByCell,
+  );
 
   // Merge comments and adjustments per cell — a cell can carry both, and each must become
   // exactly one edit row (the edits table's unique index is one row per dataset+code+month).
-  const merged = new Map<string, ImportedComment & { centerId: string }>();
-  const keyOf = (centerId: string, code: string, monthIndex: number): string =>
-    `${centerId}|${code}|${monthIndex}`;
+  const merged = new Map<string, ImportedComment & { centerId: string; year: number }>();
   for (const c of meta.comments) {
-    const key = keyOf(c.centerId, c.code, c.monthIndex);
-    merged.set(key, {
+    merged.set(cellKey(c.centerId, c.year, c.code, c.monthIndex), {
       centerId: c.centerId,
+      year: c.year,
       code: c.code,
       monthIndex: c.monthIndex,
       comment: c.comment,
     });
   }
   for (const a of meta.adjustments) {
-    const key = keyOf(a.centerId, a.code, a.monthIndex);
+    const key = cellKey(a.centerId, a.year, a.code, a.monthIndex);
     const existing = merged.get(key);
     merged.set(key, {
       centerId: a.centerId,
+      year: a.year,
       code: a.code,
       monthIndex: a.monthIndex,
       value: adjustedValueByCell.get(key) ?? a.originalValue,
@@ -249,7 +243,7 @@ function parse(candidate: UploadCandidate): StagedUpload {
   const commentsByDataset: { datasetId: string; comments: ImportedComment[] }[] = [];
   const seedsByDatasetId = new Map<string, ImportedComment[]>();
   for (const seed of merged.values()) {
-    const datasetId = idByCenterId.get(seed.centerId);
+    const datasetId = idByKey.get(datasetKey(seed.centerId, seed.year));
     if (!datasetId) {
       continue;
     }
@@ -266,12 +260,20 @@ function parse(candidate: UploadCandidate): StagedUpload {
     commentsByDataset.push({ datasetId, comments });
   }
 
+  const loadedMonthsByYear: Record<number, number[]> = {};
+  for (const entry of meta.years) {
+    loadedMonthsByYear[entry.year] = entry.loadedMonths;
+  }
+  const newestYear = meta.years[meta.years.length - 1]?.year ?? 0;
+
   const workspaceMeta: WorkspaceMeta = {
     companyName,
     warnings: [],
     activeCenterId:
-      meta.mode === "single" ? (idByCenterId.get(SINGLE_WORKBOOK_CENTER_KEY) ?? "") : "consolidado",
-    loadedMonths: meta.loadedMonths,
+      meta.mode === "single"
+        ? (idByKey.get(datasetKey(SINGLE_WORKBOOK_CENTER_KEY, newestYear)) ?? "")
+        : "consolidado",
+    loadedMonthsByYear,
     // NOT this strategy's own id: the workspace's origin is whatever system the data came from
     // (MicroPlus stays MicroPlus), which is why the metadata carries it.
     sourceSystemId: meta.system,

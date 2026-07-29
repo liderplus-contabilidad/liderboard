@@ -268,9 +268,12 @@ Ambas pestañas consumen el **motor analítico** (`lib/profit-loss/analytics/`) 
 capa de traducción pura y testeada; ya no muestran "próximamente".
 
 - **Reparto.** _Gráficos_ responde **cuánto y de qué** (montos por periodo, comparación entre
-  cuentas y centros, composición de un total). _Análisis_ responde **cómo cambia**: las
-  transformaciones del motor — acumulado YTD, índice base 100, media móvil, mismo periodo del
-  año anterior, % sobre ingresos, % sobre la cuenta padre, variación y concentración de gastos.
+  cuentas y centros, composición de un total). _Análisis_ responde **cómo cambia**: el peso de
+  cada cuenta sobre una base (análisis vertical), el % sobre ingresos de los gastos principales,
+  la variación contra el periodo anterior y la concentración de gastos. Ninguna de las dos tiene
+  selector de transformación: nombrar la operación del motor —índice base 100, media móvil, %
+  sobre la cuenta padre— obligaba a conocer el motor, y lo que el contador lee son las preguntas,
+  no las operaciones.
 - **Vista por defecto, y filtros que acotan en vez de reemplazar.** Con un Excel cargado y
   nada marcado en la fila de filtros, _Gráficos_ trae los totales del periodo como **stat
   tiles** (Ingresos, Costos y Gastos, Utilidad o Pérdida — un total es un número, no una
@@ -283,8 +286,7 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   propósito cuando lo marcado cae fuera de su pregunta, con un estado vacío que nombra la
   causa en vez de un panel en blanco. Todos son **consultas normales al motor**
   (`toSeriesQuery`/`presetQuery`), la misma ruta para el preset y para lo marcado — no hay un
-  camino aparte. En Análisis, elegir una transformación del selector agrega una cuarta
-  tarjeta construida sobre las mismas marcas; las tres de pregunta fija no desaparecen.
+  camino aparte.
 - **Análisis vertical sobre una cuenta base elegible.** La primera tarjeta de _Análisis_ es una
   **tabla** (no una gráfica, así que no pasa por `ChartCard`) de cuentas × periodos: cada celda
   es el % que esa cuenta representa de una cuenta base, y leer la fila es ver cómo fue variando
@@ -306,9 +308,9 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   `lib/profit-loss/filters.ts`, puro), porque las tres pestañas los leen; se sanean **en
   lectura**, nunca en un efecto. `PygAnalyticsProvider` (montado dentro de `PygDataProvider`,
   así que el layout no cambia) expone `usePygAnalytics()` con solo la mitad de presentación —
-  `transform`, `chartType`, `sources`, `colorOf`, `runQuery` — porque solo Gráficos/Análisis
-  la usan. La selección vive **en memoria** — sobrevive al cambio entre pestañas, no al
-  recargar.
+  `sources`, `colorOf`, `runQuery` y la cuenta base del análisis vertical — porque solo
+  Gráficos/Análisis la usan. La selección vive **en memoria** — sobrevive al cambio entre
+  pestañas, no al recargar.
 
 **Reglas que las gráficas no rompen** (cada una con su test en la capa pura):
 

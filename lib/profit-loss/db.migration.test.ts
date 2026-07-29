@@ -34,7 +34,7 @@ function dataset(id: string, role: PygDataset["role"]): PygDataset {
 
 /** A v2 meta row predates `loadedMonths` and `sourceSystemId` entirely — neither field existed
  * yet, which is exactly what the v4 and v5 upgrades have to cope with. */
-type LegacyMeta = Omit<WorkspaceMeta, "loadedMonths" | "sourceSystemId">;
+type LegacyMeta = Omit<WorkspaceMeta, "loadedMonthsByYear" | "sourceSystemId">;
 
 /** Seeds a v2 (pre-this-change) database directly, bypassing the app's own Dexie class so the
  * migration under test runs against genuinely old-shaped data when `./db` opens afterward. */
@@ -58,7 +58,9 @@ async function seedV2(datasets: PygDataset[], edits: CellEdit[], meta: LegacyMet
 }
 
 /** A v3/v4 meta row predates `sourceSystemId` — the field the v5 upgrade fills in. */
-type PreSystemMeta = Omit<WorkspaceMeta, "sourceSystemId">;
+type PreSystemMeta = Omit<WorkspaceMeta, "loadedMonthsByYear" | "sourceSystemId"> & {
+  loadedMonths?: number[];
+};
 
 /** Seeds a v3 (post-monthly-cost-center-upload, pre-this-change) database directly — same shape
  * as v2, so only the schema VERSION differs, which is what determines which upgrade functions
@@ -188,7 +190,8 @@ describe("v4 migration — a base-mensual single-statement workspace is conserve
     expect((await db.datasets.toArray()).map((d) => d.id)).toEqual(["single-1"]);
     expect(await db.edits.count()).toBe(1);
     const meta = await db.meta.get("workspace");
-    expect(meta?.loadedMonths).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    // v4 infiere `loadedMonths`; v6 la mueve al eje del año sin perder nada.
+    expect(meta?.loadedMonthsByYear).toEqual({ 2026: [0, 1, 2, 3, 4, 5, 6] });
   });
 });
 

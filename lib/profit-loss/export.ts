@@ -13,13 +13,15 @@
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
-import type { DatosCell, DatosRow } from "./datos-types";
+import type { DatosCell, DatosColumn, DatosRow } from "./datos-types";
 import { applyEditsToLeafAccounts, mergeCenters, toDatosGrid } from "./derive";
 import {
   appWorkbookMetaToRows,
   APP_WORKBOOK_META_SHEET,
   SINGLE_WORKBOOK_CENTER_KEY,
   type AppWorkbookMode,
+  type AppWorkbookSheet,
+  type AppWorkbookYear,
   type CenterCellAdjustment,
   type CenterCellComment,
 } from "./excel-metadata";
@@ -38,19 +40,40 @@ const SHEET_NAME = "Estado de Resultados";
  * by-centers "Excel completo"). SHALL re-enter via `app-workbook`'s strategy, reconstructing an
  * equivalent single-mode workspace. */
 export function buildPygWorkbook(
-  dataset: PygDataset,
-  edits: CellEdit[],
-  loadedMonths?: number[],
+  /** Every year of the single-mode workspace, one sheet each. */
+  slices: { dataset: PygDataset; edits: CellEdit[] }[],
+  loadedMonthsByYear: Record<number, number[]>,
   /** The system the workspace came from — carried in the metadata so the re-upload keeps its
    * identity (a MicroPlus workspace stays MicroPlus). Defaults to the only system that could
    * have produced a single-mode workspace before MicroPlus existed. */
   sourceSystemId: string = LEGACY_SYSTEM,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
-  writeStatementSheet(wb, SHEET_NAME, dataset, edits, loadedMonths);
-  attachWorkbookMetadata(wb, "single", dataset.year ?? 0, loadedMonths ?? [], sourceSystemId, [
-    { centerId: SINGLE_WORKBOOK_CENTER_KEY, dataset, edits },
-  ]);
+  const used = new Set<string>();
+  const sheetRows: AppWorkbookSheet[] = [];
+  const ordered = [...slices].sort((a, b) => a.dataset.year - b.dataset.year);
+
+  for (const { dataset, edits } of ordered) {
+    const name = uniqueSheetName(sheetTitle(SHEET_NAME, dataset.year, ordered.length > 1), used);
+    writeStatementSheet(wb, name, dataset, edits, loadedMonthsByYear[dataset.year] ?? []);
+    sheetRows.push({ sheetName: name, year: dataset.year, centerId: SINGLE_WORKBOOK_CENTER_KEY });
+  }
+
+  attachWorkbookMetadata(
+    wb,
+    "single",
+    ordered.map(({ dataset }) => ({
+      year: dataset.year,
+      loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
+    })),
+    sheetRows,
+    sourceSystemId,
+    ordered.map(({ dataset, edits }) => ({
+      centerId: SINGLE_WORKBOOK_CENTER_KEY,
+      dataset,
+      edits,
+    })),
+  );
   return wb;
 }
 
@@ -78,7 +101,13 @@ function writeStatementSheet(
   const grid = toDatosGrid(dataset, edits, dataset.baseFrequency);
   const originals = new Map(dataset.accounts.map((account) => [account.code, account.values]));
   const valueEdits = indexValueEdits(edits);
-  emitDataRows(ws, grid.rows, { isMonthly, originals, valueEdits, loadedMonths });
+  emitDataRows(ws, grid.rows, {
+    isMonthly,
+    columns: grid.columns,
+    originals,
+    valueEdits,
+    loadedMonths,
+  });
   return ws;
 }
 
@@ -91,17 +120,28 @@ export async function workbookToBlob(wb: ExcelJS.Workbook): Promise<Blob> {
 }
 
 /** `PyG <empresa> <periodo>.xlsx`, filesystem-safe. */
-export function pygExportFilename(dataset: PygDataset | undefined): string {
+export function pygExportFilename(
+  dataset: PygDataset | undefined,
+  years: readonly number[] = [],
+): string {
   const company = sanitize(dataset?.companyName ?? "") || "LiderPlus";
-  const period =
-    dataset?.periodLabel && dataset.periodLabel !== "—" ? ` ${dataset.periodLabel}` : "";
-  return `PyG ${company}${period}.xlsx`;
+  const sorted = [...years].sort((a, b) => a - b);
+  const span =
+    sorted.length > 1
+      ? ` ${sorted[0]}-${sorted[sorted.length - 1]}`
+      : dataset?.periodLabel && dataset.periodLabel !== "—"
+        ? ` ${dataset.periodLabel}`
+        : "";
+  return `PyG ${company}${span}.xlsx`;
 }
 
 // ── internals ──────────────────────────────────────────────────────────────
 
 interface EmitContext {
   isMonthly: boolean;
+  /** The grid's column plan — `row.cells` now carries the year's Total as its last cell, so
+   * the period cells have to be told apart from it rather than assumed to be all of them. */
+  columns: readonly DatosColumn[];
   originals: Map<string, number[]>;
   valueEdits: Map<string, CellEdit>;
   /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
@@ -177,7 +217,10 @@ function emitDataRows(ws: ExcelJS.Worksheet, rows: DatosRow[], ctx: EmitContext)
 function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): void {
   const loaded = (monthIndex: number): boolean =>
     !ctx.loadedMonths || ctx.loadedMonths.includes(monthIndex);
-  const values = row.cells.map((cell, monthIndex) =>
+  // The grid's own Total cell rides along in `row.cells`; the sheet writes the period columns
+  // and then that total, so the two are separated here rather than re-summed.
+  const periodCells = row.cells.filter((_, index) => ctx.columns[index]?.kind !== "total");
+  const values = periodCells.map((cell, monthIndex) =>
     loaded(monthIndex) ? (cell.value ?? 0) : null,
   );
   const total = values.reduce((sum: number, value) => sum + (value ?? 0), 0);
@@ -189,7 +232,7 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
   }
   r.getCell(NAME_COL).alignment = { indent: Math.max(0, row.level - 1) };
 
-  const lastValueCol = FIRST_VALUE_COL + row.cells.length - 1;
+  const lastValueCol = FIRST_VALUE_COL + periodCells.length - 1;
   const lastCol = ctx.isMonthly ? lastValueCol + 1 : lastValueCol;
   for (let col = FIRST_VALUE_COL; col <= lastCol; col++) {
     r.getCell(col).numFmt = CURRENCY_FMT;
@@ -202,7 +245,7 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
     return; // no notes on the summary row
   }
 
-  row.cells.forEach((cell, monthIndex) => {
+  periodCells.forEach((cell, monthIndex) => {
     if (!loaded(monthIndex)) {
       return;
     }
@@ -249,37 +292,50 @@ function sanitize(name: string): string {
 
 export interface MultiCenterInput {
   companyName: string;
-  year: number;
-  /** Month indices actually loaded — unloaded columns are written empty on every sheet. */
-  loadedMonths: number[];
+  /** Coverage per year — an unloaded month is written empty on every sheet of THAT year. */
+  loadedMonthsByYear: Record<number, number[]>;
   /** The system the workspace came from; defaults to the by-centers format, the only thing that
    * produces a centers-mode workspace today. */
   sourceSystemId?: string;
-  /** In selector order — "Sin centro de costo" is just the last entry, no special case. */
+  /** Every center-year of the workspace. Grouped and ordered here, not by the caller. */
   centers: { dataset: PygDataset; edits: CellEdit[] }[];
 }
 
 /**
- * The "Excel completo": a computed "Consolidado" sheet (sum of every center, "Sin centro de
- * costo" included — see `pyg-monthly-cost-centers`'s "es un centro mensual más"), one sheet
- * per center, and ONE hidden metadata sheet for the whole workbook (year, loaded months,
- * every comment and value adjustment) — round-trips through the `app-workbook` strategy.
- * Sheet names are Excel-safe (≤31 chars, unique).
+ * The "Excel completo": the WHOLE workspace, every year of it, in ONE workbook — never a zip,
+ * because the file exists to be re-uploadable and only a workbook can re-enter through the
+ * `app-workbook` strategy.
+ *
+ * Per year, in ascending order: a computed "Consolidado" sheet (sum of every center, "Sin centro
+ * de costo" included — see `pyg-monthly-cost-centers`'s "es un centro mensual más") followed by
+ * one sheet per center. A sheet's INSIDE is unchanged — twelve month columns plus the total — so
+ * only which year it belongs to is new, and that travels in the hidden metadata sheet rather
+ * than in the title, which Excel caps at 31 characters.
  */
 export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
+  const sheetRows: AppWorkbookSheet[] = [];
 
-  const base = input.centers[0]?.dataset;
-  if (base) {
+  const years = [...new Set(input.centers.map((c) => c.dataset.year))].sort((a, b) => a - b);
+
+  for (const year of years) {
+    const ofYear = input.centers
+      .filter((c) => c.dataset.year === year)
+      .sort((a, b) => (a.dataset.order ?? 0) - (b.dataset.order ?? 0));
+    if (ofYear.length === 0) {
+      continue;
+    }
+    const loadedMonths = input.loadedMonthsByYear[year] ?? [];
+
     // Apply each center's edits before merging so the Consolidado sheet equals the sum of the
     // (edited) center sheets — never the stale pre-edit values.
     const merged = mergeCenters(
-      input.centers.map((c) => applyEditsToLeafAccounts(c.dataset.accounts, c.edits)),
+      ofYear.map((c) => applyEditsToLeafAccounts(c.dataset.accounts, c.edits)),
     );
     const consolidated: PygDataset = {
-      ...base,
-      id: "consolidado",
+      ...ofYear[0].dataset,
+      id: `consolidado-${year}`,
       role: "center",
       costCenterName: undefined,
       accounts: merged.accounts,
@@ -287,23 +343,27 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
     };
     writeStatementSheet(
       wb,
-      uniqueSheetName("Consolidado", used),
+      uniqueSheetName(sheetTitle("Consolidado", year, years.length > 1), used),
       consolidated,
       [],
-      input.loadedMonths,
+      loadedMonths,
     );
-  }
 
-  for (const { dataset, edits } of input.centers) {
-    const name = uniqueSheetName(dataset.costCenterName || dataset.centerId || "Centro", used);
-    writeStatementSheet(wb, name, dataset, edits, input.loadedMonths);
+    for (const { dataset, edits } of ofYear) {
+      const name = uniqueSheetName(
+        sheetTitle(dataset.costCenterName || dataset.centerId || "Centro", year, years.length > 1),
+        used,
+      );
+      writeStatementSheet(wb, name, dataset, edits, loadedMonths);
+      sheetRows.push({ sheetName: name, year, centerId: dataset.centerId ?? dataset.id });
+    }
   }
 
   attachWorkbookMetadata(
     wb,
     "centers",
-    input.year,
-    input.loadedMonths,
+    years.map((year) => ({ year, loadedMonths: input.loadedMonthsByYear[year] ?? [] })),
+    sheetRows,
     input.sourceSystemId ?? MONTHLY_CENTERS_SYSTEM,
     input.centers.map(({ dataset, edits }) => ({
       centerId: dataset.centerId ?? dataset.id,
@@ -312,6 +372,12 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
     })),
   );
   return wb;
+}
+
+/** «CARTAGO 2025» once there is more than one year to tell apart; the bare name otherwise, so a
+ * single-year workbook looks exactly like it always did. */
+function sheetTitle(name: string, year: number, multiYear: boolean): string {
+  return multiYear ? `${name} ${year}` : name;
 }
 
 /** Excel forbids > 31 chars, the chars \ / ? * [ ] :, and duplicate sheet names. */
@@ -333,19 +399,19 @@ function uniqueSheetName(raw: string, used: Set<string>): string {
 }
 
 /**
- * The workbook's ONE hidden metadata sheet: mode, year, loaded months, and every "center"'s
- * comments and value adjustments (tagged by centerId — `SINGLE_WORKBOOK_CENTER_KEY` for a
- * single-mode workbook's one entry, since one sheet covers the whole workspace either way —
- * see design.md decision 7). Always written, even with nothing to restore: `year`/`loadedMonths`
- * are needed for round-trip regardless of whether anything was ever edited. Shared by
- * `buildPygWorkbook` (single) and `buildMultiCenterWorkbook` (centers) — `app-workbook`'s
- * strategy reads `mode` back to know which shape to reconstruct.
+ * The workbook's ONE hidden metadata sheet: mode, system, the coverage of every year, which
+ * (year, centro) each visible sheet holds, and every "center"'s comments and value adjustments
+ * (tagged by centerId and year — `SINGLE_WORKBOOK_CENTER_KEY` for a single-mode workbook's
+ * entries, since one sheet covers one year either way). Always written, even with nothing to
+ * restore: the years and their coverage are needed for round-trip regardless of whether anything
+ * was ever edited. Shared by `buildPygWorkbook` (single) and `buildMultiCenterWorkbook`
+ * (centers) — `app-workbook`'s strategy reads `mode` back to know which shape to reconstruct.
  */
 function attachWorkbookMetadata(
   wb: ExcelJS.Workbook,
   mode: AppWorkbookMode,
-  year: number,
-  loadedMonths: number[],
+  years: AppWorkbookYear[],
+  sheets: AppWorkbookSheet[],
   system: string,
   entries: { centerId: string; dataset: PygDataset; edits: CellEdit[] }[],
 ): void {
@@ -357,6 +423,7 @@ function attachWorkbookMetadata(
       if (edit.comment) {
         comments.push({
           centerId,
+          year: dataset.year,
           code: edit.code,
           monthIndex: edit.monthIndex,
           comment: edit.comment,
@@ -364,12 +431,18 @@ function attachWorkbookMetadata(
       }
       if (edit.value !== undefined) {
         const originalValue = originals.get(edit.code)?.[edit.monthIndex] ?? 0;
-        adjustments.push({ centerId, code: edit.code, monthIndex: edit.monthIndex, originalValue });
+        adjustments.push({
+          centerId,
+          year: dataset.year,
+          code: edit.code,
+          monthIndex: edit.monthIndex,
+          originalValue,
+        });
       }
     }
   }
   const meta = wb.addWorksheet(APP_WORKBOOK_META_SHEET, { state: "veryHidden" });
-  meta.addRows(appWorkbookMetaToRows({ year, loadedMonths, mode, system, comments, adjustments }));
+  meta.addRows(appWorkbookMetaToRows({ years, sheets, mode, system, comments, adjustments }));
 }
 
 export interface MonthSliceExportInput {
@@ -507,8 +580,15 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
 }
 
 /** `PyG-<año>-completo.xlsx` — outside the monthly pattern so it never reads as a month. */
-export function multiCenterFilename(year: number): string {
-  return `PyG-${year}-completo.xlsx`;
+export function multiCenterFilename(years: readonly number[]): string {
+  const sorted = [...years].sort((a, b) => a - b);
+  if (sorted.length === 0) {
+    return "PyG-completo.xlsx";
+  }
+  // A range rather than a list: «PyG-2025-2027-completo» stays inside the same shape whatever
+  // the workspace grows to, and never accidentally matches the monthly `PyG-AAAA-MM` pattern.
+  const span = sorted.length === 1 ? `${sorted[0]}` : `${sorted[0]}-${sorted[sorted.length - 1]}`;
+  return `PyG-${span}-completo.xlsx`;
 }
 
 /** `PyG-<año>-<mes>-liderboard.xlsx` — inside the monthly pattern so it re-enters unrenamed. */

@@ -5,7 +5,7 @@
  */
 import { periodLabels } from "../derive";
 import type { Frequency } from "../types";
-import type { PeriodRef } from "./types";
+import type { PeriodRef, PeriodSlot } from "./types";
 
 export interface PeriodLabelOptions {
   /** Adds the two-digit year ("Ene 26"). Set it only when the query spans several years. */
@@ -19,6 +19,14 @@ export interface PeriodLabelOptions {
 export function periodLabel(ref: PeriodRef, options: PeriodLabelOptions = {}): string {
   const label = periodLabels(ref.frequency)[ref.index] ?? String(ref.index + 1);
   return options.multiYear ? `${label} ${String(ref.year).slice(-2)}` : label;
+}
+
+/**
+ * A year-less slot's label — «Ene», «T1». The filter bar marks slots, not dated periods, so
+ * there is no year to append: the mark narrows every visible year at once.
+ */
+export function periodSlotLabel(slot: PeriodSlot): string {
+  return periodLabels(slot.frequency)[slot.index] ?? String(slot.index + 1);
 }
 
 /** Every period of a year at the given frequency, in calendar order. */
