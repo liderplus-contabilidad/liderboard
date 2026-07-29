@@ -374,6 +374,77 @@ tu proveedor y tu modal de carga sobre `<ExcelActions/>`, y decláralo en el `ri
 `MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de que el
 caso es general y va en la API, no en tu módulo.
 
+## Clientes de PyG
+
+Una firma contable lleva diez clientes, no uno. PyG guarda **varios a la vez**, y abrir uno no
+toca los datos, ajustes ni comentarios de los demás.
+
+- **Qué es un cliente.** Un nombre que elige el usuario más **exactamente un** estado de
+  resultados — sus datasets, su cobertura, sus ajustes y sus comentarios. La lista es plana: un
+  cliente no contiene otros ni varios estados. Un cliente que migró de sistema contable se modela
+  como dos clientes, porque sus planes de cuentas no se mezclan.
+- **Se crea explícitamente y nace vacío** (`+ Agregar cliente`). **Ninguna carga inventa un
+  cliente por su cuenta**; la única excepción la pide el usuario desde el diálogo de choque
+  ("Crear cliente y cargar"), con el nombre propuesto y **editable**.
+- **La etiqueta no es la identidad.** El usuario llama «Manor Galápagos» a lo que el archivo llama
+  `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, así que el nombre **nunca** se compara contra un
+  archivo. Un cliente vacío no tiene identidad: su primera carga la **adopta**, y de ahí en
+  adelante el choque se comprueba contra la identidad adoptada. Renombrar no la cambia.
+- **Reglas del nombre** (`lib/profit-loss/clients.ts`, puro y con tests): se recorta, no puede
+  quedar vacío, tope de 60 caracteres, y es **único ignorando mayúsculas y acentos** — «manor» y
+  «Manor» no son dos clientes. El rechazo **nombra** al cliente que ya lo usa.
+- **El selector vive en el header** (`ActiveClient` + `PygClientActions`), donde el usuario ya
+  mira para saber qué cliente tiene abierto. Al desplegarlo: buscador con foco al abrir (ignora
+  mayúsculas y acentos), atajo **`⌘K`** anunciado en la cabecera, `Escape` que devuelve el foco al
+  bloque, cada cliente con su sublínea (sistema · modo · años, o «Sin datos cargados») y un menú
+  `⋯` por fila con **Renombrar** y **Eliminar**. Sin scrim: el tablero de atrás sigue legible
+  mientras se decide. **El componente sigue siendo prop-driven** — sin lista de clientes se rinde
+  como el bloque de solo lectura de siempre, que es lo que deja a Ocupaciones intacta.
+- **Orden alfabético, sin columna `order`.** Renombrar reordena, que es lo que se espera al
+  renombrar.
+- **Eliminar cuantifica lo que descarta**: años, centros, cuentas y número de comentarios
+  (`describeClientContents`), y nombra uno a uno los clientes que **no** se tocan. «Los ajustes»
+  aquí significa lo que significa en toda la app — celdas editadas a mano por encima del valor del
+  archivo. Al eliminar el cliente activo se abre el **primero por nombre** de los que queden; si
+  no queda ninguno, la app entra en su estado vacío.
+- **Sin clientes, la app lo dice y no deja cargar**: el bloque del header queda con **borde
+  punteado** («Sin cliente seleccionado» / «Ningún estado de resultados cargado»), el contenido
+  ofrece crear el primero explicando qué se gana, y la razón por la que no se puede cargar va
+  **visible junto a «Cargar Excel»**, en una píldora, no escondida en un tooltip.
+- **El choque de identidad tiene tres salidas, no dos** (`describeIdentityChange` devuelve sus dos
+  formas). Las dos tarjetas comparan **empresa y sistema contable** — nunca un NIT, que ninguna
+  estrategia extrae — y el sistema se nombra con la etiqueta de su estrategia, jamás con su id:
+  - **Otro cliente ya tiene esa identidad**: el archivo pertenece allí. La acción principal es
+    **cargar allí**, que no destruye nada; solo cambia el cliente activo.
+  - **Ninguno coincide**: la acción principal es **crear el cliente y cargar**. Reemplazar el
+    cliente abierto baja a acción secundaria, explicando cuándo tiene sentido (que se haya
+    renombrado o cambiado de sistema) y qué descarta exactamente. Ese reemplazo **conserva los
+    comentarios de las cuentas que también existan en el archivo nuevo** y descarta los ajustes de
+    valor: un comentario sigue siendo cierto cuando la misma cuenta vuelve a llegar; un ajuste es
+    una corrección sobre una cifra que el archivo acaba de reemplazar.
+  - Y siempre **Cancelar** y **Elegir otro archivo**, que es la salida de «me equivoqué de
+    archivo», la más frecuente de todas.
+- **Cambiar de cliente no arrastra la selección anterior.** Los filtros se podan **en la lectura**
+  (`sanitizeFilters`), no en un efecto, así que una cuenta, un centro o un año que no existan en el
+  cliente nuevo desaparecen en el mismo render: no hay un render intermedio con una tabla vacía.
+  Los filtros son estado de sesión y **no** se guardan por cliente.
+- **Almacenamiento particionado por `clientId`** (Dexie **v7**): tabla `clients`, `clientId` en
+  cada dataset, `meta` con **una fila por cliente** en vez de la fila única `"workspace"`, y una
+  tabla `active` de una fila que recuerda cuál está abierto entre sesiones. `edits` no cambia de
+  forma: cuelga de `datasetId`, único entre clientes, así que una edición no puede llegar al
+  cliente equivocado ni con un bug; lo que gana es **borrado en cascada**.
+- **`db.ts` es la única puerta a las tablas.** No es limpieza oportunista: con datos de varios
+  clientes conviviendo, una consulta sin acotar los mezcla en silencio y nada aguas abajo puede
+  notarlo. `ParsedDataset` (`types.ts`) es `PygDataset` sin `clientId` — la capa pura produce
+  datasets que todavía no son de nadie y `db.ts` **estampa** el dueño al escribir, porque a qué
+  cliente pertenece un archivo lo decide qué cliente está abierto, nunca el archivo.
+- **La migración v7 es aditiva.** Dexie no baja de versión, así que no borra ningún dataset ni
+  ninguna edición: el workspace guardado se convierte en el primer cliente, con su `companyName`
+  recortado o `Cliente 1` si viniera vacío, y queda activo. Una base que nunca cargó nada no crea
+  ningún cliente y la app arranca en su estado vacío.
+- **Ocupaciones no cambia.** Tiene su propia base y su propio `hotelName`; adoptará esta misma
+  forma en su propio cambio.
+
 ## Carga de Excel (PyG › Datos)
 
 - **Un registry de estrategias, no un `if`.** `lib/profit-loss/upload/registry.ts` resuelve
@@ -452,8 +523,8 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
   dos modos escribe **una sola columna**: subir junio escribe el índice 5 y no toca ningún otro
   mes; un centro o una cuenta nuevos se dan de alta con ceros en los meses anteriores. Se pueden
   soltar varios meses de golpe: se parsean **todos antes de escribir nada**, se validan como
-  conjunto (una sola identidad — ver abajo —, un solo año, sin meses repetidos) y se aplican en
-  una sola escritura. Por dentro, un estado único es un workspace con **un único centro sin
+  conjunto (una sola identidad — ver abajo —, sin repetir un `(año, mes)`; **mezclar años sí es
+  válido**) y se aplican en una sola escritura. Por dentro, un estado único es un workspace con **un único centro sin
   nombre** (`mode: "single"`, `centerId: null`): la misma `mergeMonthSlice` sirve a los dos
   modos, sin rama nueva — solo se salta la validación contra `GENERAL`, que no existe en este
   formato.
@@ -495,10 +566,12 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
 - **Frecuencias:** el archivo define la frecuencia base y la vista puede agregar hacia
   arriba (mensual → trimestral → semestral → anual, sumas de períodos); nunca se
   desagrega.
-- **Persistencia:** IndexedDB (Dexie). Los valores de archivo y las ediciones/comentarios viven
-  en tablas separadas. Un mes nuevo (por centros o estado único) se aplica con
-  `applyMonthSlice` (nunca toca `edits`); un «Excel completo»/«Excel con tus datos» **reemplaza**
-  el workspace entero (con confirmación si hay ediciones).
+- **Persistencia:** IndexedDB (Dexie), particionada por cliente (ver "Clientes de PyG"). Los
+  valores de archivo y las ediciones/comentarios viven en tablas separadas. Un mes nuevo (por
+  centros o estado único) se aplica con `applyMonthSlice` (nunca toca `edits`); un «Excel
+  completo»/«Excel con tus datos» **fusiona por año** dentro del cliente abierto — cada año que
+  trae el archivo se reemplaza entero (con confirmación si ese año tiene ediciones) y un año que
+  el archivo no trae queda intacto.
 - **Decisión — edición solo en vista mensual:** editar valores y comentar celdas solo
   está disponible en la frecuencia Mensual, porque una celda agregada cubre varios
   meses y la edición sería ambigua.
@@ -509,7 +582,9 @@ Generadas con **`exceljs`** (formato + notas de celda, que SheetJS no escribe), 
 _dynamic import_ para no engordar el bundle inicial. Dos opciones, sin plantilla vacía (llenar a
 mano doce meses por cuenta no es un flujo real):
 
-- **Excel completo / Excel con tus datos:** el workspace entero. En modo por centros, una hoja
+- **Excel completo / Excel con tus datos:** el estado de resultados del **cliente abierto**,
+  entero y de ningún otro; el nombre del archivo no lleva la etiqueta del cliente, sino la empresa
+  y el periodo, que es lo que el contador reconoce y lo que la recarga vuelve a leer. En modo por centros, una hoja
   **Consolidado** (suma de todos los centros, Sin centro de costo incluido, con los ajustes ya
   aplicados) más una hoja por centro; en estado único, una única hoja del Estado de Resultados.
   En ambos, los meses no cargados quedan **vacíos**, no en cero, y las cuentas padre llevan sus
