@@ -70,12 +70,6 @@ export interface ImportedComment {
   value?: number;
 }
 
-/** What `parsePygWorkbook` yields: the dataset plus any comments to re-seed as edits. */
-export interface PygParseResult {
-  dataset: PygDataset;
-  comments: ImportedComment[];
-}
-
 /** A user edit overlay — never mutates `AccountRow.values`. */
 export interface CellEdit {
   id?: number;
@@ -94,6 +88,13 @@ export interface WorkspaceMeta {
   companyName: string;
   warnings: string[];
   activeCenterId: string;
+  /**
+   * The accounting system this workspace came from — the `id` of the upload strategy that
+   * originated it (`upload/systems.ts`). Part of its identity `(sistema, empresa, año, modo)`,
+   * because two systems' charts of accounts are structurally incompatible; also what decides
+   * whether the app can write that system's format back ("Un mes en crudo").
+   */
+  sourceSystemId: string;
   /**
    * Month indices (0–11) actually loaded into the by-centers workspace — declared, not
    * inferred: a loaded month with all-zero values is covered, an unloaded one is not, and the

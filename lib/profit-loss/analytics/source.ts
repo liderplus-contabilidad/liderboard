@@ -17,10 +17,10 @@ import type { AnalyticsSource } from "./types";
 export const DEFAULT_CENTER_ID = "default";
 
 /**
- * `coveredIndices` is the workspace's declared coverage (by-centers `loadedMonths`) — when
- * given, it wins outright and the values are never inspected to decide it. Omitted only for
- * the single-statement flow, whose one file can't distinguish "not loaded" from "loaded at
- * zero", so the value-based inference is the best available signal there.
+ * `coveredIndices` is the workspace's declared coverage (`WorkspaceMeta.loadedMonths`, in
+ * either mode now) — when given, it wins outright and the values are never inspected to decide
+ * it. Omitting it falls back to value-based inference, kept only for callers with no declared
+ * coverage to pass (tests, fixtures) — every real workspace declares one.
  */
 export function buildAnalyticsSource(
   dataset: PygDataset,

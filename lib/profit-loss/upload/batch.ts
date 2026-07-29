@@ -22,8 +22,34 @@ function monthLabel(month: number): string {
   return MONTHS_FULL_ES[month] ?? `mes ${month + 1}`;
 }
 
-/** Rejects the WHOLE batch, writing nothing, when it mixes years or repeats a month. */
+/** Rejects the WHOLE batch, writing nothing, when its own files don't share an identity —
+ * mode or company — or when it mixes years or repeats a month. Every file in a single drop is
+ * meant to be the same workspace, so this is checked before anything merges (see
+ * `pyg-single-monthly-upload`'s "Identidad del workspace" — a batch mixing identities is
+ * rejected outright, never partially applied). */
 export function validateBatch(slices: readonly MonthSlice[]): void {
+  const systems = [...new Set(slices.map((s) => s.system))];
+  if (systems.length > 1) {
+    throw new PygParseError(
+      "mixed-identity",
+      "La carga mezcla archivos de sistemas contables distintos; sus planes de cuentas no son " +
+        "compatibles.",
+    );
+  }
+  const modes = [...new Set(slices.map((s) => s.mode))];
+  if (modes.length > 1) {
+    throw new PygParseError(
+      "mixed-identity",
+      "La carga mezcla un estado único con archivos mensuales por centros de costo.",
+    );
+  }
+  const companies = [...new Set(slices.map((s) => s.companyName))];
+  if (companies.length > 1) {
+    throw new PygParseError(
+      "mixed-identity",
+      `La carga mezcla archivos de empresas distintas: ${companies.join(", ")}.`,
+    );
+  }
   const years = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
   if (years.length > 1) {
     throw new PygParseError(

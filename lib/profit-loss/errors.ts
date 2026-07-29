@@ -12,20 +12,20 @@ export type PygParseErrorCode =
   | "invalid-file"
   | "no-accounts"
   | "no-header"
-  | "consolidated-unsupported"
   | "invalid-filename"
   | "month-out-of-range"
   | "general-missing"
   | "mixed-years"
   | "duplicate-month"
-  | "unrecognized-format";
+  | "unrecognized-format"
+  | "missing-date-range"
+  | "invalid-date-range"
+  | "mixed-identity";
 
 const MESSAGES: Record<PygParseErrorCode, string> = {
   "invalid-file": "No se pudo leer el archivo. Verifica que sea un Excel (.xls o .xlsx) válido.",
   "no-accounts": "El archivo no contiene filas de cuentas contables reconocibles.",
   "no-header": "No se encontró la fila de cabecera con los períodos del reporte.",
-  "consolidated-unsupported":
-    "Este archivo trae columnas de centros de costo; usa la carga mensual por centros en vez del estado único.",
   "invalid-filename":
     "El nombre del archivo debe seguir el patrón PyG-YYYY-MM-… (ej. PyG-2026-01-darwolf.xlsx). " +
     "El archivo no trae el mes en su contenido, así que tiene que salir del nombre.",
@@ -34,6 +34,10 @@ const MESSAGES: Record<PygParseErrorCode, string> = {
   "mixed-years": "La carga mezcla archivos de años distintos.",
   "duplicate-month": "La carga incluye más de un archivo para el mismo mes.",
   "unrecognized-format": "El archivo no corresponde a ningún formato aceptado.",
+  "missing-date-range":
+    'El estado único debe declarar su rango de fechas ("Desde el … hasta el …"); no se encontró esa línea.',
+  "invalid-date-range": "El rango de fechas del archivo no corresponde a un mes calendario.",
+  "mixed-identity": "La carga mezcla archivos de empresas, años o modos distintos.",
 };
 
 export class PygParseError extends Error {

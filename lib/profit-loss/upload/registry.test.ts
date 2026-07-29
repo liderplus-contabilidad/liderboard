@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { PygParseError } from "../errors";
-import { buildCandidate, resolveCandidate } from "./registry";
+import { aoaToXlsxBuffer as microplusBuffer, MICROPLUS_AOA } from "./microplus.fixtures";
+import { aoaToXlsxBuffer as centersBuffer, MONTHLY_CENTERS_AOA } from "./monthly-centers.fixtures";
+import { aoaToXlsxBuffer as singleBuffer, MONTHLY_SINGLE_AOA } from "./monthly-single.fixtures";
+import { buildCandidate, resolveCandidate, resolveUpload, writesOwnFormat } from "./registry";
 import type { StagedUpload, UploadCandidate, UploadStrategy } from "./types";
 
 function fakeBuffer(): ArrayBuffer {
@@ -20,15 +23,26 @@ function fakeStrategy(
     id,
     label: `Estrategia ${id}`,
     detect,
-    parse: () => result ?? { kind: "single-statement", result: null as never },
+    parse: () =>
+      result ?? { kind: "workspace", datasets: [], meta: null as never, commentsByDataset: [] },
   };
 }
 
 describe("resolveCandidate — primer acierto", () => {
   it("returns the payload of the FIRST strategy that detects a match", () => {
     const candidate = buildCandidate("x.xlsx", fakeBuffer());
-    const first: StagedUpload = { kind: "single-statement", result: "first" as never };
-    const second: StagedUpload = { kind: "single-statement", result: "second" as never };
+    const first: StagedUpload = {
+      kind: "workspace",
+      datasets: [],
+      meta: "first" as never,
+      commentsByDataset: [],
+    };
+    const second: StagedUpload = {
+      kind: "workspace",
+      datasets: [],
+      meta: "second" as never,
+      commentsByDataset: [],
+    };
     const strategies = [
       fakeStrategy("a", () => true, first),
       fakeStrategy("b", () => true, second),
@@ -38,7 +52,12 @@ describe("resolveCandidate — primer acierto", () => {
 
   it("skips a strategy that does not detect and falls through to the next", () => {
     const candidate = buildCandidate("x.xlsx", fakeBuffer());
-    const second: StagedUpload = { kind: "single-statement", result: "second" as never };
+    const second: StagedUpload = {
+      kind: "workspace",
+      datasets: [],
+      meta: "second" as never,
+      commentsByDataset: [],
+    };
     const strategies = [fakeStrategy("a", () => false), fakeStrategy("b", () => true, second)];
     expect(resolveCandidate(candidate, strategies)).toBe(second);
   });
@@ -75,7 +94,12 @@ describe("resolveCandidate — el workbook se lee una sola vez", () => {
 describe("resolveCandidate — detect que falla al leer devuelve false", () => {
   it("treats a throwing detect as no-match and keeps evaluating the rest", () => {
     const candidate = buildCandidate("x.xlsx", fakeBuffer());
-    const matched: StagedUpload = { kind: "single-statement", result: "ok" as never };
+    const matched: StagedUpload = {
+      kind: "workspace",
+      datasets: [],
+      meta: "ok" as never,
+      commentsByDataset: [],
+    };
     const strategies = [
       fakeStrategy("broken", () => {
         throw new Error("hoja ausente");
@@ -83,6 +107,50 @@ describe("resolveCandidate — detect que falla al leer devuelve false", () => {
       fakeStrategy("b", () => true, matched),
     ];
     expect(resolveCandidate(candidate, strategies)).toBe(matched);
+  });
+});
+
+describe("la lista fija — cada formato cae en su estrategia", () => {
+  it("resuelve un archivo MicroPlus por la estrategia MicroPlus", () => {
+    const slice = resolveUpload("mayo.xls", microplusBuffer(MICROPLUS_AOA)) as Extract<
+      StagedUpload,
+      { kind: "month-slice" }
+    >;
+    expect(slice.kind).toBe("month-slice");
+    expect(slice.system).toBe("microplus");
+  });
+
+  it("MicroPlus no le quita archivos a las otras dos estrategias", () => {
+    const single = resolveUpload("descarga.xlsx", singleBuffer(MONTHLY_SINGLE_AOA)) as Extract<
+      StagedUpload,
+      { kind: "month-slice" }
+    >;
+    expect(single.system).toBe("monthly-single");
+    const centers = resolveUpload(
+      "PyG-2026-01-darwolf.xlsx",
+      centersBuffer(MONTHLY_CENTERS_AOA),
+    ) as Extract<StagedUpload, { kind: "month-slice" }>;
+    expect(centers.system).toBe("monthly-centers");
+  });
+});
+
+describe("writesOwnFormat — una estrategia declara si sabe escribir su formato", () => {
+  it("MicroPlus es de solo lectura: su workspace no ofrece «Un mes en crudo»", () => {
+    expect(writesOwnFormat("microplus")).toBe(false);
+  });
+
+  it("los dos formatos que la app sí escribe lo declaran", () => {
+    expect(writesOwnFormat("monthly-single")).toBe(true);
+    expect(writesOwnFormat("monthly-centers")).toBe(true);
+  });
+
+  it("un sistema desconocido se trata como de solo lectura", () => {
+    expect(writesOwnFormat("")).toBe(false);
+    expect(writesOwnFormat("un-sistema-que-no-existe")).toBe(false);
+  });
+
+  it("una estrategia que no lo declara es de solo lectura", () => {
+    expect(writesOwnFormat("a", [fakeStrategy("a", () => true)])).toBe(false);
   });
 });
 

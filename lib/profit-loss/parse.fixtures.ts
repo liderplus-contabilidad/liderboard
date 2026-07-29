@@ -4,7 +4,6 @@
  * invented data — tests must never depend on the git-ignored `.context/` samples.
  */
 import * as XLSX from "xlsx";
-import { META_SHEET_NAME } from "./excel-metadata";
 import type { AccountRow } from "./types";
 
 export type FixtureCell = string | number | null;
@@ -74,25 +73,6 @@ export const SUCURSAL_AOA: FixtureCell[][] = [
   ...MONTHLY_BODY,
 ];
 
-/** A second sucursal (different center) sharing the chart of accounts — for merge/workspace tests. */
-export const SUCURSAL_SUR_AOA: FixtureCell[][] = [
-  ["HOTELERA ANDES S.A."],
-  ["Estado de Resultados"],
-  ["Centro de Costo: SUCURSAL SUR"],
-  ["Desde el 01/01/2026 hasta el 31/12/2026"],
-  [null],
-  [null],
-  [null, null, ...MONTH_HEADERS, "Total"],
-  [null],
-  monthlyRow("4", "Ingresos", months(30, 20), 50),
-  monthlyRow("4.1", "Ventas", months(30, 20), 50),
-  monthlyRow("4.1.1", "Ventas Habitaciones", months(30, 20), 50),
-  monthlyRow("5", "Costos y Gastos", months(10), 10),
-  monthlyRow("5.1", "Gastos Operativos", months(10), 10),
-  monthlyRow("5.1.1", "Sueldos", months(10), 10),
-  [null, "Utilidad o Perdida", ...months(20, 20), 40],
-];
-
 /** Annual export: a single "Total" value column. */
 export const ANNUAL_AOA: FixtureCell[][] = [
   ["HOTELERA ANDES S.A."],
@@ -134,27 +114,6 @@ export const CONSOLIDATED_AOA: FixtureCell[][] = [
   [null, "Utilidad o Perdida", 260, 220, 35, 5],
 ];
 
-/** Monthly file whose "4.1" parent row disagrees with the sum of its children. */
-export const MISMATCHED_PARENT_AOA: FixtureCell[][] = MONTHLY_AOA.map((row) =>
-  row[0] === "4.1" ? monthlyRow("4.1", "Ventas", months(999, 200), 1199) : row,
-);
-
-/** Monthly export with only Enero–Junio columns (missing months zero-fill + warn). */
-export const PARTIAL_MONTHS_AOA: FixtureCell[][] = [
-  ["HOTELERA ANDES S.A."],
-  ["Estado de Resultados"],
-  ["Desde el 01/01/2026 hasta el 30/06/2026"],
-  [null],
-  [null, null, ...MONTH_HEADERS.slice(0, 6), "Total"],
-  ["4", "Ingresos", 130, 200, 25, 0, 0, 0, 355],
-  ["4.1.1", "Ventas Habitaciones", 130, 200, 25, 0, 0, 0, 355],
-  ["5", "Costos y Gastos", 90, 0, 0, 5, 0, 0, 95],
-  [null, "Utilidad o Perdida", 40, 200, 25, -5, 0, 0, 260],
-];
-
-/** Preamble only — no account rows at all. */
-export const NO_ACCOUNTS_AOA: FixtureCell[][] = [["HOTELERA ANDES S.A."], ["Estado de Resultados"]];
-
 /** The monthly fixture as parsed `AccountRow[]` — direct input for derive tests. */
 export const MONTHLY_ACCOUNTS: AccountRow[] = MONTHLY_BODY.filter(
   (row): row is FixtureCell[] & { 0: string } => typeof row[0] === "string",
@@ -172,17 +131,5 @@ export function aoaToXlsxBuffer(aoa: FixtureCell[][]): ArrayBuffer {
   const sheet = XLSX.utils.aoa_to_sheet(aoa);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, "Consulta Personas");
-  return XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
-}
-
-/** Same, plus a hidden metadata sheet — exercises parse's comment re-import path. */
-export function aoaToXlsxBufferWithMeta(
-  aoa: FixtureCell[][],
-  metaRows: (string | number)[][],
-): ArrayBuffer {
-  const workbook = XLSX.utils.book_new();
-  // Data sheet first so SheetNames[0] stays the data sheet.
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(aoa), "Consulta Personas");
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(metaRows), META_SHEET_NAME);
   return XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 }

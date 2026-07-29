@@ -11,9 +11,11 @@
  */
 import { PygParseError } from "../errors";
 import type { AccountRow } from "../types";
+import { slugifyCenter } from "../workspace";
 import { parseMonthlyFilename } from "./filename";
 import { findFirstDataRow, findHeaderRow, normalizeLabel, readGrid, toNumber } from "./grid";
 import type { Cell } from "./grid";
+import { MONTHLY_CENTERS_SYSTEM } from "./systems";
 import type { CenterSlice, StagedUpload, UploadCandidate, UploadStrategy } from "./types";
 
 /** Owned by this strategy: the source's own account-code shape (see `upload/types.ts`). */
@@ -152,11 +154,14 @@ function parse(candidate: UploadCandidate): StagedUpload {
 
   const centers: CenterSlice[] = centerColumns.map((column, ci) => ({
     name: column.label,
+    centerId: slugifyCenter(column.label),
     accounts: centerAccounts[ci],
   }));
 
   return {
     kind: "month-slice",
+    mode: "centers",
+    system: MONTHLY_CENTERS_SYSTEM,
     year: period.year,
     month: period.month,
     companyName,
@@ -167,8 +172,10 @@ function parse(candidate: UploadCandidate): StagedUpload {
 }
 
 export const monthlyCentersStrategy: UploadStrategy = {
-  id: "monthly-centers",
+  id: MONTHLY_CENTERS_SYSTEM,
   label: "Mensual por centros de costo",
   detect,
   parse,
+  // `buildMonthSliceWorkbook` writes this very grid back — hence "Un mes en crudo".
+  writesOwnFormat: true,
 };

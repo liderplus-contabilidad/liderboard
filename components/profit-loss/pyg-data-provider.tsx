@@ -51,7 +51,9 @@ import { periodsForYear } from "@/lib/profit-loss/analytics/period";
 import type { PeriodRef } from "@/lib/profit-loss/analytics/types";
 import type { CellEdit, Frequency, PygDataset, WorkspaceMeta } from "@/lib/profit-loss/types";
 import { applyBatch, type MonthSlice } from "@/lib/profit-loss/upload/batch";
+import { LEGACY_SYSTEM } from "@/lib/profit-loss/upload/systems";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
+import { compareIdentity, type WorkspaceIdentity } from "@/lib/profit-loss/workspace-identity";
 import { PygAnalyticsProvider } from "./pyg-analytics-provider";
 
 const EMPTY_EDITS: CellEdit[] = [];
@@ -92,16 +94,24 @@ interface PygDataValue {
   activeCenterId: string;
   /** Month indices (0–11) declared loaded in the by-centers workspace; [] in single mode. */
   loadedMonths: number[];
+  /** The loaded workspace's (sistema, empresa, año, modo) — `null` when empty. What a dropped
+   * batch's own identity is compared against (`compareIdentity`) before the modal decides
+   * whether to merge it in directly or ask for a replace confirmation first. */
+  workspaceIdentity: WorkspaceIdentity | null;
+  /** The system the workspace came from (`upload/systems.ts`) — what decides whether the app can
+   * write its raw format back. `null` with no workspace loaded. */
+  sourceSystemId: string | null;
   commitWorkspace: (built: BuiltWorkspace) => Promise<void>;
   /**
-   * Merges a validated month-slice batch onto the CURRENT by-centers workspace — one write,
-   * edits untouched. Throws if the batch mixes years/repeats a month, or if it belongs to a
-   * different year than what's already loaded (the caller must confirm and use
+   * Merges a validated month-slice batch (either mode) onto the CURRENT workspace — one write,
+   * edits untouched. Throws if the batch mixes years/repeats a month, or if its identity
+   * (empresa, año, modo) doesn't match what's already loaded (the caller must confirm and use
    * `replaceMonthlyWorkspace` instead — see the modal, which owns that confirmation).
    */
   commitMonthlyBatch: (slices: MonthSlice[]) => Promise<MonthlyBatchOutcome>;
-  /** Starts a brand-new by-centers workspace for a different year, discarding the current one
-   * and its edits — the destructive path the modal gates behind an explicit confirmation. */
+  /** Starts a brand-new workspace (either mode) for a different identity, discarding the
+   * current one and its edits — the destructive path the modal gates behind an explicit
+   * confirmation. */
   replaceMonthlyWorkspace: (
     slices: MonthSlice[],
   ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
@@ -180,6 +190,26 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   const workspaceYear = datasets.find((d) => d.year != null)?.year ?? 0;
+
+  // A workspace's mode is never mixed (centers-mode and single-mode datasets never coexist —
+  // every write path that could mix them is rejected before it writes), so which role is
+  // present decides it.
+  const sourceSystemId = datasets.length > 0 ? (metaRow?.sourceSystemId ?? LEGACY_SYSTEM) : null;
+
+  const workspaceIdentity: WorkspaceIdentity | null = useMemo(() => {
+    if (datasets.length === 0) {
+      return null;
+    }
+    const identityMode = datasets.some((d) => d.role === "center" || d.role === "sin-centro")
+      ? "centers"
+      : "single";
+    return {
+      system: metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
+      companyName: metaRow?.companyName || datasets[0].companyName,
+      year: workspaceYear,
+      mode: identityMode,
+    };
+  }, [datasets, metaRow?.companyName, metaRow?.sourceSystemId, workspaceYear]);
 
   // Sanitizing on read rather than in an effect means the filters are NEVER out of step with
   // the workspace, the resolved center or the frequency — not even for the render in between.
@@ -310,25 +340,34 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   const commitMonthlyBatch = useCallback(
     async (slices: MonthSlice[]): Promise<MonthlyBatchOutcome> => {
-      const centerDatasets = datasets.filter((d) => d.role === "center" || d.role === "sin-centro");
-      const currentYear = centerDatasets[0]?.year;
-      const batchYear = slices[0]?.year;
+      const batchMode = slices[0]?.mode;
+      const relevant = datasets.filter((d) =>
+        batchMode === "single"
+          ? d.role === "single"
+          : d.role === "center" || d.role === "sin-centro",
+      );
+      const batchIdentity: WorkspaceIdentity | null =
+        slices[0] && batchMode
+          ? {
+              system: slices[0].system,
+              companyName: slices[0].companyName,
+              year: slices[0].year,
+              mode: batchMode,
+            }
+          : null;
       if (
-        centerDatasets.length > 0 &&
-        currentYear != null &&
-        batchYear != null &&
-        currentYear !== batchYear
+        workspaceIdentity &&
+        batchIdentity &&
+        compareIdentity(workspaceIdentity, batchIdentity).length > 0
       ) {
-        // The modal is expected to have already routed a different year through
+        // The modal is expected to have already routed a mismatched batch through
         // `replaceMonthlyWorkspace` after an explicit confirmation — this only guards against
-        // ever silently mixing years into the same columns.
-        throw new Error(
-          `El workspace tiene ${currentYear} cargado; este archivo es de ${batchYear}.`,
-        );
+        // ever silently mixing identities into the same workspace.
+        throw new Error("El archivo no coincide con la identidad del workspace cargado.");
       }
-      const result = applyBatch(centerDatasets, metaRow?.loadedMonths ?? EMPTY_MONTHS, slices);
+      const result = applyBatch(relevant, metaRow?.loadedMonths ?? EMPTY_MONTHS, slices);
       const conflicts = detectReloadConflicts(
-        centerDatasets,
+        relevant,
         result.datasets,
         slices.map((s) => s.month),
         allEdits,
@@ -336,8 +375,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       const nextMeta: WorkspaceMeta = {
         companyName: result.datasets[0]?.companyName || metaRow?.companyName || "",
         warnings: result.warnings,
-        activeCenterId: metaRow?.activeCenterId ?? CONSOLIDADO_ID,
+        activeCenterId:
+          batchMode === "single"
+            ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
+            : (metaRow?.activeCenterId ?? CONSOLIDADO_ID),
         loadedMonths: result.loadedMonths,
+        // Identity was just checked, so the batch's system IS the workspace's.
+        sourceSystemId: slices[0]?.system ?? metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
       };
       await applyMonthSlice(result.datasets, nextMeta);
       return {
@@ -347,7 +391,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         conflicts,
       };
     },
-    [datasets, metaRow, allEdits],
+    [datasets, metaRow, allEdits, workspaceIdentity],
   );
 
   const replaceMonthlyWorkspace = useCallback(async (slices: MonthSlice[]) => {
@@ -355,8 +399,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     const meta: WorkspaceMeta = {
       companyName: result.datasets[0]?.companyName || "",
       warnings: result.warnings,
-      activeCenterId: CONSOLIDADO_ID,
+      activeCenterId:
+        slices[0]?.mode === "single" ? (result.datasets[0]?.id ?? "") : CONSOLIDADO_ID,
       loadedMonths: result.loadedMonths,
+      sourceSystemId: slices[0]?.system ?? LEGACY_SYSTEM,
     };
     await replaceWorkspace(result.datasets, meta);
     setRawFilters(emptyFilters());
@@ -395,6 +441,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       views,
       activeCenterId: resolvedActiveId,
       loadedMonths: metaRow?.loadedMonths ?? EMPTY_MONTHS,
+      workspaceIdentity,
+      sourceSystemId,
       commitWorkspace,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
@@ -426,6 +474,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       views,
       resolvedActiveId,
       metaRow?.loadedMonths,
+      workspaceIdentity,
+      sourceSystemId,
       commitWorkspace,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,

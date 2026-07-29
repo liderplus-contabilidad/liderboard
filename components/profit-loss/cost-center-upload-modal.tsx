@@ -13,6 +13,12 @@ import type { PygDataset } from "@/lib/profit-loss/types";
 import { validateBatch } from "@/lib/profit-loss/upload/batch";
 import type { StagedUpload } from "@/lib/profit-loss/upload/types";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
+import {
+  compareIdentity,
+  describeIdentityChange,
+  type IdentityMismatchReason,
+  type WorkspaceIdentity,
+} from "@/lib/profit-loss/workspace-identity";
 import { usePygData } from "./pyg-data-provider";
 
 interface StagedFile {
@@ -23,6 +29,7 @@ interface StagedFile {
 }
 
 interface UploadSummary {
+  mode: "single" | "centers";
   loadedMonths: number[];
   centersCount: number;
   accountsCount: number;
@@ -33,13 +40,11 @@ interface UploadSummary {
 function describe(staged: StagedUpload): string {
   if (staged.kind === "month-slice") {
     const month = MONTHS_FULL_ES[staged.month] ?? `mes ${staged.month + 1}`;
-    return `Mensual por centros · ${month} ${staged.year}`;
+    const label = staged.mode === "single" ? "Estado único" : "Mensual por centros";
+    return `${label} · ${month} ${staged.year}`;
   }
-  if (staged.kind === "single-statement") {
-    const d = staged.result.dataset;
-    return d.baseFrequency === "anual" ? "Estado único · anual" : "Estado único · mensual";
-  }
-  return "Excel completo de la app";
+  const isSingle = staged.datasets.length === 1 && staged.datasets[0].role === "single";
+  return isSingle ? "Excel con tus datos (estado único)" : "Excel completo de la app";
 }
 
 /** Every distinct `kind` staged so far — a valid batch has exactly one. */
@@ -51,22 +56,26 @@ function stagedKinds(files: StagedFile[]): StagedUpload["kind"][] {
 
 /**
  * Staging modal for PyG's Excel uploads, resolved through the strategy registry: each dropped
- * file is parsed on the spot (its badge names the format and, for a month slice, the period),
- * or shows its own concrete error. Month slices are validated and merged as ONE batch; a
- * single-statement or "Excel completo" file replaces the whole workspace, same as before this
- * change (see `pyg-upload-strategies`/`pyg-monthly-cost-centers`).
+ * file is parsed on the spot (its badge names the format and, for a month slice, the period and
+ * mode), or shows its own concrete error. Month slices (either mode) are validated and merged as
+ * ONE batch; an "Excel completo" file replaces the whole workspace. A batch whose identity
+ * (sistema, empresa, año, modo) contradicts the loaded workspace triggers ONE replace
+ * confirmation instead of merging (see `pyg-single-monthly-upload`'s "Identidad del workspace"
+ * and `pyg-microplus-upload`'s "El sistema de origen forma parte de la identidad del workspace").
  */
 export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { commitWorkspace, commitMonthlyBatch, replaceMonthlyWorkspace, datasets } = usePygData();
+  const { commitWorkspace, commitMonthlyBatch, replaceMonthlyWorkspace, workspaceIdentity } =
+    usePygData();
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [confirmDestructive, setConfirmDestructive] = useState(false);
-  const [confirmYearChange, setConfirmYearChange] = useState<{
-    currentYear: number;
-    newYear: number;
+  const [confirmIdentityChange, setConfirmIdentityChange] = useState<{
+    current: WorkspaceIdentity;
+    incoming: WorkspaceIdentity;
+    reasons: IdentityMismatchReason[];
   } | null>(null);
   const [summary, setSummary] = useState<UploadSummary | null>(null);
 
@@ -74,7 +83,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   useEffect(() => {
     if (!open) {
       setConfirmDestructive(false);
-      setConfirmYearChange(null);
+      setConfirmIdentityChange(null);
       setSummary(null);
       setFiles([]);
       setBatchError(null);
@@ -139,19 +148,18 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
 
   const mixedKindsError =
     kinds.length > 1
-      ? "No se puede cargar un estado único o un Excel completo junto con archivos mensuales por centros; quita uno de los dos grupos."
+      ? "No se puede cargar un Excel completo junto con archivos mensuales; quita uno de los dos grupos."
       : null;
-
-  const centerDatasets = datasets.filter((d) => d.role === "center" || d.role === "sin-centro");
-  const currentYear = centerDatasets[0]?.year ?? null;
 
   const finishWithMonthlyOutcome = useCallback(
     (
+      mode: "single" | "centers",
       outcome: { datasets: PygDataset[]; loadedMonths: number[]; warnings: string[] },
       conflicts: ReloadConflict[] = [],
     ) => {
       const accountsCount = outcome.datasets[0]?.accounts.length ?? 0;
       setSummary({
+        mode,
         loadedMonths: outcome.loadedMonths,
         centersCount: outcome.datasets.length,
         accountsCount,
@@ -167,20 +175,20 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     setBusy(true);
     try {
       const outcome = await commitMonthlyBatch(monthSlices);
-      finishWithMonthlyOutcome(outcome, outcome.conflicts);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome, outcome.conflicts);
     } finally {
       setBusy(false);
     }
   }, [commitMonthlyBatch, monthSlices, finishWithMonthlyOutcome]);
 
-  const runYearChangeReplace = useCallback(async () => {
+  const runIdentityChangeReplace = useCallback(async () => {
     setBusy(true);
     try {
       const outcome = await replaceMonthlyWorkspace(monthSlices);
-      finishWithMonthlyOutcome(outcome);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome);
     } finally {
       setBusy(false);
-      setConfirmYearChange(null);
+      setConfirmIdentityChange(null);
     }
   }, [replaceMonthlyWorkspace, monthSlices, finishWithMonthlyOutcome]);
 
@@ -199,34 +207,21 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     [commitWorkspace, onClose],
   );
 
-  const singleStatementOrWorkspaceBuilt: BuiltWorkspace | null = (() => {
+  // "Excel completo de la app" — reconstructs the whole workspace via its hidden metadata sheet.
+  // A single-dataset, role:"single" reconstruction is a single-mode workspace; anything else is
+  // the by-centers one.
+  const workspaceBuilt: BuiltWorkspace | null = (() => {
     const staged = validFiles[0]?.staged;
-    if (!staged || kind === "month-slice") {
+    if (!staged || staged.kind !== "workspace") {
       return null;
     }
-    if (staged.kind === "single-statement") {
-      const { dataset, comments } = staged.result;
-      return {
-        mode: "single",
-        datasets: [dataset],
-        commentsByDataset: [{ datasetId: dataset.id, comments }],
-        meta: {
-          companyName: dataset.companyName,
-          warnings: dataset.warnings,
-          activeCenterId: dataset.id,
-          loadedMonths: [],
-        },
-      };
-    }
-    if (staged.kind === "workspace") {
-      return {
-        mode: "multi",
-        datasets: staged.datasets,
-        commentsByDataset: staged.commentsByDataset,
-        meta: staged.meta,
-      };
-    }
-    return null;
+    return {
+      mode:
+        staged.datasets.length === 1 && staged.datasets[0].role === "single" ? "single" : "multi",
+      datasets: staged.datasets,
+      commentsByDataset: staged.commentsByDataset,
+      meta: staged.meta,
+    };
   })();
 
   const commit = useCallback(async () => {
@@ -237,17 +232,29 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       if (monthSlices.length === 0 || batchError) {
         return;
       }
-      if (currentYear !== null && currentYear !== monthSlices[0].year) {
-        setConfirmYearChange({ currentYear, newYear: monthSlices[0].year });
+      const incoming = monthSlices[0];
+      const incomingIdentity: WorkspaceIdentity = {
+        system: incoming.system,
+        companyName: incoming.companyName,
+        year: incoming.year,
+        mode: incoming.mode,
+      };
+      const reasons = workspaceIdentity ? compareIdentity(workspaceIdentity, incomingIdentity) : [];
+      if (workspaceIdentity && reasons.length > 0) {
+        setConfirmIdentityChange({
+          current: workspaceIdentity,
+          incoming: incomingIdentity,
+          reasons,
+        });
         return;
       }
       await runMonthlyCommit();
       return;
     }
-    if (!singleStatementOrWorkspaceBuilt) {
+    if (!workspaceBuilt) {
       return;
     }
-    if (singleStatementOrWorkspaceBuilt.mode === "single") {
+    if (workspaceBuilt.mode === "single") {
       setBusy(true);
       const editCount = await db.edits.count();
       setBusy(false);
@@ -256,17 +263,29 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
         return;
       }
     }
-    await runReplaceWorkspace(singleStatementOrWorkspaceBuilt);
+    await runReplaceWorkspace(workspaceBuilt);
   }, [
     busy,
     kind,
     monthSlices,
     batchError,
-    currentYear,
+    workspaceIdentity,
     runMonthlyCommit,
-    singleStatementOrWorkspaceBuilt,
+    workspaceBuilt,
     runReplaceWorkspace,
   ]);
+
+  const identityChangeConfirmation = useMemo(
+    () =>
+      confirmIdentityChange
+        ? describeIdentityChange(
+            confirmIdentityChange.current,
+            confirmIdentityChange.incoming,
+            confirmIdentityChange.reasons,
+          )
+        : null,
+    [confirmIdentityChange],
+  );
 
   const removeAdjustment = useCallback(async (conflict: ReloadConflict) => {
     const existing = await db.edits
@@ -347,8 +366,8 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
                   Arrastra los archivos o haz clic para seleccionar
                 </span>
                 <span className="text-[11.5px] text-faint">
-                  Un mes por centros de costo (PyG-AAAA-MM-…), un estado único, o el Excel completo
-                  de la app (.xls / .xlsx)
+                  Un mes por centros de costo (PyG-AAAA-MM-…), un mes de estado único (con su rango
+                  de fechas), o el Excel completo de la app (.xls / .xlsx)
                 </span>
               </button>
               <input
@@ -454,29 +473,23 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
         confirmLabel="Cargar"
         cancelLabel="Cancelar"
         onConfirm={() => {
-          if (singleStatementOrWorkspaceBuilt) {
-            void runReplaceWorkspace(singleStatementOrWorkspaceBuilt);
+          if (workspaceBuilt) {
+            void runReplaceWorkspace(workspaceBuilt);
           }
         }}
         onCancel={() => setConfirmDestructive(false)}
       />
 
       <ConfirmDialog
-        open={confirmYearChange !== null}
+        open={confirmIdentityChange !== null}
         variant="destructive"
         busy={busy}
-        title="Cambiar de año"
-        description={
-          confirmYearChange
-            ? `El workspace tiene ${confirmYearChange.currentYear} cargado. Este archivo es de ` +
-              `${confirmYearChange.newYear}: cambiar de año descarta los datos, ajustes y ` +
-              `comentarios de ${confirmYearChange.currentYear}. ¿Continuar?`
-            : undefined
-        }
-        confirmLabel="Cambiar de año"
+        title={identityChangeConfirmation?.title ?? "Reemplazar datos actuales"}
+        description={identityChangeConfirmation?.description}
+        confirmLabel={identityChangeConfirmation?.title ?? "Continuar"}
         cancelLabel="Cancelar"
-        onConfirm={() => void runYearChangeReplace()}
-        onCancel={() => setConfirmYearChange(null)}
+        onConfirm={() => void runIdentityChangeReplace()}
+        onCancel={() => setConfirmIdentityChange(null)}
       />
     </>
   );
@@ -493,9 +506,13 @@ function SummaryPanel({
   return (
     <div className="flex flex-col gap-3 p-5">
       <p className="text-[13px] text-ink-soft">
-        Meses cargados: {monthLabels.join(", ") || "ninguno"}. {summary.centersCount} centro
-        {summary.centersCount === 1 ? "" : "s"}, {summary.accountsCount} cuenta
-        {summary.accountsCount === 1 ? "" : "s"}.
+        Meses cargados: {monthLabels.join(", ") || "ninguno"}.{" "}
+        {summary.mode === "centers" && (
+          <>
+            {summary.centersCount} centro{summary.centersCount === 1 ? "" : "s"},{" "}
+          </>
+        )}
+        {summary.accountsCount} cuenta{summary.accountsCount === 1 ? "" : "s"}.
       </p>
       {summary.warnings.length > 0 && (
         <NoticeBanner details={summary.warnings}>

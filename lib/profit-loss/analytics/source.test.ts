@@ -96,7 +96,7 @@ describe("coverage — recibida vs. omitida (por-centros vs. estado único)", ()
     expect([...source.coverage]).toEqual([0]);
   });
 
-  it("is derived from values, unchanged, when coveredIndices is omitted (single-statement path)", () => {
+  it("falls back to value-based inference when coveredIndices is omitted", () => {
     const source = buildAnalyticsSource(CULTURA_MANOR);
     expect([...source.coverage].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });

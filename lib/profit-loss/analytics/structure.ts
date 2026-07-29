@@ -9,15 +9,23 @@ import { periodsAlign } from "./period";
 import { aggregateCoverage, canReexpress } from "./source";
 import { blankPoints, type AnalyticsSource, type Series } from "./types";
 
-/** The income root; every vertical analysis divides by it. */
-const REVENUE_ROOT = "4";
+/** The income root; it is what a vertical analysis divides by unless another base is named. */
+export const REVENUE_ROOT = "4";
 
 /**
- * Divides each point by the revenue of ITS OWN source. Used over one source this is vertical
- * analysis; used over several it normalizes centers whose sizes are ~100× apart, because each
- * one is measured against its own revenue instead of against the consolidated total.
+ * Divides each point by the account `baseCode` of ITS OWN source. The series does NOT have to
+ * hang from the base — dividing a expense by revenue is the ordinary vertical analysis, not an
+ * exception — and used over several sources it normalizes centers whose sizes are ~100× apart,
+ * because each one is measured against its own base instead of against the consolidated total.
+ *
+ * This is the module's ONE definition of "percentage over an account": the fixed-denominator
+ * transformations are expressed on top of it rather than repeating the arithmetic.
  */
-export function toPctOfRevenue(series: Series, sources: AnalyticsSource[]): Series {
+export function toPctOfAccount(
+  series: Series,
+  sources: AnalyticsSource[],
+  baseCode: string,
+): Series {
   const frequency = series.points[0]?.period.frequency;
   const source = sources.find(
     (candidate) => candidate.centerId === series.key.centerId && candidate.year === series.key.year,
@@ -26,21 +34,25 @@ export function toPctOfRevenue(series: Series, sources: AnalyticsSource[]): Seri
     return { ...series, points: blankPoints(series.points) };
   }
 
-  const revenue = aggregate(
-    source.valuesByCode.get(REVENUE_ROOT) ?? [],
-    source.baseFrequency,
-    frequency,
-  );
+  const base = aggregate(source.valuesByCode.get(baseCode) ?? [], source.baseFrequency, frequency);
   const coverage = aggregateCoverage(source.coverage, source.baseFrequency, frequency);
 
   return {
     ...series,
     points: series.points.map((point) => {
-      const total = coverage.has(point.period.index) ? (revenue[point.period.index] ?? null) : null;
+      const total = coverage.has(point.period.index) ? (base[point.period.index] ?? null) : null;
       const divisible = point.value !== null && total !== null && total !== 0;
       return { ...point, value: divisible ? ((point.value as number) / total) * 100 : null };
     }),
   };
+}
+
+/**
+ * Vertical analysis against Ingresos — the case `baseCode = "4"`, and the one the "% sobre
+ * ingresos" card and the cross-center normalization both read.
+ */
+export function toPctOfRevenue(series: Series, sources: AnalyticsSource[]): Series {
+  return toPctOfAccount(series, sources, REVENUE_ROOT);
 }
 
 /**

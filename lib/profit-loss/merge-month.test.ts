@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { allowedFrequencies } from "@/lib/period";
+import { slugifyCenter } from "./workspace";
 import { compareAccountCodes, mergeMonthSlice, sortAccountCodes } from "./merge-month";
 import type { StagedUpload } from "./upload/types";
 import type { PygDataset } from "./types";
@@ -14,14 +16,57 @@ function slice(
 ): MonthSlice {
   return {
     kind: "month-slice",
+    mode: "centers",
+    system: "monthly-centers",
     year,
     month,
     companyName: "HOTELERA ANDES S.A.",
     centers: centers.map((c) => ({
       name: c.name,
+      centerId: slugifyCenter(c.name),
       accounts: c.accounts.map((a) => ({ code: a.code, name: a.name, values: [a.value] })),
     })),
     general: general.map((a) => ({ code: a.code, name: a.name, values: [a.value] })),
+    warnings: [],
+  };
+}
+
+function singleSlice(month: number, accounts: AccountInput[], year = 2026): MonthSlice {
+  return {
+    kind: "month-slice",
+    mode: "single",
+    system: "monthly-single",
+    year,
+    month,
+    companyName: "HOTELERA ANDES S.A.",
+    centers: [
+      {
+        name: "",
+        centerId: null,
+        accounts: accounts.map((a) => ({ code: a.code, name: a.name, values: [a.value] })),
+      },
+    ],
+    warnings: [],
+  };
+}
+
+function singleDataset(id: string, accounts: { code: string; value: number }[]): PygDataset {
+  const values = Array.from({ length: 12 }, () => 0);
+  return {
+    id,
+    fileName: "x.xlsx",
+    uploadedAt: 0,
+    companyName: "HOTELERA ANDES S.A.",
+    periodLabel: "Ene–Dic 2026",
+    year: 2026,
+    baseFrequency: "mensual",
+    role: "single",
+    accounts: accounts.map((a) => ({
+      code: a.code,
+      name: a.code,
+      values: values.map((_, i) => (i === 0 ? a.value : 0)),
+    })),
+    resultFromFile: [],
     warnings: [],
   };
 }
@@ -206,53 +251,55 @@ describe("mergeMonthSlice — cuadre contra GENERAL", () => {
   });
 });
 
-describe("mergeMonthSlice — aviso de archivo acumulado", () => {
-  function pairSlice(month: number, ups: number, downs: number, base: number): MonthSlice {
-    const accounts: AccountInput[] = [];
-    for (let i = 0; i < ups; i++) {
-      accounts.push({ code: `4.${i}`, name: `Cuenta ${i}`, value: base + 100 });
-    }
-    for (let i = 0; i < downs; i++) {
-      accounts.push({ code: `5.${i}`, name: `Cuenta ${i}`, value: base - 100 });
-    }
-    return slice(month, [{ name: "SUCURSAL NORTE", accounts }], accounts);
-  }
-
-  /** Places every value at index 4 (mayo) — the month-1 the June (index 5) comparison reads. */
-  function previousCenter(ups: number, downs: number, base: number): PygDataset {
-    const dataset = center("sucursal-norte", 0, []);
-    const codes = [
-      ...Array.from({ length: ups }, (_, i) => `4.${i}`),
-      ...Array.from({ length: downs }, (_, i) => `5.${i}`),
-    ];
-    dataset.accounts = codes.map((code) => ({
-      code,
-      name: code,
-      values: [0, 0, 0, 0, base, 0, 0, 0, 0, 0, 0, 0],
-    }));
-    return dataset;
-  }
-
-  it("avisa cuando la firma de acumulado se cumple (≥20 subidas, ≤5% bajadas)", () => {
-    const prev = previousCenter(24, 1, 100); // 24 up, 1 down → 4% down share
-    const junio = pairSlice(5, 24, 1, 100);
-    const { warnings } = mergeMonthSlice([prev], [4], junio);
-    expect(warnings.some((w) => w.includes("acumulado"))).toBe(true);
-    expect(warnings.some((w) => w.includes("24 de 25"))).toBe(true);
+describe("mergeMonthSlice — modo estado único", () => {
+  it("agrega un mes nuevo sin tocar los anteriores", () => {
+    const enero = singleDataset("s", [{ code: "4", value: 100 }]);
+    const junio = singleSlice(5, [{ code: "4", name: "Ingresos", value: 400 }]);
+    const { datasets } = mergeMonthSlice([enero], [0], junio);
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].role).toBe("single");
+    expect(datasets[0].centerId).toBeUndefined();
+    expect(datasets[0].baseFrequency).toBe("mensual");
+    expect(allowedFrequencies("mensual")).toEqual(["mensual", "trimestral", "semestral", "anual"]);
+    expect(datasets[0].accounts.find((a) => a.code === "4")?.values).toEqual([
+      100, 0, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0,
+    ]);
   });
 
-  it("un mes normal (subidas y bajadas comparables) no dispara el aviso", () => {
-    const prev = previousCenter(12, 12, 100);
-    const junio = pairSlice(5, 12, 12, 100);
-    const { warnings } = mergeMonthSlice([prev], [4], junio);
-    expect(warnings.some((w) => w.includes("acumulado"))).toBe(false);
+  it("recargar el mismo mes sobrescribe solo ese índice", () => {
+    const marzo = singleDataset("s", [{ code: "4", value: 999 }]);
+    marzo.accounts[0].values = [0, 0, 999, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    const reload = singleSlice(2, [{ code: "4", name: "Ingresos", value: 150 }]);
+    const { datasets } = mergeMonthSlice([marzo], [2], reload);
+    expect(datasets[0].accounts.find((a) => a.code === "4")?.values[2]).toBe(150);
   });
 
-  it("sin mes anterior cargado, la comprobación se omite", () => {
-    const prev = previousCenter(24, 1, 100);
-    const junio = pairSlice(5, 24, 1, 100);
-    // month 4 (mayo) is NOT in loadedMonths — nothing to compare against.
-    const { warnings } = mergeMonthSlice([prev], [], junio);
-    expect(warnings.some((w) => w.includes("acumulado"))).toBe(false);
+  it("una cuenta nueva se inserta con cero en los meses anteriores y su posición numérica", () => {
+    const enero = singleDataset("s", [{ code: "5.2.1.2.14", value: 10 }]);
+    const junio = singleSlice(5, [
+      { code: "5.2.1.2.14", name: "A", value: 20 },
+      { code: "5.2.1.2.14.1", name: "B", value: 5 },
+    ]);
+    const { datasets } = mergeMonthSlice([enero], [0], junio);
+    const accounts = datasets[0].accounts;
+    const newAccount = accounts.find((a) => a.code === "5.2.1.2.14.1");
+    expect(newAccount?.values).toEqual([0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0]);
+    const codes = accounts.map((a) => a.code);
+    expect(codes.indexOf("5.2.1.2.14.1")).toBe(codes.indexOf("5.2.1.2.14") + 1);
+  });
+
+  it("una cuenta ausente del archivo del mes recibe cero y conserva sus valores anteriores", () => {
+    const enero = singleDataset("s", [{ code: "4", value: 300 }]);
+    const junio = singleSlice(5, [{ code: "4", name: "Ingresos", value: 340 }]);
+    const { datasets } = mergeMonthSlice([enero], [0], junio);
+    const cuenta4 = datasets[0].accounts.find((a) => a.code === "4");
+    expect(cuenta4?.values).toEqual([300, 0, 0, 0, 0, 340, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("no produce ningún aviso de cuadre contra GENERAL", () => {
+    const enero = singleDataset("s", [{ code: "4", value: 300 }]);
+    const junio = singleSlice(5, [{ code: "4", name: "Ingresos", value: 340 }]);
+    const { warnings } = mergeMonthSlice([enero], [0], junio);
+    expect(warnings).toEqual([]);
   });
 });

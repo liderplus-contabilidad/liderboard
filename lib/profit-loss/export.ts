@@ -6,8 +6,9 @@
  * The "con tus datos" workbook mirrors the upload structure so it re-parses cleanly
  * (round-trip): preamble → header → account rows → result row. Edited leaves and rolled-up
  * parents come from `toDatosGrid`; every edited cell carries a note with its original value,
- * and every comment becomes a note too. A hidden metadata sheet lets `parse` restore the
- * comments on re-upload (see `excel-metadata.ts`).
+ * and every comment becomes a note too. A hidden metadata sheet (shared with the by-centers
+ * "Excel completo", see `excel-metadata.ts`) lets `app-workbook`'s strategy restore the year,
+ * loaded months, comments and value adjustments on re-upload.
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
@@ -17,12 +18,13 @@ import { applyEditsToLeafAccounts, mergeCenters, toDatosGrid } from "./derive";
 import {
   appWorkbookMetaToRows,
   APP_WORKBOOK_META_SHEET,
-  commentsToMetaRows,
-  META_SHEET_NAME,
+  SINGLE_WORKBOOK_CENTER_KEY,
+  type AppWorkbookMode,
   type CenterCellAdjustment,
   type CenterCellComment,
 } from "./excel-metadata";
 import type { CellEdit, PygDataset } from "./types";
+import { LEGACY_SYSTEM, MONTHLY_CENTERS_SYSTEM } from "./upload/systems";
 
 const CODE_COL = 1;
 const NAME_COL = 2;
@@ -31,11 +33,24 @@ const FIRST_VALUE_COL = 3;
 const CURRENCY_FMT = '"$"#,##0.00;"-$"#,##0.00';
 const SHEET_NAME = "Estado de Resultados";
 
-/** The Estado de Resultados with edited values and comments, ready to download. */
-export function buildPygWorkbook(dataset: PygDataset, edits: CellEdit[]): ExcelJS.Workbook {
+/** The Estado de Resultados with edited values and comments, ready to download. `loadedMonths`,
+ * when given, leaves an unloaded month's cells genuinely empty rather than 0 (mirrors the
+ * by-centers "Excel completo"). SHALL re-enter via `app-workbook`'s strategy, reconstructing an
+ * equivalent single-mode workspace. */
+export function buildPygWorkbook(
+  dataset: PygDataset,
+  edits: CellEdit[],
+  loadedMonths?: number[],
+  /** The system the workspace came from — carried in the metadata so the re-upload keeps its
+   * identity (a MicroPlus workspace stays MicroPlus). Defaults to the only system that could
+   * have produced a single-mode workspace before MicroPlus existed. */
+  sourceSystemId: string = LEGACY_SYSTEM,
+): ExcelJS.Workbook {
   const wb = newWorkbook();
-  writeStatementSheet(wb, SHEET_NAME, dataset, edits);
-  attachMetadata(wb, edits);
+  writeStatementSheet(wb, SHEET_NAME, dataset, edits, loadedMonths);
+  attachWorkbookMetadata(wb, "single", dataset.year ?? 0, loadedMonths ?? [], sourceSystemId, [
+    { centerId: SINGLE_WORKBOOK_CENTER_KEY, dataset, edits },
+  ]);
   return wb;
 }
 
@@ -217,21 +232,6 @@ function cellNote(
   return cell.comment || undefined;
 }
 
-function attachMetadata(wb: ExcelJS.Workbook, edits: CellEdit[]): void {
-  const comments = edits
-    .filter((edit) => edit.comment)
-    .map((edit) => ({
-      code: edit.code,
-      monthIndex: edit.monthIndex,
-      comment: edit.comment as string,
-    }));
-  if (comments.length === 0) {
-    return;
-  }
-  const meta = wb.addWorksheet(META_SHEET_NAME, { state: "veryHidden" });
-  meta.addRows(commentsToMetaRows(comments));
-}
-
 function cellKey(code: string, monthIndex: number): string {
   return `${code}:${monthIndex}`;
 }
@@ -252,6 +252,9 @@ export interface MultiCenterInput {
   year: number;
   /** Month indices actually loaded — unloaded columns are written empty on every sheet. */
   loadedMonths: number[];
+  /** The system the workspace came from; defaults to the by-centers format, the only thing that
+   * produces a centers-mode workspace today. */
+  sourceSystemId?: string;
   /** In selector order — "Sin centro de costo" is just the last entry, no special case. */
   centers: { dataset: PygDataset; edits: CellEdit[] }[];
 }
@@ -296,7 +299,18 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
     writeStatementSheet(wb, name, dataset, edits, input.loadedMonths);
   }
 
-  attachAppWorkbookMetadata(wb, input.year, input.loadedMonths, input.centers);
+  attachWorkbookMetadata(
+    wb,
+    "centers",
+    input.year,
+    input.loadedMonths,
+    input.sourceSystemId ?? MONTHLY_CENTERS_SYSTEM,
+    input.centers.map(({ dataset, edits }) => ({
+      centerId: dataset.centerId ?? dataset.id,
+      dataset,
+      edits,
+    })),
+  );
   return wb;
 }
 
@@ -319,21 +333,25 @@ function uniqueSheetName(raw: string, used: Set<string>): string {
 }
 
 /**
- * The workbook's ONE hidden metadata sheet: year, loaded months, and every center's comments
- * and value adjustments (tagged by centerId, since one sheet now covers every center — see
- * design.md decision 7). Always written, even with nothing to restore: `year`/`loadedMonths`
- * are needed for round-trip regardless of whether anything was ever edited.
+ * The workbook's ONE hidden metadata sheet: mode, year, loaded months, and every "center"'s
+ * comments and value adjustments (tagged by centerId — `SINGLE_WORKBOOK_CENTER_KEY` for a
+ * single-mode workbook's one entry, since one sheet covers the whole workspace either way —
+ * see design.md decision 7). Always written, even with nothing to restore: `year`/`loadedMonths`
+ * are needed for round-trip regardless of whether anything was ever edited. Shared by
+ * `buildPygWorkbook` (single) and `buildMultiCenterWorkbook` (centers) — `app-workbook`'s
+ * strategy reads `mode` back to know which shape to reconstruct.
  */
-function attachAppWorkbookMetadata(
+function attachWorkbookMetadata(
   wb: ExcelJS.Workbook,
+  mode: AppWorkbookMode,
   year: number,
   loadedMonths: number[],
-  centers: { dataset: PygDataset; edits: CellEdit[] }[],
+  system: string,
+  entries: { centerId: string; dataset: PygDataset; edits: CellEdit[] }[],
 ): void {
   const comments: CenterCellComment[] = [];
   const adjustments: CenterCellAdjustment[] = [];
-  for (const { dataset, edits } of centers) {
-    const centerId = dataset.centerId ?? dataset.id;
+  for (const { centerId, dataset, edits } of entries) {
     const originals = new Map(dataset.accounts.map((account) => [account.code, account.values]));
     for (const edit of edits) {
       if (edit.comment) {
@@ -351,7 +369,7 @@ function attachAppWorkbookMetadata(
     }
   }
   const meta = wb.addWorksheet(APP_WORKBOOK_META_SHEET, { state: "veryHidden" });
-  meta.addRows(appWorkbookMetaToRows({ year, loadedMonths, comments, adjustments }));
+  meta.addRows(appWorkbookMetaToRows({ year, loadedMonths, mode, system, comments, adjustments }));
 }
 
 export interface MonthSliceExportInput {
@@ -430,6 +448,62 @@ function flattenGridValuesAtMonth(
       flattenGridValuesAtMonth(row.children, month, out);
     }
   }
+}
+
+export interface SingleMonthSliceInput {
+  companyName: string;
+  year: number;
+  /** 0–11. */
+  month: number;
+  dataset: PygDataset;
+  edits: CellEdit[];
+}
+
+/**
+ * A single month of a single-mode workspace, in the source system's own grid — one `Total`
+ * column and the month's own `Desde el … hasta el …` range line, with the user's adjustments
+ * already applied. Re-enters through the `monthly-single` strategy exactly like a fresh
+ * accounting-system export (see `pyg-single-monthly-upload`'s "Descargas del modo estado
+ * único"). Unlike the by-centers raw month, this format DOES carry a date line — that's how
+ * `monthly-single` reads its period back — so the preamble writes it.
+ */
+export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): ExcelJS.Workbook {
+  const wb = newWorkbook();
+  const ws = wb.addWorksheet("Reporte");
+
+  ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
+  ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
+    bold: true,
+    color: { argb: "FF64748B" },
+  };
+  const mm = String(input.month + 1).padStart(2, "0");
+  const lastDay = new Date(input.year, input.month + 1, 0).getDate();
+  ws.addRow([
+    `Desde el 01/${mm}/${input.year} hasta el ${String(lastDay).padStart(2, "0")}/${mm}/${input.year}`,
+  ]);
+  ws.addRow([]);
+
+  const headerRow = ws.addRow(["", "", "Total"]);
+  headerRow.font = { bold: true };
+  headerRow.eachCell((cell) => {
+    cell.alignment = { horizontal: "center" };
+  });
+
+  ws.getColumn(CODE_COL).width = 12;
+  ws.getColumn(NAME_COL).width = 42;
+  ws.getColumn(FIRST_VALUE_COL).width = 16;
+  ws.views = [{ state: "frozen", xSplit: 2, ySplit: headerRow.number }];
+
+  // The dataset's "mensual" grid already has rollups + edits applied — flattening it gives
+  // code → value at `input.month`, in the account tree's pre-order (= file/numeric) order.
+  const grid = toDatosGrid(input.dataset, input.edits, "mensual");
+  const values = new Map<string, { name: string; value: number }>();
+  flattenGridValuesAtMonth(grid.rows, input.month, values);
+  for (const [code, { name, value }] of values) {
+    const row = ws.addRow([code, name, value]);
+    row.getCell(FIRST_VALUE_COL).numFmt = CURRENCY_FMT;
+  }
+  return wb;
 }
 
 /** `PyG-<año>-completo.xlsx` — outside the monthly pattern so it never reads as a month. */

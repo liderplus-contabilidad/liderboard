@@ -1,13 +1,47 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
+import * as XLSX from "xlsx";
+import { APP_WORKBOOK_META_SHEET, rowsToAppWorkbookMeta } from "./excel-metadata";
 import { buildMultiCenterWorkbook, buildPygWorkbook, pygExportFilename } from "./export";
-import { parsePygWorkbook } from "./parse";
-import { aoaToXlsxBuffer, MONTHLY_AOA, SUCURSAL_AOA, SUCURSAL_SUR_AOA } from "./parse.fixtures";
-import type { CellEdit } from "./types";
+import { MONTHLY_ACCOUNTS } from "./parse.fixtures";
+import type { AccountRow, CellEdit, PygDataset } from "./types";
 
-const { dataset } = parsePygWorkbook(aoaToXlsxBuffer(MONTHLY_AOA), "reporte.xlsx");
-const norte = parsePygWorkbook(aoaToXlsxBuffer(SUCURSAL_AOA), "norte.xls").dataset;
-const sur = parsePygWorkbook(aoaToXlsxBuffer(SUCURSAL_SUR_AOA), "sur.xls").dataset;
+function buildDataset(
+  id: string,
+  accounts: AccountRow[],
+  overrides: Partial<PygDataset> = {},
+): PygDataset {
+  return {
+    id,
+    fileName: "reporte.xlsx",
+    uploadedAt: 0,
+    companyName: "HOTELERA ANDES S.A.",
+    periodLabel: "Ene–Dic 2026",
+    year: 2026,
+    baseFrequency: "mensual",
+    role: "single",
+    accounts: accounts.map((a) => ({ ...a, values: [...a.values] })),
+    resultFromFile: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function months(...values: number[]): number[] {
+  return Array.from({ length: 12 }, (_, i) => values[i] ?? 0);
+}
+
+const dataset = buildDataset("reporte", MONTHLY_ACCOUNTS);
+const norte = buildDataset("norte", MONTHLY_ACCOUNTS, { costCenterName: "SUCURSAL NORTE" });
+const SUR_ACCOUNTS: AccountRow[] = [
+  { code: "4", name: "Ingresos", values: months(30, 20) },
+  { code: "4.1", name: "Ventas", values: months(30, 20) },
+  { code: "4.1.1", name: "Ventas Habitaciones", values: months(30, 20) },
+  { code: "5", name: "Costos y Gastos", values: months(10) },
+  { code: "5.1", name: "Gastos Operativos", values: months(10) },
+  { code: "5.1.1", name: "Sueldos", values: months(10) },
+];
+const sur = buildDataset("sur", SUR_ACCOUNTS, { costCenterName: "SUCURSAL SUR" });
 
 /** Leaf edit (with comment), parent comment-only, and a leaf edit without a comment. */
 const edits: CellEdit[] = [
@@ -47,26 +81,47 @@ function allNotes(ws: ExcelJS.Worksheet): string[] {
 }
 
 describe("buildPygWorkbook — value round-trip", () => {
-  it("re-parses with the edited values and no sum mismatch", async () => {
-    const wb = buildPygWorkbook(dataset, edits);
-    const buffer = await wb.xlsx.writeBuffer();
-    const { dataset: reparsed } = parsePygWorkbook(buffer as unknown as ArrayBuffer, "re.xlsx");
-
-    expect(reparsed.accounts.find((a) => a.code === "4.1.1")?.values[0]).toBe(150);
-    expect(reparsed.accounts.find((a) => a.code === "5.1.1")?.values[0]).toBe(90);
-    // Parents and result were exported from the edited leaves, so nothing descuadra.
-    expect(reparsed.warnings).toEqual([]);
+  it("writes the edited values, not the file's original ones", async () => {
+    const ws = await reload(buildPygWorkbook(dataset, edits));
+    let habitacionesEnero: unknown;
+    let sueldosEnero: unknown;
+    ws.eachRow((row) => {
+      const code = String(row.getCell(1).value ?? "");
+      if (code === "4.1.1") habitacionesEnero = row.getCell(3).value;
+      if (code === "5.1.1") sueldosEnero = row.getCell(3).value;
+    });
+    expect(habitacionesEnero).toBe(150);
+    expect(sueldosEnero).toBe(90);
   });
 });
 
-describe("buildPygWorkbook — comment round-trip", () => {
-  it("restores comments (leaf and parent) from the metadata sheet", async () => {
-    const wb = buildPygWorkbook(dataset, edits);
+describe("buildPygWorkbook — metadata sheet", () => {
+  it("writes mode, year, comments and value adjustments for the round-trip", async () => {
+    const wb = buildPygWorkbook(dataset, edits, [0, 1]);
     const buffer = await wb.xlsx.writeBuffer();
-    const { comments } = parsePygWorkbook(buffer as unknown as ArrayBuffer, "re.xlsx");
+    const workbook = XLSX.read(buffer as unknown as ArrayBuffer);
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[APP_WORKBOOK_META_SHEET], {
+      header: 1,
+      raw: true,
+      defval: null,
+    });
+    const meta = rowsToAppWorkbookMeta(rows);
 
-    expect(comments).toContainEqual({ code: "4.1.1", monthIndex: 0, comment: "Ajuste de enero" });
-    expect(comments).toContainEqual({ code: "4", monthIndex: 1, comment: "Revisar febrero" });
+    expect(meta.mode).toBe("single");
+    expect(meta.year).toBe(2026);
+    expect(meta.loadedMonths).toEqual([0, 1]);
+    expect(meta.comments).toContainEqual(
+      expect.objectContaining({ code: "4.1.1", monthIndex: 0, comment: "Ajuste de enero" }),
+    );
+    expect(meta.comments).toContainEqual(
+      expect.objectContaining({ code: "4", monthIndex: 1, comment: "Revisar febrero" }),
+    );
+    expect(meta.adjustments).toContainEqual(
+      expect.objectContaining({ code: "4.1.1", monthIndex: 0, originalValue: 100 }),
+    );
+    expect(meta.adjustments).toContainEqual(
+      expect.objectContaining({ code: "5.1.1", monthIndex: 0, originalValue: 80 }),
+    );
   });
 });
 

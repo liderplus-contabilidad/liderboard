@@ -13,29 +13,40 @@ import { usePygData } from "./pyg-data-provider";
  * tabs (`ModuleTabs`, solo en Datos) y también el vacío de Gráficas/Análisis (`PygEmptyState`),
  * donde son la única forma de cargar un archivo.
  *
- * El menú de descarga cambia por modo: multi-centro ofrece «Excel completo» (el workspace
- * entero, re-subible) y «Un mes en crudo» (el mes más reciente cargado, en el formato del
- * sistema contable); estado único ofrece solo «Excel con tus datos» (llenar a mano doce meses
- * por cuenta no es un flujo real, así que «Plantilla vacía» se retira de los dos modos). El
- * `ⓘ` lee el catálogo de formatos aceptados del registry de estrategias en vez de llevar el
- * texto escrito a mano — cargado bajo demanda para no meter SheetJS en el bundle inicial.
+ * El menú de descarga es el mismo en ambos modos: «Excel completo»/«Excel con tus datos» (el
+ * workspace entero, re-subible) y «Un mes en crudo» (el mes más reciente cargado, en el formato
+ * del sistema contable, con los ajustes aplicados) — llenar a mano doce meses por cuenta no es
+ * un flujo real, así que «Plantilla vacía» no existe en ninguno de los dos. «Un mes en crudo»
+ * solo aparece si la estrategia que originó el workspace declara que sabe ESCRIBIR su formato
+ * (`writesOwnFormat`): un workspace MicroPlus, que la app solo sabe leer, se queda con una sola
+ * opción y `ExcelActions` la rinde como botón plano. El `ⓘ` lee el catálogo de formatos
+ * aceptados del mismo registry en vez de llevar el texto escrito a mano — todo cargado bajo
+ * demanda para no meter SheetJS en el bundle inicial.
  */
 export function PygExcelActions() {
-  const { dataset, datasets, edits, views, mode, loadedMonths } = usePygData();
+  const { dataset, datasets, edits, views, mode, loadedMonths, sourceSystemId } = usePygData();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [acceptedFormats, setAcceptedFormats] = useState<{ id: string; label: string }[]>([]);
+  // `null` mientras el registry no ha cargado: hasta saberlo, no se ofrece escribir un formato
+  // que quizá no sepamos escribir (el sentido seguro de la duda).
+  const [writableSystems, setWritableSystems] = useState<string[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void import("@/lib/profit-loss/upload/registry").then(({ acceptedFileFormats }) => {
-      if (!cancelled) {
-        setAcceptedFormats(acceptedFileFormats());
-      }
-    });
+    void import("@/lib/profit-loss/upload/registry").then(
+      ({ acceptedFileFormats, writableSystemIds }) => {
+        if (!cancelled) {
+          setAcceptedFormats(acceptedFileFormats());
+          setWritableSystems(writableSystemIds());
+        }
+      },
+    );
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const canWriteRawMonth = Boolean(sourceSystemId && writableSystems?.includes(sourceSystemId));
 
   const centerViews = useMemo(
     () => views.filter((v) => v.role === "center" || v.role === "sin-centro"),
@@ -47,7 +58,7 @@ export function PygExcelActions() {
   const downloads = useMemo<ExcelDownloadOption[]>(() => {
     if (mode === "multi") {
       const noMonthsReason = "Carga un mes primero.";
-      return [
+      const options: ExcelDownloadOption[] = [
         {
           id: "completo",
           title: "Excel completo",
@@ -71,6 +82,7 @@ export function PygExcelActions() {
               companyName: dataset?.companyName ?? "LiderPlus",
               year: workspaceYear ?? 0,
               loadedMonths,
+              ...(sourceSystemId ? { sourceSystemId } : {}),
               centers: withEdits,
             });
             const blob = await exportMod.workbookToBlob(workbook);
@@ -112,13 +124,15 @@ export function PygExcelActions() {
           },
         },
       ];
+      return canWriteRawMonth ? options : options.filter((option) => option.id !== "mes-crudo");
     }
 
-    return [
+    const noMonthsReason = "Carga un mes primero.";
+    const options: ExcelDownloadOption[] = [
       {
         id: "data",
         title: "Excel con tus datos",
-        description: "El estado con los valores y comentarios actuales",
+        description: "El estado con sus doce columnas de mes, los valores y comentarios actuales",
         icon: FileSpreadsheet,
         iconClassName: "text-brand",
         disabled: !dataset,
@@ -131,13 +145,57 @@ export function PygExcelActions() {
             import("@/lib/profit-loss/export"),
             import("@/lib/download"),
           ]);
-          const workbook = exportMod.buildPygWorkbook(dataset, edits);
+          const workbook = exportMod.buildPygWorkbook(
+            dataset,
+            edits,
+            loadedMonths,
+            sourceSystemId ?? undefined,
+          );
           const blob = await exportMod.workbookToBlob(workbook);
           downloadBlob(blob, exportMod.pygExportFilename(dataset));
         },
       },
+      {
+        id: "mes-crudo",
+        title: "Un mes en crudo",
+        description:
+          "El mes más reciente cargado, en el formato del sistema contable, con los ajustes aplicados",
+        icon: FilePlus2,
+        iconClassName: "text-muted",
+        disabled: !dataset || latestLoadedMonth === null,
+        disabledReason: noMonthsReason,
+        run: async () => {
+          if (!dataset || latestLoadedMonth === null) {
+            return;
+          }
+          const [exportMod, { downloadBlob }] = await Promise.all([
+            import("@/lib/profit-loss/export"),
+            import("@/lib/download"),
+          ]);
+          const workbook = exportMod.buildSingleMonthSliceWorkbook({
+            companyName: dataset.companyName,
+            year: workspaceYear ?? 0,
+            month: latestLoadedMonth,
+            dataset,
+            edits,
+          });
+          const blob = await exportMod.workbookToBlob(workbook);
+          downloadBlob(blob, exportMod.monthSliceFilename(workspaceYear ?? 0, latestLoadedMonth));
+        },
+      },
     ];
-  }, [dataset, edits, mode, centerViews, loadedMonths, workspaceYear, latestLoadedMonth]);
+    return canWriteRawMonth ? options : options.filter((option) => option.id !== "mes-crudo");
+  }, [
+    dataset,
+    edits,
+    mode,
+    centerViews,
+    loadedMonths,
+    workspaceYear,
+    latestLoadedMonth,
+    sourceSystemId,
+    canWriteRawMonth,
+  ]);
 
   return (
     <>

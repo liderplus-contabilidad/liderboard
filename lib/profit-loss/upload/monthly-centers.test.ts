@@ -56,6 +56,7 @@ describe("monthlyCentersStrategy.parse — archivo bien formado", () => {
   it("parses the company, centers, general and warnings", () => {
     const slice = parseOk(MONTHLY_CENTERS_AOA, "PyG-2026-06-junio.xlsx");
     expect(slice.kind).toBe("month-slice");
+    expect(slice.mode).toBe("centers");
     expect(slice.year).toBe(2026);
     expect(slice.month).toBe(5);
     expect(slice.companyName).toBe("HOTELERA ANDES S.A.");
@@ -66,8 +67,9 @@ describe("monthlyCentersStrategy.parse — archivo bien formado", () => {
       "SIN CENTRO DE COSTO",
     ]);
     const norte = slice.centers[0];
+    expect(norte.centerId).toBe("sucursal-norte");
     expect(norte.accounts.find((a) => a.code === "4")?.values).toEqual([300]);
-    expect(slice.general.find((a) => a.code === "4")?.values).toEqual([355]);
+    expect(slice.general?.find((a) => a.code === "4")?.values).toEqual([355]);
     expect(slice.warnings).toEqual([]);
   });
 

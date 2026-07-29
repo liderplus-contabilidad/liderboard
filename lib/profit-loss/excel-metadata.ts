@@ -1,59 +1,26 @@
 /**
- * The bridge that lets comments survive a download → re-upload round-trip. Exported
- * workbooks carry a hidden metadata sheet with one row per comment; `parse` reads it back.
+ * The bridge that lets a workbook's comments, adjustments and period survive a download →
+ * re-upload round-trip, for BOTH single-mode ("Excel con tus datos") and by-centers ("Excel
+ * completo") workspaces — see `app-workbook.ts`, the one strategy that reads this sheet back
+ * for either mode, told apart by `AppWorkbookMeta.mode`.
  *
  * Pure and library-agnostic on purpose: it works on arrays-of-arrays, so `exceljs` (which
  * writes the sheet) and SheetJS `xlsx` (which reads it) both use these helpers without
- * importing each other. Value edits are NOT stored here — they fold into the new baseline.
+ * importing each other.
  */
-import type { ImportedComment } from "./types";
+import { LEGACY_SYSTEM } from "./upload/systems";
 
-/** Obscure name so it can't collide with a real accounting sheet; hidden in the workbook. */
-export const META_SHEET_NAME = "_liderplus_meta";
-
-const META_HEADER = ["code", "monthIndex", "comment"] as const;
-
-/** Comments → the sheet's rows (header first). Callers pass only edits that have text. */
-export function commentsToMetaRows(
-  comments: { code: string; monthIndex: number; comment: string }[],
-): (string | number)[][] {
-  return [
-    [...META_HEADER],
-    ...comments.map(({ code, monthIndex, comment }) => [code, monthIndex, comment]),
-  ];
-}
-
-/**
- * Rows → comments, keeping only well-formed data rows. The header (a non-numeric
- * `monthIndex` cell) and any malformed row fail validation and drop out, so no explicit
- * header-skipping is needed. Comment text is kept verbatim (never trimmed).
- */
-export function metaRowsToComments(rows: unknown[][]): ImportedComment[] {
-  const comments: ImportedComment[] = [];
-  for (const row of rows) {
-    const [code, monthIndex, comment] = row;
-    if (
-      typeof code === "string" &&
-      code.trim() !== "" &&
-      typeof monthIndex === "number" &&
-      Number.isInteger(monthIndex) &&
-      typeof comment === "string" &&
-      comment !== ""
-    ) {
-      comments.push({ code: code.trim(), monthIndex, comment });
-    }
-  }
-  return comments;
-}
-
-/**
- * The "Excel completo" (app-workbook) round-trip's hidden metadata sheet — one sheet for the
- * WHOLE workspace, not one per center, because `loadedMonths` is workspace-wide (a file is a
- * month and brings every center) and a cell needs its center named to be placed back. Each
- * row is tagged by kind so the three concerns (workspace period, comments, adjustments) share
- * one sheet without a fixed row order.
- */
+/** Obscure name so it can't collide with a real accounting sheet; hidden in the workbook. One
+ * sheet for the WHOLE workspace (not one per center), because `loadedMonths` is workspace-wide
+ * and a cell needs its center named to be placed back. Each row is tagged by kind so the three
+ * concerns (workspace period, comments, adjustments) share one sheet without a fixed row order. */
 export const APP_WORKBOOK_META_SHEET = "_liderplus_workspace_meta";
+
+/** The `centerId` a single-mode workbook's rows carry — there is exactly one "center" and it
+ * has no real name, so every comment/adjustment row is tagged with this instead. */
+export const SINGLE_WORKBOOK_CENTER_KEY = "";
+
+export type AppWorkbookMode = "single" | "centers";
 
 export interface CenterCellComment {
   centerId: string;
@@ -73,12 +40,19 @@ export interface CenterCellAdjustment {
 export interface AppWorkbookMeta {
   year: number;
   loadedMonths: number[];
+  mode: AppWorkbookMode;
+  /** The accounting system the workspace came from (`upload/systems.ts`) — carried so a
+   * download → re-upload keeps the workspace's identity, MicroPlus included, instead of the
+   * reconstructed workspace claiming to come from the app's own format. */
+  system: string;
   comments: CenterCellComment[];
   adjustments: CenterCellAdjustment[];
 }
 
 export function appWorkbookMetaToRows(meta: AppWorkbookMeta): (string | number)[][] {
-  const rows: (string | number)[][] = [["workspace", meta.year, meta.loadedMonths.join(",")]];
+  const rows: (string | number)[][] = [
+    ["workspace", meta.year, meta.loadedMonths.join(","), meta.mode, meta.system],
+  ];
   for (const c of meta.comments) {
     rows.push(["comment", c.centerId, c.code, c.monthIndex, c.comment]);
   }
@@ -92,13 +66,17 @@ export function appWorkbookMetaToRows(meta: AppWorkbookMeta): (string | number)[
 export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
   let year = 0;
   let loadedMonths: number[] = [];
+  let mode: AppWorkbookMode = "centers";
+  // A workbook downloaded before the system was carried can only have come from the
+  // single-statement format, the same reasoning the Dexie migration follows.
+  let system: string = LEGACY_SYSTEM;
   const comments: CenterCellComment[] = [];
   const adjustments: CenterCellAdjustment[] = [];
 
   for (const row of rows) {
     const [kind, ...rest] = row;
     if (kind === "workspace") {
-      const [rawYear, rawMonths] = rest;
+      const [rawYear, rawMonths, rawMode, rawSystem] = rest;
       if (typeof rawYear === "number") {
         year = rawYear;
       }
@@ -107,6 +85,12 @@ export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
           .split(",")
           .map(Number)
           .filter((n) => Number.isInteger(n));
+      }
+      if (rawMode === "single" || rawMode === "centers") {
+        mode = rawMode;
+      }
+      if (typeof rawSystem === "string" && rawSystem !== "") {
+        system = rawSystem;
       }
     } else if (kind === "comment") {
       const [centerId, code, monthIndex, comment] = rest;
@@ -131,5 +115,5 @@ export function rowsToAppWorkbookMeta(rows: unknown[][]): AppWorkbookMeta {
       }
     }
   }
-  return { year, loadedMonths, comments, adjustments };
+  return { year, loadedMonths, mode, system, comments, adjustments };
 }

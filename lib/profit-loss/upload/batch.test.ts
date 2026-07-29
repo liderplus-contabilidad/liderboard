@@ -3,19 +3,80 @@ import { PygParseError } from "../errors";
 import { applyBatch, validateBatch } from "./batch";
 import type { MonthSlice } from "./batch";
 
-function slice(month: number, year = 2026): MonthSlice {
+function slice(month: number, year = 2026, companyName = "HOTELERA ANDES S.A."): MonthSlice {
   return {
     kind: "month-slice",
+    mode: "centers",
+    system: "monthly-centers",
     year,
     month,
-    companyName: "HOTELERA ANDES S.A.",
+    companyName,
     centers: [
-      { name: "SUCURSAL NORTE", accounts: [{ code: "4", name: "Ingresos", values: [100] }] },
+      {
+        name: "SUCURSAL NORTE",
+        centerId: "sucursal-norte",
+        accounts: [{ code: "4", name: "Ingresos", values: [100] }],
+      },
     ],
     general: [{ code: "4", name: "Ingresos", values: [100] }],
     warnings: [],
   };
 }
+
+function singleSlice(month: number, year = 2026): MonthSlice {
+  return {
+    kind: "month-slice",
+    mode: "single",
+    system: "monthly-single",
+    year,
+    month,
+    companyName: "NOMIK HOTELS S.A.S.",
+    centers: [
+      { name: "", centerId: null, accounts: [{ code: "4", name: "Ingresos", values: [100] }] },
+    ],
+    warnings: [],
+  };
+}
+
+describe("validateBatch — identidad del propio lote", () => {
+  it("rejects a batch mixing single-mode and centers-mode files", () => {
+    try {
+      validateBatch([slice(0), singleSlice(1)]);
+      throw new Error("expected validateBatch to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PygParseError);
+      expect((error as PygParseError).code).toBe("mixed-identity");
+    }
+  });
+
+  it("rejects a batch mixing accounting systems", () => {
+    // Misma empresa, mismo año, meses distintos: sin esta comprobación el lote entraría y
+    // fusionaría dos planes de cuentas incompatibles.
+    try {
+      validateBatch([
+        { ...singleSlice(0), companyName: "HOSPITAL X" },
+        { ...singleSlice(1), companyName: "HOSPITAL X", system: "microplus" },
+      ]);
+      throw new Error("expected validateBatch to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PygParseError);
+      expect((error as PygParseError).code).toBe("mixed-identity");
+      expect((error as PygParseError).message).toContain("sistemas contables distintos");
+    }
+  });
+
+  it("rejects a batch mixing companies, naming both", () => {
+    try {
+      validateBatch([slice(0, 2026, "NOMIK"), slice(1, 2026, "DARWIN & WOLF")]);
+      throw new Error("expected validateBatch to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PygParseError);
+      expect((error as PygParseError).code).toBe("mixed-identity");
+      expect((error as PygParseError).message).toContain("NOMIK");
+      expect((error as PygParseError).message).toContain("DARWIN & WOLF");
+    }
+  });
+});
 
 describe("validateBatch — un solo año", () => {
   it("rejects a batch mixing years, naming both", () => {

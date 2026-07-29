@@ -36,10 +36,9 @@ export interface AnalyticsView {
  * merged every center's edits into its accounts, so filtering here is what stops them from
  * being applied twice.
  *
- * `coveredIndices` is the workspace's declared `loadedMonths` (by-centers mode) — the SAME set
- * for every view, since one file is a month and brings every center at once, Consolidado
- * included. Omitted for a single-statement workspace, whose coverage `buildAnalyticsSource`
- * still infers from values.
+ * `coveredIndices` is the workspace's declared `loadedMonths` — the SAME set for every view,
+ * since one file is a month and brings every center (or the lone statement, in single mode) at
+ * once, Consolidado included.
  */
 export function sourcesFromViews(
   views: readonly AnalyticsView[],

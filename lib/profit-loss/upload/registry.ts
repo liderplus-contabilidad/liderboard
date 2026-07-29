@@ -3,23 +3,27 @@
  * in the order given and keeps the FIRST that detects a match — order is an explicit part of
  * the contract, not incidental (see the spec's "Resolución ordenada, primer acierto").
  *
- * Fixed order below: `app-workbook` first because its "Consolidado" sheet alone has the exact
- * shape `single-statement` accepts (month columns, no cost-center line) — its hidden metadata
- * sheet is the one cheap, exclusive signal that must be checked before anything shape-based.
- * `monthly-centers` and `single-statement` don't collide (free-text vs. month-name columns),
- * so their relative order doesn't matter, but it is still explicit rather than incidental.
+ * Fixed order below: `app-workbook` first because its hidden metadata sheet is the one cheap,
+ * exclusive signal that must be checked before anything shape-based. `monthly-centers` and
+ * `monthly-single` don't collide (several free-text columns vs. exactly one `Total` column), so
+ * their relative order doesn't matter, but it is still explicit rather than incidental.
+ * `microplus` comes last and collides with nothing either way: it puts its code and name in
+ * columns the other two never read (they need col A + col B), and its `CODIGO` + `NOMBRE DE LA
+ * CUENTA` header is a signature none of them produces.
  */
 import { PygParseError } from "../errors";
 import { appWorkbookStrategy } from "./app-workbook";
 import { readWorkbook } from "./grid";
+import { microplusStrategy } from "./microplus";
 import { monthlyCentersStrategy } from "./monthly-centers";
-import { singleStatementStrategy } from "./single-statement";
+import { monthlySingleStrategy } from "./monthly-single";
 import type { StagedUpload, UploadCandidate, UploadStrategy } from "./types";
 
 export const STRATEGIES: readonly UploadStrategy[] = [
   appWorkbookStrategy,
   monthlyCentersStrategy,
-  singleStatementStrategy,
+  monthlySingleStrategy,
+  microplusStrategy,
 ];
 
 /** Reads the workbook exactly once; every strategy's `detect`/`parse` shares this candidate. */
@@ -73,4 +77,25 @@ export function resolveUpload(fileName: string, buffer: ArrayBuffer): StagedUplo
 /** The fixed strategy list's accepted formats — what the info tip and error messages read. */
 export function acceptedFileFormats(): { id: string; label: string }[] {
   return acceptedFormats(STRATEGIES);
+}
+
+/**
+ * Whether the app can WRITE the format of the given system (the strategy's `id`) — what decides
+ * if a workspace offers the "Un mes en crudo" download. An unknown system, or one whose strategy
+ * doesn't declare `writesOwnFormat`, is read-only: returning a file in a format nobody wrote is
+ * never the safe default.
+ */
+export function writesOwnFormat(
+  systemId: string,
+  strategies: readonly UploadStrategy[] = STRATEGIES,
+): boolean {
+  return strategies.some(
+    (strategy) => strategy.id === systemId && strategy.writesOwnFormat === true,
+  );
+}
+
+/** The ids of every system the app can write back — the one call the download UI needs, so it
+ * doesn't have to hold the registry itself just to answer `writesOwnFormat`. */
+export function writableSystemIds(): string[] {
+  return STRATEGIES.filter((strategy) => strategy.writesOwnFormat).map((strategy) => strategy.id);
 }

@@ -6,23 +6,23 @@
  * (derive.ts, the analytics engine, export) keeps working unmodified.
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
-import type { StagedUpload } from "./upload/types";
-import { CENTER_PALETTE, slugifyCenter } from "./workspace";
+import type { CenterSlice, StagedUpload } from "./upload/types";
+import { CENTER_PALETTE } from "./workspace";
 import type { AccountRow, DatasetRole, PygDataset } from "./types";
 
 type MonthSlice = Extract<StagedUpload, { kind: "month-slice" }>;
 
 const SIN_CENTRO = /sin\s+centro\s+de\s+costo/i;
+/** Internal map key for "single" mode's one nameless slice — never written to a persisted
+ * `PygDataset.centerId`, which stays unset for a "single" role dataset. */
+const SINGLE_KEY = "__single__";
 /** Tolerance for float drift when validating file sums (one cent) — matches `parse.ts`. */
 const SUM_TOLERANCE = 0.011;
-/** Design.md decision 8: verified against the six real 2026 files (906 up / 4 down = 0.44%). */
-const ACCUMULATED_MIN_UPS = 20;
-const ACCUMULATED_MAX_DOWN_SHARE = 0.05;
 
 export interface MergeMonthResult {
   datasets: PygDataset[];
   loadedMonths: number[];
-  /** Cuadre-against-GENERAL and accumulated-file notices — never block the merge. */
+  /** Cuadre-against-GENERAL notices — never block the merge. */
   warnings: string[];
 }
 
@@ -56,28 +56,40 @@ function roleFor(centerName: string): DatasetRole {
   return SIN_CENTRO.test(centerName) ? "sin-centro" : "center";
 }
 
+/** The key `mergeMonthSlice` keys its internal map by — never `null`, unlike the persisted
+ * `PygDataset.centerId`, which "single" mode leaves unset. */
+function keyFor(centerId: string | null | undefined): string {
+  return centerId ?? SINGLE_KEY;
+}
+
 function newCenterDataset(
-  name: string,
+  centerSlice: CenterSlice,
   slice: MonthSlice,
   order: number,
   paletteIndex: number,
 ): PygDataset {
-  return {
+  const base = {
     id: crypto.randomUUID(),
     fileName: `PyG-${slice.year}-${String(slice.month + 1).padStart(2, "0")}`,
     uploadedAt: Date.now(),
     companyName: slice.companyName,
     periodLabel: `Ene–Dic ${slice.year}`,
     year: slice.year,
-    baseFrequency: "mensual",
-    role: roleFor(name),
-    centerId: slugifyCenter(name),
-    centerColor: CENTER_PALETTE[paletteIndex % CENTER_PALETTE.length],
-    order,
-    costCenterName: name,
+    baseFrequency: "mensual" as const,
     accounts: [],
     resultFromFile: [],
     warnings: [],
+  };
+  if (slice.mode === "single") {
+    return { ...base, role: "single" };
+  }
+  return {
+    ...base,
+    role: roleFor(centerSlice.name),
+    centerId: centerSlice.centerId as string,
+    centerColor: CENTER_PALETTE[paletteIndex % CENTER_PALETTE.length],
+    order,
+    costCenterName: centerSlice.name,
   };
 }
 
@@ -94,20 +106,18 @@ export function mergeMonthSlice(
 ): MergeMonthResult {
   const month = slice.month;
   const centersByCenterId = new Map<string, PygDataset>(
-    current.map((dataset) => [dataset.centerId as string, cloneDataset(dataset)]),
-  );
-  const preMergeById = new Map<string, PygDataset>(
-    current.map((dataset) => [dataset.centerId as string, dataset]),
+    current.map((dataset) => [keyFor(dataset.centerId), cloneDataset(dataset)]),
   );
 
   // Any center the slice names that isn't in the workspace yet is created now, with 12 zero
   // columns and the next palette slot — its accounts get filled in below like every other.
+  // "single" mode's one slice always resolves to the SAME key, so this only ever creates it once.
   for (const centerSlice of slice.centers) {
-    const centerId = slugifyCenter(centerSlice.name);
-    if (!centersByCenterId.has(centerId)) {
+    const key = keyFor(centerSlice.centerId);
+    if (!centersByCenterId.has(key)) {
       centersByCenterId.set(
-        centerId,
-        newCenterDataset(centerSlice.name, slice, centersByCenterId.size, centersByCenterId.size),
+        key,
+        newCenterDataset(centerSlice, slice, centersByCenterId.size, centersByCenterId.size),
       );
     }
   }
@@ -135,7 +145,7 @@ export function mergeMonthSlice(
   const sliceValuesByCenterId = new Map<string, Map<string, number>>();
   for (const centerSlice of slice.centers) {
     sliceValuesByCenterId.set(
-      slugifyCenter(centerSlice.name),
+      keyFor(centerSlice.centerId),
       new Map(centerSlice.accounts.map((a) => [a.code, a.values[0] ?? 0])),
     );
   }
@@ -159,22 +169,23 @@ export function mergeMonthSlice(
     ? [...loadedMonths]
     : [...loadedMonths, month].sort((a, b) => a - b);
 
-  const warnings: string[] = [
-    ...cuadreWarnings(mergedDatasets, orderedCodes, slice, month),
-    ...accumulatedFileWarning(preMergeById, centersByCenterId, orderedCodes, month, loadedMonths),
-  ];
+  // The cuadre check doesn't apply to "single" mode: there is no GENERAL column to cuadre
+  // against.
+  const warnings: string[] =
+    slice.mode === "centers" ? cuadreWarnings(mergedDatasets, orderedCodes, slice, month) : [];
 
   return { datasets: mergedDatasets, loadedMonths: nextLoadedMonths, warnings };
 }
 
-/** One warning per month naming how many accounts don't sum to GENERAL — never one per account. */
+/** One warning per month naming how many accounts don't sum to GENERAL — never one per account.
+ * Only ever called in "centers" mode (see `mergeMonthSlice`), where `slice.general` is set. */
 function cuadreWarnings(
   datasets: readonly PygDataset[],
   codes: readonly string[],
   slice: MonthSlice,
   month: number,
 ): string[] {
-  const generalByCode = new Map(slice.general.map((a) => [a.code, a.values[0] ?? 0]));
+  const generalByCode = new Map((slice.general ?? []).map((a) => [a.code, a.values[0] ?? 0]));
   let mismatches = 0;
   for (const code of codes) {
     const general = generalByCode.get(code);
@@ -194,50 +205,4 @@ function cuadreWarnings(
   }
   const label = MONTHS_FULL_ES[month] ?? `mes ${month + 1}`;
   return [`El mes de ${label} no cuadra con GENERAL en ${mismatches} cuenta(s).`];
-}
-
-/**
- * Design.md decision 8: a month indistinguishable in shape from a year-to-date accumulated
- * export shows nearly every (account, center) pair rising and almost none falling versus the
- * prior month. Only a warning — the values load exactly as given either way.
- */
-function accumulatedFileWarning(
-  preMergeById: Map<string, PygDataset>,
-  postMergeById: Map<string, PygDataset>,
-  codes: readonly string[],
-  month: number,
-  loadedMonths: readonly number[],
-): string[] {
-  if (month === 0 || !loadedMonths.includes(month - 1)) {
-    return [];
-  }
-  let ups = 0;
-  let downs = 0;
-  for (const [centerId, postDataset] of postMergeById) {
-    const preDataset = preMergeById.get(centerId);
-    const preByCode = new Map(preDataset?.accounts.map((a) => [a.code, a.values[month - 1]]) ?? []);
-    for (const code of codes) {
-      const previous = preByCode.get(code) ?? 0;
-      const account = postDataset.accounts.find((a) => a.code === code);
-      const current = account?.values[month] ?? 0;
-      if (Math.abs(previous) <= SUM_TOLERANCE && Math.abs(current) <= SUM_TOLERANCE) {
-        continue; // neither month moved this pair — not part of "changed"
-      }
-      const delta = current - previous;
-      if (delta > SUM_TOLERANCE) {
-        ups++;
-      } else if (delta < -SUM_TOLERANCE) {
-        downs++;
-      }
-    }
-  }
-  const changed = ups + downs;
-  if (ups < ACCUMULATED_MIN_UPS || changed === 0 || downs / changed > ACCUMULATED_MAX_DOWN_SHARE) {
-    return [];
-  }
-  return [
-    `Este archivo se parece a un acumulado del año y no al mes de ${MONTHS_FULL_ES[month] ?? month + 1}: ` +
-      `${ups} de ${changed} cuentas por centro suben respecto al mes anterior y solo ${downs} bajan. ` +
-      `Revisa el filtro de fechas del export si no era la intención.`,
-  ];
 }

@@ -5,6 +5,7 @@
  */
 import Dexie, { type Table } from "dexie";
 import type { CellEdit, ImportedComment, PygDataset, WorkspaceMeta } from "./types";
+import { LEGACY_SYSTEM } from "./upload/systems";
 
 /** Singleton workspace metadata row (company, warnings, active selector id). */
 interface WorkspaceMetaRow extends WorkspaceMeta {
@@ -62,6 +63,74 @@ class PygDb extends Dexie {
         await datasetsTable.bulkDelete(retiredIds);
         await tx.table<CellEdit>("edits").where("datasetId").anyOf(retiredIds).delete();
         await tx.table("meta").clear();
+      });
+    // v4: the two single-statement formats that produced base-anual datasets (the twelve-month
+    // export and the Total-only annual export) are retired by `monthly-single-statement-upload`
+    // — neither can be reinterpreted as monthly, so they and their edits are discarded. A
+    // surviving base-mensual single dataset adopts `loadedMonths` inferred from which months
+    // hold a non-zero value anywhere in its accounts — the same heuristic the app already used
+    // for coverage, so this is not a regression, just a inference documented as such.
+    this.version(4)
+      .stores({
+        datasets: "id, role, order",
+        edits: "++id, datasetId, &[datasetId+code+monthIndex]",
+        meta: "key",
+      })
+      .upgrade(async (tx) => {
+        const datasetsTable = tx.table<PygDataset>("datasets");
+        const singleDatasets = await datasetsTable.filter((d) => d.role === "single").toArray();
+        const annualIds = singleDatasets
+          .filter((d) => d.baseFrequency === "anual")
+          .map((d) => d.id);
+        if (annualIds.length > 0) {
+          await datasetsTable.bulkDelete(annualIds);
+          await tx.table<CellEdit>("edits").where("datasetId").anyOf(annualIds).delete();
+          if ((await datasetsTable.count()) === 0) {
+            await tx.table("meta").clear();
+          }
+        }
+
+        const survivingMonthly = singleDatasets.filter((d) => d.baseFrequency === "mensual");
+        if (survivingMonthly.length === 0) {
+          return;
+        }
+        const metaRow = await tx.table("meta").get("workspace");
+        if (!metaRow) {
+          return;
+        }
+        const loadedMonths = new Set<number>();
+        for (const dataset of survivingMonthly) {
+          for (const account of dataset.accounts) {
+            account.values.forEach((value, monthIndex) => {
+              if (value !== 0) {
+                loadedMonths.add(monthIndex);
+              }
+            });
+          }
+        }
+        await tx.table("meta").put({
+          ...metaRow,
+          loadedMonths: [...loadedMonths].sort((a, b) => a - b),
+        });
+      });
+    // v5: the workspace records which accounting SYSTEM it came from (`microplus-upload-support`
+    // adds a second one). Nothing is discarded — an already-stored workspace can only have come
+    // from the single-statement strategy, so it adopts that id.
+    this.version(5)
+      .stores({
+        datasets: "id, role, order",
+        edits: "++id, datasetId, &[datasetId+code+monthIndex]",
+        meta: "key",
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<WorkspaceMetaRow>("meta")
+          .toCollection()
+          .modify((row) => {
+            if (!row.sourceSystemId) {
+              row.sourceSystemId = LEGACY_SYSTEM;
+            }
+          });
       });
   }
 }

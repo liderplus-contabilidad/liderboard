@@ -30,6 +30,7 @@ function seed(id: string): Promise<void> {
     warnings: [],
     activeCenterId: id,
     loadedMonths: [],
+    sourceSystemId: "monthly-single",
   });
 }
 
@@ -84,7 +85,13 @@ describe("replaceWorkspace", () => {
   it("stores several datasets + meta and clears the previous workspace", async () => {
     await replaceWorkspace(
       [center("a", "norte"), center("b", "sur")],
-      { companyName: "ACME", warnings: ["w"], activeCenterId: "consolidado", loadedMonths: [] },
+      {
+        companyName: "ACME",
+        warnings: ["w"],
+        activeCenterId: "consolidado",
+        loadedMonths: [],
+        sourceSystemId: "monthly-single",
+      },
       [
         { datasetId: "a", comments: [{ code: "4", monthIndex: 0, comment: "hola" }] },
         { datasetId: "b", comments: [] },
@@ -106,6 +113,7 @@ describe("replaceWorkspace", () => {
       warnings: [],
       activeCenterId: "s1",
       loadedMonths: [],
+      sourceSystemId: "monthly-single",
     });
     // The provider must query toArray(): both rows come back.
     expect((await db.datasets.toArray()).map((d) => d.id).sort()).toEqual(["c1", "s1"]);
@@ -116,13 +124,25 @@ describe("replaceWorkspace", () => {
   it("wipes datasets, edits and meta of the prior workspace", async () => {
     await replaceWorkspace(
       [center("a", "norte")],
-      { companyName: "ACME", warnings: [], activeCenterId: "consolidado", loadedMonths: [] },
+      {
+        companyName: "ACME",
+        warnings: [],
+        activeCenterId: "consolidado",
+        loadedMonths: [],
+        sourceSystemId: "monthly-single",
+      },
       [{ datasetId: "a", comments: [] }],
     );
     await saveCellEdit({ datasetId: "a", code: "4", monthIndex: 0, value: 1 });
     await replaceWorkspace(
       [center("z", "z")],
-      { companyName: "OTHER", warnings: [], activeCenterId: "consolidado", loadedMonths: [] },
+      {
+        companyName: "OTHER",
+        warnings: [],
+        activeCenterId: "consolidado",
+        loadedMonths: [],
+        sourceSystemId: "monthly-single",
+      },
       [{ datasetId: "z", comments: [] }],
     );
     expect((await db.datasets.toArray()).map((d) => d.id)).toEqual(["z"]);
@@ -135,7 +155,13 @@ describe("applyMonthSlice", () => {
   it("upserts datasets and meta without touching edits", async () => {
     await replaceWorkspace(
       [center("a", "norte")],
-      { companyName: "ACME", warnings: [], activeCenterId: "consolidado", loadedMonths: [0] },
+      {
+        companyName: "ACME",
+        warnings: [],
+        activeCenterId: "consolidado",
+        loadedMonths: [0],
+        sourceSystemId: "monthly-single",
+      },
       [{ datasetId: "a", comments: [] }],
     );
     await saveCellEdit({ datasetId: "a", code: "4", monthIndex: 0, value: 42 });
@@ -149,6 +175,7 @@ describe("applyMonthSlice", () => {
       warnings: [],
       activeCenterId: "consolidado",
       loadedMonths: [0, 1],
+      sourceSystemId: "monthly-single",
     });
 
     const stored = await db.datasets.get("a");
@@ -167,12 +194,14 @@ describe("applyMonthSlice", () => {
       warnings: [],
       activeCenterId: "consolidado",
       loadedMonths: [0],
+      sourceSystemId: "monthly-single",
     });
     await applyMonthSlice([center("a", "norte"), center("b", "sur")], {
       companyName: "ACME",
       warnings: [],
       activeCenterId: "consolidado",
       loadedMonths: [0],
+      sourceSystemId: "monthly-single",
     });
     expect((await db.datasets.toArray()).map((d) => d.id).sort()).toEqual(["a", "b"]);
   });
