@@ -5,13 +5,12 @@ import { DataGrid, GridRow } from "@/components/data-table/data-grid";
 import { EditableCell } from "@/components/data-table/editable-cell";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { Badge } from "@/components/ui/badge";
+import { formatCurrency } from "@/lib/format";
 import { Demo, DocSection } from "./section";
 
 const MONTHS = ["Ene", "Feb", "Mar", "Abr"];
 
-const money = (value: number) =>
-  (value < 0 ? "-$ " : "$ ") +
-  Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (value: number) => formatCurrency(value, { cents: true });
 
 interface PygRow {
   concept: string;

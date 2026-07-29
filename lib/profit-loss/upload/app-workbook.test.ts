@@ -69,7 +69,12 @@ const SIN_CENTRO_VALUES = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 describe("appWorkbookStrategy.detect", () => {
   it("matches a workbook that carries the hidden metadata sheet", () => {
     const buffer = buildFixture({
-      metaRows: [["workspace", 2026, "0,1"]],
+      metaRows: [
+        ["workspace", "centers", "monthly-centers"],
+        ["year", 2026, "0,1"],
+        ["sheet", "SUCURSAL NORTE", 2026, "sucursal-norte"],
+        ["sheet", "SIN CENTRO DE COSTO", 2026, "sin-centro-de-costo"],
+      ],
       norteValues: NORTE_VALUES,
       sinCentroValues: SIN_CENTRO_VALUES,
     });
@@ -80,7 +85,12 @@ describe("appWorkbookStrategy.detect", () => {
 describe("appWorkbookStrategy.parse", () => {
   it("reconstructs centers (skipping Consolidado), year and loadedMonths", () => {
     const buffer = buildFixture({
-      metaRows: [["workspace", 2026, "0,1"]],
+      metaRows: [
+        ["workspace", "centers", "monthly-centers"],
+        ["year", 2026, "0,1"],
+        ["sheet", "SUCURSAL NORTE", 2026, "sucursal-norte"],
+        ["sheet", "SIN CENTRO DE COSTO", 2026, "sin-centro-de-costo"],
+      ],
       norteValues: NORTE_VALUES,
       sinCentroValues: SIN_CENTRO_VALUES,
     });
@@ -95,16 +105,19 @@ describe("appWorkbookStrategy.parse", () => {
     expect(datasets.map((d) => d.role)).toEqual(["center", "sin-centro"]);
     expect(datasets[0].accounts.find((a) => a.code === "4")?.values).toEqual(NORTE_VALUES);
     expect(datasets[0].year).toBe(2026);
-    expect(meta.loadedMonths).toEqual([0, 1]);
+    expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 1] });
     expect(meta.activeCenterId).toBe("consolidado");
   });
 
   it("merges a comment and an adjustment on the same cell into one edit seed", () => {
     const buffer = buildFixture({
       metaRows: [
-        ["workspace", 2026, "0"],
-        ["comment", "sucursal-norte", "4", 0, "Ajuste de enero"],
-        ["adjustment", "sucursal-norte", "4", 0, 100],
+        ["workspace", "centers", "monthly-centers"],
+        ["year", 2026, "0"],
+        ["sheet", "SUCURSAL NORTE", 2026, "sucursal-norte"],
+        ["sheet", "SIN CENTRO DE COSTO", 2026, "sin-centro-de-costo"],
+        ["comment", "sucursal-norte", 2026, "4", 0, "Ajuste de enero"],
+        ["adjustment", "sucursal-norte", 2026, "4", 0, 100],
       ],
       norteValues: NORTE_VALUES,
       sinCentroValues: SIN_CENTRO_VALUES,
@@ -126,8 +139,11 @@ describe("appWorkbookStrategy.parse", () => {
   it("produces a value-only seed when a cell has no textual comment", () => {
     const buffer = buildFixture({
       metaRows: [
-        ["workspace", 2026, "0"],
-        ["adjustment", "sucursal-norte", "4", 0, 100],
+        ["workspace", "centers", "monthly-centers"],
+        ["year", 2026, "0"],
+        ["sheet", "SUCURSAL NORTE", 2026, "sucursal-norte"],
+        ["sheet", "SIN CENTRO DE COSTO", 2026, "sin-centro-de-costo"],
+        ["adjustment", "sucursal-norte", 2026, "4", 0, 100],
       ],
       norteValues: NORTE_VALUES,
       sinCentroValues: SIN_CENTRO_VALUES,

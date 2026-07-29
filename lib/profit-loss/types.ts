@@ -27,12 +27,23 @@ export interface AccountRow {
 
 export interface PygDataset {
   id: string;
+  /**
+   * The CLIENT this dataset belongs to. PyG holds several clients at once, and every read and
+   * write is bounded by this — a query without it would mix two accounting firms' clients in
+   * silence, which no other validation would catch (see `clients.ts` and `db.ts`).
+   */
+  clientId: string;
   fileName: string;
   uploadedAt: number;
   companyName: string;
   /** e.g. "Ene–Dic 2026"; "—" when the file has no date-range line. */
   periodLabel: string;
-  year: number | null;
+  /**
+   * The year this dataset holds. Required: a dataset is a CENTER-YEAR, so the year is half of
+   * its logical key. Every strategy declares it — from the filename, the date-range line or the
+   * app workbook's own metadata — so there is no path that produces a dataset without one.
+   */
+  year: number;
   /** Frequency the file provides; the UI can aggregate up, never down. */
   baseFrequency: Frequency;
   /** Workspace role. "single" for a standalone statement (also the v1 migration default). */
@@ -52,6 +63,17 @@ export interface PygDataset {
   /** Spanish, human-readable parse/validation notes. */
   warnings: string[];
 }
+
+/**
+ * A dataset that does not belong to a client YET — what the pure layer produces before anything is
+ * persisted (a parsed workbook, a merged month).
+ *
+ * Which client a file belongs to is decided by which client is OPEN, and by the identity dialog
+ * when the two disagree — never by the file, which knows nothing about the user's list of
+ * clients. So `db.ts` stamps `clientId` at the door, and the layers in between never carry a
+ * value they could get wrong.
+ */
+export type ParsedDataset = Omit<PygDataset, "clientId">;
 
 /**
  * One cell's imported edit, carried in an exported workbook's hidden metadata sheet and
@@ -96,10 +118,30 @@ export interface WorkspaceMeta {
    */
   sourceSystemId: string;
   /**
-   * Month indices (0–11) actually loaded into the by-centers workspace — declared, not
-   * inferred: a loaded month with all-zero values is covered, an unloaded one is not, and the
-   * two produce the same zeros. Empty for a single-statement workspace, whose coverage is
-   * still derived from values (a whole year always arrives in one file).
+   * Month indices (0–11) actually loaded, PER YEAR — declared, not inferred: a loaded month
+   * with all-zero values is covered, an unloaded one is not, and the two produce the same
+   * zeros.
+   *
+   * Keyed by year because coverage lives on the same axis as the data: loading January of 2026
+   * must not mark January of 2025 as covered. A year absent from this record is a year the
+   * workspace does not have.
    */
-  loadedMonths: number[];
+  loadedMonthsByYear: Record<number, number[]>;
+}
+
+/** A year's declared coverage; `[]` for a year the workspace never loaded. */
+export function loadedMonthsFor(
+  meta: Pick<WorkspaceMeta, "loadedMonthsByYear"> | undefined,
+  year: number,
+): number[] {
+  return meta?.loadedMonthsByYear[year] ?? [];
+}
+
+/** Every year the workspace declares coverage for, ascending. */
+export function loadedYearsOf(
+  meta: Pick<WorkspaceMeta, "loadedMonthsByYear"> | undefined,
+): number[] {
+  return Object.keys(meta?.loadedMonthsByYear ?? {})
+    .map(Number)
+    .sort((a, b) => a - b);
 }

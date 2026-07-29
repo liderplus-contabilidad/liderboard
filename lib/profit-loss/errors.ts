@@ -3,7 +3,7 @@
  * without pulling SheetJS into the initial bundle.
  *
  * `message` is optional per-call: most codes carry a fixed Spanish message, but a few
- * (mixed years, a duplicate month, no strategy matching) need to name the actual values
+ * (a duplicate month, a mixed batch, no strategy matching) need to name the actual values
  * involved, so the call site passes its own text and the code stays the stable, matchable
  * part of the error.
  */
@@ -15,7 +15,6 @@ export type PygParseErrorCode =
   | "invalid-filename"
   | "month-out-of-range"
   | "general-missing"
-  | "mixed-years"
   | "duplicate-month"
   | "unrecognized-format"
   | "missing-date-range"
@@ -31,13 +30,13 @@ const MESSAGES: Record<PygParseErrorCode, string> = {
     "El archivo no trae el mes en su contenido, así que tiene que salir del nombre.",
   "month-out-of-range": "El mes en el nombre del archivo debe estar entre 01 y 12.",
   "general-missing": "No se encontró la columna GENERAL en la fila de cabecera.",
-  "mixed-years": "La carga mezcla archivos de años distintos.",
   "duplicate-month": "La carga incluye más de un archivo para el mismo mes.",
   "unrecognized-format": "El archivo no corresponde a ningún formato aceptado.",
   "missing-date-range":
     'El estado único debe declarar su rango de fechas ("Desde el … hasta el …"); no se encontró esa línea.',
   "invalid-date-range": "El rango de fechas del archivo no corresponde a un mes calendario.",
-  "mixed-identity": "La carga mezcla archivos de empresas, años o modos distintos.",
+  // El año salió de la identidad con `pyg-multi-year`: mezclar años en una carga es válido.
+  "mixed-identity": "La carga mezcla archivos de empresas, sistemas o modos distintos.",
 };
 
 export class PygParseError extends Error {

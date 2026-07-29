@@ -11,16 +11,23 @@ const TONES: Record<ToolbarTone, string> = {
 /** A horizontal filter/action row: wraps its controls with consistent padding + gap. */
 export function Toolbar({
   tone = "surface",
+  inert = false,
   className,
   children,
 }: {
   /** `surface` = plain white row; `sunken` = tinted row with a top hairline. */
   tone?: ToolbarTone;
+  /** Takes the whole row out of the focus order and the a11y tree — for a bar whose controls
+   * have nothing to act on yet. The row keeps its space, so nothing reflows when they do. */
+  inert?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center gap-2.5 px-7 py-3", TONES[tone], className)}>
+    <div
+      inert={inert}
+      className={cn("flex flex-wrap items-center gap-2.5 px-7 py-3", TONES[tone], className)}
+    >
       {children}
     </div>
   );

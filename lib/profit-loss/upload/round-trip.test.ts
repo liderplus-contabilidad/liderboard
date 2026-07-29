@@ -37,7 +37,13 @@ function singleDataset(id: string, values: number[]): PygDataset {
 
 /** `centerId` MUST be `slugifyCenter(name)`, same invariant `merge-month.ts` maintains —
  * `app-workbook.ts` re-derives it the same way from the sheet name on import. */
-function center(id: string, name: string, order: number, generalValue: number): PygDataset {
+function center(
+  id: string,
+  name: string,
+  order: number,
+  generalValue: number,
+  year = 2026,
+): PygDataset {
   const values = [...MONTHS];
   values[0] = generalValue; // Enero
   values[2] = generalValue + 50; // Marzo
@@ -46,8 +52,8 @@ function center(id: string, name: string, order: number, generalValue: number): 
     fileName: "x.xlsx",
     uploadedAt: 0,
     companyName: "HOTELERA ANDES S.A.",
-    periodLabel: "Ene–Dic 2026",
-    year: 2026,
+    periodLabel: `Ene–Dic ${year}`,
+    year,
     baseFrequency: "mensual",
     role: "center",
     centerId: slugifyCenter(name),
@@ -67,21 +73,72 @@ async function toBuffer(
   return blob.arrayBuffer();
 }
 
+describe("round-trip — Excel completo multi-año", () => {
+  it("lleva todos los años en un libro y los devuelve separados", async () => {
+    const workbook = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2025: [0, 1], 2026: [0, 2] },
+      centers: [
+        { dataset: center("norte-25", "SUCURSAL NORTE", 0, 100, 2025), edits: [] },
+        { dataset: center("sur-25", "SUCURSAL SUR", 1, 40, 2025), edits: [] },
+        { dataset: center("norte-26", "SUCURSAL NORTE", 0, 700, 2026), edits: [] },
+        { dataset: center("sur-26", "SUCURSAL SUR", 1, 80, 2026), edits: [] },
+      ],
+    });
+    const fileName = multiCenterFilename([2025, 2026]);
+    expect(fileName).toBe("PyG-2025-2026-completo.xlsx");
+
+    const staged = resolveUpload(fileName, await toBuffer(workbook));
+    const { datasets, meta } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    // Cuatro centro-año, cada uno con su propio año y sus propios valores.
+    expect(datasets).toHaveLength(4);
+    expect(datasets.map((d) => d.year).sort()).toEqual([2025, 2025, 2026, 2026]);
+    const norte25 = datasets.find((d) => d.year === 2025 && d.costCenterName === "SUCURSAL NORTE");
+    const norte26 = datasets.find((d) => d.year === 2026 && d.costCenterName === "SUCURSAL NORTE");
+    expect(norte25?.accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
+    expect(norte26?.accounts.find((a) => a.code === "4")?.values[0]).toBe(700);
+    // La cobertura es de cada año, no compartida.
+    expect(meta.loadedMonthsByYear).toEqual({ 2025: [0, 1], 2026: [0, 2] });
+  });
+
+  it("un mismo centro conserva su color en los dos años", async () => {
+    const workbook = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2025: [0], 2026: [0] },
+      centers: [
+        // 2025 lista NORTE primero; 2026 lo lista segundo — el caso de los archivos reales.
+        { dataset: center("norte-25", "SUCURSAL NORTE", 0, 100, 2025), edits: [] },
+        { dataset: center("sur-25", "SUCURSAL SUR", 1, 40, 2025), edits: [] },
+        { dataset: center("sur-26", "SUCURSAL SUR", 0, 80, 2026), edits: [] },
+        { dataset: center("norte-26", "SUCURSAL NORTE", 1, 700, 2026), edits: [] },
+      ],
+    });
+    const staged = resolveUpload(multiCenterFilename([2025, 2026]), await toBuffer(workbook));
+    const { datasets } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    const colorOf = (name: string, year: number) =>
+      datasets.find((d) => d.costCenterName === name && d.year === year)?.centerColor;
+    expect(colorOf("SUCURSAL NORTE", 2025)).toBe(colorOf("SUCURSAL NORTE", 2026));
+    expect(colorOf("SUCURSAL SUR", 2025)).toBe(colorOf("SUCURSAL SUR", 2026));
+    expect(colorOf("SUCURSAL NORTE", 2025)).not.toBe(colorOf("SUCURSAL SUR", 2025));
+  });
+});
+
 describe("round-trip — Excel completo", () => {
   it("re-enters as an equivalent workspace: centers, values, loadedMonths", async () => {
     const norte = center("norte", "SUCURSAL NORTE", 0, 100);
     const sur = center("sur", "SUCURSAL SUR", 1, 40);
     const workbook = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
-      year: 2026,
-      loadedMonths: [0, 2],
+      loadedMonthsByYear: { 2026: [0, 2] },
       centers: [
         { dataset: norte, edits: [] },
         { dataset: sur, edits: [] },
       ],
     });
     const buffer = await toBuffer(workbook);
-    const fileName = multiCenterFilename(2026);
+    const fileName = multiCenterFilename([2026]);
     expect(fileName).toBe("PyG-2026-completo.xlsx");
     const staged = resolveUpload(fileName, buffer);
     expect(staged.kind).toBe("workspace");
@@ -91,7 +148,7 @@ describe("round-trip — Excel completo", () => {
     expect(datasets[0].accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
     expect(datasets[0].accounts.find((a) => a.code === "4")?.values[2]).toBe(150);
     expect(datasets[1].accounts.find((a) => a.code === "4")?.values[0]).toBe(40);
-    expect(meta.loadedMonths).toEqual([0, 2]);
+    expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
   });
 
   it("keeps an adjustment marked as an adjustment after the round-trip", async () => {
@@ -106,8 +163,7 @@ describe("round-trip — Excel completo", () => {
     };
     const workbook = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
-      year: 2026,
-      loadedMonths: [0],
+      loadedMonthsByYear: { 2026: [0] },
       centers: [{ dataset: norte, edits: [edit] }],
     });
     const buffer = await toBuffer(workbook);
@@ -159,8 +215,7 @@ describe("round-trip — sin la hoja de metadatos", () => {
     const norte = center("norte", "SUCURSAL NORTE", 0, 100);
     const workbook = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
-      year: 2026,
-      loadedMonths: [0],
+      loadedMonthsByYear: { 2026: [0] },
       centers: [{ dataset: norte, edits: [] }],
     });
     workbook.removeWorksheet(workbook.worksheets.find((w) => w.name.startsWith("_"))?.id ?? -1);
@@ -175,7 +230,7 @@ describe("round-trip — Excel con tus datos (estado único)", () => {
     values[0] = 100; // Enero
     values[2] = 150; // Marzo
     const dataset = singleDataset("s1", values);
-    const workbook = buildPygWorkbook(dataset, [], [0, 2]);
+    const workbook = buildPygWorkbook([{ dataset: dataset, edits: [] }], { 2026: [0, 2] });
     const buffer = await toBuffer(workbook);
     const staged = resolveUpload("cualquier-nombre.xlsx", buffer);
     expect(staged.kind).toBe("workspace");
@@ -186,7 +241,7 @@ describe("round-trip — Excel con tus datos (estado único)", () => {
     expect(datasets[0].companyName).toBe("NOMIK HOTELS S.A.S.");
     expect(datasets[0].accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
     expect(datasets[0].accounts.find((a) => a.code === "4")?.values[2]).toBe(150);
-    expect(meta.loadedMonths).toEqual([0, 2]);
+    expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
   });
 
   it("keeps an adjustment marked as an adjustment after the round-trip", async () => {
@@ -199,7 +254,7 @@ describe("round-trip — Excel con tus datos (estado único)", () => {
       comment: "Ajuste de enero",
       updatedAt: 1,
     };
-    const workbook = buildPygWorkbook(dataset, [edit], [0]);
+    const workbook = buildPygWorkbook([{ dataset: dataset, edits: [edit] }], { 2026: [0] });
     const buffer = await toBuffer(workbook);
     const staged = resolveUpload("cualquier-nombre.xlsx", buffer) as Extract<
       StagedUpload,
@@ -216,7 +271,11 @@ describe("round-trip — Excel con tus datos (estado único)", () => {
 describe("round-trip — el sistema de origen sobrevive al Excel de la app", () => {
   it("un workspace MicroPlus descargado y vuelto a cargar sigue siendo MicroPlus", async () => {
     const dataset = singleDataset("s1", MONTHS);
-    const workbook = buildPygWorkbook(dataset, [], [4], "microplus");
+    const workbook = buildPygWorkbook(
+      [{ dataset: dataset, edits: [] }],
+      { 2026: [4] },
+      "microplus",
+    );
     const buffer = await toBuffer(workbook);
 
     const staged = resolveUpload("PyG HOSPITAL.xlsx", buffer);
@@ -229,7 +288,9 @@ describe("round-trip — el sistema de origen sobrevive al Excel de la app", () 
 
   it("un workspace del otro sistema conserva el suyo", async () => {
     const dataset = singleDataset("s1", MONTHS);
-    const buffer = await toBuffer(buildPygWorkbook(dataset, [], [0], "monthly-single"));
+    const buffer = await toBuffer(
+      buildPygWorkbook([{ dataset: dataset, edits: [] }], { 2026: [0] }, "monthly-single"),
+    );
     const staged = resolveUpload("x.xlsx", buffer) as Extract<StagedUpload, { kind: "workspace" }>;
     expect(staged.meta.sourceSystemId).toBe("monthly-single");
   });
@@ -239,8 +300,7 @@ describe("round-trip — el sistema de origen sobrevive al Excel de la app", () 
     const buffer = await toBuffer(
       buildMultiCenterWorkbook({
         companyName: "HOTELERA ANDES S.A.",
-        year: 2026,
-        loadedMonths: [0],
+        loadedMonthsByYear: { 2026: [0] },
         centers: [{ dataset: norte, edits: [] }],
       }),
     );
@@ -301,7 +361,9 @@ describe("round-trip — a segmented state", () => {
     expect(before["6.1"]).toBe(300);
     expect(before["#no-operacional"]).toBe(300);
 
-    const buffer = await toBuffer(buildPygWorkbook(dataset, edits, [0], "monthly-single"));
+    const buffer = await toBuffer(
+      buildPygWorkbook([{ dataset: dataset, edits: edits }], { 2026: [0] }, "monthly-single"),
+    );
     const staged = resolveUpload("PyG NOMIK.xlsx", buffer) as Extract<
       StagedUpload,
       { kind: "workspace" }
@@ -336,12 +398,11 @@ describe("round-trip — a segmented state", () => {
     const buffer = await toBuffer(
       buildMultiCenterWorkbook({
         companyName: "NOMIK HOTELS S.A.S.",
-        year: 2026,
-        loadedMonths: [0],
+        loadedMonthsByYear: { 2026: [0] },
         centers: [{ dataset: norte, edits }],
       }),
     );
-    const staged = resolveUpload(multiCenterFilename(2026), buffer) as Extract<
+    const staged = resolveUpload(multiCenterFilename([2026]), buffer) as Extract<
       StagedUpload,
       { kind: "workspace" }
     >;

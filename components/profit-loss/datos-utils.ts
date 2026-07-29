@@ -14,11 +14,6 @@ export interface FlatRow {
   isCollapsed: boolean;
 }
 
-/** Row total = sum of its month cells (nulls treated as 0). */
-export function rowTotal(row: DatosRow): number {
-  return row.cells.reduce((acc, cell) => acc + (cell.value ?? 0), 0);
-}
-
 /** Cell/total display: app-wide currency, or an en-dash for empty/zero. */
 export function formatAmount(value: number | null): string {
   if (value === null || value === 0) {
@@ -27,12 +22,11 @@ export function formatAmount(value: number | null): string {
   return formatCurrency(value, { cents: true });
 }
 
+// Sorting by the Total column needs no case of its own any more: it is an ordinary column, so
+// `{ col }` reaches it like any other.
 function sortValue(row: DatosRow, sort: DatosSort): number | string {
   if (sort.key === "name") {
     return row.name;
-  }
-  if (sort.key === "total") {
-    return rowTotal(row);
   }
   return row.cells[sort.key.col]?.value ?? 0;
 }

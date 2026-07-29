@@ -166,10 +166,10 @@ describe("tooltip de la gráfica principal", () => {
     ]) {
       expect(html).toContain(label);
     }
-    // 14 vendidas sobre 30 disponibles, y los $1.400 que produjeron.
+    // 14 vendidas sobre 30 disponibles, y los $1,400 que produjeron.
     expect(html).toContain("14");
     expect(html).toContain("30");
-    expect(html).toContain("46,7 %");
+    expect(html).toContain("46.7 %");
   });
 
   // Con dos series y UNA columna manda `entityOption`, así que la comparación sobre el eje se
@@ -343,16 +343,16 @@ describe("buildHeatmaps", () => {
 
 describe("formatMetric", () => {
   it("una razón se lee en puntos porcentuales, no como fracción", () => {
-    expect(formatMetric(0.2984, "percent")).toBe("29,8 %");
+    expect(formatMetric(0.2984, "percent")).toBe("29.8 %");
   });
 
   it("el dinero conserva los centavos mientras quepan", () => {
-    expect(formatMetric(82.89, "currency")).toBe("$82,89");
-    expect(formatMetric(115302.4, "currency")).toBe("$115.302");
+    expect(formatMetric(82.89, "currency")).toBe("$82.89");
+    expect(formatMetric(115302.4, "currency")).toBe("$115,302");
   });
 
   it("un conteo no arrastra decimales espurios", () => {
-    expect(formatMetric(1480, "count")).toBe("1.480");
+    expect(formatMetric(1480, "count")).toBe("1,480");
   });
 
   it("sin valor no inventa un cero", () => {

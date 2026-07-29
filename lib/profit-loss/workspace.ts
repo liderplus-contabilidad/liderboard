@@ -8,7 +8,7 @@
  * statement) no longer exist under the monthly-by-centers model. Loading a workspace now goes
  * through the upload registry (`upload/`) and `merge-month.ts` instead.
  */
-import type { ImportedComment, PygDataset, WorkspaceMeta } from "./types";
+import type { ImportedComment, ParsedDataset, WorkspaceMeta } from "./types";
 
 /** Center dot palette (from the design's `_ccColorMap`). */
 export const CENTER_PALETTE = ["#1e3a5f", "#0e7490", "#d97706", "#16a34a", "#7c3aed", "#dc2626"];
@@ -23,6 +23,63 @@ export function slugifyCenter(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** `Sin centro de costo` is pinned last whatever year first introduced it. */
+const SIN_CENTRO_ROLE = "sin-centro";
+
+/**
+ * Gives every distinct `centerId` ONE color and ONE position across the whole workspace, every
+ * year included.
+ *
+ * Without this, the slot came from the center's position inside the file that first created it,
+ * per year — and the real exports list the centers in a different order in different years
+ * (2025 opens with CARTAGO, 2026 with ALBEMARLE). A center would then change color when the
+ * reader changed year, which is exactly what the color exists to prevent.
+ *
+ * The order is «first year in which the center appears, then that year's file order», so
+ * loading an older year later cannot renumber the centers the user already knows. `sin-centro`
+ * is pinned at the end regardless.
+ *
+ * Pure: returns a new array, and only touches `order` and `centerColor`. Generic in the dataset
+ * so it runs equally on what the merge just produced and on what came back out of Dexie —
+ * whatever goes in comes out, `clientId` included when there is one.
+ */
+export function assignCenterSlots<T extends ParsedDataset>(datasets: readonly T[]): T[] {
+  const firstSeen = new Map<string, { year: number; order: number }>();
+  for (const dataset of [...datasets].sort(
+    (a, b) => a.year - b.year || (a.order ?? 0) - (b.order ?? 0),
+  )) {
+    const centerId = dataset.centerId;
+    if (centerId === undefined || firstSeen.has(centerId)) {
+      continue;
+    }
+    firstSeen.set(centerId, { year: dataset.year, order: dataset.order ?? 0 });
+  }
+
+  const sinCentro = new Set(
+    datasets.filter((d) => d.role === SIN_CENTRO_ROLE).map((d) => d.centerId),
+  );
+  const ranked = [...firstSeen.entries()]
+    .sort(([idA, a], [idB, b]) => {
+      const lastA = sinCentro.has(idA) ? 1 : 0;
+      const lastB = sinCentro.has(idB) ? 1 : 0;
+      return lastA - lastB || a.year - b.year || a.order - b.order || idA.localeCompare(idB);
+    })
+    .map(([centerId]) => centerId);
+  const slotOf = new Map(ranked.map((centerId, slot) => [centerId, slot]));
+
+  return datasets.map((dataset) => {
+    const slot = dataset.centerId === undefined ? undefined : slotOf.get(dataset.centerId);
+    if (slot === undefined) {
+      return dataset;
+    }
+    return {
+      ...dataset,
+      order: slot,
+      centerColor: CENTER_PALETTE[slot % CENTER_PALETTE.length],
+    };
+  });
+}
+
 /**
  * What a full workspace replace (`replaceWorkspace`) writes. Single-statement and app-workbook
  * uploads both shape their payload into this before committing — a monthly batch instead goes
@@ -30,7 +87,7 @@ export function slugifyCenter(name: string): string {
  */
 export interface BuiltWorkspace {
   mode: "single" | "multi";
-  datasets: PygDataset[];
+  datasets: ParsedDataset[];
   commentsByDataset: { datasetId: string; comments: ImportedComment[] }[];
   meta: WorkspaceMeta;
 }

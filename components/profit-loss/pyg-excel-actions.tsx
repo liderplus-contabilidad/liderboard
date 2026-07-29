@@ -3,7 +3,7 @@
 import { FilePlus2, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
-import { db } from "@/lib/profit-loss/db";
+import { datasetEdits } from "@/lib/profit-loss/db";
 import { CostCenterUploadModal } from "./cost-center-upload-modal";
 import { usePygData } from "./pyg-data-provider";
 
@@ -24,7 +24,17 @@ import { usePygData } from "./pyg-data-provider";
  * demanda para no meter SheetJS en el bundle inicial.
  */
 export function PygExcelActions() {
-  const { dataset, datasets, edits, views, mode, loadedMonths, sourceSystemId } = usePygData();
+  const {
+    activeClientId,
+    dataset,
+    datasets,
+    views,
+    mode,
+    loadedYears,
+    visibleYears,
+    loadedMonthsByYear,
+    sourceSystemId,
+  } = usePygData();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [acceptedFormats, setAcceptedFormats] = useState<{ id: string; label: string }[]>([]);
   // `null` mientras el registry no ha cargado: hasta saberlo, no se ofrece escribir un formato
@@ -52,8 +62,14 @@ export function PygExcelActions() {
     () => views.filter((v) => v.role === "center" || v.role === "sin-centro"),
     [views],
   );
-  const workspaceYear = centerViews[0]?.dataset.year ?? datasets.find((d) => d.year != null)?.year;
-  const latestLoadedMonth = loadedMonths.length > 0 ? Math.max(...loadedMonths) : null;
+  // "Un mes en crudo" writes ONE month of ONE year, so it needs a resolved year: with several
+  // years on screen there is no such thing, and the option says so instead of guessing.
+  const rawYear = visibleYears.length === 1 ? visibleYears[0] : null;
+  const rawYearMonths = rawYear === null ? [] : (loadedMonthsByYear[rawYear] ?? []);
+  const latestLoadedMonth = rawYearMonths.length > 0 ? Math.max(...rawYearMonths) : null;
+  const anyMonthLoaded = Object.values(loadedMonthsByYear).some((months) => months.length > 0);
+  const severalYearsReason =
+    "Hay varios años a la vista; marca uno solo para bajar un mes en crudo.";
 
   const downloads = useMemo<ExcelDownloadOption[]>(() => {
     if (mode === "multi") {
@@ -65,28 +81,32 @@ export function PygExcelActions() {
           description: "El workspace entero: la hoja consolidada más una por centro, re-subible",
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
-          disabled: loadedMonths.length === 0,
+          disabled: !anyMonthLoaded,
           disabledReason: noMonthsReason,
           run: async () => {
             const [exportMod, { downloadBlob }] = await Promise.all([
               import("@/lib/profit-loss/export"),
               import("@/lib/download"),
             ]);
+            // EVERY year of the workspace, not just the visible ones: this file is the backup,
+            // so what it leaves out is what a restore would not bring back.
+            const centersAllYears = datasets.filter(
+              (d) => d.role === "center" || d.role === "sin-centro",
+            );
             const withEdits = await Promise.all(
-              centerViews.map(async (v) => ({
-                dataset: v.dataset,
-                edits: await db.edits.where("datasetId").equals(v.dataset.id).toArray(),
+              centersAllYears.map(async (d) => ({
+                dataset: d,
+                edits: await datasetEdits(d.id),
               })),
             );
             const workbook = exportMod.buildMultiCenterWorkbook({
               companyName: dataset?.companyName ?? "LiderPlus",
-              year: workspaceYear ?? 0,
-              loadedMonths,
+              loadedMonthsByYear,
               ...(sourceSystemId ? { sourceSystemId } : {}),
               centers: withEdits,
             });
             const blob = await exportMod.workbookToBlob(workbook);
-            downloadBlob(blob, exportMod.multiCenterFilename(workspaceYear ?? 0));
+            downloadBlob(blob, exportMod.multiCenterFilename(loadedYears));
           },
         },
         {
@@ -97,9 +117,9 @@ export function PygExcelActions() {
           icon: FilePlus2,
           iconClassName: "text-muted",
           disabled: latestLoadedMonth === null,
-          disabledReason: noMonthsReason,
+          disabledReason: rawYear === null ? severalYearsReason : noMonthsReason,
           run: async () => {
-            if (latestLoadedMonth === null) {
+            if (latestLoadedMonth === null || rawYear === null) {
               return;
             }
             const [exportMod, { downloadBlob }] = await Promise.all([
@@ -110,17 +130,17 @@ export function PygExcelActions() {
               centerViews.map(async (v) => ({
                 name: v.name,
                 dataset: v.dataset,
-                edits: await db.edits.where("datasetId").equals(v.dataset.id).toArray(),
+                edits: await datasetEdits(v.dataset.id),
               })),
             );
             const workbook = exportMod.buildMonthSliceWorkbook({
               companyName: dataset?.companyName ?? "LiderPlus",
-              year: workspaceYear ?? 0,
+              year: rawYear,
               month: latestLoadedMonth,
               centers: withEdits,
             });
             const blob = await exportMod.workbookToBlob(workbook);
-            downloadBlob(blob, exportMod.monthSliceFilename(workspaceYear ?? 0, latestLoadedMonth));
+            downloadBlob(blob, exportMod.monthSliceFilename(rawYear, latestLoadedMonth));
           },
         },
       ];
@@ -145,14 +165,21 @@ export function PygExcelActions() {
             import("@/lib/profit-loss/export"),
             import("@/lib/download"),
           ]);
+          // Every year of the statement, same reasoning as the by-centers workbook.
+          const singlesAllYears = datasets.filter((d) => d.role === "single");
+          const slices = await Promise.all(
+            singlesAllYears.map(async (d) => ({
+              dataset: d,
+              edits: await datasetEdits(d.id),
+            })),
+          );
           const workbook = exportMod.buildPygWorkbook(
-            dataset,
-            edits,
-            loadedMonths,
+            slices,
+            loadedMonthsByYear,
             sourceSystemId ?? undefined,
           );
           const blob = await exportMod.workbookToBlob(workbook);
-          downloadBlob(blob, exportMod.pygExportFilename(dataset));
+          downloadBlob(blob, exportMod.pygExportFilename(dataset, loadedYears));
         },
       },
       {
@@ -163,9 +190,9 @@ export function PygExcelActions() {
         icon: FilePlus2,
         iconClassName: "text-muted",
         disabled: !dataset || latestLoadedMonth === null,
-        disabledReason: noMonthsReason,
+        disabledReason: rawYear === null ? severalYearsReason : noMonthsReason,
         run: async () => {
-          if (!dataset || latestLoadedMonth === null) {
+          if (!dataset || latestLoadedMonth === null || rawYear === null) {
             return;
           }
           const [exportMod, { downloadBlob }] = await Promise.all([
@@ -174,24 +201,26 @@ export function PygExcelActions() {
           ]);
           const workbook = exportMod.buildSingleMonthSliceWorkbook({
             companyName: dataset.companyName,
-            year: workspaceYear ?? 0,
+            year: rawYear,
             month: latestLoadedMonth,
             dataset,
-            edits,
+            edits: await datasetEdits(dataset.id),
           });
           const blob = await exportMod.workbookToBlob(workbook);
-          downloadBlob(blob, exportMod.monthSliceFilename(workspaceYear ?? 0, latestLoadedMonth));
+          downloadBlob(blob, exportMod.monthSliceFilename(rawYear, latestLoadedMonth));
         },
       },
     ];
     return canWriteRawMonth ? options : options.filter((option) => option.id !== "mes-crudo");
   }, [
     dataset,
-    edits,
+    datasets,
     mode,
     centerViews,
-    loadedMonths,
-    workspaceYear,
+    loadedYears,
+    loadedMonthsByYear,
+    rawYear,
+    anyMonthLoaded,
     latestLoadedMonth,
     sourceSystemId,
     canWriteRawMonth,
@@ -200,7 +229,13 @@ export function PygExcelActions() {
   return (
     <>
       <ExcelActions
-        upload={{ onClick: () => setUploadOpen(true) }}
+        upload={{
+          onClick: () => setUploadOpen(true),
+          disabled: activeClientId === null,
+          // Junto al botón, no en un tooltip: sin cliente, cargar no es lo siguiente que hay que
+          // hacer, y el vacío de al lado ya ofrece lo que sí.
+          disabledReason: "Crea un cliente antes de cargar datos.",
+        }}
         downloads={downloads}
         info={{
           title: "Archivos aceptados",

@@ -3,12 +3,12 @@ import type { OccupancyGridRow } from "@/lib/occupancy/derive";
 
 type Format = OccupancyGridRow["format"];
 
-/** Two decimals max: `formatNumber` would otherwise render 680/31 as "21,935". */
+/** Two decimals max: `formatNumber` would otherwise render 680/31 as "21.935". */
 function cents(value: number): string {
   return formatNumber(Math.round(value * 100) / 100);
 }
 
-/** Past this, "1.095,17" no longer fits a day column and would be clipped mid-number. */
+/** Past this, "1,095.17" no longer fits a day column and would be clipped mid-number. */
 const CENTS_FIT_BELOW = 1000;
 
 /** Occupancy is a small ratio out of few rooms: at zero decimals 9/22 and 10/22 both read "41 %". */
@@ -37,9 +37,9 @@ export function formatAggregate(value: number | null, format: Format): string {
 }
 
 /**
- * Seeds an editable cell ON FOCUS with the EXACT value: `formatNumber` (es-EC) is the inverse of
+ * Seeds an editable cell ON FOCUS with the EXACT value: `formatNumber` is the inverse of
  * `parseCurrency`, so focus-and-blur round-trips. Seeding the compact display form instead would
- * make a stray click commit 1.095 over a stored 1.095,17. A zero seeds blank; committing a blank
+ * make a stray click commit 1,095 over a stored 1,095.17. A zero seeds blank; committing a blank
  * yields 0 again, so nothing is lost.
  */
 export function seedEditValue(value: number | null): string {

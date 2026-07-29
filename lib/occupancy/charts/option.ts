@@ -51,7 +51,7 @@ const CENTS_FIT_BELOW = 1000;
 
 /**
  * The one formatter every axis, label, tooltip and table cell goes through. A ratio arrives as a
- * fraction and `formatPercent` speaks in points, so the ×100 lives here; an ADR of $82,89 keeps
+ * fraction and `formatPercent` speaks in points, so the ×100 lives here; an ADR of $82.89 keeps
  * its cents because rounding to $83 loses exactly the precision the figure exists for.
  */
 export function formatMetric(value: number | null, unit: MetricUnit): string | null {

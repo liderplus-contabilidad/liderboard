@@ -41,8 +41,8 @@ export function CellEditor({
   onSave: (value: number | null, comment: string) => void;
   onClose: () => void;
 }) {
-  // Seed with the Ecuadorian format the parser expects (`.` thousands, `,` decimals) so
-  // a value with cents round-trips on save instead of being inflated by dropped dots.
+  // Seed with the Ecuadorian format the parser expects (`,` thousands, `.` decimals) so
+  // a value with cents round-trips on save instead of being inflated by dropped separators.
   const [value, setValue] = useState(initialValue === null ? "" : formatNumber(initialValue));
   const [comment, setComment] = useState(initialComment);
   const inputRef = useRef<HTMLInputElement>(null);

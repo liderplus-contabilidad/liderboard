@@ -32,6 +32,18 @@ export interface PeriodRef {
   index: number;
 }
 
+/**
+ * A period WITHOUT a year — "enero", not "enero de 2026". This is what the filter bar marks:
+ * with several years on screen, marking «Ene» has to narrow every one of them, so a dated
+ * reference would have to be re-issued each time the marked years change.
+ *
+ * `selection.ts` expands a slot against the years in play to get back `PeriodRef`s.
+ */
+export interface PeriodSlot {
+  frequency: Frequency;
+  index: number;
+}
+
 /** One point of the X axis. `null` = no movement in that period (see the file header). */
 export interface SeriesPoint {
   period: PeriodRef;

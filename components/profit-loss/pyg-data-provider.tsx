@@ -13,11 +13,21 @@ import {
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
   applyMonthSlice,
-  db,
+  clientDatasets,
+  clientEdits,
+  createClient as createClientRow,
+  deleteClient as deleteClientRow,
+  deleteYear,
+  getActiveClientId,
   getWorkspaceMeta,
-  replaceWorkspace,
+  listClientSummaries,
+  mergeWorkspaceYears,
+  renameClient as renameClientRow,
+  replaceClientWorkspace,
   saveCellEdits,
   segmentWorkspace,
+  setActiveClient,
+  type ClientSummary,
 } from "@/lib/profit-loss/db";
 import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
 import {
@@ -25,6 +35,7 @@ import {
   applyEditsToLeafAccounts,
   FREQUENCY_ORDER,
   mergeCenters,
+  type YearSlice,
 } from "@/lib/profit-loss/derive";
 import {
   accountOptions,
@@ -34,10 +45,13 @@ import {
 } from "@/lib/profit-loss/filter";
 import {
   canEditActiveCenter,
+  canEditActiveYear,
   clearFilters as clearAllFilters,
   CONSOLIDADO_ID,
   emptyFilters,
+  periodSlots,
   resolveActiveCenterId,
+  resolveVisibleYears,
   sanitizeFilters,
   seedCenterIds,
   withCenterToggled,
@@ -46,26 +60,44 @@ import {
   withCodeToggled,
   withPeriodsCleared,
   withPeriodToggled,
+  withYearsCleared,
+  withYearToggled,
   type FilterView,
   type PygFilters,
 } from "@/lib/profit-loss/filters";
-import { periodsForYear } from "@/lib/profit-loss/analytics/period";
-import type { PeriodRef } from "@/lib/profit-loss/analytics/types";
-import type { CellEdit, Frequency, PygDataset, WorkspaceMeta } from "@/lib/profit-loss/types";
+import type { PeriodSlot } from "@/lib/profit-loss/analytics/types";
+import {
+  loadedMonthsFor,
+  type AccountRow,
+  type CellEdit,
+  type Frequency,
+  type ParsedDataset,
+  type PygDataset,
+  type WorkspaceMeta,
+} from "@/lib/profit-loss/types";
 import { applyBatch, type MonthSlice } from "@/lib/profit-loss/upload/batch";
 import { LEGACY_SYSTEM } from "@/lib/profit-loss/upload/systems";
 import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
-import { compareIdentity, type WorkspaceIdentity } from "@/lib/profit-loss/workspace-identity";
+import {
+  compareIdentity,
+  deriveWorkspaceIdentity,
+  type WorkspaceIdentity,
+} from "@/lib/profit-loss/workspace-identity";
 import { PygAnalyticsProvider } from "./pyg-analytics-provider";
 
 const EMPTY_EDITS: CellEdit[] = [];
 const EMPTY_DATASETS: PygDataset[] = [];
-const EMPTY_MONTHS: number[] = [];
+const EMPTY_CLIENTS: ClientSummary[] = [];
+const EMPTY_COVERAGE: Record<number, number[]> = {};
+const EMPTY_SLICES: YearSlice[] = [];
 const CONSOLIDADO_COLOR = "#334155";
 
 export interface MonthlyBatchOutcome {
-  datasets: PygDataset[];
-  loadedMonths: number[];
+  datasets: ParsedDataset[];
+  /** The workspace's coverage after the batch, per year. */
+  loadedMonthsByYear: Record<number, number[]>;
+  /** The years the batch brought, ascending — what the summary groups by. */
+  years: number[];
   warnings: string[];
   conflicts: ReloadConflict[];
 }
@@ -76,11 +108,34 @@ export interface CenterView {
   name: string;
   color?: string;
   role: "consolidado" | "center" | "sin-centro" | "single";
+  /**
+   * This center across the VISIBLE years, ascending — what Datos lays side by side. Each slice
+   * carries its own year's edits, so an adjustment never leaks between years.
+   */
+  slices: YearSlice[];
+  /**
+   * The single year charts, exports and the ficha read: the resolved one, or the most recent
+   * when several are visible. Opening those to real multi-year series is a later change; until
+   * then this is what keeps them behaving exactly as they do with one year loaded.
+   */
   dataset: PygDataset;
   editable: boolean;
 }
 
 interface PygDataValue {
+  /** Every client, by name, with what each one holds — the selector's list. */
+  clients: ClientSummary[];
+  /** The open client, or `null` with none (a new install, or the last one just deleted). */
+  activeClientId: string | null;
+  /** The open client's entry, for whoever needs its name without looking it up. */
+  activeClient: ClientSummary | undefined;
+  /** Creates an EMPTY client and opens it. Rejects nothing: the caller validates the name with
+   * `clients.ts` where it can say what is wrong. */
+  createClient: (name: string) => Promise<string>;
+  renameClient: (clientId: string, name: string) => Promise<void>;
+  /** Deletes a client with everything it holds; the first remaining one BY NAME takes over. */
+  deleteClient: (clientId: string) => Promise<void>;
+  selectClient: (clientId: string) => Promise<void>;
   dataset: PygDataset | undefined;
   /** Every dataset in the current workspace — what a monthly batch merges onto. */
   datasets: PygDataset[];
@@ -92,13 +147,24 @@ interface PygDataValue {
   mode: "single" | "multi";
   /** Selector entries (Consolidado + centers + Sin-centro); empty in single mode. */
   views: CenterView[];
+  /** The resolved view across the visible years — what Datos lays side by side. */
+  activeSlices: YearSlice[];
   /** The resolved center — Consolidado when none or several are marked. */
   activeCenterId: string;
-  /** Month indices (0–11) declared loaded in the by-centers workspace; [] in single mode. */
+  /** Every year the workspace holds, ascending. */
+  loadedYears: number[];
+  /** The years Datos lays side by side: the marked ones, or all of them when none is marked. */
+  visibleYears: number[];
+  /** The single year charts, exports and the ficha read — the most recent visible one. */
+  chartYear: number;
+  /** Declared coverage of the year Datos is showing; [] in single mode. */
   loadedMonths: number[];
-  /** The loaded workspace's (sistema, empresa, año, modo) — `null` when empty. What a dropped
-   * batch's own identity is compared against (`compareIdentity`) before the modal decides
-   * whether to merge it in directly or ask for a replace confirmation first. */
+  /** Declared coverage of every year, for the export and the upload summary. */
+  loadedMonthsByYear: Record<number, number[]>;
+  /** The loaded workspace's (sistema, empresa, modo) — `null` when empty. What a dropped batch's
+   * own identity is compared against (`compareIdentity`) before the modal decides whether to
+   * merge it in directly or ask for a replace confirmation first. The YEAR is not part of it:
+   * another year merges in without asking. */
   workspaceIdentity: WorkspaceIdentity | null;
   /** The system the workspace came from (`upload/systems.ts`) — what decides whether the app can
    * write its raw format back. `null` with no workspace loaded. */
@@ -112,15 +178,29 @@ interface PygDataValue {
   segment: () => Promise<string[]>;
   /**
    * Merges a validated month-slice batch (either mode) onto the CURRENT workspace — one write,
-   * edits untouched. Throws if the batch mixes years/repeats a month, or if its identity
-   * (empresa, año, modo) doesn't match what's already loaded (the caller must confirm and use
-   * `replaceMonthlyWorkspace` instead — see the modal, which owns that confirmation).
+   * edits untouched. A batch may span several years; each lands on its own. Throws if the batch
+   * repeats a `(año, mes)` pair, or if its identity (sistema, empresa, modo) doesn't match what's
+   * already loaded (the caller must confirm and use `replaceMonthlyWorkspace` instead — see the
+   * modal, which owns that confirmation).
    */
   commitMonthlyBatch: (slices: MonthSlice[]) => Promise<MonthlyBatchOutcome>;
-  /** Starts a brand-new workspace (either mode) for a different identity, discarding the
-   * current one and its edits — the destructive path the modal gates behind an explicit
-   * confirmation. */
+  /** Deletes a year — its datasets, its adjustments and its coverage. Resolves with how many
+   * adjustments went with it. */
+  removeYear: (year: number) => Promise<number>;
+  /** Starts a brand-new workspace (either mode) for a different identity in the ACTIVE CLIENT,
+   * discarding its statement and its adjustments — the destructive path the clash dialog gates
+   * behind an explicit confirmation, and now its SECONDARY action. No other client is touched. */
   replaceMonthlyWorkspace: (
+    slices: MonthSlice[],
+  ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
+  /** «Crear cliente y cargar» — the clash dialog's primary action when no client matches. */
+  createClientWithBatch: (
+    name: string,
+    slices: MonthSlice[],
+  ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
+  /** «Cargar en \<cliente\>» — the clash dialog's primary action when one does. */
+  commitBatchIntoClient: (
+    clientId: string,
     slices: MonthSlice[],
   ) => Promise<Omit<MonthlyBatchOutcome, "conflicts">>;
   /** Workspace-level cuadre warnings (from meta). */
@@ -140,13 +220,15 @@ interface PygDataValue {
   deepestLevel: number;
   /** Accounts of the resolved view as "Cuenta contable" options; [] with no dataset. */
   accountOptions: AccountOption[];
-  /** The filter bar's single selection: marked accounts, centers and periods. */
+  /** The filter bar's single selection: marked accounts, centers, years and periods. */
   filters: PygFilters;
   toggleCode: (code: string) => void;
   toggleCenter: (centerId: string) => void;
-  togglePeriod: (period: PeriodRef) => void;
+  toggleYear: (year: number) => void;
+  togglePeriod: (period: PeriodSlot) => void;
   /** Each dropdown's own "Quitar selección" footer button. */
   clearCodes: () => void;
+  clearYears: () => void;
   /** "Todos (Consolidado)" — clears only the center marks. */
   clearCenters: () => void;
   clearPeriods: () => void;
@@ -173,61 +255,88 @@ const PygDataContext = createContext<PygDataValue | null>(null);
  * `charts/`, so this provider never has to import from that layer (verified: it doesn't).
  */
 export function PygDataProvider({ children }: { children: ReactNode }) {
-  // toArray() (NOT orderBy("order")): IndexedDB indexes exclude rows whose key is undefined,
-  // so `order`-less single/migrated datasets would vanish from an orderBy. buildViews sorts
-  // centers by `order` itself.
-  const datasets = useLiveQuery(() => db.datasets.toArray(), []) ?? EMPTY_DATASETS;
-  const allEdits = useLiveQuery(() => db.edits.toArray(), []) ?? EMPTY_EDITS;
-  const metaRow = useLiveQuery(() => getWorkspaceMeta(), []);
-
-  // buildViews needs every center's edits so the computed Consolidado reflects them.
-  const views = useMemo<CenterView[]>(() => buildViews(datasets, allEdits), [datasets, allEdits]);
-  const mode: "single" | "multi" =
-    views.length <= 1 && views[0]?.role === "single" ? "single" : "multi";
-
-  // Every view's own account codes (parents included) — what `sanitizeFilters` prunes a marked
-  // account against, and all this provider needs to stay out of the analytics/charts layers.
-  const filterViews = useMemo<FilterView[]>(
-    () =>
-      views.map((view) => ({
-        id: view.id,
-        editable: view.editable,
-        codes: view.dataset.accounts.map((account) => account.code),
-      })),
-    [views],
+  // Every read is bounded by the open client. `db.ts` owns the queries — a `toArray()` here
+  // would return every client's rows at once, and nothing downstream could tell.
+  const clients = useLiveQuery(() => listClientSummaries(), []) ?? EMPTY_CLIENTS;
+  const activeClientId = useLiveQuery(() => getActiveClientId(), []) ?? null;
+  const datasets =
+    useLiveQuery(
+      () => (activeClientId ? clientDatasets(activeClientId) : Promise.resolve(EMPTY_DATASETS)),
+      [activeClientId],
+    ) ?? EMPTY_DATASETS;
+  const allEdits =
+    useLiveQuery(
+      () => (activeClientId ? clientEdits(activeClientId) : Promise.resolve(EMPTY_EDITS)),
+      [activeClientId],
+    ) ?? EMPTY_EDITS;
+  const metaRow = useLiveQuery(
+    () => (activeClientId ? getWorkspaceMeta(activeClientId) : Promise.resolve(undefined)),
+    [activeClientId],
   );
 
   const [frequency, setFrequencyState] = useState<Frequency>("mensual");
   const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
-  const workspaceYear = datasets.find((d) => d.year != null)?.year ?? 0;
+  // Every year the workspace holds, read off the datasets rather than the metadata: the datasets
+  // ARE the workspace, so the two can never disagree about which years exist.
+  const loadedYears = useMemo(
+    () => [...new Set(datasets.map((d) => d.year))].sort((a, b) => a - b),
+    [datasets],
+  );
+  // Resolved before the views, because which years are on screen decides which datasets they
+  // span. `resolveVisibleYears` prunes marks against `loadedYears` itself, so this never lags a
+  // deleted year.
+  const visibleYears = useMemo(
+    () => resolveVisibleYears(rawFilters, loadedYears),
+    [rawFilters, loadedYears],
+  );
+
+  // buildViews needs every center's edits so the computed Consolidado reflects them.
+  const views = useMemo<CenterView[]>(
+    () => buildViews(datasets, allEdits, visibleYears),
+    [datasets, allEdits, visibleYears],
+  );
+  const mode: "single" | "multi" =
+    views.length <= 1 && views[0]?.role === "single" ? "single" : "multi";
+
+  // Every view's account codes (parents included), UNIONED over the visible years — what
+  // `sanitizeFilters` prunes a marked account against. The union is what lets a cuenta that only
+  // 2025 reports survive while 2025 is on screen.
+  const filterViews = useMemo<FilterView[]>(
+    () =>
+      views.map((view) => ({
+        id: view.id,
+        editable: view.editable,
+        codes: [
+          ...new Set(view.slices.flatMap((slice) => slice.dataset.accounts.map((a) => a.code))),
+        ],
+      })),
+    [views],
+  );
+
+  // The single year charts, exports and the ficha read (decision 12): the resolved one, or the
+  // most recent when several are visible.
+  const chartYear = visibleYears[visibleYears.length - 1] ?? 0;
 
   // A workspace's mode is never mixed (centers-mode and single-mode datasets never coexist —
   // every write path that could mix them is rejected before it writes), so which role is
   // present decides it.
   const sourceSystemId = datasets.length > 0 ? (metaRow?.sourceSystemId ?? LEGACY_SYSTEM) : null;
 
-  const workspaceIdentity: WorkspaceIdentity | null = useMemo(() => {
-    if (datasets.length === 0) {
-      return null;
-    }
-    const identityMode = datasets.some((d) => d.role === "center" || d.role === "sin-centro")
-      ? "centers"
-      : "single";
-    return {
-      system: metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
-      companyName: metaRow?.companyName || datasets[0].companyName,
-      year: workspaceYear,
-      mode: identityMode,
-    };
-  }, [datasets, metaRow?.companyName, metaRow?.sourceSystemId, workspaceYear]);
+  // The ACTIVE CLIENT's identity, derived exactly as every other client's is
+  // (`listClientSummaries` uses the same function) — `null` while the client is empty, which is
+  // what makes a first upload adopt instead of clash.
+  const workspaceIdentity: WorkspaceIdentity | null = useMemo(
+    () => deriveWorkspaceIdentity(datasets, metaRow),
+    [datasets, metaRow],
+  );
 
   // Sanitizing on read rather than in an effect means the filters are NEVER out of step with
   // the workspace, the resolved center or the frequency — not even for the render in between.
   const filterContext = useMemo(
-    () => ({ views: filterViews, year: workspaceYear, frequency }),
-    [filterViews, workspaceYear, frequency],
+    () => ({ views: filterViews, loadedYears, frequency }),
+    [filterViews, loadedYears, frequency],
   );
   const filters = useMemo(
     () => sanitizeFilters(rawFilters, filterContext),
@@ -237,7 +346,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const resolvedActiveId = resolveActiveCenterId(filters, filterViews);
   const activeView = views.find((v) => v.id === resolvedActiveId) ?? views[0];
   const dataset = activeView?.dataset;
-  const canEdit = canEditActiveCenter(filters, filterViews) && frequency === "mensual";
+  // Editing needs all three: one editable center, one year on screen, and the concrete monthly
+  // view. Each is a different way for a cell to be ambiguous, so each is checked on its own and
+  // Datos names whichever one is failing.
+  const canEdit =
+    canEditActiveCenter(filters, filterViews) &&
+    canEditActiveYear(filters, loadedYears) &&
+    frequency === "mensual";
 
   // Edits of the active view's dataset — for display (comments) and, on editable centers, values.
   // The synthetic Consolidado (id "consolidado") has no stored edits: they are already merged
@@ -249,7 +364,22 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   );
 
   const base = dataset?.baseFrequency;
-  const accounts = dataset?.accounts;
+  // The "Cuenta contable" universe is the union over the visible years, so an account that only
+  // one of them reports is still offerable while that year is on screen.
+  const accounts = useMemo(() => {
+    if (!activeView) {
+      return undefined;
+    }
+    const byCode = new Map<string, AccountRow>();
+    for (const slice of activeView.slices) {
+      for (const account of slice.dataset.accounts) {
+        if (!byCode.has(account.code)) {
+          byCode.set(account.code, account);
+        }
+      }
+    }
+    return [...byCode.values()];
+  }, [activeView]);
   const allowed = useMemo(() => (base ? allowedFrequencies(base) : [...FREQUENCY_ORDER]), [base]);
 
   // A NEW workspace (its set of dataset ids changed) resets to the base frequency; the filters
@@ -312,15 +442,23 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [filters, views],
   );
 
-  const togglePeriod = useCallback(
-    (period: PeriodRef) => {
-      setRawFilters(withPeriodToggled(filters, period, periodsForYear(workspaceYear, frequency)));
+  const toggleYear = useCallback(
+    (year: number) => {
+      setRawFilters(withYearToggled(filters, year, loadedYears));
     },
-    [filters, workspaceYear, frequency],
+    [filters, loadedYears],
+  );
+
+  const togglePeriod = useCallback(
+    (period: PeriodSlot) => {
+      setRawFilters(withPeriodToggled(filters, period, periodSlots(frequency)));
+    },
+    [filters, frequency],
   );
 
   const clearCodes = useCallback(() => setRawFilters(withCodesCleared(filters)), [filters]);
   const clearCenters = useCallback(() => setRawFilters(withCentersCleared(filters)), [filters]);
+  const clearYears = useCallback(() => setRawFilters(withYearsCleared(filters)), [filters]);
   const clearPeriods = useCallback(() => setRawFilters(withPeriodsCleared(filters)), [filters]);
   const clearFilters = useCallback(() => setRawFilters(clearAllFilters()), []);
 
@@ -343,15 +481,37 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [accounts],
   );
 
-  const commitWorkspace = useCallback(async (built: BuiltWorkspace) => {
-    await replaceWorkspace(built.datasets, built.meta, built.commentsByDataset);
-    // `replaceWorkspace` already persisted `built.meta.activeCenterId`; this only seeds the
-    // in-memory filter selection from it (a real center marks it, the Consolidado marks none).
-    setRawFilters({ ...emptyFilters(), centerIds: seedCenterIds(built.meta.activeCenterId) });
-  }, []);
+  const commitWorkspace = useCallback(
+    async (built: BuiltWorkspace) => {
+      if (!activeClientId) {
+        return;
+      }
+      // MERGES by year rather than replacing, INTO THE OPEN CLIENT: the years this file does not
+      // carry survive, and no other client is reachable from here whatever the file's metadata
+      // sheet declares.
+      await mergeWorkspaceYears(
+        activeClientId,
+        built.datasets,
+        built.meta,
+        built.commentsByDataset,
+      );
+      // The write already persisted `built.meta.activeCenterId`; this only seeds the in-memory
+      // filter selection from it (a real center marks it, the Consolidado marks none).
+      setRawFilters({
+        ...emptyFilters(),
+        centerIds: seedCenterIds(built.meta.activeCenterId),
+        // Same rule as a monthly batch: what just arrived is what the reader wants to look at.
+        years: [...new Set(built.datasets.map((dataset) => dataset.year))].sort((a, b) => a - b),
+      });
+    },
+    [activeClientId],
+  );
 
   const commitMonthlyBatch = useCallback(
     async (slices: MonthSlice[]): Promise<MonthlyBatchOutcome> => {
+      if (!activeClientId) {
+        throw new Error("Crea un cliente antes de cargar datos.");
+      }
       const batchMode = slices[0]?.mode;
       const relevant = datasets.filter((d) =>
         batchMode === "single"
@@ -363,7 +523,6 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
           ? {
               system: slices[0].system,
               companyName: slices[0].companyName,
-              year: slices[0].year,
               mode: batchMode,
             }
           : null;
@@ -377,11 +536,12 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         // ever silently mixing identities into the same workspace.
         throw new Error("El archivo no coincide con la identidad del workspace cargado.");
       }
-      const result = applyBatch(relevant, metaRow?.loadedMonths ?? EMPTY_MONTHS, slices);
+      const result = applyBatch(relevant, metaRow?.loadedMonthsByYear ?? EMPTY_COVERAGE, slices);
+      const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
       const conflicts = detectReloadConflicts(
         relevant,
         result.datasets,
-        slices.map((s) => s.month),
+        slices.map((s) => ({ year: s.year, month: s.month })),
         allEdits,
       );
       const nextMeta: WorkspaceMeta = {
@@ -391,39 +551,120 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
           batchMode === "single"
             ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
             : (metaRow?.activeCenterId ?? CONSOLIDADO_ID),
-        loadedMonths: result.loadedMonths,
+        loadedMonthsByYear: result.loadedMonthsByYear,
         // Identity was just checked, so the batch's system IS the workspace's.
         sourceSystemId: slices[0]?.system ?? metaRow?.sourceSystemId ?? LEGACY_SYSTEM,
       };
-      await applyMonthSlice(result.datasets, nextMeta);
+      await applyMonthSlice(activeClientId, result.datasets, nextMeta);
+      // Marking what just arrived: loading a month is the clearest statement of which year the
+      // user wants to look at, and without this a second year would land the table in read-only
+      // right after the action that asked to edit it.
+      setRawFilters((prev) => ({ ...prev, years: batchYears }));
       return {
         datasets: result.datasets,
-        loadedMonths: result.loadedMonths,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        years: batchYears,
         warnings: result.warnings,
         conflicts,
       };
     },
-    [datasets, metaRow, allEdits, workspaceIdentity],
+    [activeClientId, datasets, metaRow, allEdits, workspaceIdentity],
   );
 
-  const replaceMonthlyWorkspace = useCallback(async (slices: MonthSlice[]) => {
-    const result = applyBatch([], [], slices);
-    const meta: WorkspaceMeta = {
-      companyName: result.datasets[0]?.companyName || "",
+  const replaceMonthlyWorkspace = useCallback(
+    async (slices: MonthSlice[], clientId: string = activeClientId ?? "") => {
+      if (!clientId) {
+        throw new Error("Crea un cliente antes de cargar datos.");
+      }
+      const result = applyBatch([], {}, slices);
+      const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
+      const meta: WorkspaceMeta = {
+        companyName: result.datasets[0]?.companyName || "",
+        warnings: result.warnings,
+        activeCenterId:
+          slices[0]?.mode === "single" ? (result.datasets[0]?.id ?? "") : CONSOLIDADO_ID,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        sourceSystemId: slices[0]?.system ?? LEGACY_SYSTEM,
+      };
+      // Only THIS client is emptied. Its comments survive on the accounts the new file also
+      // brings — see `replaceClientWorkspace`.
+      await replaceClientWorkspace(clientId, result.datasets, meta);
+      setRawFilters({ ...emptyFilters(), years: batchYears });
+      return {
+        datasets: result.datasets,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        years: batchYears,
+        warnings: result.warnings,
+      };
+    },
+    [activeClientId],
+  );
+
+  /**
+   * Creates a client, opens it and loads the batch there — the clash dialog's «Crear cliente y
+   * cargar». The client is born empty, so the load ADOPTS the file's identity and nothing can
+   * clash; the client that was open is not touched.
+   */
+  const createClientWithBatch = useCallback(
+    async (name: string, slices: MonthSlice[]) => {
+      const client = await createClientRow(name);
+      return replaceMonthlyWorkspace(slices, client.id);
+    },
+    [replaceMonthlyWorkspace],
+  );
+
+  /** «Cargar en \<cliente\>» — opens the client that DOES match and loads there, merging onto
+   * whatever it already holds. Nothing is replaced: the identities agree by construction. */
+  const commitBatchIntoClient = useCallback(async (clientId: string, slices: MonthSlice[]) => {
+    const [existing, meta] = await Promise.all([
+      clientDatasets(clientId),
+      getWorkspaceMeta(clientId),
+    ]);
+    const batchMode = slices[0]?.mode;
+    const relevant = existing.filter((d) =>
+      batchMode === "single" ? d.role === "single" : d.role === "center" || d.role === "sin-centro",
+    );
+    const result = applyBatch(relevant, meta?.loadedMonthsByYear ?? EMPTY_COVERAGE, slices);
+    const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
+    await applyMonthSlice(clientId, result.datasets, {
+      companyName: result.datasets[0]?.companyName || meta?.companyName || "",
       warnings: result.warnings,
       activeCenterId:
-        slices[0]?.mode === "single" ? (result.datasets[0]?.id ?? "") : CONSOLIDADO_ID,
-      loadedMonths: result.loadedMonths,
-      sourceSystemId: slices[0]?.system ?? LEGACY_SYSTEM,
-    };
-    await replaceWorkspace(result.datasets, meta);
-    setRawFilters(emptyFilters());
+        batchMode === "single"
+          ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
+          : (meta?.activeCenterId ?? CONSOLIDADO_ID),
+      loadedMonthsByYear: result.loadedMonthsByYear,
+      sourceSystemId: slices[0]?.system ?? meta?.sourceSystemId ?? LEGACY_SYSTEM,
+    });
+    await setActiveClient(clientId);
+    setRawFilters({ ...emptyFilters(), years: batchYears });
     return {
       datasets: result.datasets,
-      loadedMonths: result.loadedMonths,
+      loadedMonthsByYear: result.loadedMonthsByYear,
+      years: batchYears,
       warnings: result.warnings,
     };
   }, []);
+
+  const removeYear = useCallback(
+    async (year: number) => {
+      if (!activeClientId) {
+        return 0;
+      }
+      const { deletedEdits } = await deleteYear(activeClientId, year);
+      setRawFilters((prev) => ({ ...prev, years: prev.years.filter((y) => y !== year) }));
+      return deletedEdits;
+    },
+    [activeClientId],
+  );
+
+  const createClient = useCallback(async (name: string) => (await createClientRow(name)).id, []);
+  const renameClient = useCallback(
+    (clientId: string, name: string) => renameClientRow(clientId, name),
+    [],
+  );
+  const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
+  const selectClient = useCallback((clientId: string) => setActiveClient(clientId), []);
 
   const saveEdit = useCallback(
     async (code: string, monthIndex: number, value: number | null | undefined, comment: string) => {
@@ -448,10 +689,25 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   const segmented = useMemo(() => datasets.some((d) => isSegmented(d.accounts)), [datasets]);
   const segmentable = useMemo(() => datasets.some((d) => canSegment(d.accounts)), [datasets]);
-  const segment = useCallback(async () => (await segmentWorkspace()).skipped, []);
+  const segment = useCallback(
+    async () => (activeClientId ? (await segmentWorkspace(activeClientId)).skipped : []),
+    [activeClientId],
+  );
+
+  const activeClient = useMemo(
+    () => clients.find((client) => client.id === activeClientId),
+    [clients, activeClientId],
+  );
 
   const value = useMemo<PygDataValue>(
     () => ({
+      clients,
+      activeClientId,
+      activeClient,
+      createClient,
+      renameClient,
+      deleteClient,
+      selectClient,
       dataset,
       datasets,
       edits,
@@ -460,8 +716,15 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       setFrequency,
       mode,
       views,
+      activeSlices: activeView?.slices ?? EMPTY_SLICES,
       activeCenterId: resolvedActiveId,
-      loadedMonths: metaRow?.loadedMonths ?? EMPTY_MONTHS,
+      loadedYears,
+      visibleYears,
+      chartYear,
+      // Datos reads the coverage of the year it is showing; with several on screen it is
+      // read-only anyway, and each column resolves its own year's coverage from the record.
+      loadedMonths: loadedMonthsFor(metaRow, visibleYears[0] ?? chartYear),
+      loadedMonthsByYear: metaRow?.loadedMonthsByYear ?? EMPTY_COVERAGE,
       workspaceIdentity,
       sourceSystemId,
       commitWorkspace,
@@ -470,6 +733,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
+      createClientWithBatch,
+      commitBatchIntoClient,
+      removeYear,
       warnings: metaRow?.warnings ?? [],
       saveEdit,
       deepestLevel: deepest,
@@ -477,9 +743,11 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       filters,
       toggleCode,
       toggleCenter,
+      toggleYear,
       togglePeriod,
       clearCodes,
       clearCenters,
+      clearYears,
       clearPeriods,
       clearFilters,
       canEdit,
@@ -488,6 +756,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       setExpandLevel,
     }),
     [
+      clients,
+      activeClientId,
+      activeClient,
+      createClient,
+      renameClient,
+      deleteClient,
+      selectClient,
       dataset,
       datasets,
       edits,
@@ -496,8 +771,12 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       setFrequency,
       mode,
       views,
+      activeView,
       resolvedActiveId,
-      metaRow?.loadedMonths,
+      loadedYears,
+      visibleYears,
+      chartYear,
+      metaRow,
       workspaceIdentity,
       sourceSystemId,
       commitWorkspace,
@@ -506,16 +785,20 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       segment,
       commitMonthlyBatch,
       replaceMonthlyWorkspace,
-      metaRow?.warnings,
+      createClientWithBatch,
+      commitBatchIntoClient,
+      removeYear,
       saveEdit,
       deepest,
       options,
       filters,
       toggleCode,
       toggleCenter,
+      toggleYear,
       togglePeriod,
       clearCodes,
       clearCenters,
+      clearYears,
       clearPeriods,
       clearFilters,
       canEdit,
@@ -543,48 +826,63 @@ export function usePygData(): PygDataValue {
 }
 
 /**
- * Builds the selector views: single mode → the lone dataset; multi mode → Consolidado (a
- * computed sum of the monthly centers) + each center + Sin-centro. The Consolidado dataset is
- * synthetic (never persisted): its accounts are the column-wise sum of the centers.
+ * Builds the selector views over the VISIBLE years: single mode → the lone statement; multi mode
+ * → Consolidado (a computed sum of the monthly centers) + each center + Sin-centro. A view spans
+ * every visible year, one `YearSlice` each; the Consolidado's per-year dataset is synthetic
+ * (never persisted): its accounts are the column-wise sum of that year's centers.
+ *
+ * The center list is the UNION across the visible years, so a center that only 2026 reports still
+ * appears while 2026 is on screen — its 2025 slice is simply absent, and Datos renders that
+ * year's columns empty rather than zero.
  */
-function buildViews(datasets: PygDataset[], allEdits: CellEdit[]): CenterView[] {
-  if (datasets.length === 0) {
+function buildViews(
+  datasets: PygDataset[],
+  allEdits: CellEdit[],
+  visibleYears: number[],
+): CenterView[] {
+  const visible = datasets.filter((d) => visibleYears.includes(d.year));
+  if (visible.length === 0) {
     return [];
   }
-  const single = datasets.find((d) => d.role === "single");
-  if (single && datasets.length === 1) {
+  const editsOf = (id: string) => allEdits.filter((e) => e.datasetId === id);
+  const years = [...visibleYears].sort((a, b) => a - b);
+
+  const singles = visible.filter((d) => d.role === "single");
+  if (singles.length > 0 && singles.length === visible.length) {
+    const slices = slicesByYear(singles, years, editsOf);
     return [
       {
-        id: single.id,
-        name: single.companyName,
+        id: singles[0].id,
+        name: singles[0].companyName,
         role: "single",
-        dataset: single,
-        editable: single.baseFrequency !== "anual",
+        slices,
+        dataset: latestOf(slices),
+        editable: singles.every((d) => d.baseFrequency !== "anual"),
       },
     ];
   }
 
-  // "Sin centro de costo" is an ordinary monthly, editable center now (see design.md decision
-  // 6) — its `role` tag survives only for its distinct color and its position at the end of
-  // the list, so it joins the same sort/merge/editable treatment as every other center.
-  const centers = datasets
-    .filter((d) => d.role === "center" || d.role === "sin-centro")
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // "Sin centro de costo" is an ordinary monthly, editable center — its `role` tag survives only
+  // for its distinct color and its position at the end of the list, so it joins the same
+  // sort/merge/editable treatment as every other center.
+  const centers = visible.filter((d) => d.role === "center" || d.role === "sin-centro");
+  if (centers.length === 0) {
+    return [];
+  }
   const views: CenterView[] = [];
 
-  if (centers.length > 0) {
+  // One Consolidado slice per year: summing across years would be a figure nobody asked for.
+  const consolidatedSlices: YearSlice[] = years.flatMap((year) => {
+    const ofYear = centers.filter((c) => c.year === year);
+    if (ofYear.length === 0) {
+      return [];
+    }
     const merged = mergeCenters(
-      centers.map((c) =>
-        applyEditsToLeafAccounts(
-          c.accounts,
-          allEdits.filter((e) => e.datasetId === c.id),
-        ),
-      ),
+      ofYear.map((c) => applyEditsToLeafAccounts(c.accounts, editsOf(c.id))),
     );
-    const base = centers[0];
-    const consolidated: PygDataset = {
-      ...base,
-      id: CONSOLIDADO_ID,
+    const dataset: PygDataset = {
+      ...ofYear[0],
+      id: `${CONSOLIDADO_ID}-${year}`,
       role: "center",
       centerId: CONSOLIDADO_ID,
       costCenterName: undefined,
@@ -592,25 +890,61 @@ function buildViews(datasets: PygDataset[], allEdits: CellEdit[]): CenterView[] 
       resultFromFile: [],
       warnings: [],
     };
-    views.push({
-      id: CONSOLIDADO_ID,
-      name: "Consolidado",
-      color: CONSOLIDADO_COLOR,
-      role: "consolidado",
-      dataset: consolidated,
-      editable: false,
-    });
-  }
+    // The synthetic Consolidado has no stored edits: `mergeCenters` already folded them in.
+    return [{ dataset, edits: [] }];
+  });
 
+  views.push({
+    id: CONSOLIDADO_ID,
+    name: "Consolidado",
+    color: CONSOLIDADO_COLOR,
+    role: "consolidado",
+    slices: consolidatedSlices,
+    dataset: latestOf(consolidatedSlices),
+    editable: false,
+  });
+
+  // Ordered by the workspace-wide slot (`assignCenterSlots`), which is the same in every year.
+  const byCenterId = new Map<string, PygDataset[]>();
   for (const center of centers) {
+    byCenterId.set(center.centerId as string, [
+      ...(byCenterId.get(center.centerId as string) ?? []),
+      center,
+    ]);
+  }
+  const ordered = [...byCenterId.entries()].sort(
+    ([, a], [, b]) => (a[0].order ?? 0) - (b[0].order ?? 0),
+  );
+
+  for (const [centerId, ofCenter] of ordered) {
+    const slices = slicesByYear(ofCenter, years, editsOf);
+    const newest = ofCenter.reduce((best, d) => (d.year > best.year ? d : best), ofCenter[0]);
     views.push({
-      id: center.centerId as string,
-      name: center.costCenterName || (center.centerId as string),
-      color: center.centerColor,
-      role: center.role === "sin-centro" ? "sin-centro" : "center",
-      dataset: center,
-      editable: center.baseFrequency !== "anual",
+      id: centerId,
+      name: newest.costCenterName || centerId,
+      color: newest.centerColor,
+      role: newest.role === "sin-centro" ? "sin-centro" : "center",
+      slices,
+      dataset: latestOf(slices),
+      editable: ofCenter.every((d) => d.baseFrequency !== "anual"),
     });
   }
   return views;
+}
+
+/** One slice per visible year the group actually has, ascending. */
+function slicesByYear(
+  group: PygDataset[],
+  years: number[],
+  editsOf: (id: string) => CellEdit[],
+): YearSlice[] {
+  return years.flatMap((year) => {
+    const dataset = group.find((d) => d.year === year);
+    return dataset ? [{ dataset, edits: editsOf(dataset.id) }] : [];
+  });
+}
+
+/** The most recent slice's dataset — what charts, exports and the ficha read (decision 12). */
+function latestOf(slices: YearSlice[]): PygDataset {
+  return slices[slices.length - 1].dataset;
 }

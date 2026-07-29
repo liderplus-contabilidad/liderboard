@@ -5,7 +5,7 @@
  * detectan y se reportan").
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
-import type { CellEdit, PygDataset } from "./types";
+import type { CellEdit, ParsedDataset } from "./types";
 
 const SUM_TOLERANCE = 0.011;
 
@@ -15,36 +15,51 @@ export interface ReloadConflict {
   centerId: string;
   centerName: string;
   code: string;
-  accountName: string;
+  /** The year the conflicting cell belongs to — a batch can touch several. */
+  year: number;
   monthIndex: number;
+  accountName: string;
   previousFileValue: number;
   newFileValue: number;
   adjustmentValue: number;
 }
 
+/** One `(año, mes)` a batch actually wrote. */
+export interface TouchedMonth {
+  year: number;
+  month: number;
+}
+
 /**
- * `before`/`after` are the workspace's datasets right before and right after applying a
- * batch; `touchedMonths` are the month indices the batch actually wrote. Only value edits
- * (comment-only edits never conflict) on a touched month are checked.
+ * `before`/`after` are the workspace's datasets right before and right after applying a batch;
+ * `touched` are the `(año, mes)` pairs the batch actually wrote. Only value edits (comment-only
+ * edits never conflict) on a touched cell are checked.
+ *
+ * The year is part of the key: reloading March of 2026 must not flag an adjustment sitting on
+ * March of 2025, and the two edits are indistinguishable by `monthIndex` alone — it is the
+ * DATASET that carries the year.
  */
 export function detectReloadConflicts(
-  before: readonly PygDataset[],
-  after: readonly PygDataset[],
-  touchedMonths: readonly number[],
+  before: readonly ParsedDataset[],
+  after: readonly ParsedDataset[],
+  touched: readonly TouchedMonth[],
   edits: readonly CellEdit[],
 ): ReloadConflict[] {
-  const touched = new Set(touchedMonths);
+  const touchedKeys = new Set(touched.map((entry) => `${entry.year}-${entry.month}`));
   const beforeById = new Map(before.map((d) => [d.id, d]));
   const afterById = new Map(after.map((d) => [d.id, d]));
 
   const conflicts: ReloadConflict[] = [];
   for (const edit of edits) {
-    if (edit.value === undefined || !touched.has(edit.monthIndex)) {
+    if (edit.value === undefined) {
       continue;
     }
     const beforeDataset = beforeById.get(edit.datasetId);
     const afterDataset = afterById.get(edit.datasetId);
     if (!beforeDataset || !afterDataset) {
+      continue;
+    }
+    if (!touchedKeys.has(`${afterDataset.year}-${edit.monthIndex}`)) {
       continue;
     }
     const beforeAccount = beforeDataset.accounts.find((a) => a.code === edit.code);
@@ -59,6 +74,7 @@ export function detectReloadConflicts(
       centerId: afterDataset.centerId ?? afterDataset.id,
       centerName: afterDataset.costCenterName ?? afterDataset.companyName,
       code: edit.code,
+      year: afterDataset.year,
       accountName: afterAccount?.name ?? beforeAccount?.name ?? edit.code,
       monthIndex: edit.monthIndex,
       previousFileValue,
@@ -74,7 +90,8 @@ export function detectReloadConflicts(
 export function describeConflict(conflict: ReloadConflict): string {
   const month = MONTHS_FULL_ES[conflict.monthIndex] ?? `mes ${conflict.monthIndex + 1}`;
   return (
-    `${conflict.centerName} · ${conflict.code} ${conflict.accountName} (${month}): ` +
+    `${conflict.centerName} · ${conflict.code} ${conflict.accountName} ` +
+    `(${month} de ${conflict.year}): ` +
     `el archivo cambió de ${conflict.previousFileValue} a ${conflict.newFileValue}, ` +
     `pero el ajuste sigue en ${conflict.adjustmentValue}.`
   );

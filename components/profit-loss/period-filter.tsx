@@ -10,14 +10,14 @@ import {
 } from "@/components/ui/dropdown";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { periodLabel } from "@/lib/profit-loss/analytics/period";
-import type { PeriodRef } from "@/lib/profit-loss/analytics/types";
+import { periodSlotLabel } from "@/lib/profit-loss/analytics/period";
+import type { PeriodSlot } from "@/lib/profit-loss/analytics/types";
 
 export interface PeriodFilterProps {
   /** Every period of the active granularity, in calendar order; [] with no dataset loaded. */
-  periods: readonly PeriodRef[];
-  selected: readonly PeriodRef[];
-  onToggle: (period: PeriodRef) => void;
+  periods: readonly PeriodSlot[];
+  selected: readonly PeriodSlot[];
+  onToggle: (period: PeriodSlot) => void;
   onClear: () => void;
 }
 
@@ -48,7 +48,7 @@ export function PeriodFilter({ periods, selected, onToggle, onClear }: PeriodFil
                   selected={picked.has(period.index)}
                   onToggle={() => onToggle(period)}
                 >
-                  {periodLabel(period)}
+                  {periodSlotLabel(period)}
                 </DropdownOption>
               ))}
             </div>

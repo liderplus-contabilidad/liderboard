@@ -343,24 +343,43 @@ describe("periodLabels", () => {
 describe("toDatosGrid", () => {
   it("builds the monthly grid with recomputed parents and the result row", () => {
     const grid = toDatosGrid(monthlyDataset(), [], "mensual");
-    expect(grid.months).toHaveLength(12);
+    // Twelve months plus the year's Total, which is a column like any other.
+    expect(grid.columns).toHaveLength(13);
+    expect(grid.columns.map((c) => c.label).slice(0, 2)).toEqual(["Ene", "Feb"]);
+    expect(grid.columns[12]).toMatchObject({ kind: "total", label: "Total" });
     const rows = flattenGrid(grid);
     expect(rows.get("4")?.cells[0]?.value).toBe(130);
     expect(rows.get("4")?.level).toBe(1);
     const result = grid.rows.find((row) => row.isResult);
     expect(result?.cells.map((c) => c.value).slice(0, 4)).toEqual([40, 200, 25, -5]);
+    // The Total cell closes the row, aligned with the Total column.
+    expect(result?.cells[12]?.value).toBe(260);
     expect(grid.utilidad?.positive).toBe(true);
     expect(grid.utilidad?.label).toContain("Utilidad");
   });
 
   it("aggregates cells per frequency", () => {
     const grid = toDatosGrid(monthlyDataset(), [], "trimestral");
-    expect(grid.months).toEqual(["T1", "T2", "T3", "T4"]);
+    expect(grid.columns.map((c) => c.label)).toEqual(["T1", "T2", "T3", "T4", "Total"]);
     const rows = flattenGrid(grid);
-    expect(rows.get("4")?.cells.map((c) => c.value)).toEqual([355, 0, 0, 0]);
-    expect(rows.get("5")?.cells.map((c) => c.value)).toEqual([90, 5, 0, 0]);
+    // Four quarters, then the year's Total — the sum of those four and nothing else.
+    expect(rows.get("4")?.cells.map((c) => c.value)).toEqual([355, 0, 0, 0, 355]);
+    expect(rows.get("5")?.cells.map((c) => c.value)).toEqual([90, 5, 0, 0, 95]);
     const result = grid.rows.find((row) => row.isResult);
-    expect(result?.cells.map((c) => c.value)).toEqual([265, -5, 0, 0]);
+    expect(result?.cells.map((c) => c.value)).toEqual([265, -5, 0, 0, 260]);
+  });
+
+  it("cierra cada frecuencia con su Total, salvo la anual", () => {
+    for (const frequency of ["mensual", "trimestral", "semestral"] as const) {
+      const columns = toDatosGrid(monthlyDataset(), [], frequency).columns;
+      expect(columns.filter((c) => c.kind === "total")).toHaveLength(1);
+      expect(columns[columns.length - 1].kind).toBe("total");
+    }
+  });
+
+  it("no rotula el año mientras solo hay uno a la vista", () => {
+    const columns = toDatosGrid(monthlyDataset(), [], "mensual").columns;
+    expect(columns.every((column) => !/\d{2}$/.test(column.label))).toBe(true);
   });
 
   it("recomputes parents and result from leaf value edits", () => {
@@ -437,7 +456,9 @@ describe("toDatosGrid", () => {
       resultFromFile: [260],
     };
     const grid = toDatosGrid(dataset, [], "anual");
-    expect(grid.months).toEqual(["Total"]);
+    // In annual granularity the year IS one column, so no Total is added beside it.
+    expect(grid.columns.map((c) => c.label)).toEqual(["Total"]);
+    expect(grid.columns.every((c) => c.kind === "period")).toBe(true);
     expect(flattenGrid(grid).get("4")?.cells).toHaveLength(1);
     expect(flattenGrid(grid).get("4")?.cells[0]?.value).toBe(355);
   });
@@ -495,10 +516,10 @@ describe("toDatosGrid", () => {
  * decides whether editing one cell re-renders one row or five hundred.
  */
 describe("toDatosGrid: reutilización de filas", () => {
-  it("devuelve las mismas filas y los mismos meses cuando nada cambió", () => {
+  it("devuelve las mismas filas y las mismas columnas cuando nada cambió", () => {
     const first = toDatosGrid(monthlyDataset(), [], "mensual");
     const second = toDatosGrid(monthlyDataset(), [], "mensual", first);
-    expect(second.months).toBe(first.months);
+    expect(second.columns).toBe(first.columns);
     for (const [code, row] of flattenGrid(first)) {
       expect(flattenGrid(second).get(code)).toBe(row);
     }
@@ -545,8 +566,8 @@ describe("toDatosGrid: reutilización de filas", () => {
   it("no reutiliza nada al cambiar de frecuencia: las celdas ya no son las mismas", () => {
     const monthly = toDatosGrid(monthlyDataset(), [], "mensual");
     const quarterly = toDatosGrid(monthlyDataset(), [], "trimestral", monthly);
-    expect(quarterly.months).not.toBe(monthly.months);
-    expect(quarterly.months).toEqual(["T1", "T2", "T3", "T4"]);
+    expect(quarterly.columns).not.toBe(monthly.columns);
+    expect(quarterly.columns.map((c) => c.label)).toEqual(["T1", "T2", "T3", "T4", "Total"]);
     expect(flattenGrid(quarterly).get("4")).not.toBe(flattenGrid(monthly).get("4"));
   });
 

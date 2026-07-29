@@ -1,17 +1,22 @@
 /**
- * The shapes the presentation layer can draw, the engine transformation a card applies, and the
- * two pure functions that keep a query honest: one translates the filter bar's marks into a
- * `SeriesQuery`, the other resolves the color every series gets.
+ * The shapes the presentation layer can draw, and the two pure functions that keep a query
+ * honest: one translates the filter bar's marks into a `SeriesQuery`, the other resolves the
+ * color every series gets.
  *
  * Both live here rather than in a component for the same reason the engine does: a query
  * assembled inline is a query nobody can test — and the moment two views assemble one each they
- * drift. The presets and the Análisis tab all go through `toSeriesQuery`; there is no dimension
- * to declare, so unlike the "Comparar por" model this replaces, there is nothing else to keep in
- * sync with it.
+ * drift. Every card goes through `toSeriesQuery`; there is no dimension to declare, so unlike
+ * the "Comparar por" model this replaces, there is nothing else to keep in sync with it.
  */
 import { CHART_MAX_SERIES, colorForEntity } from "@/lib/charts/palette";
 import type { PygFilters } from "../filters";
-import type { AnalyticsSource, SeriesKey, SeriesQuery } from "../analytics/types";
+import type {
+  AnalyticsSource,
+  PeriodRef,
+  PeriodSlot,
+  SeriesKey,
+  SeriesQuery,
+} from "../analytics/types";
 import type { Frequency } from "../types";
 
 /** The shapes the presentation layer can draw. One per entry of the design's form table. */
@@ -108,9 +113,25 @@ export function toSeriesQuery(filters: PygFilters, context: SelectionContext): S
     centerIds: filters.centerIds.length > 0 ? filters.centerIds : [context.activeCenterId],
     years: [context.year],
     frequency: context.frequency,
-    ...(filters.periods.length > 0 ? { periods: filters.periods } : {}),
+    ...(filters.periods.length > 0
+      ? { periods: expandSlots(filters.periods, [context.year]) }
+      : {}),
     limit: CHART_MAX_SERIES,
   };
+}
+
+/**
+ * A marked period is a year-less slot (`PeriodSlot`); the engine reads dated `PeriodRef`s. This
+ * is the one place the two meet — the slot is stamped with each year in play, which is what
+ * makes «Ene» narrow every visible year rather than only the first.
+ *
+ * Charts read a single resolved year for now, so `years` has one entry; opening them to real
+ * multi-year series is a later change, and this expansion is already what it will need.
+ */
+export function expandSlots(slots: readonly PeriodSlot[], years: readonly number[]): PeriodRef[] {
+  return years.flatMap((year) =>
+    slots.map((slot) => ({ year, frequency: slot.frequency, index: slot.index })),
+  );
 }
 
 /** Clamps a shape to one the transformation admits; the head of the list is the default. */

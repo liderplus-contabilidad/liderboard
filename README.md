@@ -80,6 +80,14 @@ usuario pasa por `lib/format.ts` (`formatCurrency` → USD de Ecuador con símbo
 que todo el panel hable el mismo idioma. Los módulos nuevos las reutilizan en vez de
 formatear localmente.
 
+En Ecuador el dólar se escribe **con coma para los miles y punto para los centavos**
+(`$57,961.95`). El ICU de `es-EC` aplica la convención española y devuelve `$57.961,95`,
+así que los formateadores se construyen sobre `en-US` —el par de separadores que el país
+usa de verdad— y la mitad española del idioma (el espacio del `%`, los textos) se escribe
+a mano. `parseCurrency` es su inverso exacto y **valida la forma antes de limpiar los
+separadores**: un importe tecleado al revés (`17.338,85`) se rechaza en vez de leerse como
+17,33885.
+
 ## Sistema visual
 
 Los tokens viven una sola vez en el bloque `@theme` de `app/globals.css` y se consumen como
@@ -170,8 +178,11 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
 
 **Pérdidas y Ganancias (PyG)** tiene su capa de filtros conectada a los datos:
 
-- El **nombre del cliente activo** se muestra en el header del módulo (`ActiveClient`),
-  con estado vacío mientras no se carga un Excel.
+- El bloque del header (`ActiveClient`) es el **selector de clientes** del módulo (ver "Clientes
+  de PyG" más abajo): nombre del cliente abierto, y al desplegarlo la lista completa con buscador,
+  `⌘K`, `+ Agregar cliente` y un menú `⋯` por fila para renombrar o eliminar. Sigue siendo
+  **prop-driven**: sin lista de clientes se rinde como el bloque de solo lectura de siempre, que
+  es como lo usa Ocupaciones.
 - **La fila de filtros es la única selección del módulo** — no hay un segundo control (ni
   "Comparar por", ni un selector de centro propio de Datos) donde elegir lo mismo distinto.
   En orden: **Cuenta contable** (marca varias; son a la vez el foco de la tabla de Datos y el
@@ -213,9 +224,9 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   **ese** centro, editable en vista Mensual (Sin centro de costo también, es un centro más). La
   tabla nombra la causa cuando no se puede editar (Consolidado, varios centros marcados, o vista
   no mensual). El subtítulo del header nombra el centro resuelto.
-- **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó
-  (`loadedMonths`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar, distinto
-  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
+- **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó de cada año
+  (`loadedMonthsByYear`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar,
+  distinto de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
   amarillo pastel (`marked`), conviviendo con el triángulo de comentario: una reclasificación
   mueve una celda de la sección de arriba, casi siempre fuera de vista, y una celda pintada se
   encuentra de un vistazo donde un subrayado no se veía. La que **acaba** de moverse lleva además
@@ -268,9 +279,12 @@ Ambas pestañas consumen el **motor analítico** (`lib/profit-loss/analytics/`) 
 capa de traducción pura y testeada; ya no muestran "próximamente".
 
 - **Reparto.** _Gráficos_ responde **cuánto y de qué** (montos por periodo, comparación entre
-  cuentas y centros, composición de un total). _Análisis_ responde **cómo cambia**: las
-  transformaciones del motor — acumulado YTD, índice base 100, media móvil, mismo periodo del
-  año anterior, % sobre ingresos, % sobre la cuenta padre, variación y concentración de gastos.
+  cuentas y centros, composición de un total). _Análisis_ responde **cómo cambia**: el peso de
+  cada cuenta sobre una base (análisis vertical), el % sobre ingresos de los gastos principales,
+  la variación contra el periodo anterior y la concentración de gastos. Ninguna de las dos tiene
+  selector de transformación: nombrar la operación del motor —índice base 100, media móvil, %
+  sobre la cuenta padre— obligaba a conocer el motor, y lo que el contador lee son las preguntas,
+  no las operaciones.
 - **Vista por defecto, y filtros que acotan en vez de reemplazar.** Con un Excel cargado y
   nada marcado en la fila de filtros, _Gráficos_ trae los totales del periodo como **stat
   tiles** (Ingresos, Costos y Gastos, Utilidad o Pérdida — un total es un número, no una
@@ -283,8 +297,7 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   propósito cuando lo marcado cae fuera de su pregunta, con un estado vacío que nombra la
   causa en vez de un panel en blanco. Todos son **consultas normales al motor**
   (`toSeriesQuery`/`presetQuery`), la misma ruta para el preset y para lo marcado — no hay un
-  camino aparte. En Análisis, elegir una transformación del selector agrega una cuarta
-  tarjeta construida sobre las mismas marcas; las tres de pregunta fija no desaparecen.
+  camino aparte.
 - **Análisis vertical sobre una cuenta base elegible.** La primera tarjeta de _Análisis_ es una
   **tabla** (no una gráfica, así que no pasa por `ChartCard`) de cuentas × periodos: cada celda
   es el % que esa cuenta representa de una cuenta base, y leer la fila es ver cómo fue variando
@@ -306,9 +319,9 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   `lib/profit-loss/filters.ts`, puro), porque las tres pestañas los leen; se sanean **en
   lectura**, nunca en un efecto. `PygAnalyticsProvider` (montado dentro de `PygDataProvider`,
   así que el layout no cambia) expone `usePygAnalytics()` con solo la mitad de presentación —
-  `transform`, `chartType`, `sources`, `colorOf`, `runQuery` — porque solo Gráficos/Análisis
-  la usan. La selección vive **en memoria** — sobrevive al cambio entre pestañas, no al
-  recargar.
+  `sources`, `colorOf`, `runQuery` y la cuenta base del análisis vertical — porque solo
+  Gráficos/Análisis la usan. La selección vive **en memoria** — sobrevive al cambio entre
+  pestañas, no al recargar.
 
 **Reglas que las gráficas no rompen** (cada una con su test en la capa pura):
 
@@ -368,6 +381,77 @@ dominio. La galería viva está en `/docs/components#excel-actions`.
 tu proveedor y tu modal de carga sobre `<ExcelActions/>`, y decláralo en el `rightSlot` de
 `MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de que el
 caso es general y va en la API, no en tu módulo.
+
+## Clientes de PyG
+
+Una firma contable lleva diez clientes, no uno. PyG guarda **varios a la vez**, y abrir uno no
+toca los datos, ajustes ni comentarios de los demás.
+
+- **Qué es un cliente.** Un nombre que elige el usuario más **exactamente un** estado de
+  resultados — sus datasets, su cobertura, sus ajustes y sus comentarios. La lista es plana: un
+  cliente no contiene otros ni varios estados. Un cliente que migró de sistema contable se modela
+  como dos clientes, porque sus planes de cuentas no se mezclan.
+- **Se crea explícitamente y nace vacío** (`+ Agregar cliente`). **Ninguna carga inventa un
+  cliente por su cuenta**; la única excepción la pide el usuario desde el diálogo de choque
+  ("Crear cliente y cargar"), con el nombre propuesto y **editable**.
+- **La etiqueta no es la identidad.** El usuario llama «Manor Galápagos» a lo que el archivo llama
+  `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, así que el nombre **nunca** se compara contra un
+  archivo. Un cliente vacío no tiene identidad: su primera carga la **adopta**, y de ahí en
+  adelante el choque se comprueba contra la identidad adoptada. Renombrar no la cambia.
+- **Reglas del nombre** (`lib/profit-loss/clients.ts`, puro y con tests): se recorta, no puede
+  quedar vacío, tope de 60 caracteres, y es **único ignorando mayúsculas y acentos** — «manor» y
+  «Manor» no son dos clientes. El rechazo **nombra** al cliente que ya lo usa.
+- **El selector vive en el header** (`ActiveClient` + `PygClientActions`), donde el usuario ya
+  mira para saber qué cliente tiene abierto. Al desplegarlo: buscador con foco al abrir (ignora
+  mayúsculas y acentos), atajo **`⌘K`** anunciado en la cabecera, `Escape` que devuelve el foco al
+  bloque, cada cliente con su sublínea (sistema · modo · años, o «Sin datos cargados») y un menú
+  `⋯` por fila con **Renombrar** y **Eliminar**. Sin scrim: el tablero de atrás sigue legible
+  mientras se decide. **El componente sigue siendo prop-driven** — sin lista de clientes se rinde
+  como el bloque de solo lectura de siempre, que es lo que deja a Ocupaciones intacta.
+- **Orden alfabético, sin columna `order`.** Renombrar reordena, que es lo que se espera al
+  renombrar.
+- **Eliminar cuantifica lo que descarta**: años, centros, cuentas y número de comentarios
+  (`describeClientContents`), y nombra uno a uno los clientes que **no** se tocan. «Los ajustes»
+  aquí significa lo que significa en toda la app — celdas editadas a mano por encima del valor del
+  archivo. Al eliminar el cliente activo se abre el **primero por nombre** de los que queden; si
+  no queda ninguno, la app entra en su estado vacío.
+- **Sin clientes, la app lo dice y no deja cargar**: el bloque del header queda con **borde
+  punteado** («Sin cliente seleccionado» / «Ningún estado de resultados cargado»), el contenido
+  ofrece crear el primero explicando qué se gana, y la razón por la que no se puede cargar va
+  **visible junto a «Cargar Excel»**, en una píldora, no escondida en un tooltip.
+- **El choque de identidad tiene tres salidas, no dos** (`describeIdentityChange` devuelve sus dos
+  formas). Las dos tarjetas comparan **empresa y sistema contable** — nunca un NIT, que ninguna
+  estrategia extrae — y el sistema se nombra con la etiqueta de su estrategia, jamás con su id:
+  - **Otro cliente ya tiene esa identidad**: el archivo pertenece allí. La acción principal es
+    **cargar allí**, que no destruye nada; solo cambia el cliente activo.
+  - **Ninguno coincide**: la acción principal es **crear el cliente y cargar**. Reemplazar el
+    cliente abierto baja a acción secundaria, explicando cuándo tiene sentido (que se haya
+    renombrado o cambiado de sistema) y qué descarta exactamente. Ese reemplazo **conserva los
+    comentarios de las cuentas que también existan en el archivo nuevo** y descarta los ajustes de
+    valor: un comentario sigue siendo cierto cuando la misma cuenta vuelve a llegar; un ajuste es
+    una corrección sobre una cifra que el archivo acaba de reemplazar.
+  - Y siempre **Cancelar** y **Elegir otro archivo**, que es la salida de «me equivoqué de
+    archivo», la más frecuente de todas.
+- **Cambiar de cliente no arrastra la selección anterior.** Los filtros se podan **en la lectura**
+  (`sanitizeFilters`), no en un efecto, así que una cuenta, un centro o un año que no existan en el
+  cliente nuevo desaparecen en el mismo render: no hay un render intermedio con una tabla vacía.
+  Los filtros son estado de sesión y **no** se guardan por cliente.
+- **Almacenamiento particionado por `clientId`** (Dexie **v7**): tabla `clients`, `clientId` en
+  cada dataset, `meta` con **una fila por cliente** en vez de la fila única `"workspace"`, y una
+  tabla `active` de una fila que recuerda cuál está abierto entre sesiones. `edits` no cambia de
+  forma: cuelga de `datasetId`, único entre clientes, así que una edición no puede llegar al
+  cliente equivocado ni con un bug; lo que gana es **borrado en cascada**.
+- **`db.ts` es la única puerta a las tablas.** No es limpieza oportunista: con datos de varios
+  clientes conviviendo, una consulta sin acotar los mezcla en silencio y nada aguas abajo puede
+  notarlo. `ParsedDataset` (`types.ts`) es `PygDataset` sin `clientId` — la capa pura produce
+  datasets que todavía no son de nadie y `db.ts` **estampa** el dueño al escribir, porque a qué
+  cliente pertenece un archivo lo decide qué cliente está abierto, nunca el archivo.
+- **La migración v7 es aditiva.** Dexie no baja de versión, así que no borra ningún dataset ni
+  ninguna edición: el workspace guardado se convierte en el primer cliente, con su `companyName`
+  recortado o `Cliente 1` si viniera vacío, y queda activo. Una base que nunca cargó nada no crea
+  ningún cliente y la app arranca en su estado vacío.
+- **Ocupaciones no cambia.** Tiene su propia base y su propio `hotelName`; adoptará esta misma
+  forma en su propio cambio.
 
 ## Carga de Excel (PyG › Datos)
 
@@ -447,8 +531,8 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
   dos modos escribe **una sola columna**: subir junio escribe el índice 5 y no toca ningún otro
   mes; un centro o una cuenta nuevos se dan de alta con ceros en los meses anteriores. Se pueden
   soltar varios meses de golpe: se parsean **todos antes de escribir nada**, se validan como
-  conjunto (una sola identidad — ver abajo —, un solo año, sin meses repetidos) y se aplican en
-  una sola escritura. Por dentro, un estado único es un workspace con **un único centro sin
+  conjunto (una sola identidad — ver abajo —, sin repetir un `(año, mes)`; **mezclar años sí es
+  válido**) y se aplican en una sola escritura. Por dentro, un estado único es un workspace con **un único centro sin
   nombre** (`mode: "single"`, `centerId: null`): la misma `mergeMonthSlice` sirve a los dos
   modos, sin rama nueva — solo se salta la validación contra `GENERAL`, que no existe en este
   formato.
@@ -461,23 +545,28 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
   un ajuste queda encima de un valor que el archivo cambió, la carga lo reporta como
   **conflicto** en el resumen (centro, cuenta, mes, valor anterior/nuevo, valor del ajuste), con
   la opción de quitarlo ahí mismo; el ajuste sigue aplicándose mientras tanto.
-- **Cobertura explícita, no adivinada.** El workspace declara qué meses cargó
-  (`WorkspaceMeta.loadedMonths`, en ambos modos): un mes nunca cargado y un mes cargado en cero
-  producen los mismos ceros pero significan cosas distintas, y solo el primero se rinde vacío en
-  Datos y descubierto en Gráficos/Análisis.
+- **Cobertura explícita, no adivinada, y por año.** El workspace declara qué meses cargó de cada
+  año (`WorkspaceMeta.loadedMonthsByYear`, en ambos modos): un mes nunca cargado y un mes cargado
+  en cero producen los mismos ceros pero significan cosas distintas, y solo el primero se rinde
+  vacío en Datos y descubierto en Gráficos/Análisis. Va indexada por año porque la cobertura vive
+  en el mismo eje que los datos: cargar enero de 2026 no puede marcar enero de 2025 como cubierto.
 - **Avisos, nunca bloqueos:** cuadre contra `GENERAL` en modo por centros (un aviso por mes con
   cuántas cuentas no cuadran, nunca uno por cuenta); en estado único se valida en cambio la fila
   «Utilidad o Pérdida» del archivo contra el cálculo.
-- **Identidad del workspace: `(sistema, empresa, año, modo)`** (`workspace-identity.ts`). Un
-  archivo que contradiga cualquiera de los cuatro pide **una sola** confirmación de reemplazo
-  (nombrando qué cambia y cuántos ajustes y comentarios se descartan); mezclar identidades en una
-  misma carga se rechaza nombrándolas. Sustituye la vieja regla «un año por workspace». El
+- **Identidad del workspace: `(sistema, empresa, modo)`** (`workspace-identity.ts`), **derivada**
+  de los datasets y el `meta` del cliente, nunca guardada — por eso un cliente vacío no tiene
+  identidad y su primera carga la **adopta**. Un archivo que contradiga cualquiera de los tres
+  abre el **diálogo de choque** con tres salidas (ver "Clientes de PyG"), y lo que reemplace, lo
+  reemplaza solo en el cliente abierto; mezclar identidades en una
+  misma carga se rechaza nombrándolas. **El año no está en la identidad**: un dataset es un
+  centro-año, así que un archivo de otro año no contradice nada — se suma al workspace sin
+  preguntar, y una misma carga puede mezclar años mientras no repita un `(año, mes)`. El
   **sistema** es el id de la estrategia que originó el workspace (`upload/systems.ts`), guardado
   en `WorkspaceMeta.sourceSystemId` y llevado también dentro del Excel de la app, para que
   descargar y volver a cargar conserve el origen. Está en la identidad porque los planes de
   cuentas de dos sistemas son incompatibles (`4.1.01.01.01` frente a `4.1.1.1.1`) y, con la
-  empresa y el año coincidiendo —el mismo cliente migrando de sistema—, ninguna otra validación
-  lo detendría.
+  empresa coincidiendo —el mismo cliente migrando de sistema—, ninguna otra validación lo
+  detendría.
 - **Mapeo genérico:** cada estrategia lee su propio esqueleto (preámbulo → cabecera → filas
   `código, nombre, valores`), no un plan de cuentas fijo. Las sumas de cuentas padre y la fila
   "Utilidad o Pérdida" (raíces 4 − raíces 5) **siempre se recalculan desde las cuentas de
@@ -485,10 +574,12 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
 - **Frecuencias:** el archivo define la frecuencia base y la vista puede agregar hacia
   arriba (mensual → trimestral → semestral → anual, sumas de períodos); nunca se
   desagrega.
-- **Persistencia:** IndexedDB (Dexie). Los valores de archivo y las ediciones/comentarios viven
-  en tablas separadas. Un mes nuevo (por centros o estado único) se aplica con
-  `applyMonthSlice` (nunca toca `edits`); un «Excel completo»/«Excel con tus datos» **reemplaza**
-  el workspace entero (con confirmación si hay ediciones).
+- **Persistencia:** IndexedDB (Dexie), particionada por cliente (ver "Clientes de PyG"). Los
+  valores de archivo y las ediciones/comentarios viven en tablas separadas. Un mes nuevo (por
+  centros o estado único) se aplica con `applyMonthSlice` (nunca toca `edits`); un «Excel
+  completo»/«Excel con tus datos» **fusiona por año** dentro del cliente abierto — cada año que
+  trae el archivo se reemplaza entero (con confirmación si ese año tiene ediciones) y un año que
+  el archivo no trae queda intacto.
 - **Decisión — edición solo en vista mensual:** editar valores y comentar celdas solo
   está disponible en la frecuencia Mensual, porque una celda agregada cubre varios
   meses y la edición sería ambigua.
@@ -499,7 +590,9 @@ Generadas con **`exceljs`** (formato + notas de celda, que SheetJS no escribe), 
 _dynamic import_ para no engordar el bundle inicial. Dos opciones, sin plantilla vacía (llenar a
 mano doce meses por cuenta no es un flujo real):
 
-- **Excel completo / Excel con tus datos:** el workspace entero. En modo por centros, una hoja
+- **Excel completo / Excel con tus datos:** el estado de resultados del **cliente abierto**,
+  entero y de ningún otro; el nombre del archivo no lleva la etiqueta del cliente, sino la empresa
+  y el periodo, que es lo que el contador reconoce y lo que la recarga vuelve a leer. En modo por centros, una hoja
   **Consolidado** (suma de todos los centros, Sin centro de costo incluido, con los ajustes ya
   aplicados) más una hoja por centro; en estado único, una única hoja del Estado de Resultados.
   En ambos, los meses no cargados quedan **vacíos**, no en cero, y las cuentas padre llevan sus

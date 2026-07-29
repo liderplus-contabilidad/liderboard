@@ -103,12 +103,46 @@ upload modal — never its own button markup. The FORM of the download control i
 many options it gets (one → plain button, two or more → menu), never declared; `busy`, the error
 panel and the reentrancy guard live in the primitive, so a module supplies just
 `run: () => Promise<void>` plus `disabled`/`disabledReason`. Live gallery at
-`/docs/components#excel-actions`. **Module state never lives there** — each data provider is mounted in the
+`/docs/components#excel-actions`. `ExcelActions` renders the UPLOAD button's `disabledReason` as a
+pill beside it rather than as a tooltip — a control switched off with no visible reason makes you
+point at it to find out what is missing, and what is missing here is the module's previous step.
+**Module state never lives there** — each data provider is mounted in the
 dashboard layout, because the header reads from the same state the panel does (`ActiveClient`
-shows PyG's empresa and Ocupaciones' hotel). PyG › Datos now loads real Excel data: `lib/profit-loss/` holds
+shows PyG's cliente and Ocupaciones' hotel).
+
+**PyG holds several CLIENTES at once.** A client is a name the user chose plus exactly one estado
+de resultados — flat list, no nesting. It is created EXPLICITLY (`+ Agregar cliente`), is born
+empty, and no upload ever invents one on its own. Its label and the razón social of a file are
+different things and NEVER compared: the user calls «Manor Galápagos» what the file calls
+`DARWIN & WOLF…`. An empty client has no identity; its FIRST upload **adopts** `(sistema, empresa,
+modo)`, so a first load can never clash. `lib/profit-loss/clients.ts` is the pure layer (name
+validation and its 60-char cap, uniqueness ignoring case and accents via `normalizeLabel`,
+alphabetical order — there is no `order` column, renaming reorders —, `matchesSearch` for the
+selector's search box, `proposeClientName` for the clash dialog's editable suggestion, and
+`findClientForIdentity`, which is what lets a clash say «este archivo sí es de Dingoo»).
+**Storage is partitioned by `clientId`** (Dexie v7: table `clients`, `datasets.clientId`, `meta`
+keyed by client instead of the singleton row `"workspace"`, and a one-row `active` table so the
+open client survives a reload). `edits` keeps hanging off `datasetId`, unique across clients, so an
+edit cannot reach the wrong client even with a bug — what it gains is CASCADE on delete. The
+migration is purely ADDITIVE (Dexie has no downgrade): nothing is deleted, the workspace becomes
+the first client named after its `companyName` (or `Cliente 1`), and a database that never loaded
+anything gets NO client. **`db.ts` is the only door to the tables** — that is not tidiness, it is
+the mitigation of this design's one real risk: with several clients sharing four tables, an
+unbounded query mixes two companies in silence and nothing downstream can tell. `ParsedDataset`
+(`types.ts`) is `PygDataset` minus `clientId`: the pure layer produces datasets that belong to
+nobody yet, and `db.ts` STAMPS the owner at the door, because which client a file belongs to is
+decided by which client is open, never by the file. A discrepant identity therefore no longer
+replaces «the workspace»: it opens a dialog with THREE exits whose shape depends on whether
+another client already holds that identity (`describeIdentityChange` returns both forms) — load it
+there (nothing is destroyed), create the client it belongs to, or replace only the ACTIVE client,
+which keeps the comments of accounts the new file also brings and discards the value adjustments.
+The selector lives in the header and `ActiveClient` stays **prop-driven**: with no `clients` prop it
+renders the read-only block it always was, which is why Ocupaciones is untouched by all of this.
+
+PyG › Datos loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
-`PygDataProvider` — mounted in the dashboard layout — shares `dataset`/`edits`/
-`frequency` between the header (`ActiveClient`) and the Datos content. `DatosView`
+`PygDataProvider` — mounted in the dashboard layout — shares `clients`/`dataset`/`edits`/
+`frequency` between the header (`PygClientActions`) and the Datos content. `DatosView`
 renders the Estado de Resultados table (account tree, sortable months + Total, cell
 edit/comment); editing/commenting is monthly-view-only. The Datos toolbar downloads
 the edited state or a seeded blank template via `exceljs` (`export.ts`, dynamic
@@ -150,9 +184,11 @@ MicroPlus's `CODIGO`+`NOMBRE DE LA CUENTA`, so the header alone made MicroPlus c
 files. Order is not what separates them; each `detect` is. The exact-calendar-month rule
 (`date-range.ts`'s `toCalendarMonth`) is shared verbatim — no per-vendor exception. `merge-month.ts` is the pure merge — new center/account →
 zero-filled everywhere but the arriving month, and cuadre against `GENERAL` (one aviso per month,
-never per account). `WorkspaceMeta.loadedMonths` is the declared coverage — a month never
-loaded reads `null` through the whole engine (`buildAnalyticsSource`'s `coveredIndices` param),
-never the same as a loaded month valued at 0. Edits survive every reload (`applyMonthSlice`
+never per account). **A dataset is a center-YEAR**, so several years live in one workspace;
+`WorkspaceMeta.loadedMonthsByYear` is the declared coverage, keyed by year because coverage lives
+on the same axis as the data (loading January of 2026 must not mark January of 2025 as covered).
+A month never loaded reads `null` through the whole engine (`buildAnalyticsSource`'s
+`coveredIndices` param), never the same as a loaded month valued at 0. Edits survive every reload (`applyMonthSlice`
 never touches `edits`); an adjusted cell gets a dotted `brand` underline in Datos, and reloading
 a month whose file value changed under an adjustment surfaces as a conflict in the upload
 summary, removable from there. `Sin centro de costo` is an ordinary editable monthly center now
@@ -162,17 +198,25 @@ round-trips through `app-workbook.ts`) and "un mes en crudo" (`buildMonthSliceWo
 through `monthly-centers.ts`); no blank template in either mode. **Estado único loads monthly and
 incrementally too**: `monthly-single.ts` reduces every upload to the same `month-slice` shape
 (`mode: "single"`, one nameless `centerId: null` slice, no `general`), so it reuses
-`merge-month.ts`/`loadedMonths` unmodified — a single-mode dataset's `baseFrequency` is therefore
-always `"mensual"`, unlocking trimestral/semestral/anual there too. **Workspace identity is
-`(sistema, empresa, año, modo)`** (`workspace-identity.ts`): a file whose system, company, year or
-mode contradicts what's loaded triggers one replace confirmation before writing anything,
-superseding the old "un año por workspace" rule. The SYSTEM is the id of the originating strategy
+`merge-month.ts`/`loadedMonthsByYear` unmodified — a single-mode dataset's `baseFrequency` is
+therefore always `"mensual"`, unlocking trimestral/semestral/anual there too. **Workspace identity
+is `(sistema, empresa, modo)`** (`workspace-identity.ts`, derived by `deriveWorkspaceIdentity` from
+the datasets + `meta`, never stored — which is what makes «un cliente vacío no tiene identidad»
+free): a file whose system, company or mode contradicts the **ACTIVE CLIENT's** opens the clash
+dialog described above, and whatever it replaces, it replaces only there. **The YEAR is
+deliberately NOT in it**: it was, back when a `PygDataset` held one `number[12]` and a second year
+had nowhere to go; now a file from another year is not a contradiction but more of the same
+workspace, and it merges in without asking — which is also why a batch may mix years (it may not
+repeat a `(year, month)`). The SYSTEM is the id of the originating strategy
 (`upload/systems.ts`), stored in `WorkspaceMeta.sourceSystemId` and carried through the app's own
 workbook metadata, because two systems' charts of accounts (`4.1.01.01.01` vs `4.1.1.1.1`) would
-fuse into one meaningless tree and nothing else would catch it when company and year match.
+fuse into one meaningless tree and nothing else would catch it when company matches. `systemLabel`
+lives next to those ids for the same reason they do — naming a system on screen must not drag in
+SheetJS — and it is the ONE way a system reaches copy: the `id` is not UI text.
 Estado único's downloads mirror centers: "Excel con tus datos"
-(`buildPygWorkbook`, carries `loadedMonths` and adjustment originals in the same hidden metadata
-sheet `app-workbook.ts` reads) and "un mes en crudo" (`buildSingleMonthSliceWorkbook`, re-enters
+(`buildPygWorkbook`, carries every year, its coverage and the adjustment originals in the same
+hidden metadata sheet `app-workbook.ts` reads, and **re-enters merging BY YEAR** — a year the file
+doesn't carry stays untouched) and "un mes en crudo" (`buildSingleMonthSliceWorkbook`, re-enters
 through `monthly-single.ts`) — but **"un mes en crudo" only appears when the originating strategy
 declares `writesOwnFormat`**; MicroPlus is read-only, so its workspace shows one plain button.
 **Análisis vertical:** the first card of Análisis is a TABLE (accounts × periods, each cell the
@@ -276,24 +320,34 @@ Datos keeps its own three strips: those answer «cuál edito», the bar answers 
 and the bar falls back to whatever Datos has open.
 
 **PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders, in
-order, Cuenta contable · Nivel · Centro de costo · Periodo, "Ver por" pinned right, and an
+order, Cuenta contable · Nivel · Centro de costo · Año · Periodo, "Ver por" pinned right, and an
 active-filter chip strip (`active-filter-chips.tsx`) below — reflected identically by Datos,
 Gráficos and Análisis, with no second place (no "Comparar" box, no Datos-only center pills) to
 pick the same things differently. The comparison axis is never declared: marking several
 accounts and/or several centers is itself what produces a comparison, so `lib/profit-loss/
-filters.ts` holds one flat `PygFilters` (`codes`/`centerIds`/`periods`), pure toggles kept in
-universe order (not click order), `sanitizeFilters` (pruned on read, never in an effect) and
+filters.ts` holds one flat `PygFilters` (`codes`/`centerIds`/`years`/`periods`), pure toggles kept
+in universe order (not click order), `sanitizeFilters` (pruned on read, never in an effect) and
 `resolveActiveCenterId`/`canEditActiveCenter` — the center Datos reads and edits is _derived_:
 none or several centers marked resolves to the Consolidado (read-only), exactly one resolves to
-that center. `center-filter.tsx` and `period-filter.tsx` render the last two dropdowns;
+that center. **«Año» follows the same rule as «Centro de costo»** — exactly one marked is that
+year, editable; none or several puts the years side by side, read-only — and a marked `periods`
+entry is a `PeriodSlot` (`{frequency, index}`), not a `PeriodRef`: one period mark narrows the
+axis of EVERY marked year rather than picking a year's period. `center-filter.tsx` and `period-filter.tsx` render the last two dropdowns;
 `center-filter.tsx` renders nothing in single-statement mode. The ONE control outside the bar is
 Análisis' «Base» dropdown: it names a card's denominator, not what any tab reads, so it sits in
 that card's header (same rule as Ocupaciones' «Ver por»). Both it and the account filter render
 the same `account-tree-list.tsx` — one tree, single- or multi-select. Marking accounts also intersects
 every structural card's fixed universe (composition, ranking, cascada, Análisis' three defaults)
-instead of being ignored by them, and marking periods bounds Datos' visible columns (its Total
-column stays the full-year sum regardless, relabeled "Total año" while a period mark is active).
+instead of being ignored by them, and marking periods bounds Datos' visible columns.
 `PygDataProvider` owns the filters and never imports from `charts/`.
+
+**Datos speaks in COLUMNS, not months.** `DatosGrid.columns` is a `DatosColumn[]` where each entry
+carries its own `year`, its `index` and its `kind` (`"period" | "total"`) — because a grid can show
+several years side by side and a header has to say which year a column belongs to ("Ene 25" with
+more than one visible, "Ene" with one). **A year's Total is a column like any other**, one per
+year, which is what removed the old `showTotal` flag and the `"total"` sort key: a single total
+computed over every cell would have added 2025 to 2026. Annual granularity contributes no Total
+column, because there the year IS the column.
 
 **Charts.** `lib/profit-loss/analytics/` is the pure engine (series with coverage, the
 temporal/structure/variation transforms). Everything above it is also pure and tested:
