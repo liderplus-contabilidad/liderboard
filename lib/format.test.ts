@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { formatNumber, parseCurrency } from "./format";
+import { formatCurrency, formatNumber, formatPercent, parseCurrency } from "./format";
+
+describe("formatCurrency", () => {
+  it("groups thousands with a comma and separates cents with a dot", () => {
+    expect(formatCurrency(57961.95, { cents: true })).toBe("$57,961.95");
+    expect(formatCurrency(1234)).toBe("$1,234");
+    expect(formatCurrency(-1234, { cents: true })).toBe("-$1,234.00");
+  });
+});
+
+describe("formatPercent", () => {
+  it("separates the decimal with a dot", () => {
+    expect(formatPercent(12.4)).toBe("12.4 %");
+    expect(formatPercent(1234.5)).toBe("1,234.5 %");
+  });
+});
 
 describe("parseCurrency", () => {
-  it("parses Ecuadorian-formatted amounts (dot = thousands, comma = decimals)", () => {
-    expect(parseCurrency("17.338,85")).toBe(17338.85);
-    expect(parseCurrency("1.234,56")).toBe(1234.56);
-    expect(parseCurrency("1.234")).toBe(1234); // thousands, no decimals
-    expect(parseCurrency("80,75")).toBe(80.75);
-    expect(parseCurrency("-20,4")).toBe(-20.4);
+  it("parses Ecuadorian-formatted amounts (comma = thousands, dot = decimals)", () => {
+    expect(parseCurrency("17,338.85")).toBe(17338.85);
+    expect(parseCurrency("1,234.56")).toBe(1234.56);
+    expect(parseCurrency("1,234")).toBe(1234); // thousands, no decimals
+    expect(parseCurrency("80.75")).toBe(80.75);
+    expect(parseCurrency("-20.4")).toBe(-20.4);
     expect(parseCurrency("0")).toBe(0);
   });
 
@@ -15,6 +30,10 @@ describe("parseCurrency", () => {
     expect(parseCurrency("")).toBeNull();
     expect(parseCurrency("   ")).toBeNull();
     expect(parseCurrency("abc")).toBeNull();
+  });
+
+  it("rejects the inverted convention instead of silently inflating the value", () => {
+    expect(parseCurrency("17.338,85")).toBeNull();
   });
 
   it("round-trips values rendered by formatNumber (the editor seed) without inflation", () => {

@@ -31,7 +31,7 @@ import { LEGACY_SYSTEM, MONTHLY_CENTERS_SYSTEM } from "./upload/systems";
 const CODE_COL = 1;
 const NAME_COL = 2;
 const FIRST_VALUE_COL = 3;
-/** Ecuador USD, sign before the symbol: "$1.234,00" / "-$1.234,00" (viewer-locale grouping). */
+/** Ecuador USD, sign before the symbol: "$1,234.00" / "-$1,234.00" (viewer-locale grouping). */
 const CURRENCY_FMT = '"$"#,##0.00;"-$"#,##0.00';
 const SHEET_NAME = "Estado de Resultados";
 

@@ -80,6 +80,14 @@ usuario pasa por `lib/format.ts` (`formatCurrency` → USD de Ecuador con símbo
 que todo el panel hable el mismo idioma. Los módulos nuevos las reutilizan en vez de
 formatear localmente.
 
+En Ecuador el dólar se escribe **con coma para los miles y punto para los centavos**
+(`$57,961.95`). El ICU de `es-EC` aplica la convención española y devuelve `$57.961,95`,
+así que los formateadores se construyen sobre `en-US` —el par de separadores que el país
+usa de verdad— y la mitad española del idioma (el espacio del `%`, los textos) se escribe
+a mano. `parseCurrency` es su inverso exacto y **valida la forma antes de limpiar los
+separadores**: un importe tecleado al revés (`17.338,85`) se rechaza en vez de leerse como
+17,33885.
+
 ## Sistema visual
 
 Los tokens viven una sola vez en el bloque `@theme` de `app/globals.css` y se consumen como

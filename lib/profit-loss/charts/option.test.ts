@@ -110,7 +110,7 @@ describe("los periodos sin cobertura no se dibujan", () => {
     const label = barOption([series], CONTEXT).series[0].label;
 
     expect(label?.formatter?.({ value: null, name: "Feb", dataIndex: 1 })).toBe("");
-    expect(label?.formatter?.({ value: 1000, name: "Ene", dataIndex: 0 })).toContain("1.000");
+    expect(label?.formatter?.({ value: 1000, name: "Ene", dataIndex: 0 })).toContain("1,000");
   });
 });
 
@@ -181,7 +181,7 @@ describe("tipos de gráfico soportados", () => {
     expect(option.series).toHaveLength(1);
     expect(label?.show).toBe(true);
     expect(label?.formatter?.({ value: 8000, name: "Arrendamiento", dataIndex: 0 })).toContain(
-      "80,0 %",
+      "80.0 %",
     );
     expect(option.series[0].markLine?.data[0].yAxis).toBe(0.5);
   });
@@ -292,7 +292,7 @@ describe("marcas, leyenda y etiquetas", () => {
   it("formats the axis with formatCurrency and the periods with periodLabel", () => {
     const option = barOption(manySeries(1), CONTEXT);
 
-    expect(option.yAxis?.axisLabel?.formatter?.(17338)).toBe("$17.338");
+    expect(option.yAxis?.axisLabel?.formatter?.(17338)).toBe("$17,338");
     expect(option.xAxis?.data?.slice(0, 3)).toEqual(["Ene", "Feb", "Mar"]);
   });
 
@@ -300,7 +300,7 @@ describe("marcas, leyenda y etiquetas", () => {
     const share = hundredPercentOption([makeSeries([20], { container: [100] })], CONTEXT);
     const index = lineOption([makeSeries([120])], { ...CONTEXT, unit: "indice" });
 
-    expect(share.yAxis?.axisLabel?.formatter?.(20)).toBe("20,0 %");
+    expect(share.yAxis?.axisLabel?.formatter?.(20)).toBe("20.0 %");
     expect(index.yAxis?.axisLabel?.formatter?.(120)).toBe("120");
   });
 });
@@ -323,7 +323,7 @@ describe("el signo de una variación", () => {
   it("carries an arrow and the signed value, so color is not the only cue", () => {
     const label = variationBarOption(entries).series[0].label;
 
-    expect(label?.formatter?.({ value: 1200, name: "Publicidad", dataIndex: 0 })).toBe("▲ $1.200");
+    expect(label?.formatter?.({ value: 1200, name: "Publicidad", dataIndex: 0 })).toBe("▲ $1,200");
     expect(label?.formatter?.({ value: -450, name: "Mantenimiento", dataIndex: 1 })).toBe(
       "▼ -$450",
     );
@@ -353,8 +353,8 @@ describe("la forma que la transformación admite", () => {
 
   it("makes the table twin of a 100% stack show shares, not amounts", () => {
     expect(seriesTableFor("barras-100", series, context).rows[0].values).toEqual([
-      "20,0 %",
-      "30,0 %",
+      "20.0 %",
+      "30.0 %",
     ]);
     expect(seriesTableFor("barras", series, context).rows[0].values).toEqual(["$200", "$300"]);
   });
@@ -370,7 +370,7 @@ describe("la gemela en tabla", () => {
 
     expect(table.columns).toEqual(["Ene", "Feb"]);
     expect(table.rows.map((row) => row.label)).toEqual(["Ventas Restaurante", "Ventas Eventos"]);
-    expect(table.rows[0].values).toEqual(["$1.000", "$1.200"]);
+    expect(table.rows[0].values).toEqual(["$1,000", "$1,200"]);
     expect(table.rows[0].id).toBe("4.1.1.2|cultura-manor|2026");
   });
 
@@ -380,7 +380,7 @@ describe("la gemela en tabla", () => {
       periods: PERIODS.slice(0, 2),
     });
 
-    expect(table.rows[0].values).toEqual(["$1.000", null]);
+    expect(table.rows[0].values).toEqual(["$1,000", null]);
   });
 
   it("shows the transformation, not the amounts behind it", () => {
@@ -392,7 +392,7 @@ describe("la gemela en tabla", () => {
       unit: "porcentaje",
     });
 
-    expect(table.rows[0].values).toEqual(["20,0 %"]);
+    expect(table.rows[0].values).toEqual(["20.0 %"]);
   });
 
   it("ranks the entries of an entry-based card largest first", () => {
@@ -421,7 +421,7 @@ describe("interacción de la gráfica", () => {
 
     expect(html).toContain("Ene");
     expect(html).toContain("Ventas Restaurante");
-    expect(html).toContain("$1.000");
+    expect(html).toContain("$1,000");
     expect(html).toContain("$500");
   });
 
@@ -465,7 +465,7 @@ describe("interacción de la gráfica", () => {
     expect(option.tooltip?.trigger).toBe("item");
     expect(html).toContain("Restaurante");
     expect(html).toContain("$750");
-    expect(html).toContain("75,0 %");
+    expect(html).toContain("75.0 %");
   });
 });
 
