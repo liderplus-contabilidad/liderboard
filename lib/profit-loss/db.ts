@@ -138,11 +138,7 @@ class PygDb extends Dexie {
 
 export const db = new PygDb();
 
-/**
- * Atomically replaces the whole workspace: clears datasets/edits/meta, inserts the new
- * datasets, writes the meta singleton, and re-seeds imported comments as comment-only edits
- * per dataset (value edits are already baked into each dataset's values).
- */
+/** Replaces the workspace: clears all tables, inserts datasets, meta, and re-seeds edits. */
 export async function replaceWorkspace(
   datasets: PygDataset[],
   meta: WorkspaceMeta,

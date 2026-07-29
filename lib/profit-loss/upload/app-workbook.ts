@@ -93,18 +93,21 @@ function readCenterSheet(grid: Cell[][]): { companyName: string; accounts: Accou
   return { companyName: readCompanyName(grid, headerRow), accounts };
 }
 
-/** Overwrites a leaf's visible (adjusted) value with the metadata's original where one exists —
- * the base a reload must write (design.md decision 7: base = metadata where it exists, sheet
- * otherwise). */
+/**
+ * Restores original values from metadata, recording displaced adjusted values for re-seeding.
+ */
 function applyOriginals(
   accounts: AccountRow[],
   originalValueByCell: Map<string, number>,
   centerId: string,
+  adjustedValueByCell: Map<string, number>,
 ): void {
   for (const account of accounts) {
     for (let monthIndex = 0; monthIndex < account.values.length; monthIndex++) {
-      const original = originalValueByCell.get(`${centerId}|${account.code}|${monthIndex}`);
+      const key = `${centerId}|${account.code}|${monthIndex}`;
+      const original = originalValueByCell.get(key);
       if (original !== undefined) {
+        adjustedValueByCell.set(key, account.values[monthIndex]);
         account.values[monthIndex] = original;
       }
     }
@@ -123,11 +126,12 @@ function reconstructSingle(
   candidate: UploadCandidate,
   meta: AppWorkbookMeta,
   originalValueByCell: Map<string, number>,
+  adjustedValueByCell: Map<string, number>,
 ): Reconstructed {
   const sheetName = candidate.workbook.SheetNames.find((name) => name !== APP_WORKBOOK_META_SHEET);
   const grid = sheetName ? readGrid(candidate.workbook, sheetName) : [];
   const { companyName, accounts } = readCenterSheet(grid);
-  applyOriginals(accounts, originalValueByCell, SINGLE_WORKBOOK_CENTER_KEY);
+  applyOriginals(accounts, originalValueByCell, SINGLE_WORKBOOK_CENTER_KEY, adjustedValueByCell);
 
   const id = crypto.randomUUID();
   const dataset: PygDataset = {
@@ -154,6 +158,7 @@ function reconstructCenters(
   candidate: UploadCandidate,
   meta: AppWorkbookMeta,
   originalValueByCell: Map<string, number>,
+  adjustedValueByCell: Map<string, number>,
 ): Reconstructed {
   const centerSheetNames = candidate.workbook.SheetNames.filter(
     (name) => name !== APP_WORKBOOK_META_SHEET && !CONSOLIDADO_SHEET.test(name),
@@ -170,7 +175,7 @@ function reconstructCenters(
       companyName = sheetCompany;
     }
     const centerId = slugifyCenter(sheetName);
-    applyOriginals(accounts, originalValueByCell, centerId);
+    applyOriginals(accounts, originalValueByCell, centerId, adjustedValueByCell);
     const role: DatasetRole = SIN_CENTRO.test(sheetName) ? "sin-centro" : "center";
     const id = crypto.randomUUID();
     idByCenterId.set(centerId, id);
@@ -207,11 +212,13 @@ function parse(candidate: UploadCandidate): StagedUpload {
   for (const a of meta.adjustments) {
     originalValueByCell.set(`${a.centerId}|${a.code}|${a.monthIndex}`, a.originalValue);
   }
+  // Filled while reading the sheets: the adjusted value each original displaced.
+  const adjustedValueByCell = new Map<string, number>();
 
   const { companyName, datasets, idByCenterId } =
     meta.mode === "single"
-      ? reconstructSingle(candidate, meta, originalValueByCell)
-      : reconstructCenters(candidate, meta, originalValueByCell);
+      ? reconstructSingle(candidate, meta, originalValueByCell, adjustedValueByCell)
+      : reconstructCenters(candidate, meta, originalValueByCell, adjustedValueByCell);
 
   // Merge comments and adjustments per cell — a cell can carry both, and each must become
   // exactly one edit row (the edits table's unique index is one row per dataset+code+month).
@@ -234,7 +241,7 @@ function parse(candidate: UploadCandidate): StagedUpload {
       centerId: a.centerId,
       code: a.code,
       monthIndex: a.monthIndex,
-      value: a.originalValue,
+      value: adjustedValueByCell.get(key) ?? a.originalValue,
       ...(existing?.comment ? { comment: existing.comment } : {}),
     });
   }

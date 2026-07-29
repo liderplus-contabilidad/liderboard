@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import type { DatosRow } from "../datos-types";
+import { toDatosGrid } from "../derive";
 import { PygParseError } from "../errors";
 import {
   buildMonthSliceWorkbook,
@@ -9,6 +11,7 @@ import {
   multiCenterFilename,
   workbookToBlob,
 } from "../export";
+import { segmentAccounts } from "../segment";
 import type { CellEdit, PygDataset } from "../types";
 import { resolveUpload } from "./registry";
 import type { StagedUpload } from "./types";
@@ -113,12 +116,10 @@ describe("round-trip — Excel completo", () => {
       { kind: "workspace" }
     >;
 
-    // The visible sheet shows the ADJUSTED value...
     expect(staged.datasets[0].accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
-    // ...but the metadata restores the seed as a real edit (value + comment), not baked in.
     const norteId = staged.datasets[0].id;
     const seeds = staged.commentsByDataset.find((c) => c.datasetId === norteId)?.comments;
-    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: "Ajuste de enero", value: 100 }]);
+    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: "Ajuste de enero", value: 999 }]);
   });
 });
 
@@ -205,12 +206,10 @@ describe("round-trip — Excel con tus datos (estado único)", () => {
       { kind: "workspace" }
     >;
 
-    // The reconstructed dataset holds the ORIGINAL (pre-adjustment) base value...
     expect(staged.datasets[0].accounts.find((a) => a.code === "4")?.values[0]).toBe(0);
-    // ...and the metadata restores the seed as a real edit (value + comment), not baked in.
     const id = staged.datasets[0].id;
     const seeds = staged.commentsByDataset.find((c) => c.datasetId === id)?.comments;
-    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: "Ajuste de enero", value: 0 }]);
+    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: "Ajuste de enero", value: 999 }]);
   });
 });
 
@@ -250,6 +249,105 @@ describe("round-trip — el sistema de origen sobrevive al Excel de la app", () 
       { kind: "workspace" }
     >;
     expect(staged.meta.sourceSystemId).toBe("monthly-centers");
+  });
+});
+
+describe("round-trip — a segmented state", () => {
+  /** 5 with its subtree 5.2, already segmented: root 6 in zeros, as left by `segmentWorkspace`. */
+  function segmented(id: string): PygDataset {
+    const at = (value: number): number[] => [...MONTHS].map((_, i) => (i === 0 ? value : 0));
+    return {
+      ...singleDataset(id, MONTHS),
+      accounts: segmentAccounts([
+        { code: "4", name: "Ingresos", values: at(5000) },
+        { code: "5", name: "Costos y Gastos", values: at(1000) },
+        { code: "5.2", name: "Gastos", values: at(1000) },
+        { code: "5.2.1", name: "Servicios", values: at(1000) },
+      ]),
+    };
+  }
+
+  /** What the user writes when reclassifying 300 as non-operational: the pair 6.1 / 5.2.1. */
+  const reclassification = (id: string): CellEdit[] => [
+    { datasetId: id, code: "6.1", monthIndex: 0, value: 300, updatedAt: 1 },
+    { datasetId: id, code: "5.2.1", monthIndex: 0, value: 700, updatedAt: 1 },
+  ];
+
+  function seedsAsEdits(staged: Extract<StagedUpload, { kind: "workspace" }>): CellEdit[] {
+    const datasetId = staged.datasets[0].id;
+    const seeds = staged.commentsByDataset.find((c) => c.datasetId === datasetId)?.comments ?? [];
+    return seeds.map((seed) => ({ datasetId, ...seed, updatedAt: 1 }));
+  }
+
+  /** Each row of the Income Statement in January, including summary rows (by their `resultKind`). */
+  function januaryByRow(dataset: PygDataset, edits: CellEdit[]): Record<string, number> {
+    const out: Record<string, number> = {};
+    const walk = (rows: DatosRow[]): void => {
+      for (const row of rows) {
+        out[row.code || `#${row.resultKind}`] = row.cells[0]?.value ?? 0;
+        if (row.children) {
+          walk(row.children);
+        }
+      }
+    };
+    walk(toDatosGrid(dataset, edits, "mensual").rows);
+    return out;
+  }
+
+  it("single state: reclassification to section 6 survives download and reload", async () => {
+    const dataset = segmented("s1");
+    const edits = reclassification("s1");
+    const before = januaryByRow(dataset, edits);
+    expect(before["6.1"]).toBe(300);
+    expect(before["#no-operacional"]).toBe(300);
+
+    const buffer = await toBuffer(buildPygWorkbook(dataset, edits, [0], "monthly-single"));
+    const staged = resolveUpload("PyG NOMIK.xlsx", buffer) as Extract<
+      StagedUpload,
+      { kind: "workspace" }
+    >;
+
+    // Section 6 returns complete: its accounts are still there...
+    expect(staged.datasets[0].accounts.map((a) => a.code)).toEqual([
+      "4",
+      "5",
+      "5.2",
+      "5.2.1",
+      "6",
+      "6.1",
+    ]);
+    // ...and the base remains as in the file (6 in zeros), with the amount in the edit.
+    expect(staged.datasets[0].accounts.find((a) => a.code === "6.1")?.values[0]).toBe(0);
+    expect(januaryByRow(staged.datasets[0], seedsAsEdits(staged))).toEqual(before);
+  });
+
+  it("by centers: each center recovers its own reclassification", async () => {
+    const norte: PygDataset = {
+      ...segmented("norte"),
+      role: "center",
+      centerId: slugifyCenter("SUCURSAL NORTE"),
+      centerColor: "#000",
+      order: 0,
+      costCenterName: "SUCURSAL NORTE",
+    };
+    const edits = reclassification("norte");
+    const before = januaryByRow(norte, edits);
+
+    const buffer = await toBuffer(
+      buildMultiCenterWorkbook({
+        companyName: "NOMIK HOTELS S.A.S.",
+        year: 2026,
+        loadedMonths: [0],
+        centers: [{ dataset: norte, edits }],
+      }),
+    );
+    const staged = resolveUpload(multiCenterFilename(2026), buffer) as Extract<
+      StagedUpload,
+      { kind: "workspace" }
+    >;
+
+    expect(staged.datasets[0].accounts.find((a) => a.code === "6.1")?.values[0]).toBe(0);
+    expect(januaryByRow(staged.datasets[0], seedsAsEdits(staged))).toEqual(before);
   });
 });
 

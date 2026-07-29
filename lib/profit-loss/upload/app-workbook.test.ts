@@ -114,11 +114,12 @@ describe("appWorkbookStrategy.parse", () => {
     const norte = datasets.find((d) => d.costCenterName === "SUCURSAL NORTE");
     const seeds = commentsByDataset.find((c) => c.datasetId === norte?.id)?.comments;
     expect(seeds).toHaveLength(1);
+    expect(norte?.accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
     expect(seeds?.[0]).toEqual({
       code: "4",
       monthIndex: 0,
       comment: "Ajuste de enero",
-      value: 100,
+      value: 150,
     });
   });
 
@@ -135,6 +136,7 @@ describe("appWorkbookStrategy.parse", () => {
     const { datasets, commentsByDataset } = staged as Extract<StagedUpload, { kind: "workspace" }>;
     const norte = datasets.find((d) => d.costCenterName === "SUCURSAL NORTE");
     const seeds = commentsByDataset.find((c) => c.datasetId === norte?.id)?.comments;
-    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: undefined, value: 100 }]);
+    expect(norte?.accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
+    expect(seeds).toEqual([{ code: "4", monthIndex: 0, comment: undefined, value: 150 }]);
   });
 });
