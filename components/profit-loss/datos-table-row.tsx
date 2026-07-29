@@ -18,6 +18,12 @@ export interface DatosTableRowProps {
   visibleColumns: number[];
   editable: boolean;
   showTotal: boolean;
+  /** Which columns the by-centers workspace has actually loaded; `null` = no restriction
+   * (single-statement mode). An unloaded column renders empty and never opens for editing,
+   * regardless of `editable` or `row.movement`. */
+  loadedColumns: ReadonlySet<number> | null;
+  /** Column of THIS row to light up briefly (a reclassified twin), or `null` for none. */
+  flashCol: number | null;
   /** The ficha panel is currently showing this row. */
   detailOpen: boolean;
   onToggle: (code: string) => void;
@@ -37,6 +43,8 @@ function DatosTableRowImpl({
   visibleColumns,
   editable,
   showTotal,
+  loadedColumns,
+  flashCol,
   detailOpen,
   onToggle,
   onEditCell,
@@ -95,13 +103,16 @@ function DatosTableRowImpl({
       </td>
 
       {visibleColumns.map((col) => {
-        const cell = row.cells[col];
+        const loaded = !loadedColumns || loadedColumns.has(col);
+        const cell = loaded ? row.cells[col] : undefined;
         return (
           <DataCell
             key={col}
             value={cell?.value ?? null}
             hasComment={Boolean(cell?.comment)}
-            openable={openable}
+            edited={Boolean(cell?.edited)}
+            flash={flashCol === col}
+            openable={openable && loaded}
             onEdit={(anchor) => onEditCell(row.code, col, anchor, valueEditable)}
           />
         );
@@ -163,15 +174,22 @@ function DetailCell({
   );
 }
 
-/** One month cell: negatives red, empty/zero an en-dash, comment → corner mark. */
+/**
+ * Represents a single month cell with specific styles for negatives, zero/empty values, and comments.
+ * Highlights include persistent `edited` styling for adjustments and temporary `flash` for recent changes.
+ */
 function DataCell({
   value,
   hasComment,
+  edited,
+  flash,
   openable,
   onEdit,
 }: {
   value: number | null;
   hasComment: boolean;
+  edited: boolean;
+  flash: boolean;
   openable: boolean;
   onEdit: (anchor: EditorAnchor) => void;
 }) {
@@ -188,6 +206,13 @@ function DataCell({
       style={{ borderTop: "8px solid var(--color-warning)", borderLeft: "8px solid transparent" }}
     />
   ) : null;
+  const amount = <span>{formatAmount(value)}</span>;
+  // Paint stays, ring fades — see the note above on why they are two marks and not one.
+  const marks = cn(
+    "transition-[background-color,box-shadow] duration-500",
+    edited && "bg-marked",
+    flash && "shadow-[inset_0_0_0_2px_var(--color-marked-strong)]",
+  );
 
   if (!openable) {
     return (
@@ -195,10 +220,11 @@ function DataCell({
         className={cn(
           "relative border-b border-border-soft px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums",
           tone,
+          marks,
         )}
       >
         {mark}
-        {formatAmount(value)}
+        {amount}
       </td>
     );
   }
@@ -210,11 +236,12 @@ function DataCell({
         type="button"
         onClick={(event) => onEdit(anchorOf(event.currentTarget))}
         className={cn(
-          "h-full w-full px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums transition-colors hover:bg-brand-soft",
+          "h-full w-full px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums hover:bg-brand-soft",
           tone,
+          marks,
         )}
       >
-        {formatAmount(value)}
+        {amount}
       </button>
     </td>
   );

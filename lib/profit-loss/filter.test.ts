@@ -52,6 +52,17 @@ describe("deepestLevel", () => {
   it("returns 0 for no accounts", () => {
     expect(deepestLevel([])).toBe(0);
   });
+
+  it("cuenta los siete niveles de MicroPlus sin tope escrito", () => {
+    // MicroPlus anida un nivel más que los formatos anteriores (`5.5.01.02.22.01.01`); el
+    // filtro de Nivel los ofrece sin un solo cambio en su código, que solo cuenta segmentos.
+    const accounts: AccountRow[] = [
+      { code: "5", name: "Costos y Gastos", values: [1] },
+      { code: "5.5.01.02.22.01.01", name: "Cuenta de séptimo nivel", values: [1] },
+    ];
+    expect(deepestLevel(accounts)).toBe(7);
+    expect(accountOptions(accounts).map((o) => o.level)).toEqual([1, 7]);
+  });
 });
 
 describe("accountOptions", () => {

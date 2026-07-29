@@ -99,4 +99,12 @@ describe("fuentes analíticas desde las vistas del workspace", () => {
   it("returns nothing for an empty workspace instead of failing a query", () => {
     expect(sourcesFromViews([], [])).toEqual([]);
   });
+
+  it("passes the same declared coverage to every view, Consolidado included", () => {
+    const covered = new Set([0, 1]);
+    const sources = sourcesFromViews(workspaceViews(), [], covered);
+    for (const source of sources) {
+      expect([...source.coverage]).toEqual([0, 1]);
+    }
+  });
 });

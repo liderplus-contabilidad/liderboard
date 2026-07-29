@@ -3,6 +3,7 @@ import { CENTRO_PRINCIPAL_SOURCE, CULTURA_MANOR_SOURCE, makeSeries, makeSource }
 import { buildSeries } from "./series";
 import {
   toPareto,
+  toPctOfAccount,
   toPctOfContainer,
   toPctOfRevenue,
   toPieSlices,
@@ -20,6 +21,51 @@ function seriesOf(code: string, source: AnalyticsSource): Series {
     frequency: "mensual",
   }).series[0];
 }
+
+describe("toPctOfAccount", () => {
+  const sources = [CULTURA_MANOR_SOURCE, CENTRO_PRINCIPAL_SOURCE];
+
+  it("divides by a base that is not the revenue root", () => {
+    const pct = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "5");
+    // 8.000 dentro de unos costos de 20.121.
+    expect(pct.points[0].value ?? 0).toBeCloseTo(39.76, 2);
+  });
+
+  it("divides a series that does not hang from the base", () => {
+    // Un gasto sobre los ingresos: el caso normal del análisis vertical, no una excepción.
+    const pct = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "4");
+    expect(ARRENDAMIENTO.startsWith("4")).toBe(false);
+    expect(pct.points[0].value ?? 0).toBeCloseTo(31.71, 2);
+  });
+
+  it("returns everything null when the base is not in the source", () => {
+    const pct = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "9.9.9");
+    expect(pct.points.every((point) => point.value === null)).toBe(true);
+  });
+
+  it("divides each center by its own base", () => {
+    const manor = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "5");
+    const principal = toPctOfAccount(
+      seriesOf(ARRENDAMIENTO, CENTRO_PRINCIPAL_SOURCE),
+      sources,
+      "5",
+    );
+    // Los dos centros están ~100× separados en absoluto; sobre su propia base son el mismo peso.
+    expect(manor.points[0].value ?? 0).toBeCloseTo(principal.points[0].value ?? 0, 6);
+  });
+
+  it("keeps the key and the container", () => {
+    const series = seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE);
+    const pct = toPctOfAccount(series, sources, "5");
+    expect(pct.key).toEqual(series.key);
+    expect(pct.container).toEqual(series.container);
+  });
+
+  it("propagates the uncovered periods", () => {
+    const pct = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "5");
+    expect(pct.points[7].value).toBeNull();
+  });
+});
 
 describe("toPctOfRevenue", () => {
   const sources = [CULTURA_MANOR_SOURCE, CENTRO_PRINCIPAL_SOURCE];

@@ -11,8 +11,12 @@ import {
   periodLabels,
   sumByPeriod,
 } from "@/lib/period";
-import type { DatosCell, DatosGrid, DatosRow } from "./datos-types";
+import type { DatosCell, DatosGrid, DatosResultKind, DatosRow } from "./datos-types";
+import { isNonOperationalCode, NON_OPERATIONAL_ROOT } from "./segment";
 import type { AccountRow, CellEdit, Frequency, PygDataset } from "./types";
+
+/** Root the operating result closes on — the block income and operating costs live in. */
+const OPERATING_ROOT = "5";
 
 export interface AccountNode {
   code: string;
@@ -140,28 +144,75 @@ function rollupNode(node: AccountNode): AccountNode {
 }
 
 /**
- * Utilidad o Pérdida = Σ roots starting "4" − Σ roots starting "5". Expenses are
- * stored positive in the source system, hence the subtraction (never a sign flip).
- * Call AFTER computeRollups so root values are trustworthy.
+ * Accounting sign of a root: income (4) adds, costs and expenses (5) subtract, and so does the
+ * non-operating block (6) that «Segmentar gastos» splits out of 5.2. Expenses are stored
+ * positive in the source system, hence the subtraction (never a sign flip). This is the ONE
+ * definition — `analytics/series.ts` re-exports it rather than restating the rule.
  */
-export function computeResult(roots: AccountNode[]): { values: number[]; warnings: string[] } {
+export function rootSign(code: string): 1 | -1 | 0 {
+  if (code.startsWith("4")) {
+    return 1;
+  }
+  if (code.startsWith("5") || isNonOperationalCode(code)) {
+    return -1;
+  }
+  return 0;
+}
+
+/** Final statement summary: operating result, non-operating total (positive as an expense), and net result (operating minus non-operating). */
+export interface StatementResult {
+  /** Σ4 − Σ5 − Σ6: the result of the exercise — what the file's own row must match. */
+  values: number[];
+  /** Σ4 − Σ5. Identical to `values` while the statement has no non-operating block. */
+  operating: number[];
+  /** Σ6, positive: the non-operating block's total. Null when the statement was never segmented. */
+  nonOperatingTotal: number[] | null;
+  /** Σ5 + Σ6, or null when the statement was never segmented. */
+  expenses: number[] | null;
+  warnings: string[];
+}
+
+/**
+ * The statement's results. Segmenting only ever REDISTRIBUTES: what a 6 account takes, its twin
+ * inside 5.2 gives up, so `values` is the same number before and after — what moves is each
+ * block's own result. Call AFTER computeRollups so root values are trustworthy.
+ */
+export function computeResult(roots: AccountNode[]): StatementResult {
   const warnings: string[] = [];
   const width = roots[0]?.values.length ?? 0;
-  const values = Array.from({ length: width }, () => 0);
+  const zeros = () => Array.from({ length: width }, () => 0);
+  const income = zeros();
+  const operatingCost = zeros();
+  const nonOperatingCost = zeros();
+  let segmented = false;
 
   for (const root of roots) {
-    const sign = root.code.startsWith("4") ? 1 : root.code.startsWith("5") ? -1 : 0;
+    const sign = rootSign(root.code);
     if (sign === 0) {
       warnings.push(
-        `La cuenta raíz ${root.code} no es de ingresos (4) ni costos/gastos (5); se excluye de Utilidad o Pérdida.`,
+        `La cuenta raíz ${root.code} no es de ingresos (4), costos/gastos (5) ni gastos no operacionales (6); se excluye de Utilidad o Pérdida.`,
       );
       continue;
     }
+    const nonOperating = isNonOperationalCode(root.code);
+    segmented ||= nonOperating;
+    const target = sign === 1 ? income : nonOperating ? nonOperatingCost : operatingCost;
     for (let col = 0; col < width; col++) {
-      values[col] += sign * (root.values[col] ?? 0);
+      target[col] += root.values[col] ?? 0;
     }
   }
-  return { values, warnings };
+
+  const operating = income.map((value, col) => value - operatingCost[col]);
+  const values = operating.map((value, col) => value - nonOperatingCost[col]);
+  return {
+    values,
+    operating,
+    // The block's total as it is stored — positive. `values` already subtracts it, which is the
+    // accountant's own arithmetic: operacional − total no operacional = ejercicio.
+    nonOperatingTotal: segmented ? nonOperatingCost : null,
+    expenses: segmented ? operatingCost.map((value, col) => value + nonOperatingCost[col]) : null,
+    warnings,
+  };
 }
 
 /**
@@ -207,34 +258,62 @@ export function toDatosGrid(
   const result = computeResult(rolled);
 
   const comments = new Map<string, Map<number, string>>();
+  const editedMonths = new Map<string, Set<number>>();
   for (const item of edits) {
-    if (!item.comment) {
-      continue;
+    if (item.comment) {
+      const byMonth = comments.get(item.code) ?? new Map<number, string>();
+      byMonth.set(item.monthIndex, item.comment);
+      comments.set(item.code, byMonth);
     }
-    const byMonth = comments.get(item.code) ?? new Map<number, string>();
-    byMonth.set(item.monthIndex, item.comment);
-    comments.set(item.code, byMonth);
+    // Only LEAF accounts ever hold a value edit (`CellEdit`'s own contract), so this map never
+    // reaches a parent row below — no separate "skip parents" check is needed.
+    if (item.value !== undefined) {
+      const months = editedMonths.get(item.code) ?? new Set<number>();
+      months.add(item.monthIndex);
+      editedMonths.set(item.code, months);
+    }
   }
 
   const reusable = indexRows(previous?.rows);
   const base = dataset.baseFrequency;
   const rows: DatosRow[] = rolled.map((node) =>
-    toDatosRow(node, base, frequency, comments, reusable),
+    toDatosRow(node, base, frequency, comments, editedMonths, reusable),
   );
-  const resultValues = aggregate(result.values, base, frequency);
-  rows.push(
+  const summary = (
+    name: string,
+    values: number[],
+    resultKind: DatosResultKind,
+    anchorCode?: string,
+  ): DatosRow =>
     reuse(
       {
         code: "",
-        name: "Utilidad o Pérdida",
+        name,
         level: 1,
         movement: false,
         isResult: true,
-        cells: resultValues.map((value) => ({ value })),
+        resultKind,
+        ...(anchorCode ? { anchorCode } : {}),
+        cells: aggregate(values, base, frequency).map((value) => ({ value })),
       },
-      previous?.rows.find((row) => row.isResult),
-    ),
-  );
+      previous?.rows.find((row) => row.resultKind === resultKind),
+    );
+
+  if (result.nonOperatingTotal && result.expenses) {
+    rows.push(
+      summary("Utilidad Operacional", result.operating, "operacional", OPERATING_ROOT),
+      summary(
+        "Total No Operacional",
+        result.nonOperatingTotal,
+        "no-operacional",
+        NON_OPERATIONAL_ROOT,
+      ),
+      summary("Total Gastos del Ejercicio", result.expenses, "total-gastos"),
+      summary("Utilidad del Ejercicio", result.values, "ejercicio"),
+    );
+  } else {
+    rows.push(summary("Utilidad o Pérdida", result.values, "ejercicio"));
+  }
 
   // The labels are a module constant, but the copy is not: a fresh `months` array would
   // invalidate whatever the view memoizes against it (the visible columns) and re-render
@@ -254,6 +333,44 @@ export function toDatosGrid(
     months,
     rows,
   };
+}
+
+/** Where each summary row goes: closing a root's block, or closing the grid. */
+export interface SummaryPlacement {
+  /** Summaries that close a root, keyed by that root's code. */
+  byAnchor: Map<string, DatosRow[]>;
+  /** Summaries that close the grid — unanchored, or anchored to a root that isn't rendered. */
+  trailing: DatosRow[];
+}
+
+/**
+ * Splits a grid's summary rows between the block each one closes and the tail of the grid.
+ *
+ * An anchor only holds while the grid is UNSORTED: sorting reorders the roots, so "after section
+ * 5" stops meaning anything. An anchor whose root the account filter hid falls back to the tail
+ * too, so a summary is never dropped.
+ */
+export function planSummaries(
+  rows: DatosRow[],
+  sorted: boolean,
+  visibleRoots: ReadonlySet<string>,
+): SummaryPlacement {
+  const byAnchor = new Map<string, DatosRow[]>();
+  const trailing: DatosRow[] = [];
+
+  for (const row of rows) {
+    if (!row.isResult) {
+      continue;
+    }
+    const anchored = !sorted && row.anchorCode && visibleRoots.has(row.anchorCode);
+    if (!anchored) {
+      trailing.push(row);
+      continue;
+    }
+    const code = row.anchorCode as string;
+    byAnchor.set(code, [...(byAnchor.get(code) ?? []), row]);
+  }
+  return { byAnchor, trailing };
 }
 
 /** Every account row of a grid by code, so a rebuild can look up its own predecessor. */
@@ -291,13 +408,19 @@ function sameRow(a: DatosRow, b: DatosRow): boolean {
     a.level !== b.level ||
     a.movement !== b.movement ||
     a.isResult !== b.isResult ||
+    a.resultKind !== b.resultKind ||
+    a.anchorCode !== b.anchorCode ||
     a.cells.length !== b.cells.length ||
     (a.children?.length ?? -1) !== (b.children?.length ?? -1)
   ) {
     return false;
   }
   for (let i = 0; i < a.cells.length; i++) {
-    if (a.cells[i].value !== b.cells[i].value || a.cells[i].comment !== b.cells[i].comment) {
+    if (
+      a.cells[i].value !== b.cells[i].value ||
+      a.cells[i].comment !== b.cells[i].comment ||
+      a.cells[i].edited !== b.cells[i].edited
+    ) {
       return false;
     }
   }
@@ -320,15 +443,22 @@ function toDatosRow(
   base: Frequency,
   frequency: Frequency,
   comments: Map<string, Map<number, string>>,
+  editedMonths: Map<string, Set<number>>,
   reusable: Map<string, DatosRow>,
 ): DatosRow {
   const values = aggregate(node.values, base, frequency);
   const byMonth = comments.get(node.code);
+  const editedSet = editedMonths.get(node.code);
   const span = base === "mensual" ? MONTHS_PER_PERIOD[frequency] : 1;
 
   const cells: DatosCell[] = values.map((value, period) => {
     const joined = byMonth ? joinComments(byMonth, period, span) : undefined;
-    return joined ? { value, comment: joined } : { value };
+    const edited = editedSet ? overlapsSpan(editedSet, period, span) : false;
+    return {
+      value,
+      ...(joined ? { comment: joined } : {}),
+      ...(edited ? { edited: true } : {}),
+    };
   });
 
   return reuse(
@@ -341,7 +471,7 @@ function toDatosRow(
       ...(node.children.length > 0
         ? {
             children: node.children.map((child) =>
-              toDatosRow(child, base, frequency, comments, reusable),
+              toDatosRow(child, base, frequency, comments, editedMonths, reusable),
             ),
           }
         : {}),
@@ -364,6 +494,16 @@ function joinComments(
     }
   }
   return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+/** Whether any base month a period covers is in `months` — same span logic as `joinComments`. */
+function overlapsSpan(months: ReadonlySet<number>, period: number, span: number): boolean {
+  for (let m = period * span; m < (period + 1) * span; m++) {
+    if (months.has(m)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

@@ -16,7 +16,17 @@ import type { AnalyticsSource } from "./types";
 /** Center id for a standalone statement, which carries no cost center of its own. */
 export const DEFAULT_CENTER_ID = "default";
 
-export function buildAnalyticsSource(dataset: PygDataset, edits: CellEdit[] = []): AnalyticsSource {
+/**
+ * `coveredIndices` is the workspace's declared coverage (`WorkspaceMeta.loadedMonths`, in
+ * either mode now) — when given, it wins outright and the values are never inspected to decide
+ * it. Omitting it falls back to value-based inference, kept only for callers with no declared
+ * coverage to pass (tests, fixtures) — every real workspace declares one.
+ */
+export function buildAnalyticsSource(
+  dataset: PygDataset,
+  edits: CellEdit[] = [],
+  coveredIndices?: ReadonlySet<number>,
+): AnalyticsSource {
   const { roots } = buildAccountTree(dataset.accounts);
   const rolled = computeRollups(applyLeafEdits(roots, edits));
 
@@ -46,7 +56,7 @@ export function buildAnalyticsSource(dataset: PygDataset, edits: CellEdit[] = []
     valuesByCode,
     namesByCode,
     parentByCode,
-    coverage: computeCoverage(valuesByCode),
+    coverage: coveredIndices ?? computeCoverage(valuesByCode),
   };
 }
 

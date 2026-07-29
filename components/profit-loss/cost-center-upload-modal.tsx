@@ -1,51 +1,92 @@
 "use client";
 
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { cn } from "@/lib/cn";
-import { db } from "@/lib/profit-loss/db";
-import { PygParseError } from "@/lib/profit-loss/errors";
-import { buildWorkspace, type StagedParse } from "@/lib/profit-loss/workspace";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { cn } from "@/lib/cn";
+import { MONTHS_FULL_ES } from "@/lib/date";
+import type { ReloadConflict } from "@/lib/profit-loss/conflicts";
+import { db, saveCellEdit } from "@/lib/profit-loss/db";
+import { PygParseError } from "@/lib/profit-loss/errors";
+import type { PygDataset } from "@/lib/profit-loss/types";
+import { validateBatch } from "@/lib/profit-loss/upload/batch";
+import type { StagedUpload } from "@/lib/profit-loss/upload/types";
+import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
+import {
+  compareIdentity,
+  describeIdentityChange,
+  type IdentityMismatchReason,
+  type WorkspaceIdentity,
+} from "@/lib/profit-loss/workspace-identity";
 import { usePygData } from "./pyg-data-provider";
 
 interface StagedFile {
   fileName: string;
-  parsed?: StagedParse;
+  staged?: StagedUpload;
   badge: string;
   error?: string;
 }
 
-function describe(parsed: StagedParse): string {
-  if (parsed.format === "consolidated") {
-    const centers = parsed.consolidated.columns.filter((c) => c.kind === "center").length;
-    return `Consolidado · ${centers} centro${centers === 1 ? "" : "s"}`;
+interface UploadSummary {
+  mode: "single" | "centers";
+  loadedMonths: number[];
+  centersCount: number;
+  accountsCount: number;
+  warnings: string[];
+  conflicts: ReloadConflict[];
+}
+
+function describe(staged: StagedUpload): string {
+  if (staged.kind === "month-slice") {
+    const month = MONTHS_FULL_ES[staged.month] ?? `mes ${staged.month + 1}`;
+    const label = staged.mode === "single" ? "Estado único" : "Mensual por centros";
+    return `${label} · ${month} ${staged.year}`;
   }
-  const d = parsed.result.dataset;
-  if (d.costCenterName) {
-    return `Centro: ${d.costCenterName}${d.year ? ` · ${d.year}` : ""}`;
-  }
-  return d.baseFrequency === "anual" ? "Estado único · anual" : "Estado único · mensual";
+  const isSingle = staged.datasets.length === 1 && staged.datasets[0].role === "single";
+  return isSingle ? "Excel con tus datos (estado único)" : "Excel completo de la app";
+}
+
+/** Every distinct `kind` staged so far — a valid batch has exactly one. */
+function stagedKinds(files: StagedFile[]): StagedUpload["kind"][] {
+  return [
+    ...new Set(files.filter((f) => f.staged).map((f) => f.staged?.kind as StagedUpload["kind"])),
+  ];
 }
 
 /**
- * Staging modal for the multi-center upload: drag/drop or pick several files, each parsed on
- * the fly to show its detected role (center / consolidado / single), keep adding, then commit
- * the whole workspace at once. The single-statement flow also goes through here.
+ * Staging modal for PyG's Excel uploads, resolved through the strategy registry: each dropped
+ * file is parsed on the spot (its badge names the format and, for a month slice, the period and
+ * mode), or shows its own concrete error. Month slices (either mode) are validated and merged as
+ * ONE batch; an "Excel completo" file replaces the whole workspace. A batch whose identity
+ * (sistema, empresa, año, modo) contradicts the loaded workspace triggers ONE replace
+ * confirmation instead of merging (see `pyg-single-monthly-upload`'s "Identidad del workspace"
+ * and `pyg-microplus-upload`'s "El sistema de origen forma parte de la identidad del workspace").
  */
 export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { commitWorkspace } = usePygData();
+  const { commitWorkspace, commitMonthlyBatch, replaceMonthlyWorkspace, workspaceIdentity } =
+    usePygData();
   const [files, setFiles] = useState<StagedFile[]>([]);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmDestructive, setConfirmDestructive] = useState(false);
+  const [confirmIdentityChange, setConfirmIdentityChange] = useState<{
+    current: WorkspaceIdentity;
+    incoming: WorkspaceIdentity;
+    reasons: IdentityMismatchReason[];
+  } | null>(null);
+  const [summary, setSummary] = useState<UploadSummary | null>(null);
 
-  // Reset the confirm gate whenever the modal is closed, so it never reappears stale.
+  // Reset everything once the modal is closed, so it never reopens on stale state.
   useEffect(() => {
     if (!open) {
-      setConfirmOpen(false);
+      setConfirmDestructive(false);
+      setConfirmIdentityChange(null);
+      setSummary(null);
+      setFiles([]);
+      setBatchError(null);
     }
   }, [open]);
 
@@ -56,14 +97,14 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     if (picked.length === 0) {
       return;
     }
-    // Dynamic import keeps SheetJS out of the initial bundle (see `errors.ts`: the typed
-    // failures live apart precisely so this import can be deferred).
-    const { parseWorkbookFile } = await import("@/lib/profit-loss/parse");
+    // Dynamic import keeps SheetJS out of the initial bundle.
+    const { resolveUpload } = await import("@/lib/profit-loss/upload/registry");
     const staged = await Promise.all(
       picked.map(async (file): Promise<StagedFile> => {
         try {
-          const parsed = await parseWorkbookFile(file);
-          return { fileName: file.name, parsed, badge: describe(parsed) };
+          const buffer = await file.arrayBuffer();
+          const result = resolveUpload(file.name, buffer);
+          return { fileName: file.name, staged: result, badge: describe(result) };
         } catch (error) {
           return {
             fileName: file.name,
@@ -79,42 +120,200 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
     setFiles((prev) => [...prev, ...staged]);
   }, []);
 
-  const valid = files.filter((f) => f.parsed);
-  const preview =
-    valid.length > 0 ? buildWorkspace(valid.map((f) => f.parsed as StagedParse)) : null;
+  const validFiles = useMemo(() => files.filter((f) => f.staged), [files]);
+  const kinds = useMemo(() => stagedKinds(files), [files]);
+  const kind = kinds.length === 1 ? kinds[0] : undefined;
+  const monthSlices = useMemo(
+    () =>
+      kind === "month-slice"
+        ? (validFiles.map((f) => f.staged) as Extract<StagedUpload, { kind: "month-slice" }>[])
+        : [],
+    [kind, validFiles],
+  );
 
-  // The actual replace; shared by the no-edits direct path and the confirm dialog.
-  const doCommit = useCallback(async () => {
-    if (!preview || busy) {
+  // Set-level validation (single year, no duplicate month) — checked before the load button
+  // ever enables, so a mistake in the batch never reaches the write path.
+  useEffect(() => {
+    if (monthSlices.length === 0) {
+      setBatchError(null);
       return;
     }
+    try {
+      validateBatch(monthSlices);
+      setBatchError(null);
+    } catch (error) {
+      setBatchError(error instanceof PygParseError ? error.message : "Lote inválido.");
+    }
+  }, [monthSlices]);
+
+  const mixedKindsError =
+    kinds.length > 1
+      ? "No se puede cargar un Excel completo junto con archivos mensuales; quita uno de los dos grupos."
+      : null;
+
+  const finishWithMonthlyOutcome = useCallback(
+    (
+      mode: "single" | "centers",
+      outcome: { datasets: PygDataset[]; loadedMonths: number[]; warnings: string[] },
+      conflicts: ReloadConflict[] = [],
+    ) => {
+      const accountsCount = outcome.datasets[0]?.accounts.length ?? 0;
+      setSummary({
+        mode,
+        loadedMonths: outcome.loadedMonths,
+        centersCount: outcome.datasets.length,
+        accountsCount,
+        warnings: outcome.warnings,
+        conflicts,
+      });
+      setFiles([]);
+    },
+    [],
+  );
+
+  const runMonthlyCommit = useCallback(async () => {
     setBusy(true);
     try {
-      await commitWorkspace(preview);
-      onClose();
-      setFiles([]);
+      const outcome = await commitMonthlyBatch(monthSlices);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome, outcome.conflicts);
     } finally {
       setBusy(false);
     }
-  }, [preview, busy, commitWorkspace, onClose]);
+  }, [commitMonthlyBatch, monthSlices, finishWithMonthlyOutcome]);
 
-  // Entry from the "Cargar" button: gate on existing edits before replacing.
-  const commit = useCallback(async () => {
-    if (!preview || busy) {
-      return;
-    }
-    // Hold the button disabled across the edit-count lookup so a double-click can't
-    // re-enter; committing then replaces the whole workspace.
+  const runIdentityChangeReplace = useCallback(async () => {
     setBusy(true);
-    const editCount = await db.edits.count();
-    setBusy(false);
-    // Confirm first if replacing would discard existing edits.
-    if (editCount > 0) {
-      setConfirmOpen(true);
+    try {
+      const outcome = await replaceMonthlyWorkspace(monthSlices);
+      finishWithMonthlyOutcome(monthSlices[0]?.mode ?? "centers", outcome);
+    } finally {
+      setBusy(false);
+      setConfirmIdentityChange(null);
+    }
+  }, [replaceMonthlyWorkspace, monthSlices, finishWithMonthlyOutcome]);
+
+  const runReplaceWorkspace = useCallback(
+    async (built: BuiltWorkspace) => {
+      setBusy(true);
+      try {
+        await commitWorkspace(built);
+        onClose();
+        setFiles([]);
+      } finally {
+        setBusy(false);
+        setConfirmDestructive(false);
+      }
+    },
+    [commitWorkspace, onClose],
+  );
+
+  // "Excel completo de la app" — reconstructs the whole workspace via its hidden metadata sheet.
+  // A single-dataset, role:"single" reconstruction is a single-mode workspace; anything else is
+  // the by-centers one.
+  const workspaceBuilt: BuiltWorkspace | null = (() => {
+    const staged = validFiles[0]?.staged;
+    if (!staged || staged.kind !== "workspace") {
+      return null;
+    }
+    return {
+      mode:
+        staged.datasets.length === 1 && staged.datasets[0].role === "single" ? "single" : "multi",
+      datasets: staged.datasets,
+      commentsByDataset: staged.commentsByDataset,
+      meta: staged.meta,
+    };
+  })();
+
+  const commit = useCallback(async () => {
+    if (busy) {
       return;
     }
-    await doCommit();
-  }, [preview, busy, doCommit]);
+    if (kind === "month-slice") {
+      if (monthSlices.length === 0 || batchError) {
+        return;
+      }
+      const incoming = monthSlices[0];
+      const incomingIdentity: WorkspaceIdentity = {
+        system: incoming.system,
+        companyName: incoming.companyName,
+        year: incoming.year,
+        mode: incoming.mode,
+      };
+      const reasons = workspaceIdentity ? compareIdentity(workspaceIdentity, incomingIdentity) : [];
+      if (workspaceIdentity && reasons.length > 0) {
+        setConfirmIdentityChange({
+          current: workspaceIdentity,
+          incoming: incomingIdentity,
+          reasons,
+        });
+        return;
+      }
+      await runMonthlyCommit();
+      return;
+    }
+    if (!workspaceBuilt) {
+      return;
+    }
+    if (workspaceBuilt.mode === "single") {
+      setBusy(true);
+      const editCount = await db.edits.count();
+      setBusy(false);
+      if (editCount > 0) {
+        setConfirmDestructive(true);
+        return;
+      }
+    }
+    await runReplaceWorkspace(workspaceBuilt);
+  }, [
+    busy,
+    kind,
+    monthSlices,
+    batchError,
+    workspaceIdentity,
+    runMonthlyCommit,
+    workspaceBuilt,
+    runReplaceWorkspace,
+  ]);
+
+  const identityChangeConfirmation = useMemo(
+    () =>
+      confirmIdentityChange
+        ? describeIdentityChange(
+            confirmIdentityChange.current,
+            confirmIdentityChange.incoming,
+            confirmIdentityChange.reasons,
+          )
+        : null,
+    [confirmIdentityChange],
+  );
+
+  const removeAdjustment = useCallback(async (conflict: ReloadConflict) => {
+    const existing = await db.edits
+      .where("[datasetId+code+monthIndex]")
+      .equals([conflict.datasetId, conflict.code, conflict.monthIndex])
+      .first();
+    await saveCellEdit({
+      datasetId: conflict.datasetId,
+      code: conflict.code,
+      monthIndex: conflict.monthIndex,
+      ...(existing?.comment ? { comment: existing.comment } : {}),
+    });
+    setSummary((prev) =>
+      prev
+        ? {
+            ...prev,
+            conflicts: prev.conflicts.filter(
+              (c) =>
+                !(
+                  c.datasetId === conflict.datasetId &&
+                  c.code === conflict.code &&
+                  c.monthIndex === conflict.monthIndex
+                ),
+            ),
+          }
+        : prev,
+    );
+  }, []);
 
   if (!open) {
     return null;
@@ -125,7 +324,9 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-6">
         <div className="w-full max-w-[560px] rounded-2xl border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
           <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
-            <h2 className="text-sm font-semibold text-ink">Cargar Excel</h2>
+            <h2 className="text-sm font-semibold text-ink">
+              {summary ? "Carga completa" : "Cargar Excel"}
+            </h2>
             <button
               type="button"
               aria-label="Cerrar"
@@ -136,120 +337,219 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
             </button>
           </header>
 
-          <div className="p-5">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                void addFiles(e.dataTransfer.files);
-              }}
-              className={cn(
-                "flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors",
-                dragOver
-                  ? "border-brand bg-brand-soft"
-                  : "border-border bg-canvas hover:border-faint",
-              )}
-            >
-              <Upload size={22} className="text-muted" />
-              <span className="text-[13px] font-medium text-ink">
-                Arrastra los archivos o haz clic para seleccionar
-              </span>
-              <span className="text-[11.5px] text-faint">
-                Sucursales mensuales, consolidado por centros, o un estado único (.xls / .xlsx)
-              </span>
-            </button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".xls,.xlsx"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                void addFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
+          {summary ? (
+            <SummaryPanel summary={summary} onRemoveAdjustment={removeAdjustment} />
+          ) : (
+            <div className="p-5">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  void addFiles(e.dataTransfer.files);
+                }}
+                className={cn(
+                  "flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors",
+                  dragOver
+                    ? "border-brand bg-brand-soft"
+                    : "border-border bg-canvas hover:border-faint",
+                )}
+              >
+                <Upload size={22} className="text-muted" />
+                <span className="text-[13px] font-medium text-ink">
+                  Arrastra los archivos o haz clic para seleccionar
+                </span>
+                <span className="text-[11.5px] text-faint">
+                  Un mes por centros de costo (PyG-AAAA-MM-…), un mes de estado único (con su rango
+                  de fechas), o el Excel completo de la app (.xls / .xlsx)
+                </span>
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".xls,.xlsx"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
 
-            {files.length > 0 && (
-              <ul className="mt-4 flex flex-col gap-1.5">
-                {files.map((file, i) => (
-                  <li
-                    key={`${file.fileName}-${i}`}
-                    className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"
-                  >
-                    <FileSpreadsheet
-                      size={18}
-                      className={file.error ? "text-negative" : "text-brand"}
-                    />
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate text-[12.5px] font-medium text-ink">
-                        {file.fileName}
-                      </span>
-                      <span
-                        className={cn("text-[11px]", file.error ? "text-negative" : "text-faint")}
-                      >
-                        {file.error ?? file.badge}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Quitar"
-                      onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                      className="ml-auto text-faint hover:text-negative"
+              {files.length > 0 && (
+                <ul className="mt-4 flex flex-col gap-1.5">
+                  {files.map((file, i) => (
+                    <li
+                      key={`${file.fileName}-${i}`}
+                      className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"
                     >
-                      <X size={15} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                      <FileSpreadsheet
+                        size={18}
+                        className={file.error ? "text-negative" : "text-brand"}
+                      />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-[12.5px] font-medium text-ink">
+                          {file.fileName}
+                        </span>
+                        <span
+                          className={cn("text-[11px]", file.error ? "text-negative" : "text-faint")}
+                        >
+                          {file.error ?? file.badge}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Quitar"
+                        onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                        className="ml-auto text-faint hover:text-negative"
+                      >
+                        <X size={15} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-            {preview && preview.meta.warnings.length > 0 && (
-              <NoticeBanner details={preview.meta.warnings} className="mt-3">
-                {preview.meta.warnings.length} aviso(s) de cuadre; se cargarán los valores tal cual.
-              </NoticeBanner>
-            )}
-          </div>
+              {mixedKindsError && <NoticeBanner className="mt-3">{mixedKindsError}</NoticeBanner>}
+              {!mixedKindsError && batchError && (
+                <NoticeBanner className="mt-3">{batchError}</NoticeBanner>
+              )}
+            </div>
+          )}
 
           <footer className="flex items-center justify-end gap-2.5 border-t border-border px-5 py-3.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-[34px] rounded-[8px] border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-muted hover:bg-canvas"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={!preview || busy}
-              onClick={() => void commit()}
-              className="inline-flex h-[34px] items-center gap-2 rounded-[8px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {busy && <Loader2 size={14} className="animate-spin" />}
-              Cargar{" "}
-              {valid.length > 0 ? `${valid.length} archivo${valid.length === 1 ? "" : "s"}` : ""}
-            </button>
+            {summary ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-[34px] rounded-[8px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-hover"
+              >
+                Cerrar
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="h-[34px] rounded-[8px] border border-border bg-surface px-3.5 text-[12.5px] font-semibold text-muted hover:bg-canvas"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    validFiles.length === 0 ||
+                    busy ||
+                    Boolean(batchError) ||
+                    Boolean(mixedKindsError)
+                  }
+                  onClick={() => void commit()}
+                  className="inline-flex h-[34px] items-center gap-2 rounded-[8px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busy && <Loader2 size={14} className="animate-spin" />}
+                  Cargar{" "}
+                  {validFiles.length > 0
+                    ? `${validFiles.length} archivo${validFiles.length === 1 ? "" : "s"}`
+                    : ""}
+                </button>
+              </>
+            )}
           </footer>
         </div>
       </div>
+
       <ConfirmDialog
-        open={confirmOpen}
+        open={confirmDestructive}
         variant="destructive"
         busy={busy}
         title="Reemplazar datos actuales"
         description="Cargar reemplazará los datos actuales y descartará las ediciones y comentarios existentes. ¿Continuar?"
         confirmLabel="Cargar"
         cancelLabel="Cancelar"
-        onConfirm={() => void doCommit()}
-        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          if (workspaceBuilt) {
+            void runReplaceWorkspace(workspaceBuilt);
+          }
+        }}
+        onCancel={() => setConfirmDestructive(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmIdentityChange !== null}
+        variant="destructive"
+        busy={busy}
+        title={identityChangeConfirmation?.title ?? "Reemplazar datos actuales"}
+        description={identityChangeConfirmation?.description}
+        confirmLabel={identityChangeConfirmation?.title ?? "Continuar"}
+        cancelLabel="Cancelar"
+        onConfirm={() => void runIdentityChangeReplace()}
+        onCancel={() => setConfirmIdentityChange(null)}
       />
     </>
+  );
+}
+
+function SummaryPanel({
+  summary,
+  onRemoveAdjustment,
+}: {
+  summary: UploadSummary;
+  onRemoveAdjustment: (conflict: ReloadConflict) => void;
+}) {
+  const monthLabels = summary.loadedMonths.map((m) => MONTHS_FULL_ES[m] ?? `mes ${m + 1}`);
+  return (
+    <div className="flex flex-col gap-3 p-5">
+      <p className="text-[13px] text-ink-soft">
+        Meses cargados: {monthLabels.join(", ") || "ninguno"}.{" "}
+        {summary.mode === "centers" && (
+          <>
+            {summary.centersCount} centro{summary.centersCount === 1 ? "" : "s"},{" "}
+          </>
+        )}
+        {summary.accountsCount} cuenta{summary.accountsCount === 1 ? "" : "s"}.
+      </p>
+      {summary.warnings.length > 0 && (
+        <NoticeBanner details={summary.warnings}>
+          {summary.warnings.length} aviso{summary.warnings.length === 1 ? "" : "s"} de la carga.
+        </NoticeBanner>
+      )}
+      {summary.conflicts.length > 0 && (
+        <div className="rounded-lg border border-border">
+          <div className="border-b border-border px-3 py-2 text-[12px] font-semibold text-ink">
+            {summary.conflicts.length} ajuste{summary.conflicts.length === 1 ? "" : "s"} sobre un
+            valor que cambió
+          </div>
+          <ul className="flex flex-col divide-y divide-border-soft">
+            {summary.conflicts.map((conflict, i) => (
+              <li
+                key={`${conflict.datasetId}-${conflict.code}-${conflict.monthIndex}-${i}`}
+                className="flex items-start gap-2.5 px-3 py-2 text-[12px] text-ink-soft"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="font-semibold text-ink">{conflict.centerName}</span> ·{" "}
+                  {conflict.code} {conflict.accountName} (
+                  {MONTHS_FULL_ES[conflict.monthIndex] ?? conflict.monthIndex + 1}): el archivo
+                  cambió de {conflict.previousFileValue} a {conflict.newFileValue}, el ajuste sigue
+                  en {conflict.adjustmentValue}.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveAdjustment(conflict)}
+                  className="shrink-0 text-[11.5px] font-semibold text-brand hover:underline"
+                >
+                  Quitar ajuste
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

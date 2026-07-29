@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MONTHS_SHORT_ES } from "@/lib/date";
+import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGrid } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
@@ -13,6 +14,7 @@ import { flattenSorted } from "./datos-utils";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { DatosTable } from "./datos-table";
 import { usePygData } from "./pyg-data-provider";
+import { SegmentActions } from "./segment-actions";
 
 interface EditingState extends EditorAnchor {
   code: string;
@@ -28,6 +30,9 @@ const AccountDetailPanel = dynamic(
   () => import("./account-detail-panel").then((mod) => mod.AccountDetailPanel),
   { ssr: false },
 );
+
+/** How long the twin cell stays lit. Long enough to find it, short enough not to linger. */
+const FLASH_MS = 2200;
 
 const EMPTY_GRID: DatosGrid = {
   id: "default",
@@ -58,6 +63,8 @@ export function DatosView() {
     warnings,
     collapsed,
     toggleCollapsed,
+    mode,
+    loadedMonths,
   } = usePygData();
 
   const [sort, setSort] = useState<DatosSort | null>(null);
@@ -66,6 +73,9 @@ export function DatosView() {
   // Which account's ficha is open. Memory only, like the analytics selection: it means nothing
   // without the workspace that produced it.
   const [detailCode, setDetailCode] = useState<string | null>(null);
+  // The twin cell a reclassification just moved, flashed briefly so the change doesn't happen
+  // out of sight. Memory only — it means nothing after the edit that produced it.
+  const [flash, setFlash] = useState<{ code: string; monthIndex: number } | null>(null);
 
   // A newly loaded dataset can be coarser than the current view (its base floors the
   // options), but the provider resets `frequency` to the base one render later. Until it
@@ -87,6 +97,14 @@ export function DatosView() {
     previousGrid.current = next;
     return next;
   }, [dataset, edits, effectiveFrequency]);
+  // The by-centers workspace declares which periods it loaded; a single-statement workspace
+  // has no such restriction (its whole year always arrives in one file).
+  const loadedColumns = useMemo(() => {
+    if (mode !== "multi" || !dataset) {
+      return null;
+    }
+    return aggregateCoverage(new Set(loadedMonths), dataset.baseFrequency, effectiveFrequency);
+  }, [mode, dataset, loadedMonths, effectiveFrequency]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).
@@ -112,6 +130,16 @@ export function DatosView() {
   useEffect(() => {
     setWarningsDismissed(false);
   }, [warnings]);
+
+  // The flash is a pointer, not a state of the data: it fades on its own so the table doesn't
+  // end up with several cells marked from edits the reader already saw.
+  useEffect(() => {
+    if (!flash) {
+      return;
+    }
+    const timer = setTimeout(() => setFlash(null), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   // Aggregating to fewer columns (e.g. Mensual → Trimestral) can strand a month-column
   // sort on a column that no longer exists; clear it so the grid isn't "sorted" by nothing.
@@ -155,7 +183,7 @@ export function DatosView() {
           editing.col,
           editing.valueEditable ? value : undefined,
           comment,
-        );
+        ).then(setFlash);
       }
       setEditing(null);
     },
@@ -185,12 +213,16 @@ export function DatosView() {
         editable={editable}
         readOnlyReason={readOnlyReason}
         showTotal={showTotal}
+        flash={flash}
+        loadedColumns={loadedColumns}
         openDetailCode={detailCode}
         onSort={onSort}
         onToggle={toggleCollapsed}
         onEditCell={onEditCell}
         onOpenDetail={onOpenDetail}
       />
+
+      <SegmentActions />
 
       {detailCode !== null && <AccountDetailPanel code={detailCode} onClose={onCloseDetail} />}
 

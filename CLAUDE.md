@@ -114,14 +114,78 @@ edit/comment); editing/commenting is monthly-view-only. The Datos toolbar downlo
 the edited state or a seeded blank template via `exceljs` (`export.ts`, dynamic
 import); the "con tus datos" file re-uploads cleanly and restores its comments from a
 hidden metadata sheet. Only leaf (movement) accounts
-edit their value; parent accounts comment-only. **Cost centers** are supported: a staging
-upload modal (`cost-center-upload-modal.tsx`) accepts several files at once (monthly
-sucursal statements + the annual `consolidado`), grouped by each file's internal
-`Centro de Costo:` line — never by filename (the real exports prove filenames unreliable).
-`workspace.ts` assembles them into a multi-dataset workspace (Dexie v2 + a `meta` singleton)
-and validates cuadres. `parse.ts` routes consolidated files via
-`parseWorkbook`/`parseConsolidatedWorkbook` instead of rejecting them; the multi-center
-download writes one sheet per center + the Consolidado (`buildMultiCenterWorkbook`).
+edit their value; parent accounts comment-only. **Cost centers load monthly and incrementally:**
+one file = one month = every center at once (`GENERAL` + a column per center + `SIN CENTRO DE
+COSTO`, the same grid the accounting system always exports); uploading June writes column 5 of
+every center and leaves every other month untouched. The file carries no date, so the filename
+declares the period — `PyG-YYYY-MM[-libre].(xlsx|xls)` — and is validated as such.
+`lib/profit-loss/upload/` is a strategy registry (`registry.ts`, first-match-wins over an
+ordered list) that replaces a format `if`: `monthly-centers.ts`, `monthly-single.ts` (the
+single-mode counterpart — unlike centers, its file DOES declare its own period, a
+`Desde el … hasta el …` line read by `date-range.ts`; a range that isn't exactly one calendar
+month is rejected naming why, and the filename plays no part), `microplus.ts` and `dingoo.ts` (a
+SECOND and a THIRD accounting system, both single-mode only) and `app-workbook.ts` (reads the
+app's own downloads back, either mode) each own their sheet shape, account-code convention and
+sign rule; `grid.ts` holds only the convention-free reading utilities. **MicroPlus is the proof
+the registry is a real extension point**: it exercises all six of those without touching the
+core. Its preamble is spread across arbitrary cells, so `microplus-grid.ts` locates EVERYTHING by
+the labels the report writes (`CODIGO`+`NOMBRE DE LA CUENTA`, `Desde:`/`Hasta:` in separate
+cells, `RESULTADO:`) and never by coordinates; a value is the ONE non-empty cell right of the
+name (the column encodes depth, `SALDO` labels a column only level 3 uses); the trailing dot of
+a parent code is stripped and kept only as a cross-check against the derived tree (an aviso when
+they disagree, the tree wins); numbers arrive as text with thousands separators; and the expense
+branch (root `5`) is NEGATED at import, because MicroPlus stores expenses negative and adds
+while the app stores them positive and subtracts. **Dingoo is the mirror of MicroPlus**, and that
+is what makes it worth reading: its `dingoo-grid.ts` also locates everything by label, but `Saldo`
+here really IS the value column (every level values in it, so an empty cell is a ZERO and nothing
+goes hunting), codes carry two-digit segments kept VERBATIM (`5.02.01.01.01` — the leading zeros
+are what the accountant checks against their own file), and the negated branch is `4`, not `5`,
+because Dingoo stores INCOME negative. Two systems negating opposite branches over an untouched
+`derive.ts` is the sign convention proving it belongs to the strategy. Its period is a one-line
+`Desde el … al …` (`al`, not the `hasta el` of `monthly-single`, whose pattern is deliberately NOT
+relaxed), and its company is read skipping the report's own titles (`REPORTE`, `ESTADO DE
+RESULTADOS`) — otherwise «first non-empty line» hands back `REPORTE`. **Both detects require their
+own range declaration**, not just the header: `Código`+`Nombre de la cuenta` normalizes to exactly
+MicroPlus's `CODIGO`+`NOMBRE DE LA CUENTA`, so the header alone made MicroPlus claim Dingoo's
+files. Order is not what separates them; each `detect` is. The exact-calendar-month rule
+(`date-range.ts`'s `toCalendarMonth`) is shared verbatim — no per-vendor exception. `merge-month.ts` is the pure merge — new center/account →
+zero-filled everywhere but the arriving month, and cuadre against `GENERAL` (one aviso per month,
+never per account). `WorkspaceMeta.loadedMonths` is the declared coverage — a month never
+loaded reads `null` through the whole engine (`buildAnalyticsSource`'s `coveredIndices` param),
+never the same as a loaded month valued at 0. Edits survive every reload (`applyMonthSlice`
+never touches `edits`); an adjusted cell gets a dotted `brand` underline in Datos, and reloading
+a month whose file value changed under an adjustment surfaces as a conflict in the upload
+summary, removable from there. `Sin centro de costo` is an ordinary editable monthly center now
+(just its own selector color/position), so the Consolidado equals `GENERAL` by construction.
+Downloads: "Excel completo" (`buildMultiCenterWorkbook`, one sheet per center + Consolidado,
+round-trips through `app-workbook.ts`) and "un mes en crudo" (`buildMonthSliceWorkbook`, re-enters
+through `monthly-centers.ts`); no blank template in either mode. **Estado único loads monthly and
+incrementally too**: `monthly-single.ts` reduces every upload to the same `month-slice` shape
+(`mode: "single"`, one nameless `centerId: null` slice, no `general`), so it reuses
+`merge-month.ts`/`loadedMonths` unmodified — a single-mode dataset's `baseFrequency` is therefore
+always `"mensual"`, unlocking trimestral/semestral/anual there too. **Workspace identity is
+`(sistema, empresa, año, modo)`** (`workspace-identity.ts`): a file whose system, company, year or
+mode contradicts what's loaded triggers one replace confirmation before writing anything,
+superseding the old "un año por workspace" rule. The SYSTEM is the id of the originating strategy
+(`upload/systems.ts`), stored in `WorkspaceMeta.sourceSystemId` and carried through the app's own
+workbook metadata, because two systems' charts of accounts (`4.1.01.01.01` vs `4.1.1.1.1`) would
+fuse into one meaningless tree and nothing else would catch it when company and year match.
+Estado único's downloads mirror centers: "Excel con tus datos"
+(`buildPygWorkbook`, carries `loadedMonths` and adjustment originals in the same hidden metadata
+sheet `app-workbook.ts` reads) and "un mes en crudo" (`buildSingleMonthSliceWorkbook`, re-enters
+through `monthly-single.ts`) — but **"un mes en crudo" only appears when the originating strategy
+declares `writesOwnFormat`**; MicroPlus is read-only, so its workspace shows one plain button.
+**Análisis vertical:** the first card of Análisis is a TABLE (accounts × periods, each cell the
+share of a base account the reader picks), so it does not use `ChartCard` — that component only
+shows its table twin alongside an `option` with series. `lib/profit-loss/charts/vertical.ts`
+(pure + tested) builds it straight off the `AnalyticsSource`, because a `SeriesQuery` would cap
+it at the palette's eight slots and this draws the whole tree. Rows need NOT descend from the
+base — a gasto over Ingresos is the ordinary case. `toPctOfAccount` in `analytics/structure.ts`
+is the module's one definition of "percentage over an account"; `toPctOfRevenue` is its
+`baseCode: "4"` case. «Total año» is `Σ cuenta ÷ Σ base`, never the average of the column
+percentages, and a base that is `null` or `0` empties the column with one warning naming the
+period — never one warning per account.
+
 **Account ficha:** each account row exposes a hover "ficha" trigger (own column, `sticky
 right-0` so it survives horizontal scroll) that opens `AccountDetailPanel` in a `SidePanel`.
 The panel runs ONE analytics query for the account and formats `buildAccountDetail`
@@ -129,6 +193,32 @@ The panel runs ONE analytics query for the account and formats `buildAccountDeta
 average of active periods, best period, share of parent, last-period variation, plan level. It
 inherits the engine's coverage (a `null` never counts as `0`), follows the active frequency (no
 chart in Anual), reuses `barOption`+`ChartCard`, and skips only the derived «Utilidad» row.
+
+**Segmentar gastos** splits the statement into operating and non-operating. A button under the
+Datos card (`segment-actions.tsx`) copies the **5.2** subtree as root **6**, re-levelling the code
+(`5.2.1.1 → 6.1.1`), keeping each account's name and zeroing every value, across EVERY dataset in
+one transaction (`segmentWorkspace` in `db.ts`; the Consolidado re-sums itself). It is ONE-WAY, so
+the control disappears once there is nothing left to segment instead of sitting disabled — and the
+presence of root 6 IS the flag, so there is no dataset field to migrate. `lib/profit-loss/
+segment.ts` (pure + tested) owns the rules: the 5.2→6 mapping, `twinCode` (6.1.1 ↔ 5.2.1.1) and
+`twinWriteFor`, which is what makes the pair hold — writing a non-operating amount ALSO writes its
+twin inside 5.2, discounted **by difference** against what the twin holds right now, so a manual
+correction on 5.2 survives and re-typing a cell moves only the delta. Section 5 keeps behaving
+exactly as before (still editable); nothing clamps, so over-classifying leaves the twin negative.
+`computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
+`toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
+`anchorCode`d to the block it closes, an anchor `flattenSorted` honors only while unsorted (a
+month sort reorders the roots, so every summary falls to the end). The shape mirrors the
+accountant's own consolidated workbook: `operating` = Σ4 − Σ5, `nonOperatingTotal` = **Σ6 positive
+— a TOTAL of expenses, not a "utilidad"**, which is why it is never negated, and the exercise is
+operating MINUS it (verified against their file: 9.357,33 − 13.395,59 = −4.038,26). Because 6 takes
+what 5 gives up, **the exercise's result never moves** — only the split does. In the table an
+adjusted cell is PAINTED (not underlined) so a reclassification is visible in the section above,
+where it happens out of view; a brief ring marks the one cell that just moved. `rootSign` in
+`derive.ts` is the
+ONE sign definition (4 adds, 5 and 6 subtract) and `analytics/series.ts` re-exports it, so the
+cascade follows; `expenseRootsOf` in `charts/presets.ts` reads the expense roots off the SOURCE so
+the tiles and the ranking don't shrink by whatever was reclassified.
 
 **Ocupaciones (hotel occupancy).** `lib/occupancy/` is the pure layer — `parse.ts` reads the
 `OCUPACION_*.xlsx` exports (month blocks stacked on one sheet), `derive.ts` builds the daily
@@ -196,7 +286,10 @@ universe order (not click order), `sanitizeFilters` (pruned on read, never in an
 `resolveActiveCenterId`/`canEditActiveCenter` — the center Datos reads and edits is _derived_:
 none or several centers marked resolves to the Consolidado (read-only), exactly one resolves to
 that center. `center-filter.tsx` and `period-filter.tsx` render the last two dropdowns;
-`center-filter.tsx` renders nothing in single-statement mode. Marking accounts also intersects
+`center-filter.tsx` renders nothing in single-statement mode. The ONE control outside the bar is
+Análisis' «Base» dropdown: it names a card's denominator, not what any tab reads, so it sits in
+that card's header (same rule as Ocupaciones' «Ver por»). Both it and the account filter render
+the same `account-tree-list.tsx` — one tree, single- or multi-select. Marking accounts also intersects
 every structural card's fixed universe (composition, ranking, cascada, Análisis' three defaults)
 instead of being ignored by them, and marking periods bounds Datos' visible columns (its Total
 column stays the full-year sum regardless, relabeled "Total año" while a period mark is active).

@@ -5,12 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-import { COMING_SOON, MODULES } from "@/lib/modules";
+import { MODULES } from "@/lib/modules";
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const ComingSoonIcon = COMING_SOON.icon;
+  // const ComingSoonIcon = COMING_SOON.icon;
 
   return (
     <aside
@@ -86,7 +86,7 @@ export function DashboardSidebar() {
           );
         })}
 
-        <div
+        {/* <div
           title={collapsed ? `${COMING_SOON.label} · Próximamente` : undefined}
           className={cn(
             "flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-sm font-medium text-faint",
@@ -100,12 +100,14 @@ export function DashboardSidebar() {
               Próximamente
             </span>
           )}
-        </div>
+        </div> */}
       </nav>
 
       {!collapsed && (
         <div className="mt-auto p-4">
-          <div className="text-center text-[10.5px] text-faintest">© 2026 LiderPlus · v0.1</div>
+          <div className="text-center text-[10.5px] text-faintest">
+            © {new Date().getFullYear()} LiderPlus · v0.1
+          </div>
         </div>
       )}
     </aside>

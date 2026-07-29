@@ -36,10 +36,10 @@ import {
   amountsAt,
   compositionQuery,
   excludedNote,
-  EXPENSE_ROOT,
+  expenseRootsOf,
   intersectWithMarked,
   lastCoveredIndex,
-  leavesOf,
+  leavesOfAny,
   topByMagnitude,
   topEntries,
 } from "@/lib/profit-loss/charts/presets";
@@ -51,11 +51,13 @@ import {
   type ChartType,
   type TransformId,
 } from "@/lib/profit-loss/charts/selection";
+import { buildVerticalAnalysis } from "@/lib/profit-loss/charts/vertical";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
 import { ChartCard } from "@/components/ui/chart-card";
 import { entryColor } from "./graficos-view";
+import { VerticalAnalysisCard } from "./vertical-analysis-card";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
@@ -74,13 +76,22 @@ const GROUP_LABELS: { id: "temporal" | "estructura" | "variacion"; label: string
  * from the SAME filters through `toSeriesQuery`, in the shape that transformation admits.
  */
 export function AnalisisView() {
-  const { dataset, filters } = usePygData();
-  const { context, colorOf, transform, chartType, setTransform, runQuery } = usePygAnalytics();
+  const { dataset, filters, accountOptions, collapsed, toggleCollapsed, views } = usePygData();
+  const {
+    context,
+    colorOf,
+    transform,
+    chartType,
+    verticalBaseCode,
+    setTransform,
+    setVerticalBaseCode,
+    runQuery,
+  } = usePygAnalytics();
   const source = activeSource(context);
   // `toPctOfRevenue` takes the engine's own mutable array; the context keeps its list readonly.
   const sources = useMemo<AnalyticsSource[]>(() => [...context.sources], [context.sources]);
 
-  const expenseLeaves = leavesOf(source, EXPENSE_ROOT);
+  const expenseLeaves = leavesOfAny(source, expenseRootsOf(source));
   const expenseCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = useMemo(
     () => runQuery(compositionQuery(expenseCodes, context, { periods: filters.periods })),
@@ -142,6 +153,23 @@ export function AnalisisView() {
     ? periodLabel(primary.periods[primaryPeriod])
     : "Sin movimiento";
 
+  // The vertical analysis reads the SOURCE rather than a query: it draws the whole account tree
+  // and a query would cap it at the palette's eight slots. Everything that bounds it — the
+  // frequency, the marked periods and accounts, the fold state — comes from the filter bar.
+  const vertical = useMemo(
+    () =>
+      buildVerticalAnalysis(source, {
+        baseCode: verticalBaseCode,
+        frequency: context.frequency,
+        periods: filters.periods,
+        markedCodes: filters.codes,
+        collapsed,
+      }),
+    [source, verticalBaseCode, context.frequency, filters.periods, filters.codes, collapsed],
+  );
+  const centerName =
+    views.find((view) => view.id === context.activeCenterId)?.name ?? "Consolidado";
+
   if (!dataset) {
     return <PygEmptyState />;
   }
@@ -160,6 +188,17 @@ export function AnalisisView() {
           periodName={primaryPeriodName}
         />
       )}
+
+      <VerticalAnalysisCard
+        table={vertical}
+        accounts={accountOptions}
+        baseCode={verticalBaseCode}
+        centerName={centerName}
+        year={context.year}
+        filteredEmpty={filters.codes.length > 0 && vertical.rows.length === 0}
+        onChangeBase={setVerticalBaseCode}
+        onToggleCollapse={toggleCollapsed}
+      />
 
       <ChartCard
         title="Gastos principales sobre ingresos"

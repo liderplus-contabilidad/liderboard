@@ -123,7 +123,7 @@ export function buildWaterfall(
   for (const root of roots) {
     if (signFor(root) === 0) {
       warnings.push(
-        `La cuenta raíz ${root} no es de ingresos (4) ni costos/gastos (5); se excluye de la cascada.`,
+        `La cuenta raíz ${root} no es de ingresos (4), costos/gastos (5) ni gastos no operacionales (6); se excluye de la cascada.`,
       );
     }
   }
