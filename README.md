@@ -213,9 +213,9 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   **ese** centro, editable en vista Mensual (Sin centro de costo también, es un centro más). La
   tabla nombra la causa cuando no se puede editar (Consolidado, varios centros marcados, o vista
   no mensual). El subtítulo del header nombra el centro resuelto.
-- **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó
-  (`loadedMonths`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar, distinto
-  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
+- **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó de cada año
+  (`loadedMonthsByYear`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar,
+  distinto de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
   amarillo pastel (`marked`), conviviendo con el triángulo de comentario: una reclasificación
   mueve una celda de la sección de arriba, casi siempre fuera de vista, y una celda pintada se
   encuentra de un vistazo donde un subrayado no se veía. La que **acaba** de moverse lleva además
@@ -463,23 +463,26 @@ RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vací
   un ajuste queda encima de un valor que el archivo cambió, la carga lo reporta como
   **conflicto** en el resumen (centro, cuenta, mes, valor anterior/nuevo, valor del ajuste), con
   la opción de quitarlo ahí mismo; el ajuste sigue aplicándose mientras tanto.
-- **Cobertura explícita, no adivinada.** El workspace declara qué meses cargó
-  (`WorkspaceMeta.loadedMonths`, en ambos modos): un mes nunca cargado y un mes cargado en cero
-  producen los mismos ceros pero significan cosas distintas, y solo el primero se rinde vacío en
-  Datos y descubierto en Gráficos/Análisis.
+- **Cobertura explícita, no adivinada, y por año.** El workspace declara qué meses cargó de cada
+  año (`WorkspaceMeta.loadedMonthsByYear`, en ambos modos): un mes nunca cargado y un mes cargado
+  en cero producen los mismos ceros pero significan cosas distintas, y solo el primero se rinde
+  vacío en Datos y descubierto en Gráficos/Análisis. Va indexada por año porque la cobertura vive
+  en el mismo eje que los datos: cargar enero de 2026 no puede marcar enero de 2025 como cubierto.
 - **Avisos, nunca bloqueos:** cuadre contra `GENERAL` en modo por centros (un aviso por mes con
   cuántas cuentas no cuadran, nunca uno por cuenta); en estado único se valida en cambio la fila
   «Utilidad o Pérdida» del archivo contra el cálculo.
-- **Identidad del workspace: `(sistema, empresa, año, modo)`** (`workspace-identity.ts`). Un
-  archivo que contradiga cualquiera de los cuatro pide **una sola** confirmación de reemplazo
+- **Identidad del workspace: `(sistema, empresa, modo)`** (`workspace-identity.ts`). Un
+  archivo que contradiga cualquiera de los tres pide **una sola** confirmación de reemplazo
   (nombrando qué cambia y cuántos ajustes y comentarios se descartan); mezclar identidades en una
-  misma carga se rechaza nombrándolas. Sustituye la vieja regla «un año por workspace». El
+  misma carga se rechaza nombrándolas. **El año no está en la identidad**: un dataset es un
+  centro-año, así que un archivo de otro año no contradice nada — se suma al workspace sin
+  preguntar, y una misma carga puede mezclar años mientras no repita un `(año, mes)`. El
   **sistema** es el id de la estrategia que originó el workspace (`upload/systems.ts`), guardado
   en `WorkspaceMeta.sourceSystemId` y llevado también dentro del Excel de la app, para que
   descargar y volver a cargar conserve el origen. Está en la identidad porque los planes de
   cuentas de dos sistemas son incompatibles (`4.1.01.01.01` frente a `4.1.1.1.1`) y, con la
-  empresa y el año coincidiendo —el mismo cliente migrando de sistema—, ninguna otra validación
-  lo detendría.
+  empresa coincidiendo —el mismo cliente migrando de sistema—, ninguna otra validación lo
+  detendría.
 - **Mapeo genérico:** cada estrategia lee su propio esqueleto (preámbulo → cabecera → filas
   `código, nombre, valores`), no un plan de cuentas fijo. Las sumas de cuentas padre y la fila
   "Utilidad o Pérdida" (raíces 4 − raíces 5) **siempre se recalculan desde las cuentas de
