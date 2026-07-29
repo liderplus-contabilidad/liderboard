@@ -26,6 +26,10 @@
   --color-negative: #dc2626;
   --color-warning: #d97706;
 
+  /* Highlight color for marked cells, not for value signs. */
+  --color-marked: #fef3c7;
+  --color-marked-strong: #f6c945;
+
   --color-chip: #eef2f6;
   --color-chip-border: #dce3eb;
 

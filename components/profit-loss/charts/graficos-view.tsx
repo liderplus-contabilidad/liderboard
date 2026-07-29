@@ -42,7 +42,7 @@ import { WaterfallCard } from "./waterfall-card";
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
 /** What the evolution card falls back to with no account marked: Ingresos against every expense
- * root the statement carries — one of them until «Segmentar utilidad» adds the non-operating. */
+ * root the statement carries — one of them until «Segmentar gastos» adds the non-operating. */
 function defaultEvolutionCodes(source: Parameters<typeof expenseRootsOf>[0]): string[] {
   return [REVENUE_ROOT, ...expenseRootsOf(source)];
 }

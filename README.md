@@ -106,6 +106,7 @@ token y una primitiva de `components/ui/`; no escribas hex sueltos ni estilos en
 | `positive` / `negative`         | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
 | `warning`                       | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
 | `zero`                          | `#c2cbd5`                         | El `–` de una celda en cero                                      |
+| `marked` / `marked-strong`      | `#fef3c7` / `#f6c945`             | Celda con ajuste de valor (pintada) y borde de la recién movida  |
 | `chip` / `chip-border`          | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
 
 **Verde y rojo son señal de signo, no colores de serie.** Nunca pintan una categoría, y nunca
@@ -214,8 +215,12 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   no mensual). El subtítulo del header nombra el centro resuelto.
 - **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó
   (`loadedMonths`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar, distinto
-  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** lleva un
-  subrayado punteado `brand` bajo la cifra, conviviendo con el triángulo de comentario.
+  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
+  amarillo pastel (`marked`), conviviendo con el triángulo de comentario: una reclasificación
+  mueve una celda de la sección de arriba, casi siempre fuera de vista, y una celda pintada se
+  encuentra de un vistazo donde un subrayado no se veía. La que **acaba** de moverse lleva además
+  un borde `marked-strong` que se desvanece solo — la pintura dice «esta está ajustada», el borde
+  dice «esta es la que cambió recién».
 - **Ficha de cuenta** (panel lateral): cada fila de cuenta trae un enlace **«ficha»** que
   aparece al pasar el mouse (columna fija a la derecha, para que no se pierda con el scroll
   horizontal; alcanzable con teclado). Abre un `SidePanel` derecho —sin velo, para leerse
@@ -228,7 +233,7 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   no cuenta como movimiento. Sigue la **frecuencia activa** (en Anual, sin gráfica). Las reglas
   viven en `lib/profit-loss/charts/account-detail.ts` (puro, testeado); el panel solo formatea.
   Aplica a todas las cuentas salvo «Utilidad o Pérdida», que es derivada.
-- **Segmentar utilidad** (botón bajo la tarjeta, solo en Datos): parte el estado en operacional
+- **Segmentar gastos** (botón bajo la tarjeta, solo en Datos): parte el estado en operacional
   y no operacional. Copia el subárbol **5.2** como la raíz **6** de gastos no operacionales,
   re-nivelando el código (`5.2.1.1 → 6.1.1`) y conservando el nombre de cada cuenta, con todos
   los montos en **0**; alcanza a **todos los centros a la vez** en una sola transacción (el
@@ -244,12 +249,12 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   que la tabla ya sabe mostrar. Las reglas viven en `lib/profit-loss/segment.ts` (puro, testeado).
 - **Cómo cierra el estado.** Sin segmentar, una sola fila **«Utilidad o Pérdida»**, exactamente
   como antes. Segmentado, cuatro: **Utilidad Operacional** (Σ4 − Σ5) tras la sección 5,
-  **Utilidad No Operacional** (Σ4 − Σ6) tras la sección 6, y **Total Gastos del Ejercicio**
-  (Σ5 + Σ6) y **Utilidad del Ejercicio** (Σ4 − Σ5 − Σ6) cerrando la grilla. Las dos primeras leen
-  **los mismos ingresos** contra su propio bloque de gastos: son lecturas paralelas, **no dos
-  mitades que suman** la del ejercicio. Como la 6 descuenta de la 5, **la utilidad del ejercicio
-  no se mueve al reclasificar** — lo que se mueve es el resultado de cada bloque, y el badge del
-  header sigue mostrando la del ejercicio. Cada resumen se ancla tras su bloque solo en el orden
+  **Total No Operacional** (Σ6) tras la sección 6, y **Total Gastos del Ejercicio** (Σ5 + Σ6) y
+  **Utilidad del Ejercicio** (Utilidad Operacional − Total No Operacional) cerrando la grilla. La
+  fila no operacional es un **total de gastos, no una utilidad**: va en positivo como todo gasto
+  en esta app y se **resta**, nunca se muestra negada — es la aritmética del consolidado del
+  contador (`9.357,33 − 13.395,59 = −4.038,26`). Como la 6 descuenta de la 5, **la utilidad del
+  ejercicio no se mueve al reclasificar** y el badge del header sigue mostrándola. Cada resumen se ancla tras su bloque solo en el orden
   natural: con un orden por mes activo las cuatro caen al final, porque ahí las secciones se
   reacomodan y "después de la sección 5" deja de significar algo.
 - Rendimiento: filas memoizadas (`React.memo`), derivaciones con `useMemo` y

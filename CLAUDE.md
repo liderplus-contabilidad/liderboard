@@ -144,7 +144,7 @@ average of active periods, best period, share of parent, last-period variation, 
 inherits the engine's coverage (a `null` never counts as `0`), follows the active frequency (no
 chart in Anual), reuses `barOption`+`ChartCard`, and skips only the derived «Utilidad» row.
 
-**Segmentar utilidad** splits the statement into operating and non-operating. A button under the
+**Segmentar gastos** splits the statement into operating and non-operating. A button under the
 Datos card (`segment-actions.tsx`) copies the **5.2** subtree as root **6**, re-levelling the code
 (`5.2.1.1 → 6.1.1`), keeping each account's name and zeroing every value, across EVERY dataset in
 one transaction (`segmentWorkspace` in `db.ts`; the Consolidado re-sums itself). It is ONE-WAY, so
@@ -158,11 +158,14 @@ exactly as before (still editable); nothing clamps, so over-classifying leaves t
 `computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
 `toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
 `anchorCode`d to the block it closes, an anchor `flattenSorted` honors only while unsorted (a
-month sort reorders the roots, so every summary falls to the end). The two block results read the
-SAME income against their own expenses (`operating` = Σ4 − Σ5, `nonOperating` = Σ4 − Σ6) — they are
-PARALLEL readings and deliberately do NOT add up to `values`; the accountant asked for it that way
-after seeing the netted version. Because 6 takes what 5 gives up, **the exercise's result never
-moves** — only each block's does. `rootSign` in `derive.ts` is the
+month sort reorders the roots, so every summary falls to the end). The shape mirrors the
+accountant's own consolidated workbook: `operating` = Σ4 − Σ5, `nonOperatingTotal` = **Σ6 positive
+— a TOTAL of expenses, not a "utilidad"**, which is why it is never negated, and the exercise is
+operating MINUS it (verified against their file: 9.357,33 − 13.395,59 = −4.038,26). Because 6 takes
+what 5 gives up, **the exercise's result never moves** — only the split does. In the table an
+adjusted cell is PAINTED (not underlined) so a reclassification is visible in the section above,
+where it happens out of view; a brief ring marks the one cell that just moved. `rootSign` in
+`derive.ts` is the
 ONE sign definition (4 adds, 5 and 6 subtract) and `analytics/series.ts` re-exports it, so the
 cascade follows; `expenseRootsOf` in `charts/presets.ts` reads the expense roots off the SOURCE so
 the tiles and the ranking don't shrink by whatever was reclassified.

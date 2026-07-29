@@ -110,7 +110,7 @@ describe("computeResult", () => {
     const { roots } = buildAccountTree(MONTHLY_ACCOUNTS);
     const result = computeResult(computeRollups(roots));
     expect(result.operating).toEqual(result.values);
-    expect(result.nonOperating).toBeNull();
+    expect(result.nonOperatingTotal).toBeNull();
     expect(result.expenses).toBeNull();
   });
 
@@ -124,24 +124,29 @@ describe("computeResult", () => {
     const result = computeResult(roots);
 
     expect(result.operating).toEqual([70]);
-    // The SAME income against the other block — 100 − 12 — not the negation of the block.
-    expect(result.nonOperating).toEqual([88]);
+    // A TOTAL of expenses, reported positive like every other expense — never negated.
+    expect(result.nonOperatingTotal).toEqual([12]);
     expect(result.expenses).toEqual([42]);
     expect(result.values).toEqual([58]);
     expect(result.warnings).toEqual([]);
   });
 
-  it("reads both blocks against the same income, so they do not add up to the exercise", () => {
+  it("closes the exercise as operating minus the non-operating total", () => {
+    // The accountant's own consolidated workbook: 9.357,33 − 13.395,59 = −4.038,26 (enero).
     const { roots } = buildAccountTree([
-      { code: "4", name: "Ingresos", values: [100] },
-      { code: "5", name: "Gastos", values: [30] },
-      { code: "6", name: "Gastos No Operacionales", values: [12] },
+      { code: "4", name: "Ingresos", values: [75_930.24] },
+      { code: "5", name: "Costo de ventas y gastos", values: [66_572.91] },
+      { code: "6", name: "Gastos", values: [13_395.59] },
     ]);
     const result = computeResult(roots);
+    const round = (value: number) => Math.round(value * 100) / 100;
 
-    expect(result.operating[0] + (result.nonOperating as number[])[0]).not.toBe(result.values[0]);
-    // Each row is income minus ITS OWN block; the exercise is income minus every block.
-    expect(result.values).toEqual([100 - 30 - 12]);
+    expect(round(result.operating[0])).toBe(9357.33);
+    expect(round((result.nonOperatingTotal as number[])[0])).toBe(13_395.59);
+    expect(round(result.values[0])).toBe(-4038.26);
+    expect(round(result.operating[0] - (result.nonOperatingTotal as number[])[0])).toBe(
+      round(result.values[0]),
+    );
   });
 
   it("keeps the exercise's result fixed: reclassifying only redistributes it", () => {
@@ -280,7 +285,7 @@ function monthlyDataset(): PygDataset {
 
 /**
  * A statement carrying a 5.2 subtree, already segmented — the shape Datos renders after the
- * «Segmentar utilidad» button ran. Only Enero is set, so every summary is hand-checkable:
+ * «Segmentar gastos» button ran. Only Enero is set, so every summary is hand-checkable:
  * leaves are 4 (130), 5.1 (60) and 5.2.1.1 (30), which rolls 5 up to 90.
  */
 function segmentedDataset(): PygDataset {
@@ -451,15 +456,14 @@ describe("toDatosGrid", () => {
 
     expect(results.map((row) => [row.name, row.anchorCode])).toEqual([
       ["Utilidad Operacional", "5"],
-      ["Utilidad No Operacional", "6"],
+      ["Total No Operacional", "6"],
       ["Total Gastos del Ejercicio", undefined],
       ["Utilidad del Ejercicio", undefined],
     ]);
-    // Nothing typed yet: the block is at 0, so the exercise still reads as the operating result
-    // and the non-operating row is the untouched income (130 − 0).
+    // Nothing typed yet: the block is at 0, so the exercise still reads as the operating result.
     const value = (kind: string) => results.find((row) => row.resultKind === kind)?.cells[0]?.value;
     expect(value("operacional")).toBe(40);
-    expect(value("no-operacional")).toBe(130);
+    expect(value("no-operacional")).toBe(0);
     expect(value("total-gastos")).toBe(90);
     expect(value("ejercicio")).toBe(40);
   });
@@ -478,8 +482,8 @@ describe("toDatosGrid", () => {
       grid.rows.find((row) => row.resultKind === kind)?.cells[0]?.value;
 
     expect(value("operacional")).toBe(50);
-    // Income (130) against the non-operating block (10) — the same income the row above read.
-    expect(value("no-operacional")).toBe(120);
+    // The block's total, positive; the exercise below is 50 − 10.
+    expect(value("no-operacional")).toBe(10);
     expect(value("total-gastos")).toBe(90);
     expect(value("ejercicio")).toBe(40);
     expect(grid.utilidad?.label).toContain("Utilidad");

@@ -30,6 +30,8 @@ export interface DatosTableProps {
   showTotal: boolean;
   /** Which columns the by-centers workspace has actually loaded; `null` = no restriction. */
   loadedColumns: ReadonlySet<number> | null;
+  /** Cell to light up briefly — the twin a reclassification moved; `null` when nothing did. */
+  flash: { code: string; monthIndex: number } | null;
   /** Account whose ficha is open, so its row can stay marked; `null` when none is. */
   openDetailCode: string | null;
   onSort: (key: DatosSortKey) => void;
@@ -56,6 +58,7 @@ export function DatosTable({
   readOnlyReason,
   showTotal,
   loadedColumns,
+  flash,
   openDetailCode,
   onSort,
   onToggle,
@@ -151,6 +154,7 @@ export function DatosTable({
                     editable={editable}
                     showTotal={showTotal}
                     loadedColumns={loadedColumns}
+                    flashCol={flash?.code === flat.row.code ? flash.monthIndex : null}
                     detailOpen={openDetailCode === flat.row.code}
                     onToggle={onToggle}
                     onEditCell={onEditCell}
@@ -177,7 +181,7 @@ export function DatosTable({
               Celda con comentario
             </LegendItem>
             <LegendItem>
-              <span className="w-[14px] border-b-2 border-dotted border-brand" />
+              <span className="h-[11px] w-[14px] rounded-[2px] bg-marked" />
               Celda con ajuste de valor
             </LegendItem>
             {editable ? (

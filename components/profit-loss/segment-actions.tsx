@@ -48,7 +48,7 @@ export function SegmentActions() {
             disabled={busy}
             onClick={onSegment}
           >
-            {busy ? "Segmentando…" : "Segmentar utilidad"}
+            {busy ? "Segmentando…" : "Segmentar gastos"}
           </Button>
           <p className="max-w-[560px] text-[12.5px] leading-[1.55] text-ink-soft">
             Copia las cuentas de <span className="font-mono text-ink">5.2</span> como una sección{" "}

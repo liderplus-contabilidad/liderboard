@@ -18,7 +18,7 @@ export const EXPENSE_ROOT = "5";
 
 /**
  * Every expense root the SOURCE actually carries — the operating one, plus the non-operating
- * block once «Segmentar utilidad» split it out of 5.2. Read off the source and not declared,
+ * block once «Segmentar gastos» split it out of 5.2. Read off the source and not declared,
  * so an unsegmented statement asks exactly what it always asked, and a segmented one doesn't
  * lose from view the amount root 5 gave up: the gasto totals and the ranking stay whole, and
  * the Utilidad tile keeps agreeing with the Datos badge.

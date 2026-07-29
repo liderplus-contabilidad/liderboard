@@ -145,7 +145,7 @@ function rollupNode(node: AccountNode): AccountNode {
 
 /**
  * Accounting sign of a root: income (4) adds, costs and expenses (5) subtract, and so does the
- * non-operating block (6) that «Segmentar utilidad» splits out of 5.2. Expenses are stored
+ * non-operating block (6) that «Segmentar gastos» splits out of 5.2. Expenses are stored
  * positive in the source system, hence the subtraction (never a sign flip). This is the ONE
  * definition — `analytics/series.ts` re-exports it rather than restating the rule.
  */
@@ -159,17 +159,14 @@ export function rootSign(code: string): 1 | -1 | 0 {
   return 0;
 }
 
-/**
- * What the statement closes on. The two block results read the SAME income against their own
- * expenses — they are parallel readings, NOT two halves that add up to `values`.
- */
+/** Final statement summary: operating result, non-operating total (positive as an expense), and net result (operating minus non-operating). */
 export interface StatementResult {
   /** Σ4 − Σ5 − Σ6: the result of the exercise — what the file's own row must match. */
   values: number[];
   /** Σ4 − Σ5. Identical to `values` while the statement has no non-operating block. */
   operating: number[];
-  /** Σ4 − Σ6 — the same income read against the non-operating block; null when unsegmented. */
-  nonOperating: number[] | null;
+  /** Σ6, positive: the non-operating block's total. Null when the statement was never segmented. */
+  nonOperatingTotal: number[] | null;
   /** Σ5 + Σ6, or null when the statement was never segmented. */
   expenses: number[] | null;
   warnings: string[];
@@ -210,9 +207,9 @@ export function computeResult(roots: AccountNode[]): StatementResult {
   return {
     values,
     operating,
-    // The SAME income, read against the other block — not the negation of it. The two results
-    // are parallel readings, so they are not meant to add up to `values`.
-    nonOperating: segmented ? income.map((value, col) => value - nonOperatingCost[col]) : null,
+    // The block's total as it is stored — positive. `values` already subtracts it, which is the
+    // accountant's own arithmetic: operacional − total no operacional = ejercicio.
+    nonOperatingTotal: segmented ? nonOperatingCost : null,
     expenses: segmented ? operatingCost.map((value, col) => value + nonOperatingCost[col]) : null,
     warnings,
   };
@@ -302,12 +299,12 @@ export function toDatosGrid(
       previous?.rows.find((row) => row.resultKind === resultKind),
     );
 
-  if (result.nonOperating && result.expenses) {
+  if (result.nonOperatingTotal && result.expenses) {
     rows.push(
       summary("Utilidad Operacional", result.operating, "operacional", OPERATING_ROOT),
       summary(
-        "Utilidad No Operacional",
-        result.nonOperating,
+        "Total No Operacional",
+        result.nonOperatingTotal,
         "no-operacional",
         NON_OPERATIONAL_ROOT,
       ),
