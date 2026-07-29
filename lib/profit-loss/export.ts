@@ -31,8 +31,23 @@ import { LEGACY_SYSTEM, MONTHLY_CENTERS_SYSTEM } from "./upload/systems";
 const CODE_COL = 1;
 const NAME_COL = 2;
 const FIRST_VALUE_COL = 3;
-/** Ecuador USD, sign before the symbol: "$1,234.00" / "-$1,234.00" (viewer-locale grouping). */
-const CURRENCY_FMT = '"$"#,##0.00;"-$"#,##0.00';
+/**
+ * Ecuador USD, sign before the symbol: "$1,234.00" / "-$1,234.00".
+ *
+ * The `,` and `.` in a format code are PLACEHOLDERS, not literals — the reader's regional
+ * settings decide which character each one becomes, and CLDR says Ecuador writes
+ * "$1.234,00" (the same mistake `lib/format.ts` had to override in the app). So a Mac set
+ * to Ecuador renders these cells backwards however the app displayed them.
+ *
+ * `[$$-409]` asks for the en-US locale (symbol `$`, LCID 409) and is kept because it is the
+ * only statement the FILE gets to make about its own formatting — Sheets and LibreOffice do
+ * honor it. But it is NOT a fix: **Excel for Mac ignores it** (verified on macOS `en_EC` —
+ * the amounts only came out right after changing System Settings › Language & Region ›
+ * Number format). Do not extend this into a guarantee; the reader's locale has the last
+ * word, and the only way around that would be writing the amounts as TEXT, which costs the
+ * cells their arithmetic and `app-workbook.ts` its round-trip.
+ */
+const CURRENCY_FMT = "[$$-409]#,##0.00;-[$$-409]#,##0.00";
 const SHEET_NAME = "Estado de Resultados";
 
 /** The Estado de Resultados with edited values and comments, ready to download. `loadedMonths`,
