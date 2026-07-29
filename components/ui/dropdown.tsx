@@ -1,13 +1,23 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
-import { createContext, type ReactNode, useContext, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/cn";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DropdownContextValue {
   open: boolean;
   setOpen: (open: boolean) => void;
+  /** The button the panel anchors to — measured in viewport coordinates, see `PositionedPanel`. */
+  triggerRef: RefObject<HTMLButtonElement | null>;
 }
 
 const DropdownContext = createContext<DropdownContextValue | null>(null);
@@ -23,9 +33,10 @@ function useDropdownContext(component: string): DropdownContextValue {
 /** Root: owns the open/closed state and positions its children. */
 export function Dropdown({ children, className }: { children: ReactNode; className?: string }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <DropdownContext.Provider value={{ open, setOpen }}>
+    <DropdownContext.Provider value={{ open, setOpen, triggerRef }}>
       <div className={cn("relative", className)}>{children}</div>
     </DropdownContext.Provider>
   );
@@ -41,11 +52,12 @@ export function DropdownTrigger({
   active?: boolean;
   children: ReactNode;
 }) {
-  const { open, setOpen } = useDropdownContext("DropdownTrigger");
+  const { open, setOpen, triggerRef } = useDropdownContext("DropdownTrigger");
   const highlighted = active || open;
 
   return (
     <button
+      ref={triggerRef}
       type="button"
       aria-haspopup="menu"
       aria-expanded={open}
@@ -64,8 +76,29 @@ export function DropdownTrigger({
   );
 }
 
+/** Air between the trigger and the panel, and the minimum left against a viewport edge. */
+const PANEL_GAP = 8;
+const VIEWPORT_MARGIN = 12;
+
 /** The popover card. Renders a full-screen backdrop that closes on click. */
-export function DropdownPanel({
+export function DropdownPanel(props: {
+  align?: "left" | "right";
+  width?: number;
+  children: ReactNode;
+}) {
+  const { open } = useDropdownContext("DropdownPanel");
+  // The early return lives here, before `PositionedPanel`'s hooks: a closed dropdown must not
+  // run a layout effect on the server render.
+  return open ? <PositionedPanel {...props} /> : null;
+}
+
+/**
+ * `fixed` and measured against the trigger's viewport rect rather than `absolute` inside it,
+ * because a trigger in a card header sits inside an `overflow-hidden` shell (every `ChartCard`
+ * is one) and an absolutely positioned panel is clipped by it. It also flips above and clamps
+ * to the viewport, so a control low on the page still opens whole.
+ */
+function PositionedPanel({
   align = "left",
   width,
   children,
@@ -74,10 +107,57 @@ export function DropdownPanel({
   width?: number;
   children: ReactNode;
 }) {
-  const { open, setOpen } = useDropdownContext("DropdownPanel");
-  if (!open) {
-    return null;
-  }
+  const { setOpen, triggerRef } = useDropdownContext("DropdownPanel");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const trigger = triggerRef.current;
+      const panel = panelRef.current;
+      if (!trigger || !panel) {
+        return;
+      }
+      const anchor = trigger.getBoundingClientRect();
+      const { offsetWidth: panelWidth, offsetHeight: panelHeight } = panel;
+
+      const wanted = align === "right" ? anchor.right - panelWidth : anchor.left;
+      const left = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(wanted, window.innerWidth - panelWidth - VIEWPORT_MARGIN),
+      );
+
+      const below = anchor.bottom + PANEL_GAP;
+      const above = anchor.top - PANEL_GAP - panelHeight;
+      const fitsBelow = below + panelHeight <= window.innerHeight - VIEWPORT_MARGIN;
+      const top =
+        fitsBelow || above < VIEWPORT_MARGIN
+          ? Math.max(
+              VIEWPORT_MARGIN,
+              Math.min(below, window.innerHeight - panelHeight - VIEWPORT_MARGIN),
+            )
+          : above;
+
+      setPosition({ top, left });
+    };
+
+    place();
+    // Capture, so a scroll inside any container (a table, the tab body) moves the panel with
+    // its trigger and not just a scroll of the window.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    // A panel that shrinks — searching in the account tree, folding a branch — has to be placed
+    // again, or the one that opened upwards keeps the top of its taller self.
+    const observer = new ResizeObserver(place);
+    if (panelRef.current) {
+      observer.observe(panelRef.current);
+    }
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      observer.disconnect();
+    };
+  }, [align, triggerRef]);
 
   return (
     <>
@@ -88,12 +168,16 @@ export function DropdownPanel({
         className="fixed inset-0 z-20 cursor-default"
       />
       <div
+        ref={panelRef}
         role="menu"
-        style={{ width }}
-        className={cn(
-          "absolute top-[calc(100%+8px)] z-30 rounded-xl border border-border bg-surface p-3 shadow-[0_14px_36px_rgba(15,23,42,0.16)]",
-          align === "right" ? "right-0" : "left-0",
-        )}
+        style={{
+          width,
+          top: position?.top ?? 0,
+          left: position?.left ?? 0,
+          // The first paint happens before the measurement lands; showing it at 0,0 would flash.
+          visibility: position ? "visible" : "hidden",
+        }}
+        className="fixed z-30 rounded-xl border border-border bg-surface p-3 shadow-[0_14px_36px_rgba(15,23,42,0.16)]"
       >
         {children}
       </div>

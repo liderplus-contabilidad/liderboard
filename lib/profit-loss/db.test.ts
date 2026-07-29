@@ -1,6 +1,13 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { applyMonthSlice, db, getWorkspaceMeta, replaceWorkspace, saveCellEdit } from "./db";
+import {
+  applyMonthSlice,
+  db,
+  getWorkspaceMeta,
+  replaceWorkspace,
+  saveCellEdit,
+  saveCellEdits,
+} from "./db";
 import type { PygDataset } from "./types";
 
 function dataset(id: string): PygDataset {
@@ -78,6 +85,36 @@ describe("saveCellEdit", () => {
     ]);
     const stored = await db.edits.toArray();
     expect(stored).toHaveLength(1);
+  });
+});
+
+describe("saveCellEdits", () => {
+  it("writes every cell of one move", async () => {
+    await seed("a");
+    await saveCellEdits([
+      { datasetId: "a", code: "6.1.1", monthIndex: 0, value: 10 },
+      { datasetId: "a", code: "5.2.1.1", monthIndex: 0, value: 50 },
+    ]);
+    const stored = await db.edits.toArray();
+
+    expect(stored.map((e) => [e.code, e.value])).toEqual([
+      ["6.1.1", 10],
+      ["5.2.1.1", 50],
+    ]);
+  });
+
+  it("rolls the whole move back when one cell fails", async () => {
+    // A reclassification is the non-operating amount AND the discount on its twin. Half-applied,
+    // the pair would stop adding up to what the file brought — so the transaction takes both.
+    await seed("a");
+    await expect(
+      saveCellEdits([
+        { datasetId: "a", code: "6.1.1", monthIndex: 0, value: 10 },
+        { datasetId: "a", code: "5.2.1.1", monthIndex: Number.NaN, value: 50 },
+      ]),
+    ).rejects.toThrow();
+
+    expect(await db.edits.toArray()).toEqual([]);
   });
 });
 

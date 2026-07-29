@@ -258,10 +258,12 @@ describe("etiqueta de serie", () => {
 });
 
 describe("signFor", () => {
-  it("is +1 for income, -1 for costs and 0 for any other root", () => {
+  it("is +1 for income, -1 for costs and non-operating expenses, 0 for any other root", () => {
     expect(signFor("4.1.1.1")).toBe(1);
     expect(signFor(ARRENDAMIENTO)).toBe(-1);
-    expect(signFor("6.1")).toBe(0);
+    // The segmented block is an expense like any other: it subtracts.
+    expect(signFor("6.1")).toBe(-1);
+    expect(signFor("9.1")).toBe(0);
   });
 
   it("does not invert the values of an expense account", () => {

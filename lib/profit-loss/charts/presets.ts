@@ -9,11 +9,28 @@
 import { CHART_MAX_SERIES } from "@/lib/charts/palette";
 import type { AmountEntry } from "../analytics/structure";
 import type { AnalyticsSource, PeriodRef, SeriesBundle, SeriesQuery } from "../analytics/types";
+import { NON_OPERATIONAL_ROOT } from "../segment";
 import type { SelectionContext } from "./selection";
 
 /** The two roots every statement has; the stat tiles and the evolution card read them. */
 export const REVENUE_ROOT = "4";
 export const EXPENSE_ROOT = "5";
+
+/**
+ * Every expense root the SOURCE actually carries — the operating one, plus the non-operating
+ * block once «Segmentar gastos» split it out of 5.2. Read off the source and not declared,
+ * so an unsegmented statement asks exactly what it always asked, and a segmented one doesn't
+ * lose from view the amount root 5 gave up: the gasto totals and the ranking stay whole, and
+ * the Utilidad tile keeps agreeing with the Datos badge.
+ */
+export function expenseRootsOf(source: AnalyticsSource | undefined): string[] {
+  return [EXPENSE_ROOT, NON_OPERATIONAL_ROOT].filter((code) => source?.valuesByCode.has(code));
+}
+
+/** Leaves under ANY of the given ancestors, in source order. */
+export function leavesOfAny(source: AnalyticsSource | undefined, ancestors: string[]): string[] {
+  return ancestors.flatMap((ancestor) => leavesOf(source, ancestor));
+}
 
 /** How many bars a ranking card shows before it says how many it left out. */
 export const RANKING_SIZE = 8;

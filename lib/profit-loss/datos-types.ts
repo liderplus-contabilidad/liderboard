@@ -14,6 +14,12 @@ export interface DatosCell {
   edited?: boolean;
 }
 
+/**
+ * Which summary a result row is. An unsegmented statement closes on a single `ejercicio` row
+ * («Utilidad o Pérdida»); segmenting adds the other three.
+ */
+export type DatosResultKind = "operacional" | "no-operacional" | "total-gastos" | "ejercicio";
+
 /** A row in the account tree. Rows nest via `children`; leaves omit it. */
 export interface DatosRow {
   /** Account code, e.g. "4.1.01". Unique within a grid — used as the React key. */
@@ -27,8 +33,16 @@ export interface DatosRow {
    * stays comment-only. Parents and the result row are false.
    */
   movement?: boolean;
-  /** The "Utilidad o Pérdida" summary row, styled and pinned apart from accounts. */
+  /** A summary row, styled and pinned apart from accounts. */
   isResult?: boolean;
+  /** Which summary it is (result rows only) — also its React key, since they carry no code. */
+  resultKind?: DatosResultKind;
+  /**
+   * The root whose block this summary closes in the natural order, e.g. "5" for the operating
+   * result. Undefined closes the grid. Honored only while unsorted: sorting reorders the roots
+   * themselves, so "after section 5" stops meaning anything and every summary falls to the end.
+   */
+  anchorCode?: string;
   /** One cell per month; `cells[i]` aligns to `DatosGrid.months[i]`. */
   cells: DatosCell[];
   children?: DatosRow[];

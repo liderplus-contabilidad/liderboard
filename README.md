@@ -106,6 +106,7 @@ token y una primitiva de `components/ui/`; no escribas hex sueltos ni estilos en
 | `positive` / `negative`         | `#16a34a` / `#dc2626`             | **Solo el signo** de un valor (rojo = negativo/pérdida)          |
 | `warning`                       | `#d97706`                         | Avisos de cuadre, marca de celda comentada                       |
 | `zero`                          | `#c2cbd5`                         | El `–` de una celda en cero                                      |
+| `marked` / `marked-strong`      | `#fef3c7` / `#f6c945`             | Celda con ajuste de valor (pintada) y borde de la recién movida  |
 | `chip` / `chip-border`          | `#eef2f6` / `#dce3eb`             | Fondo y borde de chips de filtro                                 |
 
 **Verde y rojo son señal de signo, no colores de serie.** Nunca pintan una categoría, y nunca
@@ -214,8 +215,12 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   no mensual). El subtítulo del header nombra el centro resuelto.
 - **Meses no cargados, vacíos y no editables.** El workspace declara qué meses cargó
   (`loadedMonths`); un mes nunca cargado se rinde en blanco (`–`) y no abre para editar, distinto
-  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** lleva un
-  subrayado punteado `brand` bajo la cifra, conviviendo con el triángulo de comentario.
+  de un mes cargado con movimiento en cero. Una celda con un **ajuste de valor** se **pinta** de
+  amarillo pastel (`marked`), conviviendo con el triángulo de comentario: una reclasificación
+  mueve una celda de la sección de arriba, casi siempre fuera de vista, y una celda pintada se
+  encuentra de un vistazo donde un subrayado no se veía. La que **acaba** de moverse lleva además
+  un borde `marked-strong` que se desvanece solo — la pintura dice «esta está ajustada», el borde
+  dice «esta es la que cambió recién».
 - **Ficha de cuenta** (panel lateral): cada fila de cuenta trae un enlace **«ficha»** que
   aparece al pasar el mouse (columna fija a la derecha, para que no se pierda con el scroll
   horizontal; alcanzable con teclado). Abre un `SidePanel` derecho —sin velo, para leerse
@@ -228,6 +233,30 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   no cuenta como movimiento. Sigue la **frecuencia activa** (en Anual, sin gráfica). Las reglas
   viven en `lib/profit-loss/charts/account-detail.ts` (puro, testeado); el panel solo formatea.
   Aplica a todas las cuentas salvo «Utilidad o Pérdida», que es derivada.
+- **Segmentar gastos** (botón bajo la tarjeta, solo en Datos): parte el estado en operacional
+  y no operacional. Copia el subárbol **5.2** como la raíz **6** de gastos no operacionales,
+  re-nivelando el código (`5.2.1.1 → 6.1.1`) y conservando el nombre de cada cuenta, con todos
+  los montos en **0**; alcanza a **todos los centros a la vez** en una sola transacción (el
+  Consolidado se recalcula solo, porque suma hojas). Es **de un solo sentido** —para volver
+  atrás se re-suben los archivos—, así que el control **desaparece** en cuanto no hay nada que
+  segmentar, en vez de quedarse deshabilitado. Su rastro es la sección 6 misma: la presencia de
+  la raíz 6 **es** el flag, no hay campo de dataset que migrar.
+- **El par 6.x ↔ 5.2.x.** Escribir en una cuenta de la sección 6 hace **dos escrituras**: el
+  monto en la 6 y el mismo monto **de menos** en su gemela dentro de 5.2, **por diferencia**
+  contra lo que la gemela tenga en ese momento (respeta una corrección manual previa, y
+  re-editar `25 → 40` mueve solo los 15). La sección 5 **no cambia su comportamiento**: sigue
+  editándose igual que siempre. Nada topa en cero: clasificar de más deja la gemela negativa,
+  que la tabla ya sabe mostrar. Las reglas viven en `lib/profit-loss/segment.ts` (puro, testeado).
+- **Cómo cierra el estado.** Sin segmentar, una sola fila **«Utilidad o Pérdida»**, exactamente
+  como antes. Segmentado, cuatro: **Utilidad Operacional** (Σ4 − Σ5) tras la sección 5,
+  **Total No Operacional** (Σ6) tras la sección 6, y **Total Gastos del Ejercicio** (Σ5 + Σ6) y
+  **Utilidad del Ejercicio** (Utilidad Operacional − Total No Operacional) cerrando la grilla. La
+  fila no operacional es un **total de gastos, no una utilidad**: va en positivo como todo gasto
+  en esta app y se **resta**, nunca se muestra negada — es la aritmética del consolidado del
+  contador (`9.357,33 − 13.395,59 = −4.038,26`). Como la 6 descuenta de la 5, **la utilidad del
+  ejercicio no se mueve al reclasificar** y el badge del header sigue mostrándola. Cada resumen se ancla tras su bloque solo en el orden
+  natural: con un orden por mes activo las cuatro caen al final, porque ahí las secciones se
+  reacomodan y "después de la sección 5" deja de significar algo.
 - Rendimiento: filas memoizadas (`React.memo`), derivaciones con `useMemo` y
   `content-visibility` en las filas; sin virtualización (aún no hace falta).
 
@@ -296,6 +325,11 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   daltonismo y **no se ciclan**: la consulta topa en 8 series y el motor avisa cuántas descartó.
   Verde y rojo quedan **reservados** para el signo de una variación, y siempre con flecha y
   valor con signo — nunca color solo.
+- **Un gasto reclasificado sigue siendo un gasto.** Las tarjetas leen **todas** las raíces de
+  gasto que el estado tenga (`expenseRootsOf`, leído del propio origen y no declarado), así que
+  segmentar no encoge el tile de Costos y Gastos ni el ranking por lo que se movió a la sección
+  6, y la Utilidad de Gráficos sigue coincidiendo con el badge de Datos. La cascada y el signo
+  contable lo heredan de `rootSign` en `derive.ts`, la **única** definición: 4 suma, 5 y 6 restan.
 - **Cada tarjeta tiene su gemela en tabla** ("Ver como tabla"): las mismas series como filas y
   los periodos como columnas, con los valores **ya transformados** (índice 100, variación, YTD)
   y el periodo sin cobertura en blanco. Las advertencias del motor salen **completas** antes de
@@ -439,13 +473,19 @@ mano doce meses por cuenta no es un flujo real):
   **Consolidado** (suma de todos los centros, Sin centro de costo incluido, con los ajustes ya
   aplicados) más una hoja por centro; en estado único, una única hoja del Estado de Resultados.
   En ambos, los meses no cargados quedan **vacíos**, no en cero, y las cuentas padre llevan sus
-  sumatorias en negrita con sangría por nivel. Se **vuelve a subir tal cual**: una hoja de
-  metadatos oculta compartida (`_liderplus_workspace_meta`, `veryHidden`) lleva el **modo**, el
-  año, los meses cargados y el **valor de archivo original** de cada celda ajustada — así el
-  reimport separa la base del ajuste en vez de hornearlo, y `app-workbook.ts` reconstruye el modo
-  correcto a partir de esa marca. Nombre: `PyG-<año>-completo.xlsx` (por centros) o
+  sumatorias en negrita con sangría por nivel. Se exporta siempre en la **frecuencia base**. Se
+  **vuelve a subir tal cual**: una hoja de metadatos oculta compartida
+  (`_liderplus_workspace_meta`, `veryHidden`) lleva el **modo**, el año, los meses cargados, los
+  **comentarios** y el **valor de archivo original** de cada celda ajustada — así el reimport
+  separa la base del ajuste en vez de hornearlo, y `app-workbook.ts` reconstruye el modo correcto
+  a partir de esa marca. Nombre: `PyG-<año>-completo.xlsx` (por centros) o
   `PyG <empresa> <periodo>.xlsx` (estado único), deliberadamente fuera del patrón mensual para
   que nunca se lean como un mes.
+- **Las notas son para leer; la metadata es la que se relee.** Cada celda ajustada lleva una
+  **nota** con `Valor original: $X → $Y` (más el comentario si lo hay) y las celdas solo
+  comentadas llevan su texto, para que un ajuste nunca sea invisible al abrir el archivo. El
+  round-trip **no parsea esa prosa**: los comentarios se restauran desde la hoja de metadatos con
+  su texto exacto, y los valores editados vuelven como nueva base.
 - **Un mes en crudo:** el mes más reciente cargado, en la misma rejilla del sistema contable —
   por centros, `GENERAL` + centros + Sin centro de costo, con `GENERAL` como la suma de las
   demás columnas; en estado único, la columna `Total` sola, con su propia línea de rango

@@ -31,7 +31,9 @@ export function AccountBasePicker({ accounts, value, onChange }: AccountBasePick
       <DropdownTrigger active icon={<Divide size={15} />}>
         {picked ? `Base · ${picked.code} ${picked.name}` : "Base"}
       </DropdownTrigger>
-      <DropdownPanel width={344}>
+      {/* Right-aligned: the trigger sits at the card's right edge, so a panel hanging to the
+          right would leave the card even though it is no longer clipped by it. */}
+      <DropdownPanel align="right" width={344}>
         <AccountTreeList
           accounts={accounts}
           isSelected={isSelected}

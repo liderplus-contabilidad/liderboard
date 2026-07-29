@@ -17,10 +17,11 @@ import {
   amountsAt,
   compositionQuery,
   excludedNote,
-  EXPENSE_ROOT,
+  expenseRootsOf,
   intersectWithMarked,
   lastCoveredIndex,
   leavesOf,
+  leavesOfAny,
   presetQuery,
   REVENUE_ROOT,
   topEntries,
@@ -40,9 +41,11 @@ import { WaterfallCard } from "./waterfall-card";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
-/** What the evolution card falls back to with no account marked — a stable reference so the
- * queries built from it don't invalidate every render. */
-const DEFAULT_EVOLUTION_CODES = [REVENUE_ROOT, EXPENSE_ROOT];
+/** What the evolution card falls back to with no account marked: Ingresos against every expense
+ * root the statement carries — one of them until «Segmentar gastos» adds the non-operating. */
+function defaultEvolutionCodes(source: Parameters<typeof expenseRootsOf>[0]): string[] {
+  return [REVENUE_ROOT, ...expenseRootsOf(source)];
+}
 
 /**
  * Gráficos answers *how much and of what*: amounts per period, comparisons between accounts
@@ -60,9 +63,10 @@ export function GraficosView() {
   const { context, runQuery } = usePygAnalytics();
   const source = activeSource(context);
 
+  const defaultCodes = useMemo(() => defaultEvolutionCodes(source), [source]);
   const totals = useMemo(
-    () => runQuery(presetQuery(DEFAULT_EVOLUTION_CODES, context, { periods: filters.periods })),
-    [runQuery, context, filters.periods],
+    () => runQuery(presetQuery(defaultCodes, context, { periods: filters.periods })),
+    [runQuery, defaultCodes, context, filters.periods],
   );
   // ONE period for the whole tab. Every card names it in its subtitle, so they cannot be
   // allowed to each pick their own: a statement whose revenue stops in July but keeps booking
@@ -74,12 +78,15 @@ export function GraficosView() {
     : "Sin movimiento";
 
   const revenue = amountOf(totals, REVENUE_ROOT, period);
-  const expense = amountOf(totals, EXPENSE_ROOT, period);
+  const expenseParts = defaultCodes.slice(1).map((root) => amountOf(totals, root, period));
+  const expense = expenseParts.every((value) => value === null)
+    ? null
+    : expenseParts.reduce((sum: number, value) => sum + (value ?? 0), 0);
   const result = revenue !== null && expense !== null ? revenue - expense : null;
 
   // The evolution card draws the marked accounts (and centers); with nothing marked it falls
-  // back to Ingresos vs Costos y Gastos — the same two totals the stat tiles read.
-  const evolutionCodes = filters.codes.length > 0 ? filters.codes : DEFAULT_EVOLUTION_CODES;
+  // back to Ingresos vs Costos y Gastos — the same totals the stat tiles read.
+  const evolutionCodes = filters.codes.length > 0 ? filters.codes : defaultCodes;
   const evolutionFilters = useMemo(
     () => ({ ...filters, codes: evolutionCodes }),
     [filters, evolutionCodes],
@@ -111,7 +118,7 @@ export function GraficosView() {
       : undefined;
 
   // Ranking of expenses: sorted BEFORE the cut, so the largest cannot fall off the list.
-  const expenseLeaves = leavesOf(source, EXPENSE_ROOT);
+  const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
   const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = useMemo(
     () => runQuery(compositionQuery(rankingCodes, context, { periods: filters.periods })),
