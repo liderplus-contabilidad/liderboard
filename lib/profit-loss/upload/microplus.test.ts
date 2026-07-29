@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PygParseError } from "../errors";
+import { aoaToXlsxBuffer as dingooBuffer, DINGOO_AOA } from "./dingoo.fixtures";
 import { microplusStrategy } from "./microplus";
 import {
   aoaToXlsxBuffer,
@@ -67,6 +68,20 @@ describe("microplusStrategy.detect", () => {
         buildCandidate("PyG-2026-01.xlsx", centersBuffer(MONTHLY_CENTERS_AOA)),
       ),
     ).toBe(false);
+  });
+
+  it("no reclama un archivo de Dingoo, cuyo encabezado normaliza a las mismas etiquetas", () => {
+    // `Código`/`Nombre de la cuenta` es indistinguible de `CODIGO`/`NOMBRE DE LA CUENTA` una vez
+    // normalizados acentos y mayúsculas; lo que separa a los dos formatos es la fila de rango.
+    expect(
+      microplusStrategy.detect(
+        buildCandidate("RptEstadoResultados.xlsx", dingooBuffer(DINGOO_AOA)),
+      ),
+    ).toBe(false);
+  });
+
+  it("el encabezado solo no basta: sin la fila Desde:/Hasta: no acierta", () => {
+    expect(microplusStrategy.detect(candidate(MICROPLUS_NO_RANGE_AOA))).toBe(false);
   });
 });
 

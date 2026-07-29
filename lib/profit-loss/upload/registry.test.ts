@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 import { PygParseError } from "../errors";
+import { aoaToXlsxBuffer as dingooBuffer, DINGOO_AOA } from "./dingoo.fixtures";
 import { aoaToXlsxBuffer as microplusBuffer, MICROPLUS_AOA } from "./microplus.fixtures";
 import { aoaToXlsxBuffer as centersBuffer, MONTHLY_CENTERS_AOA } from "./monthly-centers.fixtures";
 import { aoaToXlsxBuffer as singleBuffer, MONTHLY_SINGLE_AOA } from "./monthly-single.fixtures";
-import { buildCandidate, resolveCandidate, resolveUpload, writesOwnFormat } from "./registry";
+import {
+  acceptedFileFormats,
+  buildCandidate,
+  resolveCandidate,
+  resolveUpload,
+  writesOwnFormat,
+} from "./registry";
 import type { StagedUpload, UploadCandidate, UploadStrategy } from "./types";
 
 function fakeBuffer(): ArrayBuffer {
@@ -120,6 +127,29 @@ describe("la lista fija — cada formato cae en su estrategia", () => {
     expect(slice.system).toBe("microplus");
   });
 
+  it("resuelve un archivo Dingoo por la estrategia Dingoo", () => {
+    const slice = resolveUpload("RptEstadoResultados.xlsx", dingooBuffer(DINGOO_AOA)) as Extract<
+      StagedUpload,
+      { kind: "month-slice" }
+    >;
+    expect(slice.kind).toBe("month-slice");
+    expect(slice.system).toBe("dingoo");
+    expect(slice.mode).toBe("single");
+  });
+
+  it("Dingoo y MicroPlus no se quitan archivos entre sí", () => {
+    // La firma de encabezado es la misma; lo que los separa es cómo declara cada uno su rango.
+    const dingoo = resolveUpload("x.xlsx", dingooBuffer(DINGOO_AOA)) as Extract<
+      StagedUpload,
+      { kind: "month-slice" }
+    >;
+    const microplus = resolveUpload("y.xls", microplusBuffer(MICROPLUS_AOA)) as Extract<
+      StagedUpload,
+      { kind: "month-slice" }
+    >;
+    expect([dingoo.system, microplus.system]).toEqual(["dingoo", "microplus"]);
+  });
+
   it("MicroPlus no le quita archivos a las otras dos estrategias", () => {
     const single = resolveUpload("descarga.xlsx", singleBuffer(MONTHLY_SINGLE_AOA)) as Extract<
       StagedUpload,
@@ -139,6 +169,10 @@ describe("writesOwnFormat — una estrategia declara si sabe escribir su formato
     expect(writesOwnFormat("microplus")).toBe(false);
   });
 
+  it("Dingoo también es de solo lectura", () => {
+    expect(writesOwnFormat("dingoo")).toBe(false);
+  });
+
   it("los dos formatos que la app sí escribe lo declaran", () => {
     expect(writesOwnFormat("monthly-single")).toBe(true);
     expect(writesOwnFormat("monthly-centers")).toBe(true);
@@ -151,6 +185,15 @@ describe("writesOwnFormat — una estrategia declara si sabe escribir su formato
 
   it("una estrategia que no lo declara es de solo lectura", () => {
     expect(writesOwnFormat("a", [fakeStrategy("a", () => true)])).toBe(false);
+  });
+});
+
+describe("el catálogo de formatos se deriva del registry", () => {
+  it("incluye la etiqueta de Dingoo sin que ningún componente la escriba", () => {
+    const ids = acceptedFileFormats().map((format) => format.id);
+    expect(ids).toContain("dingoo");
+    const dingoo = acceptedFileFormats().find((format) => format.id === "dingoo");
+    expect(dingoo?.label).toBe("Dingoo (Estado de Resultados)");
   });
 });
 

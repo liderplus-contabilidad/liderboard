@@ -6,13 +6,20 @@
  * Fixed order below: `app-workbook` first because its hidden metadata sheet is the one cheap,
  * exclusive signal that must be checked before anything shape-based. `monthly-centers` and
  * `monthly-single` don't collide (several free-text columns vs. exactly one `Total` column), so
- * their relative order doesn't matter, but it is still explicit rather than incidental.
- * `microplus` comes last and collides with nothing either way: it puts its code and name in
- * columns the other two never read (they need col A + col B), and its `CODIGO` + `NOMBRE DE LA
- * CUENTA` header is a signature none of them produces.
+ * their relative order doesn't matter, but it is still explicit rather than incidental. Neither
+ * is read by `dingoo` or `microplus`, which put their code and name in columns those two never
+ * read (they need col A + col B).
+ *
+ * `dingoo` and `microplus` DO share a header signature — `Código`/`CODIGO` +
+ * `Nombre de la cuenta`, indistinguishable once case and accents are normalized away — so the
+ * order below is NOT what separates them. Each one's `detect` additionally requires its own
+ * range declaration (`Desde el … al …` on one line for Dingoo, `Desde:`/`Hasta:` in separate
+ * cells for MicroPlus), which no other registered format produces. Reordering these two would
+ * therefore change nothing; that is the point.
  */
 import { PygParseError } from "../errors";
 import { appWorkbookStrategy } from "./app-workbook";
+import { dingooStrategy } from "./dingoo";
 import { readWorkbook } from "./grid";
 import { microplusStrategy } from "./microplus";
 import { monthlyCentersStrategy } from "./monthly-centers";
@@ -23,6 +30,7 @@ export const STRATEGIES: readonly UploadStrategy[] = [
   appWorkbookStrategy,
   monthlyCentersStrategy,
   monthlySingleStrategy,
+  dingooStrategy,
   microplusStrategy,
 ];
 

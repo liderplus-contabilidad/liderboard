@@ -123,8 +123,8 @@ declares the period — `PyG-YYYY-MM[-libre].(xlsx|xls)` — and is validated as
 ordered list) that replaces a format `if`: `monthly-centers.ts`, `monthly-single.ts` (the
 single-mode counterpart — unlike centers, its file DOES declare its own period, a
 `Desde el … hasta el …` line read by `date-range.ts`; a range that isn't exactly one calendar
-month is rejected naming why, and the filename plays no part), `microplus.ts` (a SECOND
-accounting system, single-mode only) and `app-workbook.ts` (reads the
+month is rejected naming why, and the filename plays no part), `microplus.ts` and `dingoo.ts` (a
+SECOND and a THIRD accounting system, both single-mode only) and `app-workbook.ts` (reads the
 app's own downloads back, either mode) each own their sheet shape, account-code convention and
 sign rule; `grid.ts` holds only the convention-free reading utilities. **MicroPlus is the proof
 the registry is a real extension point**: it exercises all six of those without touching the
@@ -135,8 +135,20 @@ name (the column encodes depth, `SALDO` labels a column only level 3 uses); the 
 a parent code is stripped and kept only as a cross-check against the derived tree (an aviso when
 they disagree, the tree wins); numbers arrive as text with thousands separators; and the expense
 branch (root `5`) is NEGATED at import, because MicroPlus stores expenses negative and adds
-while the app stores them positive and subtracts. The exact-calendar-month rule (`date-range.ts`'s
-`toCalendarMonth`) is shared verbatim — no per-vendor exception. `merge-month.ts` is the pure merge — new center/account →
+while the app stores them positive and subtracts. **Dingoo is the mirror of MicroPlus**, and that
+is what makes it worth reading: its `dingoo-grid.ts` also locates everything by label, but `Saldo`
+here really IS the value column (every level values in it, so an empty cell is a ZERO and nothing
+goes hunting), codes carry two-digit segments kept VERBATIM (`5.02.01.01.01` — the leading zeros
+are what the accountant checks against their own file), and the negated branch is `4`, not `5`,
+because Dingoo stores INCOME negative. Two systems negating opposite branches over an untouched
+`derive.ts` is the sign convention proving it belongs to the strategy. Its period is a one-line
+`Desde el … al …` (`al`, not the `hasta el` of `monthly-single`, whose pattern is deliberately NOT
+relaxed), and its company is read skipping the report's own titles (`REPORTE`, `ESTADO DE
+RESULTADOS`) — otherwise «first non-empty line» hands back `REPORTE`. **Both detects require their
+own range declaration**, not just the header: `Código`+`Nombre de la cuenta` normalizes to exactly
+MicroPlus's `CODIGO`+`NOMBRE DE LA CUENTA`, so the header alone made MicroPlus claim Dingoo's
+files. Order is not what separates them; each `detect` is. The exact-calendar-month rule
+(`date-range.ts`'s `toCalendarMonth`) is shared verbatim — no per-vendor exception. `merge-month.ts` is the pure merge — new center/account →
 zero-filled everywhere but the arriving month, and cuadre against `GENERAL` (one aviso per month,
 never per account). `WorkspaceMeta.loadedMonths` is the declared coverage — a month never
 loaded reads `null` through the whole engine (`buildAnalyticsSource`'s `coveredIndices` param),

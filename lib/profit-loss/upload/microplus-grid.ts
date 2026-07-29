@@ -12,7 +12,7 @@
  * trailing-dot normalization live in the strategy, which owns them.
  */
 import type { DateRange } from "./date-range";
-import { normalizeLabel, type Cell } from "./grid";
+import { compactLabel, type Cell } from "./grid";
 
 const CODE_LABEL = "codigo";
 const NAME_LABEL = "nombre de la cuenta";
@@ -27,10 +27,11 @@ const PRINT_LABELS = new Set(["pagina:", "fecha:"]);
 
 const DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 
-/** `normalizeLabel` (case + accents + outer spaces) plus collapsing INNER runs of whitespace, so
- * `"NOMBRE  DE LA  CUENTA"` still matches. Every label comparison in this module goes through it. */
+/** Every label comparison in this module goes through the shared `compactLabel` (case, accents,
+ * outer AND inner whitespace); re-exported under the module's own name because its tests and the
+ * strategy read it that way. */
 export function microplusLabel(cell: Cell): string {
-  return normalizeLabel(cell).replace(/\s+/g, " ");
+  return compactLabel(cell);
 }
 
 function text(cell: Cell): string {

@@ -381,6 +381,8 @@ caso es general y va en la API, no en tu módulo.
   - `monthly-single.ts` — el reporte mensual sin centros de costo, estado único (ver abajo).
   - `microplus.ts` — el `BALANCE DE PERDIDAS Y GANANCIAS` de **MicroPlus**, un segundo sistema
     contable (ver abajo). Solo modo estado único: MicroPlus no maneja centros de costo.
+  - `dingoo.ts` — el `ESTADO DE RESULTADOS` de **Dingoo**, un tercer sistema contable (ver
+    abajo). También solo modo estado único.
   - `app-workbook.ts` — reconoce cualquiera de las dos descargas «con tus datos» que la propia
     app produce (por su hoja de metadatos oculta compartida) y reconstruye el workspace
     completo, en el modo que declare la metadata.
@@ -406,6 +408,34 @@ caso es general y va en la API, no en tu módulo.
   - **La misma regla de rango que el resto**, sin excepción por proveedor; anida hasta **7
     niveles**, uno más que los formatos anteriores, y el filtro de Nivel los ofrece sin cambios.
   - Es de **solo lectura**: la app no escribe la plantilla de MicroPlus.
+- **Dingoo, el tercer sistema contable — y el espejo de MicroPlus.** Entró igual de limpio: sin
+  tocar el núcleo. Lo interesante es dónde difiere, porque cada diferencia confirma que esa
+  decisión pertenece a la estrategia:
+  - **`Saldo` sí es la columna del valor.** Todos los niveles valen en ella, así que una celda
+    vacía es un **cero** y no se sale a buscar el número a otra columna. Es lo contrario de
+    MicroPlus, donde la columna codifica la profundidad.
+  - **La rama que se niega es la `4`, no la `5`.** Dingoo guarda los **ingresos** en negativo y
+    suma (`Resultado = 4 + 5`). Dos sistemas negando ramas opuestas sobre el mismo `derive.ts`
+    intacto es la prueba de que la convención de signo es de la estrategia. Las contra-cuentas se
+    niegan con su rama: `(-) DEVOLUCIONES EN VENTAS` llega positiva y queda restando ingreso.
+  - **El código se conserva verbatim**, con sus ceros a la izquierda (`5.02.01.01.01` donde otros
+    escriben `5.2.1.1.1`): es lo que el contador coteja contra su propio archivo. Solo cambia la
+    grafía; el plan de cuentas es el mismo y el árbol se deriva de los códigos sin caso especial.
+  - **El periodo es una sola línea `Desde el … al …`** — con `al`, no el `hasta el` del estado
+    único, cuyo patrón **no** se relaja para aceptarlo. Misma regla de mes calendario exacto.
+  - **La empresa se lee saltando los rótulos del propio reporte** (`REPORTE`, `ESTADO DE
+RESULTADOS`), que encabezan el preámbulo; sin eso, «la primera línea no vacía» devolvería
+    `REPORTE` como razón social.
+  - **Las dos detecciones son mutuamente excluyentes, y no por el orden de la lista.** Una vez
+    normalizados acentos y mayúsculas, `Código`+`Nombre de la cuenta` es indistinguible de
+    `CODIGO`+`NOMBRE DE LA CUENTA`, así que el encabezado por sí solo hacía que MicroPlus
+    reclamara los archivos de Dingoo. Cada `detect` exige además **su propia** declaración de
+    rango, que es lo que de verdad los separa.
+  - Es de **solo lectura**, como MicroPlus.
+  - Limitación conocida: **«Segmentar gastos» no aparece** en un workspace Dingoo. `segment.ts`
+    busca el código literal `5.2` y el subárbol de gastos de Dingoo es `5.02`, así que no hay nada
+    que segmentar y el control se oculta (que es lo que ya hace en ese caso, no queda
+    deshabilitado). Generalizarlo es trabajo aparte que beneficia a los cuatro sistemas.
 - **Carga mensual e incremental, en ambos modos.** Un archivo = **un mes**. Por centros, la
   rejilla es `GENERAL` + una columna por centro + `SIN CENTRO DE COSTO` (la misma que siempre
   exporta el sistema contable), el archivo **no trae fecha** y el periodo sale del **nombre del
@@ -494,10 +524,10 @@ mano doce meses por cuenta no es un flujo real):
   que reentre sin renombrarlo (irrelevante en estado único, que no lee el nombre).
   **Solo aparece si la estrategia que originó el workspace declara que sabe escribir su formato**
   (`writesOwnFormat` en `UploadStrategy`; sin ese miembro, la estrategia es de solo lectura). Un
-  workspace cargado desde MicroPlus, que la app solo sabe leer, se queda con una sola opción — y
-  al quedar una, `ExcelActions` la rinde como botón plano en vez de menú, por su propia regla de
-  forma. «Excel con tus datos» sigue disponible y sigue volviendo a entrar, conservando
-  `microplus` como sistema de origen.
+  workspace cargado desde MicroPlus o Dingoo, que la app solo sabe leer, se queda con una sola
+  opción — y al quedar una, `ExcelActions` la rinde como botón plano en vez de menú, por su propia
+  regla de forma. «Excel con tus datos» sigue disponible y sigue volviendo a entrar, conservando
+  `microplus` o `dingoo` como sistema de origen.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
 
 ## Ocupaciones (análisis hotelero)

@@ -11,6 +11,7 @@ export const APP_WORKBOOK_SYSTEM = "app-workbook";
 export const MONTHLY_CENTERS_SYSTEM = "monthly-centers";
 export const MONTHLY_SINGLE_SYSTEM = "monthly-single";
 export const MICROPLUS_SYSTEM = "microplus";
+export const DINGOO_SYSTEM = "dingoo";
 
 /**
  * What a workspace with no system recorded is taken to be: the single-statement strategy, the

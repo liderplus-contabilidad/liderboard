@@ -46,6 +46,12 @@ export function normalizeLabel(cell: Cell): string {
     .toLowerCase();
 }
 
+/** `normalizeLabel` plus collapsing INNER runs of whitespace, so `"NOMBRE  DE LA  CUENTA"` still
+ * matches. Shared because two label-located formats need the same thing and neither owns it. */
+export function compactLabel(cell: Cell): string {
+  return normalizeLabel(cell).replace(/\s+/g, " ");
+}
+
 /** First row whose col A satisfies `isAccountCode` with a non-empty col B. */
 export function findFirstDataRow(grid: Cell[][], isAccountCode: (code: string) => boolean): number {
   return grid.findIndex(

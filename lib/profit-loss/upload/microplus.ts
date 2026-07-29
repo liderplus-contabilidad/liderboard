@@ -55,11 +55,24 @@ function locate(candidate: UploadCandidate): Located | null {
   return header ? { grid, header } : null;
 }
 
-/** A row carrying `CODIGO` and `NOMBRE DE LA CUENTA` at once — a signature no other registered
- * format produces. Never the file name (the sample is `mayo.xls`) nor the sheet name (`Sheet1`);
- * neither is contract. */
+/**
+ * The header row AND the `Desde:`/`Hasta:` range row. The header alone is NOT enough: label
+ * comparison ignores case and accents, so Dingoo's `Código · Nombre de la cuenta · Saldo` row
+ * normalizes to exactly this signature and MicroPlus used to claim its files — verified against
+ * `.context/bongoo/RptEstadoResultados.xlsx`, where `detect` matched and `parse` then died asking
+ * for a range that format never carries.
+ *
+ * The range row is what no other registered format produces, and `parse` already required it: a
+ * strategy must not claim a file it cannot parse (`pyg-upload-strategies` › «Resolución ordenada,
+ * primer acierto»). With this, telling the two formats apart no longer rests on the registry's
+ * order.
+ *
+ * Never the file name (the sample is `mayo.xls`) nor the sheet name (`Sheet1`); neither is
+ * contract.
+ */
 function detect(candidate: UploadCandidate): boolean {
-  return locate(candidate) !== null;
+  const located = locate(candidate);
+  return located !== null && findMicroplusRange(located.grid) !== null;
 }
 
 /** Strips the trailing dot MicroPlus uses to mark a parent account. Segments keep their leading
