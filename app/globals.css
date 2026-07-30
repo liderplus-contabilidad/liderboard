@@ -64,3 +64,93 @@ body {
   background: #b9c3cf;
   background-clip: content-box;
 }
+
+/* ── Impresión ─────────────────────────────────────────────────────────────
+   El informe de PyG se monta en un portal sobre <body> con este id y se
+   imprime con window.print(). Nada más de la app llega al papel.
+
+   Soltar html/body NO es opcional: el bloqueo de arriba (height:100% +
+   overflow:hidden) hace que el navegador pagine solo lo que cabe en el
+   viewport, así que sin esto el PDF sale de UNA página con la primera
+   pantalla y el resto del informe simplemente no existe. */
+@media print {
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+    background: #ffffff;
+  }
+
+  body > *:not(#pyg-report) {
+    display: none !important;
+  }
+
+  #pyg-report {
+    position: static;
+    overflow: visible;
+  }
+
+  /* Los controles de la propia vista previa no son parte del informe. */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* En pantalla la hoja tiene un ancho fijo para que los gráficos se midan contra la página;
+     al imprimir manda la página, que ya trae sus márgenes. */
+  .report-sheet,
+  .report-page {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+
+  .report-page {
+    padding: 0 !important;
+  }
+
+  /* Cada sección abre página; nada se parte por la mitad. */
+  .print-section {
+    break-before: page;
+  }
+
+  .print-section:first-child {
+    break-before: auto;
+  }
+
+  .print-keep {
+    break-inside: avoid;
+  }
+
+  /* Un <thead> de una tabla real se repite solo en cada página. */
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  /* NO hay pie repetido: `position: fixed` es la única vía en Chrome y la identidad del informe
+     ya la lleva la portada. El navegador añade su propia numeración si el lector la deja
+     activada en el diálogo. */
+
+  /* Sin esto el navegador descarta los fondos, y una tabla contable sin sus
+     bandas de encabezado deja de leerse como una tabla. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* UNA sola orientación, A4 vertical, y eso es una decisión de contenido antes que de CSS.
+   Hubo páginas apaisadas mientras el estado imprimía trece columnas de meses; para verse en la
+   previa tal como iban a salir tenían que desbordarse del cuerpo vertical del informe
+   (`margin-left` negativo), lo que en pantalla se lee como una tabla escapándose de la hoja, y
+   ni así cabían: 688 px de ancho útil menos los nombres de cuenta dejan 27 px por cifra, y una
+   cifra de seis dígitos mide 46. El informe acumula el periodo en vez de desglosarlo
+   (`lib/profit-loss/report/accumulate.ts`), sus tablas son de cuatro columnas y entran aquí con
+   holgura. Los doce meses siguen estando en Datos y en el Excel, que es donde se consultan. */
+@page {
+  size: A4 portrait;
+  margin: 14mm 14mm 16mm;
+}

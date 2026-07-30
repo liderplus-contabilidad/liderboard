@@ -6,6 +6,7 @@ import { Dropdown, DropdownPanel, DropdownTrigger } from "@/components/ui/dropdo
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { cn } from "@/lib/cn";
+import { FREQUENCY_ORDER, frequencyLabel } from "@/lib/period";
 import { periodSlots } from "@/lib/profit-loss/filters";
 import { deepestLevel, matchExpandLevel } from "@/lib/profit-loss/filter";
 import type { AccountRow, Frequency } from "@/lib/profit-loss/types";
@@ -16,12 +17,10 @@ import { PeriodFilter } from "./period-filter";
 import { YearFilter } from "./year-filter";
 import { usePygData } from "./pyg-data-provider";
 
-const GRANULARITIES: { value: Frequency; label: string }[] = [
-  { value: "mensual", label: "Mensual" },
-  { value: "trimestral", label: "Trimestral" },
-  { value: "semestral", label: "Semestral" },
-  { value: "anual", label: "Anual" },
-];
+const GRANULARITIES: { value: Frequency; label: string }[] = FREQUENCY_ORDER.map((value) => ({
+  value,
+  label: frequencyLabel(value),
+}));
 
 /**
  * PyG's filter row: Cuenta contable · Nivel · Centro de costo · Año · Periodo, with "Ver por" pinned

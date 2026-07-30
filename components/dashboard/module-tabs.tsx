@@ -6,6 +6,7 @@ import { ComingSoon } from "@/components/dashboard/coming-soon";
 import { OccupancyExcelActions } from "@/components/occupancy/occupancy-excel-actions";
 import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
 import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
+import { PygReportButton } from "@/components/profit-loss/report/pyg-report-button";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
 import { cn } from "@/lib/cn";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
@@ -52,7 +53,14 @@ interface ModuleViews {
 
 const MODULE_VIEWS: Record<string, ModuleViews> = {
   "profit-loss": {
-    rightSlot: (tab) => (tab === "datos" ? <PygExcelActions /> : null),
+    // El informe cubre las TRES pestañas, así que su botón está en las tres; las acciones de
+    // Excel siguen viviendo solo en Datos, que es donde se carga y se descarga.
+    rightSlot: (tab) => (
+      <div className="flex items-center gap-2.5">
+        {tab === "datos" && <PygExcelActions />}
+        <PygReportButton />
+      </div>
+    ),
     toolbar: () => <PygToolbar />,
     panel: (tab) => {
       switch (tab) {

@@ -136,8 +136,15 @@ export const ChartCard = memo(function ChartCard({
 /**
  * A `ChartCardSpec` mounted. `id` is the key of the list that holds the spec, not something the
  * card draws, so it is the one field that does not travel through.
+ *
+ * Whatever a spec cannot carry — the click handler, the header slot, whether the table toggle is
+ * offered — is passed alongside it: the printable report turns the toggle off, because a control
+ * on paper is a button nobody can press.
  */
-export function SpecCard({ spec }: { spec: ChartCardSpec }) {
+export function SpecCard({
+  spec,
+  ...rest
+}: { spec: ChartCardSpec } & Omit<ChartCardProps, keyof ChartCardSpec>) {
   return (
     <ChartCard
       title={spec.title}
@@ -147,6 +154,7 @@ export function SpecCard({ spec }: { spec: ChartCardSpec }) {
       warnings={spec.warnings}
       note={spec.note}
       height={spec.height}
+      {...rest}
     />
   );
 }
