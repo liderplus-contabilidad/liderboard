@@ -1,5 +1,5 @@
 /**
- * A series is identified by (center, year); the period is its X axis, not its identity.
+ * A series is a SUCURSAL; the period — year included — is its X axis, not its identity.
  *
  * `null` means "this period had no data" and `0` means "a real zero": a year loaded only to July
  * must leave August blank, because drawing it as 0 invents a collapse that never happened.
@@ -59,24 +59,78 @@ export type Scope = "dia" | Frequency;
 /** Finest first — the order «Ver por» offers them in. */
 export const SCOPE_ORDER: readonly Scope[] = ["dia", ...FREQUENCY_ORDER];
 
+/** A series is a SUCURSAL. The year travels in the period, so it no longer identifies a series. */
 export interface OccupancySeriesKey {
   centerId: string;
-  year: number;
 }
 
-/** Stable id for React keys and color lookups; neither part can contain the separator. */
+/** Stable id for React keys and color lookups. */
 export function occupancySeriesId(key: OccupancySeriesKey): string {
-  return `${key.centerId}|${key.year}`;
+  return key.centerId;
 }
 
 /**
- * Carries EVERY month the column covers — one on a monthly axis, three on a quarter — so a click
- * can narrow to exactly what was drawn. `day` is 0-based and present only on the daily axis.
+ * A full calendar date. The YEAR is part of the period, not a series: «del 1 de marzo de 2025 al 20
+ * de abril de 2026» is ONE continuous span, and putting two dates of different years side by side is
+ * what the «días específicos» mode is for. What compares is the sucursales.
+ */
+export interface DateRef {
+  year: number;
+  /** 0–11. */
+  monthIndex: number;
+  /** 0-based, clipped to the month's real length. */
+  day: number;
+}
+
+export interface DateRange {
+  from: DateRef;
+  to: DateRef;
+}
+
+/**
+ * One thing picked to be compared on its own: a DAY or a whole MONTH. A month is one column too, not
+ * thirty — «marzo contra julio» is two bars — and mixing the two granularities in one list is what lets
+ * «el 5 de enero contra todo marzo» be asked at all.
+ */
+export type PeriodPick =
+  | { kind: "dia"; year: number; monthIndex: number; day: number }
+  | { kind: "mes"; year: number; monthIndex: number };
+
+/**
+ * The two ways of asking for a period. The app says which one is on, because they answer different
+ * questions:
+ *
+ * - `rango`: one continuous span → a total and an EVOLUTION.
+ * - `comparar`: individual days and whole months, of any year → a COMPARISON, one column each. The
+ *   special case: «el 5 de enero de 2025 contra el 12 de marzo de 2026», «marzo contra julio».
+ */
+export type OccupancyPeriod =
+  | { mode: "rango"; range: DateRange }
+  | { mode: "comparar"; picks: PeriodPick[] };
+
+/** The days of ONE month of ONE year that a period covers. Never empty. */
+export interface PeriodCell {
+  year: number;
+  monthIndex: number;
+  /** 0-based, in order. A month at the end of a span holds only the part inside it. */
+  days: number[];
+}
+
+export interface OccupancyQuery {
+  metric: OccupancyMetricId;
+  centerIds: string[];
+  period: OccupancyPeriod;
+  scope: Scope;
+  limit?: number;
+}
+
+/**
+ * Carries the CELLS its column covers — one month of one year, or several on a quarter — so a click
+ * can narrow to exactly what was drawn and every consumer reads the same days the axis did.
  */
 export interface AxisPoint {
   label: string;
-  monthIndexes: number[];
-  day?: number;
+  cells: PeriodCell[];
 }
 
 /**
@@ -99,18 +153,6 @@ export interface OccupancySeries {
   values: (number | null)[];
   /** Aligned with `values`; `null` exactly where the value is. */
   facts: (PointFacts | null)[];
-}
-
-export interface OccupancyQuery {
-  metric: OccupancyMetricId;
-  centerIds: string[];
-  years: number[];
-  scope: Scope;
-  /** Marked months (0–11). Empty means the whole year: marking NARROWS the axis. */
-  months: number[];
-  /** Marked days of the month, 0-based. Empty means every day of the marked months. */
-  days: number[];
-  limit?: number;
 }
 
 export interface OccupancyBundle {

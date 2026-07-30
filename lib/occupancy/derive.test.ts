@@ -378,6 +378,8 @@ describe("toAnnualGrid", () => {
   it("counts available rooms as room-nights, the denominator of occupancy", () => {
     const dataset = emptyDataset(2026, "HOTEL X");
     dataset.months[0].inputs.available = new Array(31).fill(22);
+    // Sold rooms are what make the month count as loaded at all.
+    dataset.months[0].inputs.sold[0] = 5;
 
     // 22 rooms every day of January, not the 22 the monthly view reports as "the hotel's rooms".
     expect(annualRow(dataset, "available").cells[0]).toBe(682);
@@ -412,16 +414,34 @@ describe("toAnnualGrid", () => {
     expect(cumulative.agg).toBe(annualRow(dataset, "occupancy").agg);
   });
 
-  it("leaves an empty month's indicators empty instead of zero", () => {
+  it("leaves a month with no sales empty instead of zero, indicators included", () => {
     const dataset = yearWith([{ revenue: 1000, sold: 10, available: 40 }]);
-    expect(annualRow(dataset, "sold").cells[5]).toBe(0);
+    expect(annualRow(dataset, "sold").cells[5]).toBeNull();
     expect(annualRow(dataset, "adr").cells[5]).toBeNull();
     expect(annualRow(dataset, "occupancy").cells[5]).toBeNull();
   });
 
+  /**
+   * The real workbook is a whole year of blocks filled as the months happen, so the ones still to
+   * come already carry the hotel's capacity — and often room and channel rows left over from the
+   * year it was copied from. Reading those as data drags the year's occupancy down.
+   */
+  it("keeps the capacity of a month with no sales out of «Total año»", () => {
+    const dataset = yearWith([{ revenue: 1000, sold: 10, available: 40 }]);
+    // Agosto: la plantilla del año, con disponibles y habitaciones pero sin una sola venta.
+    dataset.months[7].inputs.available = new Array(31).fill(50);
+    dataset.months[7].inputs.rooms.simples = new Array(31).fill(3);
+
+    expect(annualRow(dataset, "available").cells[7]).toBeNull();
+    expect(annualRow(dataset, "simples").cells[7]).toBeNull();
+    // 10 de 40, no 10 de 1.590.
+    expect(annualRow(dataset, "available").agg).toBe(40);
+    expect(annualRow(dataset, "occupancy").agg).toBeCloseTo(0.25, 10);
+  });
+
   it("sums the channels of every month under one row each", () => {
     const channels = [{ id: "booking", name: "Booking" }];
-    const dataset = yearWith([{}, {}], channels);
+    const dataset = yearWith([{ sold: 12 }, { sold: 3 }], channels);
     dataset.months[0].inputs.channels.booking[0] = 7;
     dataset.months[0].inputs.channels.booking[1] = 5;
     dataset.months[1].inputs.channels.booking[0] = 3;
@@ -496,10 +516,11 @@ describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
   });
 
   it("sums the raw inputs of the months it covers", () => {
-    expect(cell(quarters(), "sold", "trimestral").cells).toEqual([60, 5, 0, 0]);
-    expect(cell(quarters(), "revenue", "trimestral").cells).toEqual([1200, 200, 0, 0]);
-    expect(cell(quarters(), "available", "trimestral").cells).toEqual([200, 50, 0, 0]);
-    expect(cell(quarters(), "sold", "semestral").cells).toEqual([65, 0]);
+    // T3 y T4 no tienen ni una venta: quedan vacíos, no en cero.
+    expect(cell(quarters(), "sold", "trimestral").cells).toEqual([60, 5, null, null]);
+    expect(cell(quarters(), "revenue", "trimestral").cells).toEqual([1200, 200, null, null]);
+    expect(cell(quarters(), "available", "trimestral").cells).toEqual([200, 50, null, null]);
+    expect(cell(quarters(), "sold", "semestral").cells).toEqual([65, null]);
   });
 
   it("computes the indicators as ratios OF THOSE SUMS, not averages of the months", () => {
@@ -516,9 +537,14 @@ describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
   });
 
   it("leaves a period with nothing in it empty instead of zero", () => {
-    expect(cell(quarters(), "sold", "trimestral").cells[2]).toBe(0);
+    expect(cell(quarters(), "sold", "trimestral").cells[2]).toBeNull();
     expect(cell(quarters(), "adr", "trimestral").cells[2]).toBeNull();
     expect(cell(quarters(), "occupancy", "trimestral").cells[2]).toBeNull();
+  });
+
+  it("cubre el trimestre en que CUALQUIERA de sus meses vendió", () => {
+    // Abril vendió y mayo/junio no: T2 se dibuja igual, con lo que abril trae.
+    expect(cell(quarters(), "sold", "trimestral").cells[1]).toBe(5);
   });
 
   it("keeps the Total column on the whole year whatever the columns are", () => {
@@ -528,12 +554,12 @@ describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
 
   it("folds the channels into the same periods", () => {
     const channels = [{ id: "booking", name: "Booking" }];
-    const dataset = yearWith([{}, {}, {}, {}], channels);
+    const dataset = yearWith([{ sold: 7 }, {}, { sold: 5 }, { sold: 3 }], channels);
     dataset.months[0].inputs.channels.booking[0] = 7;
     dataset.months[2].inputs.channels.booking[0] = 5;
     dataset.months[3].inputs.channels.booking[0] = 3;
 
-    expect(cell(dataset, "channel:booking", "trimestral").cells).toEqual([12, 3, 0, 0]);
+    expect(cell(dataset, "channel:booking", "trimestral").cells).toEqual([12, 3, null, null]);
   });
 
   it("reports the cuadre checks by period, not by month", () => {

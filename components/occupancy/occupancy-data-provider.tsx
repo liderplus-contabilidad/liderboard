@@ -12,19 +12,22 @@ import {
   sanitizeFilters,
   withCenterToggled,
   withCentersCleared,
-  withDrillIntoPeriod,
+  withPickToggled,
+  withPicksCleared,
   withMetric,
-  withDayToggled,
-  withDaysCleared,
-  withMonthToggled,
-  withMonthsCleared,
-  withPeriodShortcutToggled,
+  withPeriodMode,
+  withRangeCleared,
+  withRangeEdge,
   withScope,
-  withYearToggled,
-  withYearsCleared,
   type OccupancyFilters,
+  type PeriodMode,
 } from "@/lib/occupancy/filters";
-import type { OccupancyMetricId, Scope } from "@/lib/occupancy/analytics/types";
+import type {
+  DateRef,
+  OccupancyMetricId,
+  PeriodPick,
+  Scope,
+} from "@/lib/occupancy/analytics/types";
 import type { Frequency } from "@/lib/period";
 import { normalize } from "@/lib/occupancy/slug";
 import {
@@ -85,26 +88,23 @@ interface OccupancyDataValue {
   importErrorDetails: string[];
   dismissImportError: () => void;
   /**
-   * What the Gráficos filter bar has marked. Datos keeps its own three strips: those answer
-   * «cuál edito», these answer «cuáles comparo».
+   * What the Gráficos filter bar holds. Datos keeps its own three strips: those answer «cuál edito»,
+   * these answer «qué periodo veo».
    */
   filters: OccupancyFilters;
   setMetric: (metric: OccupancyMetricId) => void;
   setChartScope: (scope: Scope) => void;
   toggleCenterMark: (centerId: string) => void;
-  toggleYearMark: (year: number) => void;
-  toggleMonthMark: (month: number) => void;
-  /** Marking a day narrows the axis to it — and drops «Ver por» to días. */
-  toggleDayMark: (day: number) => void;
   clearCenterMarks: () => void;
-  clearYearMarks: () => void;
-  clearMonthMarks: () => void;
-  clearDayMarks: () => void;
   clearAllMarks: () => void;
-  /** The «T1»/«S1» shortcuts: they mark that period's own MONTHS, no new kind of mark. */
-  togglePeriodMark: (frequency: Frequency, index: number) => void;
-  /** Narrows to those months AND drops the axis one step. */
-  drillIntoPeriod: (months: readonly number[], scope: Scope) => void;
+  /** «Rango» (un tramo, con total y evolución) o «Días» (fechas sueltas, una columna cada una). */
+  setPeriodMode: (mode: PeriodMode) => void;
+  /** Moves one end of the span; ends given in reverse are normalized. */
+  setRangeEdge: (edge: "from" | "to", ref: DateRef) => void;
+  clearRange: () => void;
+  /** Adds or removes one day or one whole month from the «comparar» selection. */
+  togglePick: (pick: PeriodPick) => void;
+  clearPicks: () => void;
 }
 
 const OccupancyDataContext = createContext<OccupancyDataValue | null>(null);
@@ -177,6 +177,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     [datasets],
   );
   // Pruned on read, never in an effect: the marks are never a render behind the workspace.
+  // Pruned AND resolved on read: the default span carries «el año que haya» until the workspace says
+  // which years it holds. Never in an effect, so the selection is never a render behind.
   const filters = useMemo(
     () => sanitizeFilters(rawFilters, { centerIds: centers.map((c) => c.id), years: allYears }),
     [rawFilters, centers, allYears],
@@ -366,33 +368,22 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     (centerId: string) => setRawFilters((f) => withCenterToggled(f, centerId, centerUniverse)),
     [centerUniverse],
   );
-  const toggleYearMark = useCallback(
-    (year: number) => setRawFilters((f) => withYearToggled(f, year, allYears)),
-    [allYears],
-  );
-  const toggleMonthMark = useCallback(
-    (month: number) => setRawFilters((f) => withMonthToggled(f, month)),
-    [],
-  );
-  const toggleDayMark = useCallback(
-    (day: number) => setRawFilters((f) => withDayToggled(f, day)),
-    [],
-  );
   const clearCenterMarks = useCallback(() => setRawFilters(withCentersCleared), []);
-  const clearYearMarks = useCallback(() => setRawFilters(withYearsCleared), []);
-  const clearMonthMarks = useCallback(() => setRawFilters(withMonthsCleared), []);
-  const clearDayMarks = useCallback(() => setRawFilters(withDaysCleared), []);
   const clearAllMarks = useCallback(() => setRawFilters(clearMarks), []);
-  const togglePeriodMark = useCallback(
-    (frequency: Frequency, index: number) =>
-      setRawFilters((f) => withPeriodShortcutToggled(f, frequency, index)),
+  const setPeriodMode = useCallback(
+    (mode: PeriodMode) => setRawFilters((f) => withPeriodMode(f, mode)),
     [],
   );
-  const drillIntoPeriod = useCallback(
-    (months: readonly number[], scope: Scope) =>
-      setRawFilters((f) => withDrillIntoPeriod(f, months, scope)),
+  const setRangeEdge = useCallback(
+    (edge: "from" | "to", ref: DateRef) => setRawFilters((f) => withRangeEdge(f, edge, ref)),
     [],
   );
+  const clearRange = useCallback(() => setRawFilters(withRangeCleared), []);
+  const togglePick = useCallback(
+    (pick: PeriodPick) => setRawFilters((f) => withPickToggled(f, pick)),
+    [],
+  );
+  const clearPicks = useCallback(() => setRawFilters(withPicksCleared), []);
 
   const dismissImportError = useCallback(() => {
     setImportError(null);
@@ -439,16 +430,13 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       setMetric,
       setChartScope,
       toggleCenterMark,
-      toggleYearMark,
-      toggleMonthMark,
-      toggleDayMark,
       clearCenterMarks,
-      clearYearMarks,
-      clearMonthMarks,
-      clearDayMarks,
       clearAllMarks,
-      togglePeriodMark,
-      drillIntoPeriod,
+      setPeriodMode,
+      setRangeEdge,
+      clearRange,
+      togglePick,
+      clearPicks,
     }),
     [
       datasets,
@@ -460,10 +448,13 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       hasConsolidated,
       setActiveCenter,
       years,
+      allYears,
       activeYear,
       setActiveYear,
       monthIndex,
+      setMonthIndex,
       gridScope,
+      setGridScope,
       gridFrequency,
       setGridFrequency,
       dataset,
@@ -482,21 +473,17 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       importError,
       importErrorDetails,
       dismissImportError,
-      allYears,
       filters,
       setMetric,
       setChartScope,
       toggleCenterMark,
-      toggleYearMark,
-      toggleMonthMark,
-      toggleDayMark,
       clearCenterMarks,
-      clearYearMarks,
-      clearMonthMarks,
-      clearDayMarks,
       clearAllMarks,
-      togglePeriodMark,
-      drillIntoPeriod,
+      setPeriodMode,
+      setRangeEdge,
+      clearRange,
+      togglePick,
+      clearPicks,
     ],
   );
 

@@ -700,6 +700,14 @@ mes, o el año consolidado de todas.
 - **Vista anual** (botón «Año» al final de la tira de MES): las mismas filas con **un mes por
   columna** y **Total año**. Siempre calculada y de solo lectura — una celda de mes es un
   agregado de días, no hay dónde escribirla. Volver a un mes es tan simple como pulsarlo.
+- **Cobertura: cuenta como cargado el mes que tiene ventas** (ingresos o habitaciones vendidas), no
+  el que existe. Un libro real es el año entero en doce bloques que el contador llena conforme pasan
+  los meses, así que los que faltan ya traen la capacidad del hotel —y a veces filas de habitaciones
+  y canales heredadas del año del que se copió—; leerlas como dato hundía la ocupación del año (56 %
+  → 32 % en un archivo con siete meses vendidos). Un mes sin ventas deja **toda su columna vacía** y
+  no entra en el «Total año», así que la vista anual y los gráficos reportan la misma cifra. Sus
+  insumos siguen ahí, visibles y editables, en la grilla diaria de ese mes: la cobertura habla de los
+  agregados, no borra nada.
 - En la vista anual, **«Habitaciones disponibles» suma habitaciones-noche** (682 en enero) en
   vez del promedio redondeado que muestra la mensual (22): es el denominador real de la
   ocupación de ese mes. Es la única fila que agrega distinto según el alcance, y lo declara en
@@ -715,33 +723,96 @@ mes, o el año consolidado de todas.
 
 ### Gráficos
 
-La pestaña tiene su propia **barra de filtros** — Métrica · Sucursal · Año · Periodo, con la
-franja de chips activos debajo. Como en PyG, **la comparación no se declara**: marcar dos
-sucursales, dos años o dos meses es lo que la produce.
+La pestaña tiene su propia **barra de filtros** — **Sucursal · Periodo**, con la franja de chips
+activos debajo. Dos controles: **dónde** y **cuándo**. Como en PyG, **la comparación no se declara**:
+marcar dos sucursales es lo que la produce.
 
-**Ver por** (Mes / Día) **no está en esa barra**, sino en el encabezado de la serie principal,
-junto a «Ver como tabla»: es lo único que cambia el eje de esa tarjeta y no toca ninguna otra —el
-mapa de calor es siempre día a día, los canales y el ritmo semanal son totales del periodo—,
-mientras que todo lo que sí está en la barra alimenta a todas. Un control que gobierna una
-tarjeta vive sobre esa tarjeta (`ChartCard` lo recibe como `headerSlot`).
+**El año es parte de la fecha, no una serie.** Se elige dentro del periodo (año · mes · día), lo que
+permite un tramo que cruce años; lo que compara son las **sucursales**.
+
+**El filtro de Periodo tiene dos modalidades, nombradas y explicadas dentro del propio control**,
+porque responden preguntas distintas:
+
+|               | **Rango de fechas**                               | **Días específicos**                       |
+| ------------- | ------------------------------------------------- | ------------------------------------------ |
+| Cómo se elige | Desde año+mes+día → Hasta año+mes+día             | Se agregan fechas, de cualquier año        |
+| Qué es        | Un tramo continuo                                 | Fechas sueltas                             |
+| Qué muestra   | El **total** del tramo y su **evolución**         | Una **fila/columna por fecha**, comparadas |
+| Chips         | **Uno**: «del 20 de marzo al 10 de abril de 2026» | Uno por fecha                              |
+
+- **Los meses de los extremos son PARCIALES**: «del 20 de marzo al 10 de abril» son doce días de marzo
+  y diez de abril, nunca dos meses enteros.
+- **El gesto elige la modalidad**: mover un extremo _es_ un rango, agregar una fecha _es_ días. Lo
+  elegido en la otra no se pierde al cambiar.
+- **El tramo se escribe en palabras** bajo los selectores («del 20 de marzo al 10 de abril de 2026»):
+  dos ternas de desplegables no dicen el tramo que forman.
+- **`lib/occupancy/analytics/scope.ts` es la única respuesta a «qué días cubre el periodo»**
+  (`periodCells` → `{año, mes, días}`), y de ahí leen el motor de series, los totales del reporte y el
+  mapa de calor. Un 29 de febrero existe en año bisiesto y no en los demás; una fecha que el mes no
+  tiene se descarta en vez de acercarse a otra.
+
+Se lee en **dos secciones**, cada una con su título, su subtítulo y sus controles:
+
+1. **«Reporte del periodo»** · con «Ver como» y «Ver por» — **cuatro tarjetas** con el total del
+   periodo y, debajo, **una** de dos lecturas de esas mismas cifras: las **cuatro gráficas de barras**
+   (por defecto, una por cifra) o la **tabla** (centrada, el periodo fila a fila). Nunca las dos: dicen
+   lo mismo, y las gráficas dan la forma de la temporada mientras la tabla da la cifra exacta. Cierra con
+   **Canales de venta**, alineado al ancho de la lectura que esté puesta.
+2. **«Análisis por métrica»** · con el selector de métrica — una sola cifra de cerca: el mapa de calor
+   día a día y el ritmo por día de la semana.
+
+**Canales de venta vive en la PRIMERA sección** porque es la única tarjeta que **no lee la métrica**:
+cuenta noches por canal, así que es un desglose del total del periodo y va donde está ese total.
+
+**El color encodea el VALOR, y hay DOS rampas** porque el módulo hace dos preguntas distintas sobre una
+cifra, y contestar las dos con una sola es lo que hace que un color signifique dos cosas en la misma
+pantalla:
+
+| Rampa              | Pregunta                | Pasos                                 | Dónde                            |
+| ------------------ | ----------------------- | ------------------------------------- | -------------------------------- |
+| `CHART_HEAT_RAMP`  | **cuánto** (intensidad) | amarillo → naranja → **rojo**         | mapa de calor                    |
+| `CHART_SCORE_RAMP` | **qué tan bien fue**    | **rojo** → naranja → amarillo → verde | barras y micro-barra de la tabla |
+
+- **Cada marca toma su propio color** de `CHART_PERIOD_PALETTE`, doce tonos por el lugar en el eje, como
+  `channelOption` ya pinta una barra por canal. Vale igual para el **ritmo por día de la semana**.
+- Es un set **decorativo y apagado a propósito** (cada tono mezclado ~18 % hacia gris): doce barras
+  saturadas cansan la vista, y esto se mira minutos seguidos. **Nunca se usa para series** — para eso
+  están los ocho slots de identidad, que sí sobreviven al daltonismo.
+- **Con dos o más sucursales el color vuelve a la sucursal**: ahí sí codifica identidad y tiene que
+  seguir a la entidad que se compara.
+- El **mapa de calor** usa una **escala amarilla** de un solo tono (amarillo claro → ocre), monotónica en
+  luminancia, así que sobrevive a una impresión en blanco y negro y una cuadrícula de 372 celdas nunca
+  se lee como un arcoíris.
+
+Lo que el validador dice del set de doce, para que nadie lo vuelva a derivar: banda de luminancia
+**PASS**, piso de croma **PASS**, y el piso de **visión normal PASS** (peor par vecino ΔE 16.3) — que es
+la comprobación que importa para «que varíe entre barras». La separación bajo daltonismo **no** pasa
+(peor par, verde-azulado↔rosa, ΔE 3.2 en protanopía): doce tonos separables para daltonismo no existen,
+que es justamente por qué el set de identidad se detiene en ocho. Es aceptable **solo aquí** porque
+quien no distinga dos de esos tonos no pierde nada: el mes está escrito bajo la barra.
+
+**Al entrar:** todo el año, **mes a mes** y en **gráficas**. Doce columnas es la lectura que tiene la
+hoja del contador, y es la única granularidad que sirve a las dos mitades del reporte —la tabla no puede
+mostrar un eje diario—.
+
+**En la barra va solo lo que ACOTA lo que se ve.** Por eso ni «Métrica» ni «Ver como»/«Ver por» están
+ahí: la métrica elige qué cifra mira la segunda sección y los otros dos cómo se lee la primera;
+ninguno quita nada de la pantalla. Un control que gobierna una sección vive sobre esa sección.
 
 - **La métrica es de selección única.** Ocupación es %, ADR y RevPAR son $, vendidas y PAX son
   conteos; mezclarlas en una tarjeta pediría un segundo eje Y, que el proyecto no permite. Lo que
   se compara son sucursales, años y periodos, siempre en la misma unidad.
-- **El periodo se marca en dos niveles: mes y día del mes.** Con «Ver por: Día» y ningún mes
-  marcado el eje es el año corrido; marcando marzo, son sus 31 días; marcando además el día 5, el
-  eje es **una sola columna**. Marcar acota el eje y nunca multiplica las series, así que
+- **En «Comparar» el periodo se marca en dos niveles: mes y día del mes.** Con «Ver por: Día» y
+  ningún mes marcado el eje es el año corrido; marcando marzo, son sus 31 días; marcando además el
+  día 5, el eje es **una sola columna**. Marcar acota el eje y nunca multiplica las series, así que
   «Cultura Manor, 2025 y 2026, enero, día 5» son dos barras: el 5 de enero de un año contra el
   del otro. Un día marcado vale para **cada** mes marcado («el 5» de enero y de marzo), y un día
   que el mes no tiene simplemente no aparece. Marcar un día pasa «Ver por» a Día por su cuenta:
   sobre el eje mensual no querría decir nada.
 - **Cobertura:** un mes que el espacio nunca recibió no dibuja punto; un día dentro de un mes con
   datos que no vendió nada es un cero real y sí se dibuja.
-- **Tarjetas:** cuatro indicadores del alcance marcado (ocupación media, ADR, RevPAR, ingresos),
-  la serie principal, el mapa de calor día×mes, los canales de venta y el ritmo por día de la
-  semana.
-- **La selección se lee en una frase.** Bajo los controles hay una línea «Mostrando Ocupación ·
-  5 de enero · 2025 y 2026 · Cultura Manor», y el control de Periodo se rotula con el periodo
+- **La selección se lee en una frase.** Bajo los controles hay una línea «Mostrando 5 de enero ·
+  2025 y 2026 · Cultura Manor», y el control de Periodo se rotula con el periodo
   («5 de enero»), no con cuántas casillas hay marcadas. La rejilla de días se ve desde el
   principio, deshabilitada hasta que eliges un mes, para que se sepa que existe.
 - **Cuando el eje queda en una sola columna, el eje pasa a ser la entidad:** «el 5 de enero de
@@ -756,3 +827,32 @@ tarjeta vive sobre esa tarjeta (`ChartCard` lo recibe como `headerSlot`).
   sucursal-año marcada (hasta cuatro) y **una sola escala para todas**, que es lo que las hace
   comparables de un vistazo. Es el único consumidor de la rampa secuencial `CHART_HEAT_RAMP`,
   separada de la paleta categórica.
+
+#### Sección 1 · «Reporte del periodo»
+
+Es el resumen que el contador ya llevaba a mano en su propio Excel, y con el que la pestaña ABRE:
+**Venta en $ · % Ocupación · Tarifa Prom · RevPAR**, primero como **cuatro tarjetas con el total del
+rango marcado** y debajo como **cuatro gráficas de barras** —las mismas cuatro que su archivo dibuja
+bajo su tabla—.
+
+- **`MONTHLY_COLUMNS` declara esas cuatro cifras una sola vez** (encabezado, orden y unidad) y de ahí
+  las leen las dos mitades, así que una tarjeta y la gráfica de debajo no pueden nombrar ni escalar
+  la misma cifra distinto. Cada `id` es a la vez una clave de `MonthlyFigures` y una métrica del
+  motor, que es lo que permite una única lista.
+- **Las tarjetas son el cierre del rango**: `monthlyTables(...).total`, ratio de sumas, nunca el
+  promedio de los meses. Una fila de tarjetas por sucursal-año marcada, con su punto de color: marcar
+  dos es pedir compararlas, y una cifra mezclada respondería algo que nadie preguntó.
+- **Las gráficas comparten un solo eje** (`buildOccupancyEvolution`, un panel por cifra sobre la misma
+  consulta), y **cada una lleva su propia escala**: un porcentaje y un importe no comparten eje,
+  comparten periodo. Es lo que permite verlas juntas sin el segundo eje Y que el proyecto no permite.
+- **«Ver por» gobierna las cuatro a la vez** y el **clic en una barra baja un nivel** —semestre →
+  trimestre → mes → día— escribiendo en los mismos filtros; se deshace quitando el chip. Al ser el
+  mismo eje, el clic en cualquiera de las cuatro baja igual.
+- **Lo marcado en la barra las acota**: sin meses marcados son los doce del año; marcando marzo es
+  una sola barra; con días marcados las cifras cubren solo esos días.
+- **Un mes sin ventas no dibuja punto**, y su capacidad no entra en el total — es lo que el Excel de
+  origen hace dejando agosto en blanco. Dentro de un mes que sí vendió, un día sin ventas sigue
+  siendo un cero real.
+- **Dos decimales fijos** en las tarjetas (`formatMonthlyFigure`), sin el umbral por magnitud que usa
+  el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
+  escala.
