@@ -121,6 +121,30 @@ export function emptyDataset(
   };
 }
 
+/**
+ * Whether a month counts as COVERED — the ONE definition of it, read by the annual grid, by the
+ * month strip and by every card of Gráficos.
+ *
+ * Coverage is SALES, not capacity and not scaffolding. A real workbook is a whole year of twelve
+ * blocks that the accountant fills as the months happen, so the months still to come already carry
+ * the hotel's «habitaciones disponibles» — and often room-type and channel rows left over from the
+ * year it was copied from. Reading those as data drags the year's occupancy down by the capacity
+ * nobody has sold yet: a hotel seven months into a year would report 32 % instead of 56 %.
+ * `ingresos` or `habitaciones vendidas` is what says the month happened.
+ *
+ * The trade-off is deliberate: a month the hotel really was open through and sold NOTHING reads as
+ * "not loaded", because nothing in the file tells that apart from a month not yet filled — and
+ * leaving it blank is what the accountant's own report does. This is a statement about the WHOLE
+ * month; a day with no sales inside a month that sold is still a real zero.
+ */
+export function monthHasData(month: OccupancyMonth | undefined): month is OccupancyMonth {
+  if (!month) {
+    return false;
+  }
+  const { revenue, sold } = month.inputs;
+  return [revenue, sold].some((values) => values.some((value) => value !== 0));
+}
+
 /** Reads a possibly short/absent series without ever yielding NaN. */
 function at(values: number[] | undefined, day: number): number {
   const value = values?.[day];
@@ -163,16 +187,22 @@ function last(values: (number | null)[]): number | null {
   return values.length > 0 ? (values[values.length - 1] ?? null) : null;
 }
 
+/**
+ * `cells` admits `null` for the annual grid's uncovered periods; the daily grid always passes
+ * numbers. The aggregate reads only the columns that ARE there, so a year still being filled is
+ * summed over the months it has instead of over twelve.
+ */
 function inputRow(
   id: string,
   label: string,
-  cells: number[],
+  cells: (number | null)[],
   options: { hint?: string; format?: OccupancyGridRow["format"]; agg?: "sum" | "avg" } = {},
 ): OccupancyGridRow {
   const agg = options.agg ?? "sum";
+  const present = cells.filter((value): value is number => value !== null);
   // A hotel cannot hold 21,94 rooms, so the mean is rounded. Nothing computes from it: the
   // occupancy and RevPAR denominators use the SUM of available rooms, not this average.
-  const mean = cells.length > 0 ? Math.round(sum(cells) / cells.length) : null;
+  const mean = present.length > 0 ? Math.round(sum(present) / present.length) : null;
   return {
     id,
     label,
@@ -181,7 +211,7 @@ function inputRow(
     format: options.format ?? "number",
     editable: true,
     cells,
-    agg: agg === "avg" ? mean : sum(cells),
+    agg: present.length > 0 ? (agg === "avg" ? mean : sum(present)) : null,
   };
 }
 
@@ -398,10 +428,26 @@ export function toAnnualGrid(
   const perColumn = <T>(build: (column: number) => T): T[] =>
     Array.from({ length: columns }, (_, column) => build(column));
 
+  /**
+   * Coverage travels with the columns. A month with no sales contributes nothing and SHOWS nothing,
+   * so «Total año» is the year so far rather than the year plus the capacity nobody has sold yet —
+   * and the same figure the charts report. A period is covered when at least ONE of its months is,
+   * exactly as the engine reads it.
+   */
+  const covered = months.map((month) => monthHasData(month));
+  const coveredColumn = sumByPeriod(
+    covered.map((yes) => (yes ? 1 : 0)),
+    frequency,
+  ).map((count) => count > 0);
+  const blank = (values: (number | null)[]): (number | null)[] =>
+    values.map((value, column) => (coveredColumn[column] ? value : null));
+
   /** One total per COLUMN, from a raw input series: month totals folded into their period. */
   const byPeriod = (pick: (inputs: MonthInputs) => number[] | undefined): number[] =>
     sumByPeriod(
-      months.map((month) => sum(series(pick(month.inputs), month.days))),
+      months.map((month, index) =>
+        covered[index] ? sum(series(pick(month.inputs), month.days)) : 0,
+      ),
       frequency,
     );
 
@@ -422,7 +468,10 @@ export function toAnnualGrid(
 
   // A stated PAX wins over the room-type formula, so the extra beds the files record survive.
   const pax = sumByPeriod(
-    months.map((month) => {
+    months.map((month, index) => {
+      if (!covered[index]) {
+        return 0;
+      }
       let total = 0;
       for (let d = 0; d < month.days; d++) {
         const fromRooms = ROOM_ROW_IDS.reduce(
@@ -450,6 +499,10 @@ export function toAnnualGrid(
   const channelMismatch: number[] = [];
   const roomMismatch: number[] = [];
   for (let c = 0; c < columns; c++) {
+    // An uncovered period has nothing to reconcile: its cells are empty, not out of balance.
+    if (!coveredColumn[c]) {
+      continue;
+    }
     if (Math.abs(totalChannels[c] - occupied[c]) > EPSILON) {
       channelMismatch.push(c);
     }
@@ -458,69 +511,67 @@ export function toAnnualGrid(
     }
   }
 
+  /** Its last COVERED column: an accumulated figure closes where the data stops. */
+  const lastCovered = (values: (number | null)[]): number | null =>
+    last(values.filter((value) => value !== null));
+
+  const cumulativeOccupancyCells = blank(cumulativeOccupancy);
+  const cumulativePaxCells = blank(cumulativePax);
+
   const rows: OccupancyGridRow[] = [
     // Room-NIGHTS, not the "rooms the hotel has" of the monthly view: this is what the
     // occupancy and RevPAR of each period divide by.
-    inputRow("available", "Habitaciones disponibles", available, {
+    inputRow("available", "Habitaciones disponibles", blank(available), {
       hint: "habitaciones-noche",
     }),
-    inputRow("revenue", "Ingresos en habitaciones", revenue, { format: "currency" }),
-    inputRow("sold", "Habitaciones vendidas y cobradas", sold),
-    inputRow("complimentary", "Habitaciones complementarias", complimentary),
-    inputRow(
-      "cancellations",
-      "Cancelaciones",
-      byPeriod((i) => i.cancellations),
-      {
-        hint: "noches",
-      },
-    ),
-    inputRow(
-      "noShows",
-      "No shows",
-      byPeriod((i) => i.noShows),
-      { hint: "habitaciones" },
-    ),
-    inputRow(
-      "noShowsOta",
-      "No shows OTAS",
-      byPeriod((i) => i.noShowsOta),
-    ),
+    inputRow("revenue", "Ingresos en habitaciones", blank(revenue), { format: "currency" }),
+    inputRow("sold", "Habitaciones vendidas y cobradas", blank(sold)),
+    inputRow("complimentary", "Habitaciones complementarias", blank(complimentary)),
+    inputRow("cancellations", "Cancelaciones", blank(byPeriod((i) => i.cancellations)), {
+      hint: "noches",
+    }),
+    inputRow("noShows", "No shows", blank(byPeriod((i) => i.noShows)), { hint: "habitaciones" }),
+    inputRow("noShowsOta", "No shows OTAS", blank(byPeriod((i) => i.noShowsOta))),
 
     derivedRow(
       "adr",
       "ADR",
-      revenue.map((value, m) => ratio(value, sold[m])),
+      blank(revenue.map((value, m) => ratio(value, sold[m]))),
       ratio(totalRevenue, totalSold),
       { hint: "ingresos / vendidas", format: "currency" },
     ),
     derivedRow(
       "occupancy",
       "Ocupación",
-      sold.map((value, m) => ratio(value, available[m])),
+      blank(sold.map((value, m) => ratio(value, available[m]))),
       ratio(totalSold, totalAvailable),
       { hint: "vendidas / disponibles", format: "percent" },
     ),
     derivedRow(
       "revpar",
       "RevPAR",
-      revenue.map((value, m) => ratio(value, available[m])),
+      blank(revenue.map((value, m) => ratio(value, available[m]))),
       ratio(totalRevenue, totalAvailable),
       { hint: "ingresos / disponibles", format: "currency" },
     ),
     derivedRow(
       "cumulativeOccupancy",
       "% acumulado",
-      cumulativeOccupancy,
-      last(cumulativeOccupancy),
+      cumulativeOccupancyCells,
+      lastCovered(cumulativeOccupancyCells),
       { hint: "ocupación acumulada del año", format: "percent-whole" },
     ),
 
     sectionRow("section:rooms", "Habitaciones", columns),
-    ...ROOM_ROW_IDS.map((id) => inputRow(id, ROOM_LABELS[id], rooms[id])),
-    derivedRow("totalRooms", "Total habitaciones", totalRooms, sum(totalRooms)),
-    inputRow("pax", "PAX totales", pax),
-    derivedRow("cumulativePax", "PAX acumulados", cumulativePax, last(cumulativePax)),
+    ...ROOM_ROW_IDS.map((id) => inputRow(id, ROOM_LABELS[id], blank(rooms[id]))),
+    derivedRow("totalRooms", "Total habitaciones", blank(totalRooms), sum(totalRooms)),
+    inputRow("pax", "PAX totales", blank(pax)),
+    derivedRow(
+      "cumulativePax",
+      "PAX acumulados",
+      cumulativePaxCells,
+      lastCovered(cumulativePaxCells),
+    ),
 
     sectionRow(
       "section:channels",
@@ -534,10 +585,10 @@ export function toAnnualGrid(
       kind: "channel",
       format: "number",
       editable: false,
-      cells: values,
+      cells: blank(values),
       agg: sum(values),
     })),
-    derivedRow("totalChannels", "Total canales", totalChannels, sum(totalChannels)),
+    derivedRow("totalChannels", "Total canales", blank(totalChannels), sum(totalChannels)),
   ];
 
   return {

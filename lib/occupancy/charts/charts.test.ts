@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { CHART_HEAT_EMPTY, heatStep } from "@/lib/charts/palette";
-import { buildOccupancySeries } from "../analytics/series";
+import { buildOccupancyEvolution } from "../analytics/series";
+import type { DateRef, OccupancyPeriod, OccupancyQuery } from "../analytics/types";
 import { emptyFilters } from "../filters";
 import { emptyDataset } from "../derive";
 import type { OccupancyDataset } from "../types";
 import { buildHeatmaps } from "./heatmap";
-import { channelOption, formatMetric, seriesOption, seriesTable, weekdayOption } from "./option";
+import {
+  channelOption,
+  formatMetric,
+  formatMonthlyFigure,
+  MONTHLY_COLUMNS,
+  weekdayOption,
+} from "./option";
 import { colorResolver, colorUniverse, selectionUniverse, toOccupancyQuery } from "./selection";
 
 function dataset(centerId: string, year: number, sold: number[] = [9, 5, 0]): OccupancyDataset {
@@ -27,25 +34,62 @@ const MANOR = dataset("manor", 2026);
 const NORTE = dataset("norte", 2026, [2, 1, 0]);
 const colorOf = colorResolver(colorUniverse([MANOR, NORTE]));
 
+const date = (monthIndex: number, day: number, year = 2026): DateRef => ({
+  year,
+  monthIndex,
+  day,
+});
+/** Un mes entero de 2026, que es el tramo de casi todos los casos. */
+const month = (monthIndex: number): OccupancyPeriod => ({
+  mode: "rango",
+  range: { from: date(monthIndex, 0), to: date(monthIndex, 30) },
+});
+const wholeYear: OccupancyPeriod = {
+  mode: "rango",
+  range: { from: date(0, 0), to: date(11, 30) },
+};
+
 describe("toOccupancyQuery", () => {
-  it("sin nada marcado cae en la sucursal-año que el módulo ya muestra", () => {
-    const universe = selectionUniverse([MANOR, NORTE], { centerId: "norte", year: 2026 });
-    const query = toOccupancyQuery(emptyFilters(), universe);
-    expect(query.centerIds).toEqual(["norte"]);
-    expect(query.years).toEqual([2026]);
+  it("sin nada marcado cae en la sucursal que el módulo ya muestra", () => {
+    const universe = selectionUniverse([MANOR, NORTE], { centerId: "norte" });
+    expect(toOccupancyQuery(emptyFilters(), universe).centerIds).toEqual(["norte"]);
   });
 
   it("marcar acota; lo no marcado se abre a todo el universo", () => {
-    const universe = selectionUniverse([MANOR, NORTE], { centerId: "manor", year: 2026 });
+    const universe = selectionUniverse([MANOR, NORTE], { centerId: "manor" });
     const query = toOccupancyQuery({ ...emptyFilters(), centerIds: ["norte"] }, universe);
     expect(query.centerIds).toEqual(["norte"]);
-    expect(query.years).toEqual([2026]);
+    expect(toOccupancyQuery(emptyFilters(), selectionUniverse([MANOR, NORTE])).centerIds).toEqual([
+      "manor",
+      "norte",
+    ]);
   });
 
-  it("los meses marcados viajan tal cual: acotan el eje", () => {
+  it("el periodo viaja en una sola forma, la de su modalidad", () => {
     const universe = selectionUniverse([MANOR]);
-    const query = toOccupancyQuery({ ...emptyFilters(), months: [2, 5] }, universe);
-    expect(query.months).toEqual([2, 5]);
+    expect(toOccupancyQuery(emptyFilters(), universe).period.mode).toBe("rango");
+    const comparando = {
+      ...emptyFilters(),
+      periodMode: "comparar" as const,
+      picks: [{ kind: "dia" as const, ...date(0, 4) }],
+    };
+    expect(toOccupancyQuery(comparando, universe).period).toEqual({
+      mode: "comparar",
+      picks: [{ kind: "dia", ...date(0, 4) }],
+    });
+  });
+
+  it("el tramo viaja tal cual, normalizado", () => {
+    const universe = selectionUniverse([MANOR]);
+    const filters = {
+      ...emptyFilters(),
+      range: { from: date(3, 9), to: date(2, 19) },
+    };
+    const query = toOccupancyQuery(filters, universe);
+    expect(query.period).toEqual({
+      mode: "rango",
+      range: { from: date(2, 19), to: date(3, 9) },
+    });
   });
 });
 
@@ -53,170 +97,10 @@ describe("colorResolver", () => {
   it("da el color por la posición estable en el espacio, no por el orden del resultado", () => {
     const order = colorUniverse([MANOR, NORTE]);
     const colorOf = colorResolver(order);
-    const manorColor = colorOf({ centerId: "manor", year: 2026 });
+    const manorColor = colorOf({ centerId: "manor" });
     // Norte sigue pintado igual aunque Manor no esté en el resultado.
-    expect(colorOf({ centerId: "norte", year: 2026 })).not.toBe(manorColor);
-    expect(colorResolver(order)({ centerId: "manor", year: 2026 })).toBe(manorColor);
-  });
-});
-
-describe("seriesOption", () => {
-  it("dibuja barras cuando hay una sola serie leída por mes", () => {
-    const bundle = buildOccupancySeries([MANOR], {
-      metric: "occupancy",
-      centerIds: ["manor"],
-      years: [2026],
-      scope: "mensual",
-      months: [],
-      days: [],
-    });
-    expect(seriesOption(bundle, { colorOf }).series[0].type).toBe("bar");
-  });
-
-  it("pasa a líneas cuando hay comparación", () => {
-    const bundle = buildOccupancySeries([MANOR, NORTE], {
-      metric: "occupancy",
-      centerIds: ["manor", "norte"],
-      years: [2026],
-      scope: "mensual",
-      months: [],
-      days: [],
-    });
-    const option = seriesOption(bundle, { colorOf });
-    expect(option.series.map((s) => s.type)).toEqual(["line", "line"]);
-    expect(option.legend?.show).toBe(true);
-  });
-
-  it("pasa a líneas en el eje diario aunque haya una sola serie", () => {
-    const bundle = buildOccupancySeries([MANOR], {
-      metric: "occupancy",
-      centerIds: ["manor"],
-      years: [2026],
-      scope: "dia",
-      months: [0],
-      days: [],
-    });
-    expect(seriesOption(bundle, { colorOf }).series[0].type).toBe("line");
-  });
-
-  it("nunca declara un segundo eje y conserva los huecos", () => {
-    const bundle = buildOccupancySeries([MANOR], {
-      metric: "revenue",
-      centerIds: ["manor"],
-      years: [2026],
-      scope: "mensual",
-      months: [],
-      days: [],
-    });
-    const option = seriesOption(bundle, { colorOf });
-    expect(Array.isArray(option.yAxis)).toBe(false);
-    expect(option.series[0].data).toContain(null);
-  });
-
-  it("la tabla gemela trae las mismas columnas y formatea la unidad", () => {
-    const bundle = buildOccupancySeries([MANOR], {
-      metric: "occupancy",
-      centerIds: ["manor"],
-      years: [2026],
-      scope: "mensual",
-      months: [0],
-      days: [],
-    });
-    const table = seriesTable(bundle, { colorOf });
-    expect(table.columns).toEqual(["Ene"]);
-    expect(table.rows[0].values[0]).toMatch(/%/);
-  });
-});
-
-describe("tooltip de la gráfica principal", () => {
-  const enero = (centers: string[]) => ({
-    metric: "occupancy" as const,
-    centerIds: centers,
-    years: [2026],
-    scope: "mensual" as const,
-    months: [0],
-    days: [],
-  });
-
-  /** What ECharts hands the formatter for one hovered column. */
-  const param = (seriesId: string, seriesName: string, value: number | null) => ({
-    seriesId,
-    seriesName,
-    name: "Ene",
-    value,
-    dataIndex: 0,
-    marker: "●",
-  });
-
-  it("con una sola serie abre las cifras crudas y los tres indicadores", () => {
-    const bundle = buildOccupancySeries([MANOR], enero(["manor"]));
-    const html =
-      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
-        param("manor|2026", "MANOR", bundle.series[0].values[0]),
-      ]) ?? "";
-
-    for (const label of [
-      "Ocupación",
-      "Vendidas",
-      "Disponibles",
-      "Ingresos",
-      "ADR",
-      "RevPAR",
-      "PAX",
-    ]) {
-      expect(html).toContain(label);
-    }
-    // 14 vendidas sobre 30 disponibles, y los $1,400 que produjeron.
-    expect(html).toContain("14");
-    expect(html).toContain("30");
-    expect(html).toContain("46.7 %");
-  });
-
-  // Con dos series y UNA columna manda `entityOption`, así que la comparación sobre el eje se
-  // lee con el año entero delante: la columna 0 sigue siendo enero.
-  it("comparando da el valor de cada serie más la línea de dónde sale", () => {
-    const bundle = buildOccupancySeries([MANOR, NORTE], {
-      ...enero(["manor", "norte"]),
-      months: [],
-    });
-    const html =
-      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
-        param("manor|2026", "MANOR", bundle.series[0].values[0]),
-        param("norte|2026", "NORTE", bundle.series[1].values[0]),
-      ]) ?? "";
-
-    expect(html).toContain("MANOR");
-    expect(html).toContain("NORTE");
-    expect(html).toContain("14 de 30 habitaciones");
-    expect(html).toContain("3 de 30 habitaciones");
-    // El bloque completo es sólo para una serie: aquí no aparece.
-    expect(html).not.toContain("RevPAR");
-  });
-
-  it("una métrica de total no dice nunca «de 1»", () => {
-    const bundle = buildOccupancySeries([MANOR, NORTE], {
-      ...enero(["manor", "norte"]),
-      months: [],
-      metric: "revenue",
-    });
-    const html =
-      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
-        param("manor|2026", "MANOR", bundle.series[0].values[0]),
-        param("norte|2026", "NORTE", bundle.series[1].values[0]),
-      ]) ?? "";
-
-    expect(html).not.toContain("de 1 ");
-    expect(html).toContain("14 vendidas · ADR");
-  });
-
-  it("un punto sin datos no inventa un desglose", () => {
-    const bundle = buildOccupancySeries([MANOR], { ...enero(["manor"]), months: [7] });
-    const html =
-      seriesOption(bundle, { colorOf }).tooltip?.formatter?.([
-        param("manor|2026", "MANOR", null),
-      ]) ?? "";
-    expect(html).not.toContain("RevPAR");
-    expect(html).toContain("—");
+    expect(colorOf({ centerId: "norte" })).not.toBe(manorColor);
+    expect(colorResolver(order)({ centerId: "manor" })).toBe(manorColor);
   });
 });
 
@@ -231,7 +115,7 @@ describe("channelOption", () => {
     const option = channelOption(
       {
         channels,
-        series: [{ key: { centerId: "manor", year: 2026 }, label: "Manor", nights: [7, 3] }],
+        series: [{ key: { centerId: "manor" }, label: "Manor", nights: [7, 3] }],
         total: 10,
       },
       order,
@@ -248,8 +132,8 @@ describe("channelOption", () => {
       {
         channels,
         series: [
-          { key: { centerId: "manor", year: 2026 }, label: "Manor", nights: [7, 3] },
-          { key: { centerId: "norte", year: 2026 }, label: "Norte", nights: [3, 0] },
+          { key: { centerId: "manor" }, label: "Manor", nights: [7, 3] },
+          { key: { centerId: "norte" }, label: "Norte", nights: [3, 0] },
         ],
         total: 13,
       },
@@ -260,7 +144,7 @@ describe("channelOption", () => {
     expect(option.series.map((s) => s.name)).toEqual(["Manor", "Norte"]);
     expect(option.legend?.show).toBe(true);
     // El color pasa a decir QUÉ sucursal es, porque el canal ya es la fila.
-    expect(option.series[0].itemStyle?.color).toBe(colorOf({ centerId: "manor", year: 2026 }));
+    expect(option.series[0].itemStyle?.color).toBe(colorOf({ centerId: "manor" }));
   });
 });
 
@@ -300,10 +184,8 @@ describe("buildHeatmaps", () => {
   const query = {
     metric: "occupancy" as const,
     centerIds: ["manor", "norte"],
-    years: [2026],
     scope: "mensual" as const,
-    months: [],
-    days: [],
+    period: wholeYear,
   };
 
   it("dibuja una cuadrícula por sucursal-año marcada", () => {
@@ -324,7 +206,7 @@ describe("buildHeatmaps", () => {
   });
 
   it("un día que el mes no tiene queda vacío, no en cero", () => {
-    const result = buildHeatmaps([MANOR], { ...query, centerIds: ["manor"], months: [1] });
+    const result = buildHeatmaps([MANOR], { ...query, centerIds: ["manor"], period: month(1) });
     const febrero = result.grids[0].rows[0];
     expect(febrero.cells[28].value).toBeNull();
     expect(heatStep(febrero.cells[28].value, 0, 1)).toBe(CHART_HEAT_EMPTY);
@@ -360,66 +242,80 @@ describe("formatMetric", () => {
   });
 });
 
-describe("seriesOption · pocas columnas", () => {
-  const colorOf = colorResolver(colorUniverse([MANOR, NORTE]));
-
-  it("una comparación de un solo día se dibuja en barras, no en líneas de un punto", () => {
-    const bundle = buildOccupancySeries([MANOR, NORTE], {
-      metric: "occupancy",
-      centerIds: ["manor", "norte"],
-      years: [2026],
-      scope: "dia",
-      months: [0],
-      days: [0],
-    });
-    const option = seriesOption(bundle, { colorOf });
-    expect(bundle.axis).toHaveLength(1);
-    // Una barra por entidad dentro de una sola serie: el eje pasa a ser la entidad.
-    expect(option.series[0].type).toBe("bar");
-    expect(option.series[0].data).toHaveLength(2);
+describe("buildOccupancyEvolution · las cuatro cifras del reporte", () => {
+  const FIGURES = MONTHLY_COLUMNS.map((column) => column.id);
+  const query = (over: Partial<OccupancyQuery> = {}): OccupancyQuery => ({
+    metric: "occupancy",
+    centerIds: ["manor"],
+    scope: "mensual",
+    period: wholeYear,
+    ...over,
   });
 
-  it("un mes entero comparado sigue siendo líneas", () => {
-    const bundle = buildOccupancySeries([MANOR, NORTE], {
-      metric: "occupancy",
-      centerIds: ["manor", "norte"],
-      years: [2026],
-      scope: "dia",
-      months: [0],
-      days: [],
-    });
-    expect(seriesOption(bundle, { colorOf }).series[0].type).toBe("line");
+  it("declara las cuatro cifras del reporte, en su orden y con su unidad", () => {
+    expect(FIGURES).toEqual(["revenue", "occupancy", "adr", "revpar"]);
+    expect(MONTHLY_COLUMNS.map((c) => c.unit)).toEqual([
+      "currency",
+      "percent",
+      "currency",
+      "currency",
+    ]);
+  });
+
+  it("da un panel por cifra, todos sobre el MISMO eje", () => {
+    const evolution = buildOccupancyEvolution([MANOR], query(), FIGURES);
+    expect(evolution.panels.map((panel) => panel.metric.id)).toEqual(FIGURES);
+    for (const panel of evolution.panels) {
+      expect(panel.axis).toEqual(evolution.axis);
+    }
+  });
+
+  it("el eje lo manda «Ver por», igual para los cuatro", () => {
+    expect(buildOccupancyEvolution([MANOR], query(), FIGURES).axis).toHaveLength(12);
+    expect(
+      buildOccupancyEvolution([MANOR], query({ scope: "trimestral" }), FIGURES).axis,
+    ).toHaveLength(4);
+    const dias = buildOccupancyEvolution(
+      [MANOR],
+      query({ scope: "dia", period: month(0) }),
+      FIGURES,
+    );
+    expect(dias.axis).toHaveLength(31);
+    expect(dias.panels[0].axis).toEqual(dias.axis);
+  });
+
+  it("cada panel conserva su propia unidad", () => {
+    const evolution = buildOccupancyEvolution([MANOR], query(), FIGURES);
+    expect(evolution.panels.map((panel) => panel.metric.unit)).toEqual([
+      "currency",
+      "percent",
+      "currency",
+      "currency",
+    ]);
+  });
+
+  it("un aviso del tope de series se dice una vez, no cuatro", () => {
+    const many = Array.from({ length: 3 }, (_, i) => dataset(`c${i}`, 2026));
+    const evolution = buildOccupancyEvolution(
+      many,
+      query({ centerIds: many.map((d) => d.centerId), limit: 2 }),
+      FIGURES,
+    );
+    expect(evolution.warnings).toHaveLength(1);
+  });
+
+  it("un mes sin ventas no dibuja punto en ninguno de los cuatro", () => {
+    const evolution = buildOccupancyEvolution([MANOR], query(), FIGURES);
+    for (const panel of evolution.panels) {
+      expect(panel.series[0].values[1]).toBeNull();
+    }
   });
 });
 
-describe("seriesOption · una sola columna", () => {
-  const colorOf = colorResolver(colorUniverse([MANOR, NORTE]));
-  const oneDay = () =>
-    buildOccupancySeries([MANOR, NORTE], {
-      metric: "occupancy",
-      centerIds: ["manor", "norte"],
-      years: [2026],
-      scope: "dia",
-      months: [0],
-      days: [0],
-    });
-
-  it("pone las series en el eje: lo que varía es la entidad, no la fecha", () => {
-    const option = seriesOption(oneDay(), { colorOf });
-    expect(option.xAxis?.data).toEqual(["MANOR", "NORTE"]);
-    expect(option.series).toHaveLength(1);
-    expect(option.series[0].data).toHaveLength(2);
-  });
-
-  it("con una sola serie sigue siendo la fecha la que manda", () => {
-    const bundle = buildOccupancySeries([MANOR], {
-      metric: "occupancy",
-      centerIds: ["manor"],
-      years: [2026],
-      scope: "dia",
-      months: [0],
-      days: [0],
-    });
-    expect(seriesOption(bundle, { colorOf }).xAxis?.data).toEqual(["1 ene"]);
+describe("formatMonthlyFigure", () => {
+  it("dos decimales fijos, sin el umbral del millar que usa el eje", () => {
+    expect(formatMonthlyFigure(47609, "currency")).toBe("47,609.00");
+    expect(formatMonthlyFigure(0.51, "percent")).toBe("51.00 %");
+    expect(formatMonthlyFigure(null, "currency")).toBe("—");
   });
 });

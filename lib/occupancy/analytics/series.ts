@@ -1,49 +1,32 @@
 /**
- * A selection of métrica × centers × years × scope becomes series over one shared X axis.
+ * A selection of métrica × sucursales × periodo becomes series over one shared X axis.
+ *
+ * The YEAR travels in the period, so a series is a SUCURSAL and every column knows which year it
+ * belongs to. That is what lets one span run from marzo de 2025 to abril de 2026 as a single
+ * evolution, and two dates of different years sit side by side as a comparison.
  *
  * Coverage is the load-bearing rule: a month the workspace never received is `null`, so a year
  * loaded only to July stops there; a day inside a covered month that sold nothing is a real `0`.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { CHART_MAX_SERIES } from "@/lib/charts/palette";
-import { bucketLabel, bucketMonths } from "@/lib/period";
-import { daysInMonth, ROOM_ROW_IDS } from "../derive";
+import { periodLabels, periodOfMonth } from "@/lib/period";
+import { monthHasData, ROOM_ROW_IDS } from "../derive";
 import type { OccupancyDataset, OccupancyMonth } from "../types";
+import { periodCells, yearsInPeriod } from "./scope";
 import {
   metricSpec,
   type AxisPoint,
   type MetricSpec,
   type OccupancyBundle,
+  type OccupancyMetricId,
   type OccupancyQuery,
   type OccupancySeries,
+  type PeriodCell,
   type PointFacts,
 } from "./types";
 
 const ROOM_PAX = { simples: 1, dobles: 2, triples: 3 } as const;
-
-/** A month with nothing in it draws no point at all — see the file header. */
-function monthHasData(month: OccupancyMonth | undefined): boolean {
-  if (!month) {
-    return false;
-  }
-  if (month.fromFile) {
-    return true;
-  }
-  const { available, revenue, sold } = month.inputs;
-  return [available, revenue, sold].some((series) => series.some((value) => value !== 0));
-}
-
-function sum(values: number[] | undefined, upTo?: number): number {
-  if (!values) {
-    return 0;
-  }
-  const end = upTo ?? values.length;
-  let total = 0;
-  for (let i = 0; i < end && i < values.length; i++) {
-    total += values[i] ?? 0;
-  }
-  return total;
-}
 
 /** Guests the day actually reported: a stated PAX wins over the room-type formula. */
 function paxOf(month: OccupancyMonth, day: number): number {
@@ -54,21 +37,21 @@ function paxOf(month: OccupancyMonth, day: number): number {
   return month.inputs.pax[day] ?? fromRooms;
 }
 
-/** The raw inputs of a month, or of one of its days — what every metric is then built from. */
+/**
+ * The raw inputs of the days GIVEN, which is what makes a partial month partial: a span that starts
+ * on the 20th adds twelve days of marzo, not marzo.
+ */
 function rawInputs(
   month: OccupancyMonth,
-  day?: number,
+  days: readonly number[],
 ): Pick<PointFacts, "revenue" | "sold" | "available" | "pax"> {
   const at = (series: number[] | undefined) =>
-    day === undefined ? sum(series, month.days) : (series?.[day] ?? 0);
+    days.reduce((total, day) => total + (series?.[day] ?? 0), 0);
   return {
     revenue: at(month.inputs.revenue),
     sold: at(month.inputs.sold),
     available: at(month.inputs.available),
-    pax:
-      day === undefined
-        ? Array.from({ length: month.days }, (_, d) => paxOf(month, d)).reduce((a, b) => a + b, 0)
-        : paxOf(month, day),
+    pax: days.reduce((total, day) => total + paxOf(month, day), 0),
   };
 }
 
@@ -96,49 +79,80 @@ function amounts(
   }
 }
 
-/** The months the axis spans, in calendar order; marking NARROWS, it never reorders. */
-function monthsOf(query: OccupancyQuery): number[] {
-  const marked = [...new Set(query.months)].filter((m) => m >= 0 && m < 12).sort((a, b) => a - b);
-  return marked.length > 0 ? marked : Array.from({ length: 12 }, (_, m) => m);
+/** Two digits tell 2025 from 2026, and a column header has no room for four. */
+function shortYear(year: number): string {
+  return String(year).slice(-2);
+}
+
+/** Groups keeping the order the cells arrived in, which is already calendar order. */
+function groupCells(
+  cells: readonly PeriodCell[],
+  keyOf: (cell: PeriodCell) => string,
+): { key: string; group: PeriodCell[] }[] {
+  const order: string[] = [];
+  const byKey = new Map<string, PeriodCell[]>();
+  for (const cell of cells) {
+    const key = keyOf(cell);
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)?.push(cell);
+  }
+  return order.map((key) => ({ key, group: byKey.get(key) ?? [] }));
 }
 
 /**
- * Daily columns are sized by the LONGEST of the compared years, so a leap February keeps its 29th
- * and the years that lack it leave that column empty. Above the month the columns are periods; a
- * period holding SOME of its months is still drawn, labelled by those months rather than "T1".
+ * Columns are built from the period's OWN cells, so the axis can never cover days the selection did
+ * not ask for. The year appears in a label only when the period spans more than one — inside a single
+ * year it would repeat itself twelve times. «Días específicos» is always daily: each date is a column.
  */
-function buildAxis(query: OccupancyQuery, years: number[]): AxisPoint[] {
-  const months = monthsOf(query);
+function buildAxis(query: OccupancyQuery): AxisPoint[] {
+  const cells = periodCells(query.period);
+  const multiYear = yearsInPeriod(query.period).length > 1;
+  const yearTag = (value: number) => (multiYear ? ` ${shortYear(value)}` : "");
+
+  // Picked periods are ONE column each, whatever «Ver por» says: a pick is the thing being compared, so
+  // a month picked on its own is one bar and not thirty. Its label says which granularity it is.
+  if (query.period.mode === "comparar") {
+    return cells.map((cell) => ({
+      label:
+        cell.days.length === 1
+          ? `${cell.days[0] + 1} ${MONTHS_SHORT_ES[cell.monthIndex].toLowerCase()}${yearTag(cell.year)}`
+          : `${MONTHS_SHORT_ES[cell.monthIndex]}${yearTag(cell.year)}`,
+      cells: [cell],
+    }));
+  }
+
   const scope = query.scope;
+  if (scope === "dia") {
+    return cells.flatMap((cell) =>
+      cell.days.map((day) => ({
+        label: `${day + 1} ${MONTHS_SHORT_ES[cell.monthIndex].toLowerCase()}${yearTag(cell.year)}`,
+        cells: [{ ...cell, days: [day] }],
+      })),
+    );
+  }
   if (scope === "mensual") {
-    return months.map((monthIndex) => ({
-      label: MONTHS_SHORT_ES[monthIndex],
-      monthIndexes: [monthIndex],
+    return cells.map((cell) => ({
+      label: `${MONTHS_SHORT_ES[cell.monthIndex]}${yearTag(cell.year)}`,
+      cells: [cell],
     }));
   }
-  if (scope !== "dia") {
-    return bucketMonths(scope, months).map((bucket) => ({
-      label: bucketLabel(scope, bucket),
-      monthIndexes: bucket.months,
+  if (scope === "anual") {
+    // The year IS the label here, so it is never a tag.
+    return groupCells(cells, (cell) => String(cell.year)).map(({ key, group }) => ({
+      label: key,
+      cells: group,
     }));
   }
-  // Marked days narrow the axis the same way marked months do: «el 5» of every marked month.
-  const marked = [...new Set(query.days)].filter((d) => d >= 0 && d < 31).sort((a, b) => a - b);
-  const axis: AxisPoint[] = [];
-  for (const monthIndex of months) {
-    const length = Math.max(...years.map((year) => daysInMonth(year, monthIndex)));
-    const days = marked.length > 0 ? marked : Array.from({ length }, (_, day) => day);
-    for (const day of days) {
-      if (day < length) {
-        axis.push({
-          label: `${day + 1} ${MONTHS_SHORT_ES[monthIndex].toLowerCase()}`,
-          monthIndexes: [monthIndex],
-          day,
-        });
-      }
-    }
-  }
-  return axis;
+  // A quarter or a semester OF ONE YEAR: two years' T1 are two columns, never one.
+  return groupCells(cells, (cell) => `${cell.year}|${periodOfMonth(scope, cell.monthIndex)}`).map(
+    ({ key, group }) => ({
+      label: `${periodLabels(scope)[Number(key.split("|")[1])]}${yearTag(group[0].year)}`,
+      cells: group,
+    }),
+  );
 }
 
 export function buildOccupancySeries(
@@ -146,18 +160,15 @@ export function buildOccupancySeries(
   query: OccupancyQuery,
 ): OccupancyBundle {
   const metric = metricSpec(query.metric);
-  const years = query.years.length > 0 ? [...new Set(query.years)].sort((a, b) => a - b) : [];
-  const axis = buildAxis(query, years.length > 0 ? years : [new Date().getFullYear()]);
+  const axis = buildAxis(query);
   const warnings: string[] = [];
 
-  // Center outer, year inner: a center's years sit together in the legend and the table.
-  const wanted: OccupancyDataset[] = [];
+  // A series is a sucursal, in the order the query names them.
+  const wanted: { centerId: string; label: string }[] = [];
   for (const centerId of query.centerIds) {
-    for (const year of years) {
-      const found = datasets.find((d) => d.centerId === centerId && d.year === year);
-      if (found) {
-        wanted.push(found);
-      }
+    const found = datasets.find((dataset) => dataset.centerId === centerId);
+    if (found) {
+      wanted.push({ centerId, label: found.centerName });
     }
   }
 
@@ -169,26 +180,26 @@ export function buildOccupancySeries(
     );
   }
 
-  // With a single year on screen the year adds nothing to every legend entry.
-  const multiYear = new Set(wanted.map((d) => d.year)).size > 1;
-
   /**
-   * Adds up the RAW INPUTS of the months covered and only THEN applies the metric — the ratio of
-   * the sums. Covered when at least ONE of its months is, so a T1 loaded only to enero is drawn.
+   * Adds up the RAW INPUTS of the days its column covers and only THEN applies the metric — the ratio
+   * of the sums. Covered when at least ONE of its cells is, so a quarter loaded only to enero is
+   * still drawn.
    */
-  const factsAt = (dataset: OccupancyDataset, point: AxisPoint): PointFacts | null => {
+  const factsAt = (centerId: string, point: AxisPoint): PointFacts | null => {
     const totals = { revenue: 0, sold: 0, available: 0, pax: 0 };
     let covered = false;
-    for (const monthIndex of point.monthIndexes) {
-      const month = dataset.months[monthIndex];
+    for (const cell of point.cells) {
+      const dataset = datasets.find((d) => d.centerId === centerId && d.year === cell.year);
+      const month = dataset?.months[cell.monthIndex];
       if (!monthHasData(month)) {
         continue;
       }
-      if (point.day !== undefined && point.day >= month.days) {
+      const days = cell.days.filter((day) => day < month.days);
+      if (days.length === 0) {
         continue;
       }
       covered = true;
-      const inputs = rawInputs(month, point.day);
+      const inputs = rawInputs(month, days);
       totals.revenue += inputs.revenue;
       totals.sold += inputs.sold;
       totals.available += inputs.available;
@@ -201,11 +212,11 @@ export function buildOccupancySeries(
     return { ...totals, numerator, denominator };
   };
 
-  const series: OccupancySeries[] = wanted.slice(0, limit).map((dataset) => {
-    const facts = axis.map((point) => factsAt(dataset, point));
+  const series: OccupancySeries[] = wanted.slice(0, limit).map(({ centerId, label }) => {
+    const facts = axis.map((point) => factsAt(centerId, point));
     return {
-      key: { centerId: dataset.centerId, year: dataset.year },
-      label: multiYear ? `${dataset.centerName} · ${dataset.year}` : dataset.centerName,
+      key: { centerId },
+      label,
       values: facts.map((fact) =>
         fact === null || fact.denominator === 0 ? null : fact.numerator / fact.denominator,
       ),
@@ -214,4 +225,37 @@ export function buildOccupancySeries(
   });
 
   return { axis, series, metric, truncated, warnings };
+}
+
+export interface OccupancyEvolution {
+  /** Shared by every panel — same query, so column N means the same period in all of them. */
+  axis: AxisPoint[];
+  /** One bundle per figure, in the order asked for. */
+  panels: OccupancyBundle[];
+  /** Deduped: the series cap truncates every panel identically, and says so once. */
+  warnings: string[];
+}
+
+/**
+ * The same selection read through several figures at once, over ONE shared axis — which is what lets
+ * «Ver por» govern the four panels of the reporte with a single control.
+ *
+ * Each panel keeps its own scale and unit. That is the whole reason there are four of them instead of
+ * one chart with four series: a percentage and a dollar amount never share an axis, and the option
+ * types forbid the second `yAxis` that would take.
+ *
+ * `metrics` is required on purpose — the four figures are declared ONCE, next to their headings, so
+ * this cannot drift from what the tiles above the panels report.
+ */
+export function buildOccupancyEvolution(
+  datasets: OccupancyDataset[],
+  query: OccupancyQuery,
+  metrics: readonly OccupancyMetricId[],
+): OccupancyEvolution {
+  const panels = metrics.map((metric) => buildOccupancySeries(datasets, { ...query, metric }));
+  return {
+    axis: panels[0]?.axis ?? [],
+    panels,
+    warnings: [...new Set(panels.flatMap((panel) => panel.warnings))],
+  };
 }

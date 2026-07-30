@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { parseCurrency } from "@/lib/format";
 import type { Frequency } from "@/lib/period";
+import { monthHasData } from "@/lib/occupancy/derive";
 import type { OccupancyDataset } from "@/lib/occupancy/types";
 
 export interface MonthTabsProps {
@@ -25,9 +26,9 @@ const YEAR_VIEWS: { frequency: Frequency; label: string }[] = [
   { frequency: "mensual", label: "Año" },
 ];
 
+/** Same rule as everywhere else: a month is "filled" once it has sales, not once it exists. */
 function hasData(dataset: OccupancyDataset, index: number): boolean {
-  const month = dataset.months[index];
-  return Boolean(month?.fromFile) || Boolean(month?.inputs.sold.some((value) => value !== 0));
+  return monthHasData(dataset.months[index]);
 }
 
 export function MonthTabs({

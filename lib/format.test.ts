@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatNumber, formatPercent, parseCurrency } from "./format";
+import { formatAmount, formatCurrency, formatNumber, formatPercent, parseCurrency } from "./format";
 
 describe("formatCurrency", () => {
   it("groups thousands with a comma and separates cents with a dot", () => {
     expect(formatCurrency(57961.95, { cents: true })).toBe("$57,961.95");
     expect(formatCurrency(1234)).toBe("$1,234");
     expect(formatCurrency(-1234, { cents: true })).toBe("-$1,234.00");
+  });
+});
+
+describe("formatAmount", () => {
+  it("always writes two decimals, padded, with no currency symbol", () => {
+    expect(formatAmount(47609)).toBe("47,609.00");
+    expect(formatAmount(56042.18)).toBe("56,042.18");
+    expect(formatAmount(28.9)).toBe("28.90");
+    expect(formatAmount(0)).toBe("0.00");
+    expect(formatAmount(-20.4)).toBe("-20.40");
+  });
+
+  it("never lets a third decimal through", () => {
+    expect(formatAmount(21.9354)).toBe("21.94");
   });
 });
 

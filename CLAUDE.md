@@ -319,6 +319,82 @@ moves to the subtitle, because two bars under a single «5 ene» would read as t
 Datos keeps its own three strips: those answer «cuál edito», the bar answers «cuáles comparo»,
 and the bar falls back to whatever Datos has open.
 
+**The YEAR is part of the period, not a series.** `DateRef` is a full date, `OccupancyQuery.period` is
+either a `rango` (one continuous span, which may cross years) or `dias` (individual dates of any year,
+one column each), and a SERIES IS A SUCURSAL — `OccupancySeriesKey` is `{ centerId }`. That is what
+lets one span run from marzo de 2025 to abril de 2026 as a single evolution and two dates of different
+years sit side by side. The filter bar is therefore two controls: **Sucursal · Periodo**, with the year
+inside the date pickers.
+
+**`lib/occupancy/analytics/scope.ts` is the ONE answer to «which days of which months of which years
+does the period cover»** — `periodCells` returns `PeriodCell[]` (`{year, monthIndex, days}`) and
+`series.ts`, `breakdown.ts` and `heatmap.ts` all work on those cells, never on the period itself. The
+months at a span's ends are PARTIAL by construction; a date the month does not hold is dropped rather
+than clamped; every day is clipped to the month's real length, so 29 de febrero exists in a leap year
+and not in the others. `filters.ts` keeps BOTH payloads (`range` and `dates`) so switching modes loses
+nothing, and the gesture picks the mode: moving an edge IS a rango, adding a date IS días.
+`sanitizeFilters` resolves `UNRESOLVED_YEAR` (the default span's «el año que haya») against the years
+the workspace holds — on read, never in an effect.
+
+**Gráficos reads in TWO sections, each with its own heading, subtitle and controls.** «Reporte del
+periodo» opens with FOUR TILES holding the close of the period (Venta en $ · % Ocupación · Tarifa Prom ·
+RevPAR, from `reportTotals`, ratio of sums) and then ONE of two readings of the same figures, chosen by
+«Ver como»: the FOUR BAR CHARTS (the DEFAULT — one per figure, each with its own scale; the reason there
+are four instead of one chart with four series is the second `yAxis` the option types forbid) or the
+TABLE (`buildReportTable` transposes the same `OccupancyEvolution`, centered, the period down the rows).
+The tab opens on the whole year read MONTH BY MONTH (`emptyFilters`), the only granularity both halves
+can show.
+Never both: they say the same thing, and the table gives the exact figure while the charts give the
+shape. «Ver por» offers **Día only to the charts** — 365 columns a chart thins out by itself, 365 rows
+nobody reads — and going back to the table lifts the axis to Mes. The section closes with **Canales de
+venta**, which lives HERE and not under the métrica because it is the one card that does not read the
+métrica: it counts nights per channel, so it belongs beside the total it breaks down (declared once and
+placed per view, so it lines up with whichever reading is on screen). «Análisis por métrica» follows
+with the métrica selector: heatmap and weekday rhythm, the two that do read it.
+
+**Each mark takes its own colour from `CHART_PERIOD_PALETTE`** — twelve muted hues by the mark's place on
+the axis (`colorForPeriod`, wired through `SeriesOptionContext.colorAt`, honoured only for a single
+series), the way `channelOption` already paints a bar per channel. The weekday card takes it too, and the
+table's ocupación micro-bar takes the slot of ITS OWN ROW, so a row and its bar recognise each other.
+With TWO OR MORE sucursales it is ignored: colour goes back to the sucursal, where it encodes identity.
+
+That set is DECORATIVE and muted on purpose (~18 % toward grey; twelve saturated bars are tiring to read
+for minutes). **Never use it for series** — `CHART_PALETTE`'s eight CVD-sequenced slots are for identity.
+Its validator result, so nobody re-derives it: lightness band PASS, chroma floor PASS, normal-vision
+adjacent floor PASS (worst pair ΔE 16.3 — the check that matters for «que varíe»); adjacent CVD
+separation does NOT clear (worst pair ΔE 3.2 protan), because twelve colourblind-separable hues do not
+exist. Acceptable only here: the month is written under the bar, so a reader who cannot tell two of them
+apart loses nothing.
+
+`CHART_HEAT_RAMP` is a single-hue YELLOW scale (light yellow → ochre), monotonic in lightness, so it
+survives greyscale and a 372-cell grid never reads as a rainbow.
+
+`MONTHLY_COLUMNS` (in `charts/option.ts`) declares those four figures ONCE — heading, order and unit —
+and the tiles, the table and the panels all read it, so nothing can name or scale the same figure two
+ways; every `id` is at once a key of `MonthlyFigures` and an `OccupancyMetricId`, which is what lets one
+list drive all three. Tiles and table cells format through `formatMonthlyFigure` (two fixed decimals)
+rather than `formatMetric`, which drops the cents past a thousand — right for an axis, wrong for a
+figure someone compares against their own spreadsheet.
+
+**Coverage is SALES, not existence.** `monthHasData` now lives in `derive.ts` — it was copied in
+`series.ts`, `breakdown.ts`, `heatmap.ts`, `month-tabs.tsx` and `occupancy-datos-view.tsx` — and it
+is the ONE definition of a covered month: **ingresos or habitaciones vendidas**, never `fromFile` and
+never `available`. A real workbook is the whole year in twelve blocks that the accountant fills as
+the months happen, so the months still to come already carry the hotel's capacity, and often room
+and channel rows left over from the year it was copied from; reading those as data dragged the Hotel
+Ambato's 2026 occupancy from 56 % down to 32 % (8.152 room-nights nobody sold in the denominator).
+`toAnnualGrid` consults it too — an uncovered month leaves EVERY cell of its column empty and does
+not reach «Total año» — because otherwise Datos and Gráficos put two different year occupancies on
+screen; that is why `inputRow` takes `(number | null)[]` and aggregates only the columns that exist.
+The trade-off is deliberate and matches what the accountant's own report does: a month the hotel
+really was open through and sold NOTHING reads as "not loaded", since nothing in the file tells that
+apart from a month not yet filled. It is a statement about the WHOLE month — a day with no sales
+inside a month that sold is still a real zero, and the editable daily grid always shows what is
+stored. Figures go through `formatAmount` (two fixed decimals, no symbol —
+the rule `occupancy-two-decimals` proposes for the rest of the module), and the ocupación cell
+carries a micro-bar on a FIXED 0–100 % scale: scaled to the best month, a flat year would paint a
+full bar and read as a full hotel.
+
 **PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders, in
 order, Cuenta contable · Nivel · Centro de costo · Año · Periodo, "Ver por" pinned right, and an
 active-filter chip strip (`active-filter-chips.tsx`) below — reflected identically by Datos,

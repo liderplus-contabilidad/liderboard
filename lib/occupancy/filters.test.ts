@@ -1,30 +1,48 @@
 import { describe, expect, it } from "vitest";
 import {
   clearMarks,
+  picksLabel,
+  pickLabel,
   describeSelection,
-  periodLabel,
   emptyFilters,
   hasMarks,
-  sanitizeFilters,
-  withCenterToggled,
-  withDayToggled,
-  finerScope,
-  isPeriodMarked,
+  isWholeYearRange,
+  periodLabel,
   periodPhrase,
-  withDrillIntoPeriod,
-  withMonthToggled,
-  withPeriodShortcutToggled,
-  withMonthsCleared,
-  withYearToggled,
+  rangeLabel,
+  sanitizeFilters,
+  toPeriod,
+  UNRESOLVED_YEAR,
+  wholeYearRange,
+  withCenterToggled,
+  withPickToggled,
+  withPicksCleared,
+  withPeriodMode,
+  withRangeCleared,
+  withRangeEdge,
 } from "./filters";
+import type { DateRef, PeriodPick } from "./analytics/types";
 
 const UNIVERSE = { centerIds: ["manor", "norte"], years: [2025, 2026] };
+const date = (year: number, monthIndex: number, day: number): DateRef => ({
+  year,
+  monthIndex,
+  day,
+});
+const resolved = () => sanitizeFilters(emptyFilters(), UNIVERSE);
+const dia = (year: number, monthIndex: number, day: number): PeriodPick => ({
+  kind: "dia",
+  year,
+  monthIndex,
+  day,
+});
+const mes = (year: number, monthIndex: number): PeriodPick => ({ kind: "mes", year, monthIndex });
 
 describe("OccupancyFilters", () => {
-  it("arranca sin marcas, en ocupación y por mes", () => {
+  it("arranca en rango, sobre todo el año y sin sucursal marcada", () => {
     const filters = emptyFilters();
-    expect(filters.metric).toBe("occupancy");
-    expect(filters.scope).toBe("mensual");
+    expect(filters.periodMode).toBe("rango");
+    expect(filters.centerIds).toEqual([]);
     expect(hasMarks(filters)).toBe(false);
   });
 
@@ -36,162 +54,209 @@ describe("OccupancyFilters", () => {
   });
 
   it("desmarca lo ya marcado", () => {
-    let filters = withYearToggled(emptyFilters(), 2026, UNIVERSE.years);
-    filters = withYearToggled(filters, 2026, UNIVERSE.years);
-    expect(filters.years).toEqual([]);
+    let filters = withCenterToggled(emptyFilters(), "manor", UNIVERSE.centerIds);
+    filters = withCenterToggled(filters, "manor", UNIVERSE.centerIds);
+    expect(filters.centerIds).toEqual([]);
   });
 
-  it("ordena los meses por calendario", () => {
-    let filters = withMonthToggled(emptyFilters(), 6);
-    filters = withMonthToggled(filters, 1);
-    expect(filters.months).toEqual([1, 6]);
-  });
-
-  it("al bajar de un trimestre deja sus tres meses y el eje mensual", () => {
-    const filters = withDrillIntoPeriod(emptyFilters(), [3, 4, 5], "mensual");
-    expect(filters.months).toEqual([3, 4, 5]);
-    expect(filters.scope).toBe("mensual");
-  });
-
-  it("al bajar a un mes deja ese periodo y el eje diario", () => {
-    const filters = withDrillIntoPeriod(withMonthToggled(emptyFilters(), 0), [2], "dia");
-    expect(filters.months).toEqual([2]);
-    expect(filters.scope).toBe("dia");
+  it("poda la sucursal que dejó de existir", () => {
+    const stale = { ...emptyFilters(), centerIds: ["manor", "vieja"] };
+    expect(sanitizeFilters(stale, UNIVERSE).centerIds).toEqual(["manor"]);
   });
 
   it("«quitar todo» conserva la métrica y el eje: no son marcas, son la lente", () => {
     const marked = {
-      ...emptyFilters(),
+      ...resolved(),
       metric: "adr" as const,
       scope: "dia" as const,
-      years: [2026],
+      centerIds: ["manor"],
     };
     const cleared = clearMarks(marked);
     expect(cleared.metric).toBe("adr");
     expect(cleared.scope).toBe("dia");
     expect(hasMarks(cleared)).toBe(false);
   });
+});
 
-  it("poda lo que dejó de existir", () => {
-    const stale = { ...emptyFilters(), centerIds: ["manor", "vieja"], years: [2024, 2026] };
-    expect(sanitizeFilters(stale, UNIVERSE)).toMatchObject({
-      centerIds: ["manor"],
-      years: [2026],
-    });
+describe("el año que haya", () => {
+  it("el rango por defecto se resuelve al año más nuevo del espacio", () => {
+    expect(emptyFilters().range.from.year).toBe(UNRESOLVED_YEAR);
+    const filters = resolved();
+    expect(filters.range.from.year).toBe(2026);
+    expect(isWholeYearRange(filters.range)).toBe(true);
+  });
+
+  it("un año que el espacio no tiene se mueve al más nuevo que sí", () => {
+    const stale = { ...emptyFilters(), range: wholeYearRange(2019) };
+    expect(sanitizeFilters(stale, UNIVERSE).range.from.year).toBe(2026);
+  });
+
+  it("un año que sí existe se respeta", () => {
+    const filters = { ...emptyFilters(), range: wholeYearRange(2025) };
+    expect(sanitizeFilters(filters, UNIVERSE).range.from.year).toBe(2025);
+  });
+
+  it("sin años cargados no inventa ninguno", () => {
+    const filters = sanitizeFilters(emptyFilters(), { centerIds: [], years: [] });
+    expect(filters.range.from.year).toBe(UNRESOLVED_YEAR);
   });
 });
 
-describe("marcas de día", () => {
-  it("marcar un día baja el eje a días: sobre el eje mensual no querría decir nada", () => {
-    const filters = withDayToggled(withMonthToggled(emptyFilters(), 0), 4);
-    expect(filters.days).toEqual([4]);
-    expect(filters.scope).toBe("dia");
+describe("rango", () => {
+  it("mover un extremo ES un rango, y normaliza los extremos al revés", () => {
+    let filters = withPickToggled(resolved(), dia(2026, 0, 4));
+    expect(filters.periodMode).toBe("comparar");
+    filters = withRangeEdge(filters, "from", date(2026, 5, 0));
+    expect(filters.periodMode).toBe("rango");
+    filters = withRangeEdge(filters, "to", date(2026, 1, 4));
+    expect(filters.range.from).toEqual(date(2026, 1, 4));
+    expect(filters.range.to).toEqual(date(2026, 5, 0));
   });
 
-  it("quitar los meses se lleva los días", () => {
-    let filters = withMonthToggled(emptyFilters(), 0);
-    filters = withDayToggled(filters, 4);
-    expect(withMonthsCleared(filters).days).toEqual([]);
+  it("recorta a una fecha real: no hay 31 de febrero", () => {
+    const filters = withRangeEdge(resolved(), "from", date(2026, 1, 30));
+    expect(filters.range.from.day).toBe(27);
   });
 
-  it("bajar a otro mes no arrastra el día del anterior", () => {
-    let filters = withMonthToggled(emptyFilters(), 0);
-    filters = withDayToggled(filters, 4);
-    expect(withDrillIntoPeriod(filters, [5], "dia").days).toEqual([]);
+  it("puede cruzar años", () => {
+    let filters = withRangeEdge(resolved(), "from", date(2025, 10, 0));
+    filters = withRangeEdge(filters, "to", date(2026, 1, 27));
+    const period = toPeriod(filters);
+    expect(period.mode).toBe("rango");
+    expect(filters.range.from.year).toBe(2025);
+    expect(filters.range.to.year).toBe(2026);
+  });
+
+  it("«todo el año» vuelve al año en que estaba el tramo", () => {
+    let filters = withRangeEdge(resolved(), "from", date(2025, 5, 0));
+    filters = withRangeCleared(filters);
+    expect(isWholeYearRange(filters.range)).toBe(true);
+    expect(filters.range.from.year).toBe(2025);
+  });
+
+  it("un tramo que no es todo el año sí acota", () => {
+    expect(hasMarks(withRangeEdge(resolved(), "from", date(2026, 2, 0)))).toBe(true);
   });
 });
 
-describe("atajos de trimestre y semestre", () => {
-  it("marcan los meses del periodo — no son una marca aparte", () => {
-    const filters = withPeriodShortcutToggled(emptyFilters(), "trimestral", 1);
-    expect(filters.months).toEqual([3, 4, 5]);
-    expect(isPeriodMarked(filters, "trimestral", 1)).toBe(true);
-  });
-
-  it("desmarcan sólo si el periodo estaba entero", () => {
-    let filters = withMonthToggled(emptyFilters(), 3);
-    // Con abril suelto, pulsar T2 completa el trimestre en vez de vaciarlo.
-    filters = withPeriodShortcutToggled(filters, "trimestral", 1);
-    expect(filters.months).toEqual([3, 4, 5]);
-    filters = withPeriodShortcutToggled(filters, "trimestral", 1);
-    expect(filters.months).toEqual([]);
-  });
-
-  it("no tocan el eje: T1 sobre un eje mensual son tres columnas legibles", () => {
-    const filters = withPeriodShortcutToggled(emptyFilters(), "trimestral", 0);
+describe("comparación de periodos", () => {
+  it("elegir un día ES ese modo, y deja el eje como estaba", () => {
+    const filters = withPickToggled(resolved(), dia(2026, 0, 4));
+    expect(filters.periodMode).toBe("comparar");
+    expect(filters.picks).toEqual([dia(2026, 0, 4)]);
+    // «Ver por» no ofrece «Día»: una tabla del año día a día serían 365 filas.
     expect(filters.scope).toBe("mensual");
   });
 
-  it("conservan el orden del calendario y conviven con meses de otro periodo", () => {
-    let filters = withMonthToggled(emptyFilters(), 11);
-    filters = withPeriodShortcutToggled(filters, "semestral", 0);
-    expect(filters.months).toEqual([0, 1, 2, 3, 4, 5, 11]);
+  it("un MES entero también es un periodo suelto, y una sola columna", () => {
+    const filters = withPickToggled(resolved(), mes(2026, 2));
+    expect(filters.picks).toEqual([mes(2026, 2)]);
+    expect(toPeriod(filters)).toEqual({ mode: "comparar", picks: [mes(2026, 2)] });
+  });
+
+  it("días y meses conviven en la misma comparación", () => {
+    let filters = withPickToggled(resolved(), mes(2026, 6));
+    filters = withPickToggled(filters, dia(2026, 0, 4));
+    expect(filters.picks).toEqual([dia(2026, 0, 4), mes(2026, 6)]);
+  });
+
+  it("quedan en orden de calendario y el mismo dos veces se quita", () => {
+    let filters = withPickToggled(resolved(), dia(2026, 2, 11));
+    filters = withPickToggled(filters, dia(2025, 0, 4));
+    expect(filters.picks).toEqual([dia(2025, 0, 4), dia(2026, 2, 11)]);
+    filters = withPickToggled(filters, dia(2025, 0, 4));
+    expect(filters.picks).toEqual([dia(2026, 2, 11)]);
+  });
+
+  it("un día y su mes son dos periodos distintos, no el mismo", () => {
+    let filters = withPickToggled(resolved(), mes(2026, 0));
+    filters = withPickToggled(filters, dia(2026, 0, 0));
+    expect(filters.picks).toHaveLength(2);
+  });
+
+  it("cambiar de modalidad no pierde lo elegido", () => {
+    let filters = withPickToggled(resolved(), dia(2026, 0, 4));
+    filters = withPeriodMode(filters, "rango");
+    expect(filters.picks).toEqual([dia(2026, 0, 4)]);
+    expect(toPeriod(filters).mode).toBe("rango");
+    filters = withPeriodMode(filters, "comparar");
+    expect(toPeriod(filters)).toEqual({ mode: "comparar", picks: [dia(2026, 0, 4)] });
+  });
+
+  it("quitar los periodos los vacía sin tocar el tramo", () => {
+    const filters = withPicksCleared(withPickToggled(resolved(), dia(2026, 0, 4)));
+    expect(filters.picks).toEqual([]);
+    expect(isWholeYearRange(filters.range)).toBe(true);
   });
 });
 
-describe("finerScope", () => {
-  it("baja un peldaño de la escalera y se para en el día", () => {
-    expect(finerScope("anual")).toBe("semestral");
-    expect(finerScope("semestral")).toBe("trimestral");
-    expect(finerScope("trimestral")).toBe("mensual");
-    expect(finerScope("mensual")).toBe("dia");
-    expect(finerScope("dia")).toBeNull();
+describe("rangeLabel", () => {
+  it("todo el año es el año", () => {
+    expect(rangeLabel(wholeYearRange(2026))).toBe("Año 2026");
+  });
+
+  it("un mes entero es el mes", () => {
+    expect(rangeLabel({ from: date(2026, 1, 0), to: date(2026, 1, 27) })).toBe("Febrero 2026");
+  });
+
+  it("dentro de un mes nombra el mes una sola vez", () => {
+    expect(rangeLabel({ from: date(2026, 0, 0), to: date(2026, 0, 19) })).toBe(
+      "del 1 al 20 de enero de 2026",
+    );
+    expect(rangeLabel({ from: date(2026, 0, 4), to: date(2026, 0, 4) })).toBe("5 de enero de 2026");
+  });
+
+  it("dentro de un año dice el año una sola vez", () => {
+    expect(rangeLabel({ from: date(2026, 2, 19), to: date(2026, 3, 9) })).toBe(
+      "del 20 de marzo al 10 de abril de 2026",
+    );
+  });
+
+  it("cruzando años dice los dos", () => {
+    expect(rangeLabel({ from: date(2025, 10, 0), to: date(2026, 1, 27) })).toBe(
+      "del 1 de noviembre de 2025 al 28 de febrero de 2026",
+    );
   });
 });
 
-describe("periodLabel · periodos completos", () => {
-  it("dice «T1» cuando lo marcado ES un trimestre", () => {
-    expect(periodLabel([0, 1, 2], [])).toBe("T1");
-    expect(periodLabel([9, 10, 11], [])).toBe("T4");
-    expect(periodLabel([0, 1, 2, 3, 4, 5], [])).toBe("S1");
-    expect(
-      periodLabel(
-        Array.from({ length: 12 }, (_, m) => m),
-        [],
-      ),
-    ).toBe("Todo el año");
+describe("picksLabel", () => {
+  it("lista los periodos y a partir del cuarto los cuenta", () => {
+    expect(picksLabel([])).toBe("Sin periodos elegidos");
+    expect(picksLabel([dia(2026, 0, 4)])).toBe("5 ene 2026");
+    expect(picksLabel([dia(2025, 0, 4), mes(2026, 2)])).toBe("5 ene 2025 · Marzo 2026");
+    expect(picksLabel([dia(2026, 0, 0), dia(2026, 0, 1), dia(2026, 0, 2), dia(2026, 0, 3)])).toBe(
+      "1 ene 2026 · 2 ene 2026 · 3 ene 2026 y 1 más",
+    );
   });
 
-  it("no llama «T1» a dos tercios de un trimestre", () => {
-    expect(periodLabel([0, 1], [])).toBe("Ene · Feb");
-  });
-
-  it("un día marcado manda sobre el nombre del trimestre", () => {
-    expect(periodLabel([0, 1, 2], [4])).toBe("día 5 de Ene · Feb · Mar");
+  it("un día dice su día y un mes su mes: es lo que los distingue", () => {
+    expect(pickLabel(dia(2026, 11, 24))).toBe("25 dic 2026");
+    expect(pickLabel(mes(2026, 11))).toBe("Diciembre 2026");
   });
 });
 
-describe("periodLabel · meses sueltos y días", () => {
-  it("dice el periodo, no cuántas casillas hay marcadas", () => {
-    expect(periodLabel([], [])).toBe("Todo el año");
-    expect(periodLabel([0], [])).toBe("Enero");
-    expect(periodLabel([0, 2], [])).toBe("Ene · Mar");
-    expect(periodLabel([0], [4])).toBe("5 de enero");
-    expect(periodLabel([0], [4, 11])).toBe("días 5, 12 de enero");
-    expect(periodLabel([0, 2], [4])).toBe("día 5 de Ene · Mar");
+describe("periodLabel y periodPhrase", () => {
+  it("dicen el tramo o las fechas, según la modalidad", () => {
+    const filters = resolved();
+    expect(periodLabel(filters)).toBe("Año 2026");
+    expect(periodLabel(withPickToggled(filters, dia(2026, 0, 4)))).toBe("5 ene 2026");
   });
-});
 
-describe("periodPhrase", () => {
-  it("baja a minúsculas para el medio de una frase, pero no destroza un código", () => {
-    expect(periodPhrase([0], [])).toBe("enero");
-    expect(periodPhrase([], [])).toBe("todo el año");
-    expect(periodPhrase([0, 1, 2], [])).toBe("T1");
-    expect(periodPhrase([0, 1, 2, 3, 4, 5], [])).toBe("S1");
+  it("bajan a minúsculas para el medio de una frase", () => {
+    expect(periodPhrase(resolved())).toBe("año 2026");
+    expect(periodPhrase(withRangeEdge(resolved(), "from", date(2026, 2, 19)))).toBe(
+      "del 20 de marzo al 31 de diciembre de 2026",
+    );
   });
 });
 
 describe("describeSelection", () => {
-  it("resume la comparación en una frase", () => {
-    const filters = { ...emptyFilters(), years: [2025, 2026], months: [0], days: [4] };
-    expect(describeSelection(filters, ["Cultura Manor"])).toBe(
-      "Ocupación · 5 de enero · 2025 y 2026 · Cultura Manor",
-    );
+  it("resume la selección en una frase", () => {
+    const filters = withPickToggled(resolved(), dia(2026, 0, 4));
+    expect(describeSelection(filters, ["Cultura Manor"])).toBe("5 ene 2026 · Cultura Manor");
   });
 
-  it("nombra lo que no está marcado como «todos»", () => {
-    expect(describeSelection(emptyFilters(), [])).toBe(
-      "Ocupación · Todo el año · todos los años · todas las sucursales",
-    );
+  it("nombra lo que no está marcado como «todas»", () => {
+    expect(describeSelection(resolved(), [])).toBe("Año 2026 · todas las sucursales");
   });
 });

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import { monthHasData } from "@/lib/occupancy/derive";
 import type { Frequency } from "@/lib/period";
 import { CenterTabs } from "./center-tabs";
 import { MonthTabs } from "./month-tabs";
@@ -171,9 +172,7 @@ export function OccupancyDatosView() {
     : `${MONTHS_FULL_ES[monthIndex]} ${activeYear ?? ""}`.trim();
   // Named above the grid even when its strip is hidden, so the table always says which one.
   const centerLabel = isConsolidated || centers.length > 1 ? activeCenterName : undefined;
-  const activeHasData = Boolean(
-    dataset?.months.some((month) => month.fromFile || month.inputs.sold.some((v) => v !== 0)),
-  );
+  const activeHasData = Boolean(dataset?.months.some((month) => monthHasData(month)));
 
   return (
     <div className="px-7 py-5">
