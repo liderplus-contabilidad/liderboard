@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
+import { loadedColumnPositions, visibleColumnPositions } from "@/lib/profit-loss/datos-columns";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGridMultiYear } from "@/lib/profit-loss/derive";
 import { focusAccounts } from "@/lib/profit-loss/filter";
@@ -108,30 +108,12 @@ export function DatosView() {
     if (mode !== "multi" || !dataset) {
       return null;
     }
-    // Coverage is resolved PER COLUMN against its own year: a month loaded in 2025 says nothing
-    // about the same month of 2026.
-    const coveredByYear = new Map<number, ReadonlySet<number>>();
-    const positions = new Set<number>();
-    grid.columns.forEach((column, position) => {
-      // A Total is derived from whatever its year loaded, so it is never itself "unloaded".
-      if (column.kind === "total") {
-        positions.add(position);
-        return;
-      }
-      let covered = coveredByYear.get(column.year);
-      if (!covered) {
-        covered = aggregateCoverage(
-          new Set(loadedMonthsByYear[column.year] ?? []),
-          dataset.baseFrequency,
-          effectiveFrequency,
-        );
-        coveredByYear.set(column.year, covered);
-      }
-      if (covered.has(column.index)) {
-        positions.add(position);
-      }
+    return loadedColumnPositions({
+      columns: grid.columns,
+      loadedMonthsByYear,
+      baseFrequency: dataset.baseFrequency,
+      frequency: effectiveFrequency,
     });
-    return positions;
   }, [mode, dataset, loadedMonthsByYear, effectiveFrequency, grid.columns]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
@@ -147,20 +129,10 @@ export function DatosView() {
   // The "Periodo" filter bounds which columns render; the column POSITION travels through, and
   // the column itself carries the period index an edit writes against. No periods marked shows
   // the whole axis.
-  const visibleColumns = useMemo(() => {
-    if (filters.periods.length === 0) {
-      return grid.columns.map((_, position) => position);
-    }
-    const marked = new Set(filters.periods.map((period) => period.index));
-    const positions: number[] = [];
-    grid.columns.forEach((column, position) => {
-      // A Total is never trimmed: it is the year's total, not one of its periods.
-      if (column.kind === "total" || marked.has(column.index)) {
-        positions.push(position);
-      }
-    });
-    return positions;
-  }, [filters.periods, grid.columns]);
+  const visibleColumns = useMemo(
+    () => visibleColumnPositions(grid.columns, filters.periods),
+    [filters.periods, grid.columns],
+  );
 
   // A newly loaded workspace should surface its own warnings even if the previous banner
   // was dismissed.

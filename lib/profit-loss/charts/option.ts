@@ -49,6 +49,24 @@ export type ChartUnit = "moneda" | "porcentaje" | "indice";
 /** Beyond four series a number per point stops being read and starts being texture. */
 const MAX_DIRECT_LABELS = 4;
 
+/**
+ * And beyond this many MARKS — series × periods — the same thing happens for a different reason:
+ * the count is fine but the room is not. Two series over twelve months is twenty-four amounts on
+ * one axis, which at «$144,844» wide leaves them abutting rather than overlapping, so
+ * `labelLayout.hideOverlap` never fires and the row prints as one run of digits. The shape is
+ * what a chart is for; the figure to the cent is two pages away in the statement.
+ */
+const MAX_DIRECT_LABEL_MARKS = 14;
+
+/** Whether a per-mark amount can still be read on this many series over this many periods. */
+function labelsFit(seriesCount: number, points: number, context: SeriesOptionContext): boolean {
+  return (
+    (context.labels ?? true) &&
+    seriesCount <= MAX_DIRECT_LABELS &&
+    seriesCount * points <= MAX_DIRECT_LABEL_MARKS
+  );
+}
+
 /** Below two series there is nothing to tell apart, so the title carries the name. */
 const MIN_LEGEND_SERIES = 2;
 
@@ -431,6 +449,14 @@ const WATERFALL_SERIES = {
 
 const WATERFALL_STACK = "cascada";
 
+/** El plot que asume el reparto de abajo: la tarjeta más estrecha que dibuja una cascada (A4). */
+const WATERFALL_PLOT = 780;
+
+/** Lo que cabe por categoría, nunca más de lo que un nombre de cuenta necesita. */
+function waterfallLabelWidth(steps: number): number {
+  return Math.max(48, Math.min(84, Math.floor(WATERFALL_PLOT / Math.max(steps, 1))));
+}
+
 /** Headroom before the axis is rounded, so the tallest bar does not touch the plot edge. */
 const AXIS_PADDING = 1.02;
 
@@ -477,10 +503,12 @@ export function waterfallOption(steps: WaterfallStep[]): ChartOption {
     barMaxWidth: CHART_MARK.barMaxWidth,
     label: {
       show: true,
-      // On the bar, as the design asks: eight or nine steps have room, and the amount is what
-      // saves the reader from measuring against the axis.
-      position: "inside",
-      color: CHART_INK.onFill,
+      // ENCIMA de la barra, no dentro. El diseño la pedía dentro, y dentro se cortaba: el ancho
+      // de una barra lo topa `barMaxWidth`, así que «$206,570» no cabe por más pasos que se
+      // quiten, y salía impreso como «$206,57». Una cifra a medias es peor que una fuera de
+      // sitio, y arriba `hideOverlap` puede además descartar la que no quepa.
+      position: "top",
+      color: CHART_INK.strong,
       fontSize: 10.5,
       // The bar's height is the SIZE of the step; what the label says is the step's own signed
       // amount, so an expense of 56.000 reads as −$56.000 however tall its bar is.
@@ -499,11 +527,15 @@ export function waterfallOption(steps: WaterfallStep[]): ChartOption {
       ...categoryAxis(steps.map((step) => step.label)),
       // Account names are long and every step must be named: they wrap instead of being
       // dropped by `hideOverlap`, and `outerBoundsContain` shrinks the plot to fit them.
+      //
+      // El ancho SALE DEL NÚMERO DE PASOS. Estaba fijo en 84 px, que es lo que da una cascada de
+      // diez pasos en una tarjeta ancha; con doce en una hoja A4 cada categoría dispone de menos
+      // que eso y los nombres se montan unos sobre otros («IngresosOtros GastosComisiones…»).
       axisLabel: {
         color: CHART_INK.muted,
         fontSize: 10.5,
         interval: 0,
-        width: 84,
+        width: waterfallLabelWidth(steps.length),
         overflow: "break",
         hideOverlap: false,
       },
@@ -851,7 +883,7 @@ function barSeries(
     barMaxWidth: CHART_MARK.barMaxWidth,
     emphasis: { focus: "series" },
     label: directLabel(
-      (context.labels ?? true) && seriesCount <= MAX_DIRECT_LABELS,
+      labelsFit(seriesCount, series.points.length, context),
       context.unit,
       stacked ? "inside" : "top",
     ),
@@ -876,11 +908,7 @@ function lineSeries(
     symbolSize: CHART_MARK.symbolSize,
     smooth: false,
     emphasis: { focus: "series" },
-    label: directLabel(
-      (context.labels ?? true) && seriesCount <= MAX_DIRECT_LABELS,
-      context.unit,
-      "top",
-    ),
+    label: directLabel(labelsFit(seriesCount, series.points.length, context), context.unit, "top"),
     labelLayout: { hideOverlap: true },
   };
 }

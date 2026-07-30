@@ -87,10 +87,19 @@ export function formatAmount(value: number): string {
 
 /** Percentage with one decimal, Spanish spacing ("12.4 %"). */
 export function formatPercent(value: number, fractionDigits = 1): string {
-  return `${value.toLocaleString(NUMBER_LOCALE, {
+  return `${formatPoints(value, fractionDigits)} %`;
+}
+
+/**
+ * The GAP between two percentages, in points — «5.0», not «5.0 %». Going from 20 % to 25 % is
+ * five points and not «+25 %»; writing the `%` back on would be the second reading, and the two
+ * are different numbers.
+ */
+export function formatPoints(value: number, fractionDigits = 1): string {
+  return value.toLocaleString(NUMBER_LOCALE, {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
-  })} %`;
+  });
 }
 
 /** A list read as a Spanish sentence: "A", "A y B", "A, B y C". */

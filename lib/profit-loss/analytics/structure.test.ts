@@ -187,6 +187,36 @@ describe("toPareto", () => {
     expect(result.total).toBe(0);
     expect(result.excluded).toHaveLength(2);
   });
+
+  /** La cola de un plan real: cuarenta cuentas de céntimos dibujadas una sobre otra. */
+  const tail: AmountEntry[] = Array.from({ length: 24 }, (_, i) => ({
+    code: `5.1.${i}`,
+    label: `Cuenta ${i}`,
+    value: 1000 - i * 10,
+  }));
+
+  it("corta la cola y dice cuántas cuentas dejó fuera", () => {
+    const result = toPareto(tail);
+
+    expect(result.entries).toHaveLength(10);
+    expect(result.truncated).toBe(14);
+  });
+
+  it("acumula sobre el gasto ENTERO, no sobre las que caben", () => {
+    const result = toPareto(tail);
+
+    // La última barra dibujada no llega al 100 %: las catorce que no se dibujan siguen contando
+    // en el total, que es lo que hace que «concentran el X %» sea verdad.
+    expect(result.entries[9].cumulativePct).toBeLessThan(100);
+    expect(result.total).toBe(tail.reduce((sum, entry) => sum + entry.value, 0));
+  });
+
+  it("sin cola, no recorta nada", () => {
+    const result = toPareto(gastos);
+
+    expect(result.truncated).toBe(0);
+    expect(result.entries).toHaveLength(5);
+  });
 });
 
 describe("toPieSlices", () => {

@@ -203,3 +203,25 @@ export interface ChartTable {
   columns: string[];
   rows: ChartTableRow[];
 }
+
+/**
+ * A card described as DATA — everything needed to draw one, and nothing about how. The pure
+ * layer produces the list and a view arranges it, so two readers (the screen and a printable
+ * report) draw the SAME cards instead of each computing its own. Two computations of one
+ * question drift, and nothing downstream can tell which of the two numbers is the right one.
+ */
+export interface ChartCardSpec {
+  /** Stable and independent of the copy: the React key, and what a test names. */
+  id: string;
+  title: string;
+  subtitle?: string;
+  /** `null` when there is nothing to draw — the card says why instead of drawing an empty plot. */
+  option: ChartOption | null;
+  /** The same numbers as rows and columns; every card has one. */
+  table: ChartTable;
+  /** `SeriesBundle.warnings`, shown whole and before the chart. */
+  warnings?: string[];
+  /** Footnote for what the card set aside, e.g. a negative slice left out of a pie. */
+  note?: string;
+  height: number;
+}

@@ -72,6 +72,18 @@ const FREQUENCY_NOUNS: Record<Frequency, string> = {
   anual: "Año",
 };
 
+/** How a granularity is NAMED — the «Ver por» control's labels, and what a report writes. */
+const FREQUENCY_LABELS: Record<Frequency, string> = {
+  mensual: "Mensual",
+  trimestral: "Trimestral",
+  semestral: "Semestral",
+  anual: "Anual",
+};
+
+export function frequencyLabel(frequency: Frequency): string {
+  return FREQUENCY_LABELS[frequency];
+}
+
 /** «Trimestre 1 · ene–mar»: what a button reading "T1" says when you hover it. */
 export function periodFullLabel(frequency: Frequency, index: number): string {
   const months = monthsInPeriod(frequency, index);

@@ -13,6 +13,7 @@
  * - Two centers ~100× apart, like Cultura Manor against the Centro de Costo Principal.
  * - A year with movement only through July, like the real 2026 files.
  * - An annual-base source, like «Sin centro de costo».
+ * - A statement already split by «Segmentar gastos», where root 6 exists beside root 5.
  *
  * Parent rows are left at zero: `computeRollups` recomputes them from the leaves, so writing
  * the sums here would duplicate the derivation instead of exercising it.
@@ -60,6 +61,26 @@ const CHART: ChartRow[] = [
   { code: "5.1.5.12", name: "Arrendamiento Operativo", amount: 8000 },
 ];
 
+/**
+ * The non-operating branch and the root 6 «Segmentar gastos» copies out of it, appended ONLY by
+ * `segmented: true`. They stay out of the shared chart on purpose: adding them would move the
+ * rollups of root 5 that every other test asserts against.
+ *
+ * The pair is shown ALREADY SPLIT, which is the state the app persists — `5.2.1.1` keeps 550 of
+ * the 1.450 it was uploaded with and root 6 holds the 900 reclassified out of it, so the two
+ * still add up to what the file brought. `5.2.1.2` was never reclassified, so its twin is zero.
+ */
+const SEGMENTED_CHART: ChartRow[] = [
+  { code: "5.2", name: "Gastos No Operacionales" },
+  { code: "5.2.1", name: "Gastos Financieros" },
+  { code: "5.2.1.1", name: "Intereses Bancarios", amount: 550 },
+  { code: "5.2.1.2", name: "Comisiones Bancarias", amount: 230 },
+  { code: "6", name: "Gastos No Operacionales" },
+  { code: "6.1", name: "Gastos Financieros" },
+  { code: "6.1.1", name: "Intereses Bancarios", amount: 900 },
+  { code: "6.1.2", name: "Comisiones Bancarias", amount: 0 },
+];
+
 /** The hotel books no events in February; every other covered month has them. */
 const SEASONAL_CODE = "4.1.1.3";
 const SEASONAL_GAP_MONTH = 1;
@@ -76,6 +97,8 @@ export interface DatasetOptions {
   omit?: string[];
   /** "anual" collapses the year into a single Total column, like «Sin centro de costo». */
   baseFrequency?: Frequency;
+  /** Appends the 5.2 branch and the root 6 already split out of it. */
+  segmented?: boolean;
 }
 
 /** A synthetic `PygDataset` over the shared chart — the input `buildAnalyticsSource` consumes. */
@@ -88,16 +111,20 @@ export function makeDataset(options: DatasetOptions = {}): PygDataset {
     scale = 1,
     omit = [],
     baseFrequency = "mensual",
+    segmented = false,
   } = options;
 
-  const accounts: AccountRow[] = CHART.filter((row) => !omit.includes(row.code)).map((row) => {
-    const monthly = monthlyValues(row, months, scale);
-    return {
-      code: row.code,
-      name: row.name,
-      values: baseFrequency === "anual" ? [sum(monthly)] : monthly,
-    };
-  });
+  const chart = segmented ? [...CHART, ...SEGMENTED_CHART] : CHART;
+  const accounts: AccountRow[] = chart
+    .filter((row) => !omit.includes(row.code))
+    .map((row) => {
+      const monthly = monthlyValues(row, months, scale);
+      return {
+        code: row.code,
+        name: row.name,
+        values: baseFrequency === "anual" ? [sum(monthly)] : monthly,
+      };
+    });
 
   return {
     id: `${centerId}-${year}`,
@@ -166,11 +193,15 @@ export const CENTRO_VACIO = makeDataset({
   months: 0,
 });
 
+/** Already split: root 6 exists, so the expense side has TWO roots instead of one. */
+export const CULTURA_MANOR_SEGMENTADO = makeDataset({ segmented: true });
+
 export const CULTURA_MANOR_SOURCE = buildAnalyticsSource(CULTURA_MANOR);
 export const CULTURA_MANOR_2025_SOURCE = buildAnalyticsSource(CULTURA_MANOR_2025);
 export const CENTRO_PRINCIPAL_SOURCE = buildAnalyticsSource(CENTRO_PRINCIPAL);
 export const SIN_CENTRO_SOURCE = buildAnalyticsSource(SIN_CENTRO);
 export const CENTRO_VACIO_SOURCE = buildAnalyticsSource(CENTRO_VACIO);
+export const CULTURA_MANOR_SEGMENTADO_SOURCE = buildAnalyticsSource(CULTURA_MANOR_SEGMENTADO);
 
 export interface SeriesOptions {
   code?: string;

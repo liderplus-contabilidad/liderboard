@@ -157,7 +157,15 @@ interface PygDataValue {
   visibleYears: number[];
   /** The single year charts, exports and the ficha read — the most recent visible one. */
   chartYear: number;
-  /** Declared coverage of the year Datos is showing; [] in single mode. */
+  /**
+   * Declared coverage of `chartYear` — the year the analytics sources are built for, since a
+   * `CenterView.dataset` is `latestOf(slices)`. It is NOT `visibleYears[0]`: with 2025 and 2026
+   * both on screen, that is 2025, and handing 2025's twelve months to 2026's numbers marks
+   * julio–diciembre as covered there. The engine then reads them as loaded-and-zero instead of
+   * never-loaded, which is the one distinction the whole module rests on: `lastCoveredIndex`
+   * lands on «Dic», and every tile and card of Gráficos and Análisis speaks about a month with
+   * nothing in it. `[]` in single mode.
+   */
   loadedMonths: number[];
   /** Declared coverage of every year, for the export and the upload summary. */
   loadedMonthsByYear: Record<number, number[]>;
@@ -721,9 +729,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       loadedYears,
       visibleYears,
       chartYear,
-      // Datos reads the coverage of the year it is showing; with several on screen it is
-      // read-only anyway, and each column resolves its own year's coverage from the record.
-      loadedMonths: loadedMonthsFor(metaRow, visibleYears[0] ?? chartYear),
+      // La cobertura del año que leen las series, que es `chartYear` — ver el campo. Datos no
+      // usa esta lista: cada columna resuelve la cobertura de SU año contra el registro.
+      loadedMonths: loadedMonthsFor(metaRow, chartYear),
       loadedMonthsByYear: metaRow?.loadedMonthsByYear ?? EMPTY_COVERAGE,
       workspaceIdentity,
       sourceSystemId,

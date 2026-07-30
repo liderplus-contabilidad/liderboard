@@ -1,52 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { SpecCard } from "@/components/ui/chart-card";
+import { StatTile } from "@/components/ui/stat-tile";
 import { formatCurrency } from "@/lib/format";
-import { periodLabel } from "@/lib/profit-loss/analytics/period";
-import { toPieSlices } from "@/lib/profit-loss/analytics/structure";
-import {
-  entryTable,
-  horizontalBarOption,
-  pieOption,
-  seriesOptionFor,
-  seriesTableFor,
-  type ChartTable,
-} from "@/lib/profit-loss/charts/option";
-import {
-  amountOf,
-  amountsAt,
-  compositionQuery,
-  excludedNote,
-  expenseRootsOf,
-  intersectWithMarked,
-  lastCoveredIndex,
-  leavesOf,
-  leavesOfAny,
-  presetQuery,
-  REVENUE_ROOT,
-  topEntries,
-} from "@/lib/profit-loss/charts/presets";
-import {
-  activeSource,
-  codeColorResolver,
-  colorResolver,
-  expandSlots,
-  toSeriesQuery,
-} from "@/lib/profit-loss/charts/selection";
+import { buildGraficosCards } from "@/lib/profit-loss/charts/cards";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
-import { ChartCard } from "@/components/ui/chart-card";
-import { StatTile } from "@/components/ui/stat-tile";
-import { WaterfallCard } from "./waterfall-card";
-
-const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
-
-/** What the evolution card falls back to with no account marked: Ingresos against every expense
- * root the statement carries — one of them until «Segmentar gastos» adds the non-operating. */
-function defaultEvolutionCodes(source: Parameters<typeof expenseRootsOf>[0]): string[] {
-  return [REVENUE_ROOT, ...expenseRootsOf(source)];
-}
 
 /**
  * Gráficos answers *how much and of what*: amounts per period, comparisons between accounts
@@ -56,90 +17,19 @@ function defaultEvolutionCodes(source: Parameters<typeof expenseRootsOf>[0]): st
  * With an Excel loaded it shows something useful before the user marks anything, because a
  * blank panel next to a loaded file hands the reader the job of guessing what can be asked. The
  * filter bar's marks feed every card at once: the evolution card draws whatever accounts (and
- * centers) are marked, and falls back to Ingresos contra Costos y Gastos when nothing is: there
- * is no separate "Comparación" card living beside it.
+ * centers) are marked, and falls back to Ingresos contra Costos y Gastos when nothing is.
+ *
+ * WHAT each card asks lives in `buildGraficosCards`, where it is pure and tested; what is left
+ * here is where each one goes on screen. The printable report reads that same list, which is why
+ * it cannot come back into this file.
  */
 export function GraficosView() {
   const { dataset, filters } = usePygData();
-  const { context, runQuery } = usePygAnalytics();
-  const source = activeSource(context);
-  // A marked period is a year-less slot; the engine reads dated references. Gráficos still reads
-  // ONE year (`context.year`), so the expansion has a single year to stamp.
-  const periodRefs = useMemo(
-    () => expandSlots(filters.periods, [context.year]),
-    [filters.periods, context.year],
+  const { context } = usePygAnalytics();
+  const { periodName, tiles, cards } = useMemo(
+    () => buildGraficosCards(context, filters),
+    [context, filters],
   );
-
-  const defaultCodes = useMemo(() => defaultEvolutionCodes(source), [source]);
-  const totals = useMemo(
-    () => runQuery(presetQuery(defaultCodes, context, { periods: periodRefs })),
-    [runQuery, defaultCodes, context, periodRefs],
-  );
-  // ONE period for the whole tab. Every card names it in its subtitle, so they cannot be
-  // allowed to each pick their own: a statement whose revenue stops in July but keeps booking
-  // a small cost through December has coverage to the end, and cards resolving it separately
-  // would caption one "Jul" and the next "Dic" over the same screen.
-  const period = useMemo(() => lastCoveredIndex(totals), [totals]);
-  const periodName = totals.periods[period]
-    ? periodLabel(totals.periods[period])
-    : "Sin movimiento";
-
-  const revenue = amountOf(totals, REVENUE_ROOT, period);
-  const expenseParts = defaultCodes.slice(1).map((root) => amountOf(totals, root, period));
-  const expense = expenseParts.every((value) => value === null)
-    ? null
-    : expenseParts.reduce((sum: number, value) => sum + (value ?? 0), 0);
-  const result = revenue !== null && expense !== null ? revenue - expense : null;
-
-  // The evolution card draws the marked accounts (and centers); with nothing marked it falls
-  // back to Ingresos vs Costos y Gastos — the same totals the stat tiles read.
-  const evolutionCodes = filters.codes.length > 0 ? filters.codes : defaultCodes;
-  const evolutionFilters = useMemo(
-    () => ({ ...filters, codes: evolutionCodes }),
-    [filters, evolutionCodes],
-  );
-  const evolutionQuery = useMemo(
-    () => toSeriesQuery(evolutionFilters, context),
-    [evolutionFilters, context],
-  );
-  const evolution = useMemo(() => runQuery(evolutionQuery), [runQuery, evolutionQuery]);
-  const evolutionColor = useMemo(
-    () => colorResolver(evolutionFilters, context),
-    [evolutionFilters, context],
-  );
-  const evolutionContext = { colorOf: evolutionColor, periods: evolution.periods };
-
-  // Composición y ranking conservan su pregunta fija, pero intersecan su universo con las
-  // cuentas marcadas — una cuenta de gasto marcada vacía la composición de ingresos a propósito.
-  const revenueLeaves = leavesOf(source, REVENUE_ROOT);
-  const compositionCodes = intersectWithMarked(revenueLeaves, filters.codes);
-  const composition = useMemo(
-    () => runQuery(compositionQuery(compositionCodes, context, { periods: periodRefs })),
-    [runQuery, compositionCodes, context, periodRefs],
-  );
-  const slices = useMemo(() => toPieSlices(amountsAt(composition, period)), [composition, period]);
-  const sliceColor = useMemo(() => entryColor(slices.slices.map((slice) => slice.code)), [slices]);
-  const compositionEmptyNote =
-    revenueLeaves.length > 0 && compositionCodes.length === 0
-      ? "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos."
-      : undefined;
-
-  // Ranking of expenses: sorted BEFORE the cut, so the largest cannot fall off the list.
-  const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
-  const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
-  const expenses = useMemo(
-    () => runQuery(compositionQuery(rankingCodes, context, { periods: periodRefs })),
-    [runQuery, rankingCodes, context, periodRefs],
-  );
-  const ranking = useMemo(() => topEntries(amountsAt(expenses, period)), [expenses, period]);
-  const rankingColor = useMemo(
-    () => entryColor(ranking.entries.map((entry) => entry.code)),
-    [ranking],
-  );
-  const rankingEmptyNote =
-    expenseLeaves.length > 0 && rankingCodes.length === 0
-      ? "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos."
-      : undefined;
 
   if (!dataset) {
     return <PygEmptyState />;
@@ -148,93 +38,27 @@ export function GraficosView() {
   return (
     <div className="flex flex-col gap-4 px-7 py-5">
       <div className="flex gap-4">
-        <StatTile
-          label="Ingresos"
-          value={revenue === null ? null : formatCurrency(revenue)}
-          hint={periodName}
-        />
-        <StatTile
-          label="Costos y Gastos"
-          value={expense === null ? null : formatCurrency(expense)}
-          hint={periodName}
-        />
-        <StatTile
-          label={result !== null && result < 0 ? "Pérdida" : "Utilidad"}
-          value={result === null ? null : formatCurrency(result)}
-          hint={periodName}
-          sign={result === null ? undefined : result < 0 ? "negativo" : "positivo"}
-        />
+        {tiles.map((tile) => (
+          <StatTile
+            key={tile.id}
+            label={tile.label}
+            value={tile.value === null ? null : formatCurrency(tile.value)}
+            hint={periodName}
+            sign={tile.sign}
+          />
+        ))}
       </div>
 
-      <ChartCard
-        title={filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos"}
-        subtitle={`${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`}
-        option={
-          evolution.series.length > 0
-            ? seriesOptionFor("barras", evolution.series, evolutionContext)
-            : null
-        }
-        table={seriesTableFor("barras", evolution.series, evolutionContext)}
-        warnings={evolution.warnings}
-        height={300}
-      />
+      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone — una tarjeta a lo
+          ancho, dos en retícula, y la cascada cerrando con la historia completa. */}
+      <SpecCard spec={cards[0]} />
 
       <div className="grid grid-cols-2 gap-4">
-        <ChartCard
-          title="Composición de los ingresos"
-          subtitle={periodName}
-          option={
-            slices.slices.length > 0
-              ? pieOption(slices, { colorOf: sliceColor, donut: true })
-              : null
-          }
-          table={
-            slices.slices.length > 0
-              ? entryTable(slices.slices, { colorOf: sliceColor })
-              : EMPTY_TABLE
-          }
-          warnings={composition.warnings}
-          note={compositionEmptyNote ?? excludedNote(slices.excluded)}
-          height={280}
-        />
-
-        <ChartCard
-          title="Ranking de gastos"
-          subtitle={`De mayor a menor · ${periodName}`}
-          option={
-            ranking.entries.length > 0
-              ? horizontalBarOption(ranking.entries, { colorOf: rankingColor })
-              : null
-          }
-          table={
-            ranking.entries.length > 0
-              ? entryTable(ranking.entries, { colorOf: rankingColor })
-              : EMPTY_TABLE
-          }
-          warnings={expenses.warnings}
-          note={
-            rankingEmptyNote ??
-            (ranking.hidden > 0
-              ? `Se muestran las ${ranking.entries.length} cuentas más grandes; ${ranking.hidden} quedaron fuera.`
-              : undefined)
-          }
-          height={280}
-        />
+        <SpecCard spec={cards[1]} />
+        <SpecCard spec={cards[2]} />
       </div>
 
-      {/* Primero la historia completa —de dónde salió el ingreso y en qué se fue—, y recién
-          después la evolución, que responde una pregunta más fina. */}
-      <WaterfallCard
-        source={source}
-        frequency={context.frequency}
-        periods={periodRefs.length > 0 ? periodRefs : undefined}
-      />
+      <SpecCard spec={cards[3]} />
     </div>
   );
-}
-
-/** Entry-based cards color by account code, ordered by the list the card actually draws. */
-export function entryColor(codes: string[]): (code: string) => string {
-  const resolve = codeColorResolver(codes);
-  return (code) => resolve({ code, centerId: "", year: 0 });
 }
