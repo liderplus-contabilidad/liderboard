@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHART_HEAT_EMPTY,
+  CHART_HEAT_RAMP,
+  CHART_PERIOD_PALETTE,
   CHART_MARK,
   CHART_MAX_SERIES,
   CHART_NEUTRAL,
   CHART_PALETTE,
   CHART_SIGN,
   colorForEntity,
+  colorForPeriod,
+  heatStep,
 } from "./palette";
 
 const CENTERS = ["consolidado", "cultura-manor", "centro-de-costo-principal", "sin-centro"];
@@ -77,5 +82,68 @@ describe("más allá de la octava ranura", () => {
 describe("constantes de marca", () => {
   it("exposes the 2px separation the option builders paint between fills", () => {
     expect(CHART_MARK.gap).toBe(2);
+  });
+});
+
+describe("CHART_PERIOD_PALETTE · un color por marca", () => {
+  it("está apagado a propósito: doce barras saturadas cansan la vista", () => {
+    // Ninguno es el tono pleno del set de identidad: son mezclas hacia gris.
+    for (const hue of CHART_PERIOD_PALETTE) {
+      expect(CHART_PALETTE).not.toContain(hue);
+    }
+  });
+
+  it("tiene doce slots: doce meses es lo más que un periodo alcanza", () => {
+    expect(CHART_PERIOD_PALETTE).toHaveLength(12);
+    expect(new Set(CHART_PERIOD_PALETTE).size).toBe(12);
+  });
+
+  it("da el color por el lugar en el eje", () => {
+    expect(colorForPeriod(0)).toBe(CHART_PERIOD_PALETTE[0]);
+    expect(colorForPeriod(11)).toBe(CHART_PERIOD_PALETTE[11]);
+  });
+
+  it("una marca decimotercera cae en el neutro: no se inventa un tono", () => {
+    expect(colorForPeriod(12)).toBe(CHART_NEUTRAL);
+    expect(colorForPeriod(-1)).toBe(CHART_NEUTRAL);
+  });
+
+  it("no se pisa con los slots de serie: son dos trabajos distintos", () => {
+    // Comparten los primeros por diseño (misma familia de marca), pero el set es más largo.
+    expect(CHART_PERIOD_PALETTE.length).toBeGreaterThan(CHART_PALETTE.length);
+  });
+});
+
+describe("CHART_HEAT_RAMP · un solo tono", () => {
+  it("es una escala amarilla, de claro a ocre", () => {
+    expect(CHART_HEAT_RAMP[0]).toBe("#fde68a");
+    expect(CHART_HEAT_RAMP[CHART_HEAT_RAMP.length - 1]).toBe("#a15c07");
+    expect(CHART_HEAT_RAMP).toHaveLength(5);
+  });
+
+  it("su paso más claro no se confunde con una celda vacía", () => {
+    expect(CHART_HEAT_RAMP[0]).not.toBe(CHART_HEAT_EMPTY);
+  });
+
+  it("recorre sus pasos de menos a más", () => {
+    expect(heatStep(0, 0, 100)).toBe(CHART_HEAT_RAMP[0]);
+    expect(heatStep(50, 0, 100)).toBe(CHART_HEAT_RAMP[2]);
+    expect(heatStep(100, 0, 100)).toBe(CHART_HEAT_RAMP[4]);
+  });
+
+  it("sin dato no toma un paso de la rampa: vacío y cero son distintos", () => {
+    expect(heatStep(null, 0, 100)).toBe(CHART_HEAT_EMPTY);
+    expect(heatStep(0, 0, 100)).not.toBe(CHART_HEAT_EMPTY);
+  });
+
+  it("una escala plana no divide por cero", () => {
+    expect(heatStep(5, 5, 5)).toBe(CHART_HEAT_RAMP[4]);
+  });
+
+  it("no reutiliza un slot categórico: son dos trabajos distintos", () => {
+    for (const step of CHART_HEAT_RAMP) {
+      expect(CHART_PALETTE).not.toContain(step);
+      expect(CHART_PERIOD_PALETTE).not.toContain(step);
+    }
   });
 });

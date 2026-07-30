@@ -21,8 +21,8 @@ import type {
   ChartTable,
   ChartTooltip,
 } from "@/lib/charts/types";
-import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
-import type { ChannelBreakdown, WeekdayBreakdown } from "../analytics/breakdown";
+import { formatAmount, formatCurrency, formatNumber, formatPercent } from "@/lib/format";
+import type { ChannelBreakdown, MonthlyFigures, WeekdayBreakdown } from "../analytics/breakdown";
 import {
   occupancySeriesId,
   type MetricSpec,
@@ -44,6 +44,22 @@ const FEW_COLUMNS = 6;
 export interface SeriesOptionContext {
   /** The only way a series gets a color; comes from `colorResolver`. */
   colorOf: (key: OccupancySeriesKey) => string;
+  /**
+   * A panel inside a grid: half the width, so the figure printed over each bar stops fitting much
+   * sooner. It LOWERS the cap instead of switching the labels off — one column is a single bar and its
+   * amount is exactly what the reader came for; twelve of them across a half-width card overprint
+   * each other, and there the tooltip carries them.
+   */
+  compact?: boolean;
+  /**
+   * Paints EACH BAR its own colour, by its place on the axis — the way `channelOption` paints a bar per
+   * channel. Only honoured with ONE series: with two, colour has to keep telling the sucursales apart,
+   * and a per-mark hue would take that job away from it.
+   *
+   * The identity is already on the axis (every bar is labelled with its month), so this carries no
+   * reading — it keeps twelve bars from being a wall of one tone.
+   */
+  colorAt?: (index: number) => string;
 }
 
 /** Past this an amount no longer needs its cents, and they crowd an axis label. */
@@ -151,6 +167,40 @@ function axisTooltip(unit: MetricUnit, pointer: "shadow" | "line"): ChartTooltip
       return `${head}<br>${body}`;
     },
   };
+}
+
+/**
+ * The four figures of the accountant's own reporte, declared ONCE: the tiles read their heading and
+ * unit from here, and the four panels are built from these same ids — so a tile and the chart under
+ * it can never name or scale the same figure differently.
+ *
+ * Every `id` is both a key of `MonthlyFigures` and an `OccupancyMetricId`, which is what lets one
+ * list drive both halves. The wording is the accountant's, not the engine's: their sheet says
+ * «Venta en $» and «Tarifa Prom» where `METRICS` says «Ingresos» and «ADR».
+ */
+export interface MonthlyColumn {
+  id: keyof MonthlyFigures;
+  label: string;
+  unit: MetricUnit;
+}
+
+export const MONTHLY_COLUMNS: readonly MonthlyColumn[] = [
+  { id: "revenue", label: "Venta en $", unit: "currency" },
+  { id: "occupancy", label: "% Ocupación", unit: "percent" },
+  { id: "adr", label: "Tarifa Prom", unit: "currency" },
+  { id: "revpar", label: "RevPAR", unit: "currency" },
+];
+
+/**
+ * One rule for every figure of the reporte: money and indicators with two fixed decimals, and an em
+ * dash where there is no data. `formatMetric` drops the cents past a thousand — right for an axis
+ * label, wrong for a figure someone compares against their own spreadsheet cell by cell.
+ */
+export function formatMonthlyFigure(value: number | null, unit: MetricUnit): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+  return unit === "percent" ? formatPercent(value * 100, 2) : formatAmount(value);
 }
 
 const TIP_HEAD = `color:${CHART_INK.strong};font-weight:600;margin-bottom:4px`;
@@ -307,6 +357,12 @@ export function seriesOption(bundle: OccupancyBundle, context: SeriesOptionConte
   const unit = bundle.metric.unit;
   const asBars =
     bundle.axis.length <= (bundle.series.length === 1 ? MAX_DIRECT_LABELS : FEW_COLUMNS);
+  // Half-width panels print a figure over a bar only while there are few of them.
+  const directLabels =
+    asBars && bundle.axis.length <= (context.compact ? FEW_COLUMNS : MAX_DIRECT_LABELS);
+
+  // One series: every bar takes its own slot, like a channel does.
+  const perMark = bundle.series.length === 1 ? context.colorAt : undefined;
 
   return {
     ...chrome(bundle.series.length),
@@ -320,11 +376,19 @@ export function seriesOption(bundle: OccupancyBundle, context: SeriesOptionConte
             id: occupancySeriesId(entry.key),
             name: entry.label,
             type: "bar" as const,
-            data: entry.values,
+            data: perMark
+              ? entry.values.map((value, index) => ({
+                  value,
+                  itemStyle: {
+                    color: perMark(index),
+                    borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0],
+                  },
+                }))
+              : entry.values,
             itemStyle: { color, borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0] },
             barMaxWidth: CHART_MARK.barMaxWidth,
             label: {
-              show: true,
+              show: directLabels,
               position: "top" as const,
               color: CHART_INK.muted,
               fontSize: 11,
@@ -490,6 +554,8 @@ export function weekdayOption(
   fallbackColor: string,
 ): ChartOption {
   const comparing = breakdown.series.length > 1;
+  // One row: each weekday takes its own slot, so seven bars are seven marks and not one block of ink.
+  const perMark = comparing ? undefined : context.colorAt;
   return {
     ...chrome(breakdown.series.length),
     xAxis: categoryAxis([...breakdown.labels]),
@@ -499,7 +565,15 @@ export function weekdayOption(
       id: `semana:${occupancySeriesId(entry.key)}`,
       name: comparing ? entry.label : "Por día de la semana",
       type: "bar" as const,
-      data: [...entry.values],
+      data: perMark
+        ? entry.values.map((value, index) => ({
+            value,
+            itemStyle: {
+              color: perMark(index),
+              borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0],
+            },
+          }))
+        : [...entry.values],
       itemStyle: {
         color: comparing ? context.colorOf(entry.key) : fallbackColor,
         borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0],

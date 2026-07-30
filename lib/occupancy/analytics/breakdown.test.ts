@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { emptyDataset } from "../derive";
+import { emptyDataset, toAnnualGrid } from "../derive";
 import type { OccupancyDataset } from "../types";
-import { channelTotals, occupancyKpis, weekdayRhythm } from "./breakdown";
-import type { OccupancyQuery } from "./types";
+import { channelTotals, dayDetail, reportTotals, weekdayRhythm } from "./breakdown";
+import type { DateRef, OccupancyPeriod, OccupancyQuery } from "./types";
 
 function dataset(centerId: string, year: number): OccupancyDataset {
   const built = emptyDataset(year, "HOTEL A", { id: centerId, name: centerId.toUpperCase() });
@@ -17,54 +17,137 @@ function dataset(centerId: string, year: number): OccupancyDataset {
   return built;
 }
 
+const date = (year: number, monthIndex: number, day: number): DateRef => ({
+  year,
+  monthIndex,
+  day,
+});
+const rango = (from: DateRef, to: DateRef): OccupancyPeriod => ({
+  mode: "rango",
+  range: { from, to },
+});
+const dias = (...days: DateRef[]): OccupancyPeriod => ({
+  mode: "comparar",
+  picks: days.map((d) => ({ kind: "dia" as const, ...d })),
+});
+
 const query = (over: Partial<OccupancyQuery> = {}): OccupancyQuery => ({
   metric: "occupancy",
   centerIds: ["a", "b"],
-  years: [2026],
+  period: rango(date(2026, 0, 0), date(2026, 0, 30)),
   scope: "mensual",
-  months: [0],
-  days: [],
   ...over,
 });
 
 const A = dataset("a", 2026);
 const B = dataset("b", 2026);
 
-describe("occupancyKpis", () => {
-  it("da un grupo por sucursal-año en vez de mezclarlas en una cifra", () => {
-    const groups = occupancyKpis([A, B], query());
-    expect(groups.map((group) => group.label)).toEqual(["A", "B"]);
-    expect(groups[0].key).toEqual({ centerId: "a", year: 2026 });
+describe("reportTotals", () => {
+  /** Un mes entero a cifra plana por día. */
+  function withMonth(
+    built: OccupancyDataset,
+    monthIndex: number,
+    perDay: { available: number; sold: number; revenue: number },
+  ): OccupancyDataset {
+    const month = built.months[monthIndex];
+    month.fromFile = true;
+    month.inputs.available = month.inputs.available.map(() => perDay.available);
+    month.inputs.sold = month.inputs.sold.map(() => perDay.sold);
+    month.inputs.revenue = month.inputs.revenue.map(() => perDay.revenue);
+    return built;
+  }
+
+  function twoMonths(): OccupancyDataset {
+    const built = emptyDataset(2026, "HOTEL AMBATO", { id: "centro", name: "Centro" });
+    withMonth(built, 0, { available: 22, sold: 11, revenue: 627 });
+    withMonth(built, 1, { available: 22, sold: 13, revenue: 728 });
+    return built;
+  }
+
+  const wholeYear = (over: Partial<OccupancyQuery> = {}) =>
+    query({
+      centerIds: ["centro"],
+      period: rango(date(2026, 0, 0), date(2026, 11, 30)),
+      ...over,
+    });
+
+  it("da una fila por sucursal, con su nombre", () => {
+    const totals = reportTotals([A, B], query());
+    expect(totals.map((total) => total.label)).toEqual(["A", "B"]);
+    expect(totals[0].key).toEqual({ centerId: "a" });
   });
 
-  it("dentro de un grupo son ratios de las sumas de ese sucursal-año", () => {
-    const [group] = occupancyKpis([A], query({ centerIds: ["a"] }));
-    expect(group.kpis.map((k) => k.id)).toEqual(["occupancy", "adr", "revpar", "revenue"]);
-    expect(group.kpis[0].value).toBeCloseTo(0.5, 10); // 5 de 10
-    expect(group.kpis[1].value).toBeCloseTo(100, 10); // 500 / 5
-    expect(group.kpis[2].value).toBeCloseTo(50, 10); // 500 / 10
-    expect(group.kpis[3].value).toBe(500);
+  it("cierra el periodo como ratio de sumas, no como el promedio de los meses", () => {
+    const [total] = reportTotals([twoMonths()], wholeYear());
+    const revenue = 31 * 627 + 28 * 728;
+    const sold = 31 * 11 + 28 * 13;
+    const available = (31 + 28) * 22;
+
+    expect(total.figures.revenue).toBe(revenue);
+    expect(total.figures.adr).toBeCloseTo(revenue / sold, 10);
+    expect(total.figures.occupancy).toBeCloseTo(sold / available, 10);
+    expect(total.figures.revpar).toBeCloseTo(revenue / available, 10);
+    // El promedio de los dos ADR mensuales es 57,5; el ratio de sumas no.
+    expect(total.figures.adr).not.toBeCloseTo(57.5, 3);
+    // Y la identidad del módulo sobrevive al agregado.
+    expect((total.figures.adr ?? 0) * (total.figures.occupancy ?? 0)).toBeCloseTo(
+      total.figures.revpar ?? 0,
+      10,
+    );
   });
 
-  it("sin nada en el alcance no inventa ceros", () => {
-    const [group] = occupancyKpis([A], query({ centerIds: ["a"], months: [7] }));
-    expect(group.kpis[0].value).toBeNull();
+  it("coincide con la vista anual cuando el tramo ES el año", () => {
+    const built = twoMonths();
+    const grid = toAnnualGrid(built, "mensual");
+    const agg = (id: string) => grid.rows.find((row) => row.id === id)?.agg ?? null;
+    const [total] = reportTotals([built], wholeYear());
+    expect(total.figures.revenue).toBe(agg("revenue"));
+    expect(total.figures.occupancy).toBe(agg("occupancy"));
+    expect(total.figures.adr).toBe(agg("adr"));
+    expect(total.figures.revpar).toBe(agg("revpar"));
   });
 
-  it("nombra el año sólo cuando hay más de uno en pantalla", () => {
-    const otroAño = dataset("a", 2025);
-    const groups = occupancyKpis([A, otroAño], query({ centerIds: ["a"], years: [2025, 2026] }));
-    // El orden es el de la consulta: sucursal fuera, año dentro y en orden de calendario.
-    expect(groups.map((group) => group.label)).toEqual(["A · 2025", "A · 2026"]);
+  it("la capacidad de un mes sin ventas no entra en el denominador", () => {
+    const built = emptyDataset(2026, "HOTEL AMBATO", { id: "centro", name: "Centro" });
+    withMonth(built, 0, { available: 22, sold: 11, revenue: 627 });
+    // Agosto: la plantilla del año, con disponibles y habitaciones pero sin ventas.
+    built.months[7].fromFile = true;
+    built.months[7].inputs.available = built.months[7].inputs.available.map(() => 22);
+    built.months[7].inputs.rooms.simples = built.months[7].inputs.rooms.simples.map(() => 3);
+
+    const [total] = reportTotals([built], wholeYear());
+    expect(total.figures.occupancy).toBeCloseTo(0.5, 10);
+  });
+
+  it("acota al tramo, meses parciales incluidos", () => {
+    const [total] = reportTotals(
+      [twoMonths()],
+      wholeYear({ period: rango(date(2026, 0, 0), date(2026, 0, 1)) }),
+    );
+    expect(total.figures.revenue).toBe(2 * 627);
+  });
+
+  it("un periodo sin datos cierra vacío, no en cero", () => {
+    const [total] = reportTotals(
+      [twoMonths()],
+      wholeYear({ period: rango(date(2026, 7, 0), date(2026, 7, 30)) }),
+    );
+    expect(total.figures).toEqual({ revenue: null, occupancy: null, adr: null, revpar: null });
+  });
+
+  it("sobre días específicos cierra sobre esos días", () => {
+    const [total] = reportTotals(
+      [twoMonths()],
+      wholeYear({ period: dias(date(2026, 0, 0), date(2026, 1, 0)) }),
+    );
+    expect(total.figures.revenue).toBe(627 + 728);
   });
 });
 
 describe("channelTotals", () => {
   it("une los canales por id pero guarda las noches de cada sucursal aparte", () => {
     const breakdown = channelTotals([A, B], query());
-    // Una sola fila Booking, ordenada por el total combinado…
     expect(breakdown.channels).toEqual([{ id: "booking", name: "Booking", total: 8 }]);
-    // …y dentro, cada sucursal con lo suyo.
     expect(breakdown.series.map((entry) => entry.label)).toEqual(["A", "B"]);
     expect(breakdown.series.map((entry) => entry.nights)).toEqual([[4], [4]]);
     expect(breakdown.total).toBe(8);
@@ -78,15 +161,13 @@ describe("channelTotals", () => {
 
     const breakdown = channelTotals([A, otro], query());
     expect(breakdown.channels.map((c) => c.id)).toEqual(["directo", "booking"]);
-    // A no vende por Directo y B no vende por Booking: cada fila lo dice con un 0.
     expect(breakdown.series[0].nights).toEqual([0, 4]);
     expect(breakdown.series[1].nights).toEqual([9, 0]);
   });
 
-  it("deja fuera un canal sin noches", () => {
-    const sinVentas = dataset("c", 2026);
-    sinVentas.months[0].inputs.channels.booking = new Array(31).fill(0);
-    expect(channelTotals([sinVentas], query({ centerIds: ["c"] })).channels).toEqual([]);
+  it("se acota al periodo", () => {
+    expect(channelTotals([A, B], query({ period: dias(date(2026, 0, 0)) })).total).toBe(8);
+    expect(channelTotals([A, B], query({ period: dias(date(2026, 0, 1)) })).total).toBe(0);
   });
 });
 
@@ -98,28 +179,30 @@ describe("weekdayRhythm", () => {
     expect(series[0].values[3]).toBeCloseTo(0.5, 10);
   });
 
-  it("da una fila por sucursal-año en vez de fundirlas en un promedio", () => {
+  it("da una fila por sucursal en vez de fundirlas en un promedio", () => {
     const { series } = weekdayRhythm([A, B], query());
     expect(series.map((entry) => entry.label)).toEqual(["A", "B"]);
     expect(series[1].values[3]).toBeCloseTo(0.5, 10);
   });
 
   it("un día de la semana sin datos queda vacío", () => {
-    const { series } = weekdayRhythm([A], query({ centerIds: ["a"], months: [7] }));
+    const { series } = weekdayRhythm(
+      [A],
+      query({ centerIds: ["a"], period: rango(date(2026, 7, 0), date(2026, 7, 30)) }),
+    );
     expect(series[0].values.every((value) => value === null)).toBe(true);
   });
 });
 
-describe("alcance de días", () => {
-  it("los indicadores describen solo los días marcados", () => {
-    const soloDia1 = occupancyKpis([A], query({ centerIds: ["a"], days: [0] }));
-    const soloDia2 = occupancyKpis([A], query({ centerIds: ["a"], days: [1] }));
-    expect(soloDia1[0].kpis[0].value).toBeCloseTo(0.5, 10); // el día 1 vendió 5 de 10
-    expect(soloDia2[0].kpis[0].value).toBeNull(); // el día 2 no tiene nada cargado
+describe("dayDetail", () => {
+  it("dice todo lo que un día sabe de sí mismo", () => {
+    const detail = dayDetail(A, 0, 0);
+    expect(detail?.label).toBe("1 ene 2026");
+    expect(detail?.indicators.find((i) => i.id === "occupancy")?.value).toBeCloseTo(0.5, 10);
+    expect(detail?.channels).toEqual([{ id: "booking", name: "Booking", nights: 4 }]);
   });
 
-  it("los canales también se acotan al día marcado", () => {
-    expect(channelTotals([A, B], query({ days: [0] })).total).toBe(8);
-    expect(channelTotals([A, B], query({ days: [1] })).total).toBe(0);
+  it("un día que el mes no tiene no existe", () => {
+    expect(dayDetail(A, 1, 30)).toBeNull();
   });
 });

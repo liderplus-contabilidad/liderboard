@@ -76,8 +76,8 @@ export const CHART_MARK = {
   lineWidth: 2,
   symbolSize: 6,
   barMaxWidth: 44,
-  /** Rounded cap on the free end of a bar. */
-  radius: 3,
+  /** Rounded cap on the free end of a bar, anchored to the baseline. */
+  radius: 4,
 } as const;
 
 /**
@@ -93,24 +93,77 @@ export const CHART_SIGN = {
 export const CHART_FONT = "var(--font-ibm-plex-sans), system-ui, sans-serif";
 
 /**
- * NOT part of the categorical palette: those eight slots exist to be told APART, this ramp exists
- * to be read as one quantity rising. Monotonic in lightness, so it survives greyscale.
+ * TWELVE hues for the twelve marks of ONE series — a bar per month, a bar per weekday — the way
+ * `channelOption` already paints a bar per channel.
  *
- * A cell with no data takes `CHART_HEAT_EMPTY`, never a ramp step: empty and zero differ.
+ * It is a DECORATIVE set, and that is the whole difference from `CHART_PALETTE`. Those eight slots
+ * encode IDENTITY and were sequenced to survive colour blindness, because telling two SERIES apart
+ * depends on the colour alone. Here identity is on the axis: every bar is labelled with its month and
+ * carries its figure, so the colour is not the reading — it keeps twelve bars from being a wall of one
+ * tone. **Never use this set for series.**
+ *
+ * Muted on purpose (each hue mixed ~18 % toward a mid grey): twelve fully saturated bars side by side
+ * are tiring to look at, and these are read for minutes at a time.
+ *
+ * What the validator says about this order, so nobody has to re-derive it: lightness band PASS (every
+ * hue reads as a fill against white), chroma floor PASS (none of them reads grey), and the
+ * NORMAL-VISION adjacent floor PASS — worst neighbouring pair ΔE 16.3, which is the check that matters
+ * for «que varíe entre barras». Adjacent CVD separation does NOT clear (worst pair, teal↔rosa, ΔE 3.2
+ * under protanopia): twelve colourblind-separable hues do not exist, which is exactly why the identity
+ * set stops at eight. It is acceptable HERE and only here because a reader who cannot tell two of these
+ * apart loses nothing — the month is written under the bar.
+ *
+ * The order alternates cool and warm families so neighbours differ; do not re-sort it.
  */
-export const CHART_HEAT_RAMP = ["#eaf1f7", "#c3d8e9", "#8fb4d3", "#4f7fab", "#1e3a5f"] as const;
+export const CHART_PERIOD_PALETTE = [
+  "#3e74ab",
+  "#dc7046",
+  "#cd54a3",
+  "#31aa7f",
+  "#814bdd",
+  "#dd9f1b",
+  "#26a2da",
+  "#d55756",
+  "#6ea126",
+  "#d980a1",
+  "#1d968c",
+  "#af5f22",
+] as const;
+
+/** The mark's own slot, by its place on the axis. A thirteenth is the neutral, never a new hue. */
+export function colorForPeriod(index: number): string {
+  return CHART_PERIOD_PALETTE[index] ?? CHART_NEUTRAL;
+}
+
+/**
+ * NOT part of any categorical set: those slots exist to be told APART, this ramp exists to be read as
+ * one quantity rising.
+ *
+ * ONE HUE, amarillo claro → ocre — a proper sequential scale, monotonic in lightness, so it survives
+ * greyscale and a black-and-white print, and a 372-cell grid never reads as a rainbow. Its direction is
+ * written on the grid's own legend («Menos → Más»).
+ *
+ * Its light steps sit ABOVE the lightness band a categorical fill needs, on purpose: in a heat grid the
+ * lowest step is meant to be near the surface. It is `CHART_HEAT_EMPTY` it has to differ from, not the
+ * page — and a cell with no data takes that instead, because empty and zero differ.
+ */
+export const CHART_HEAT_RAMP = ["#fde68a", "#fcd34d", "#f0b429", "#d98b0b", "#a15c07"] as const;
 
 export const CHART_HEAT_EMPTY = "#f6f8fa";
 
 /** The scale is handed in, not derived per grid: two grids must mean the same by the same tone. */
-export function heatStep(value: number | null, min: number, max: number): string {
+function rampStep(ramp: readonly string[], value: number | null, min: number, max: number): string {
   if (value === null || !Number.isFinite(value)) {
     return CHART_HEAT_EMPTY;
   }
   if (max <= min) {
-    return CHART_HEAT_RAMP[CHART_HEAT_RAMP.length - 1];
+    return ramp[ramp.length - 1];
   }
   const share = (value - min) / (max - min);
-  const slot = Math.min(CHART_HEAT_RAMP.length - 1, Math.floor(share * CHART_HEAT_RAMP.length));
-  return CHART_HEAT_RAMP[Math.max(0, slot)];
+  const slot = Math.min(ramp.length - 1, Math.floor(share * ramp.length));
+  return ramp[Math.max(0, slot)];
+}
+
+export function heatStep(value: number | null, min: number, max: number): string {
+  return rampStep(CHART_HEAT_RAMP, value, min, max);
 }

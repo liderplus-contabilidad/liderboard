@@ -70,6 +70,21 @@ export function formatNumber(value: number): string {
   return EC_NUMBER.format(value);
 }
 
+const EC_AMOUNT = new Intl.NumberFormat(NUMBER_LOCALE, {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/**
+ * An amount under a column that already names its unit: two decimals ALWAYS, padded, and no `$`
+ * ("47,609.00"). A column of repeated currency symbols is noise, but a column where 47,609 sits
+ * over 56,042.18 reads as two different kinds of figure — the padding is what lets a reader
+ * compare it against their own spreadsheet cell by cell.
+ */
+export function formatAmount(value: number): string {
+  return EC_AMOUNT.format(value);
+}
+
 /** Percentage with one decimal, Spanish spacing ("12.4 %"). */
 export function formatPercent(value: number, fractionDigits = 1): string {
   return `${value.toLocaleString(NUMBER_LOCALE, {
