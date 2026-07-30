@@ -18,7 +18,13 @@
 import type { ChartCardSpec, ChartTable } from "@/lib/charts/types";
 import { periodLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
-import { toPareto, toPctOfRevenue, toPieSlices, type AmountEntry } from "../analytics/structure";
+import {
+  toPareto,
+  toPctOfRevenue,
+  toPieSlices,
+  type AmountEntry,
+  type ParetoResult,
+} from "../analytics/structure";
 import type { AnalyticsSource, Series, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
@@ -137,6 +143,20 @@ function defaultEvolutionCodes(source: AnalyticsSource | undefined): string[] {
 /** A card only carries `note` when there is one; an explicit `undefined` is a different shape. */
 function withNote(note: string | undefined): { note?: string } {
   return note === undefined ? {} : { note };
+}
+
+/**
+ * What the Pareto left out, in one line. The cut is SAID, like the ranking's: a list silently
+ * truncated reads as the whole list, and here the truncation is dozens of accounts.
+ */
+function paretoNote(pareto: ParetoResult): string | undefined {
+  const parts = [
+    pareto.truncated > 0
+      ? `Se muestran las ${pareto.entries.length} cuentas que más concentran; ${pareto.truncated} quedaron fuera.`
+      : "",
+    excludedNote(pareto.excluded, "Sin acumular") ?? "",
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 /**
@@ -394,7 +414,9 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
           pareto.entries.length > 0
             ? entryTable(pareto.entries, { colorOf: paretoColor })
             : EMPTY_TABLE,
-        ...withNote(expensesEmptyNote ?? excludedNote(pareto.excluded, "Sin acumular")),
+        // El corte se dice, como en el ranking: una lista recortada en silencio se lee como la
+        // lista entera, y aquí el recorte es de decenas de cuentas.
+        ...withNote(expensesEmptyNote ?? paretoNote(pareto)),
         height: 300,
       },
     ],

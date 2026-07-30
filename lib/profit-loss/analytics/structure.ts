@@ -95,15 +95,38 @@ export interface ParetoEntry extends AmountEntry {
 export interface ParetoResult {
   entries: ParetoEntry[];
   excluded: AmountEntry[];
+  /**
+   * Positive accounts the cap left undrawn. They are NOT missing from the reading: the last
+   * drawn bar's `cumulativePct` already counts them out of the total, so the chart still says
+   * what share the drawn ones concentrate.
+   */
+  truncated: number;
   total: number;
 }
+
+export interface ParetoOptions {
+  /** Bars to draw. Default 10 — the rest are counted, not drawn. */
+  maxEntries?: number;
+}
+
+/**
+ * The tail a real statement carries. A close moves fifty expense accounts and the smallest forty
+ * are worth cents each; drawn, they are forty rows sharing the height of one card, with their
+ * labels on top of each other and their amounts on top of the bars. Ten is the same density the
+ * ranking card uses, and the question a Pareto answers — «cuáles concentran el gasto» — is
+ * answered by the head of the list by construction.
+ */
+const MAX_PARETO_ENTRIES = 10;
 
 /**
  * Sorts from largest to smallest and accumulates the share of the total, so "which accounts
  * make up 80% of the spend" is a read and not a calculation. Entries at or below zero are set
  * aside: a running total over mixed signs has no reading.
+ *
+ * The accumulation runs over EVERY included entry and the cap is applied after, so a drawn bar's
+ * cumulative share is its share of the whole spend and not of the ten that fit.
  */
-export function toPareto(entries: AmountEntry[]): ParetoResult {
+export function toPareto(entries: AmountEntry[], options: ParetoOptions = {}): ParetoResult {
   const included = entries.filter((entry) => entry.value > 0);
   const excluded = entries.filter((entry) => entry.value <= 0);
   const total = included.reduce((sum, entry) => sum + entry.value, 0);
@@ -120,8 +143,10 @@ export function toPareto(entries: AmountEntry[]): ParetoResult {
       };
     });
 
+  const cap = options.maxEntries ?? MAX_PARETO_ENTRIES;
   // `total` is only zero when nothing was included, so the divisions above never happen then.
-  return { entries: total === 0 ? [] : ranked, excluded, total };
+  const drawn = total === 0 ? [] : ranked.slice(0, cap);
+  return { entries: drawn, excluded, truncated: ranked.length - drawn.length, total };
 }
 
 export interface PieSlice extends AmountEntry {
