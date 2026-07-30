@@ -5,21 +5,18 @@ import { memo, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
-import type { ChartOption } from "@/lib/charts/types";
-import type { ChartTable } from "@/lib/charts/types";
+import type { ChartCardSpec, ChartOption, ChartTable } from "@/lib/charts/types";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 
-export interface ChartCardProps {
-  title: string;
-  subtitle?: string;
-  /** Built by one of the pure option builders; `null` when there is nothing to draw. */
-  option: ChartOption | null;
-  /** The same numbers as rows and columns — every card has one. */
-  table: ChartTable;
-  /** `SeriesBundle.warnings`, shown whole and before the chart. */
-  warnings?: string[];
-  /** Footnote for what the engine set aside, e.g. a negative slice left out of a pie. */
-  note?: string;
+/**
+ * What the card DRAWS comes from `ChartCardSpec`, so the pure layer and this component cannot
+ * describe a card two ways. What is added here is what only a mounted card has: its own empty
+ * state, its click handler and its header controls — none of which a spec can carry.
+ *
+ * `id` is dropped (it is the key of the list, not a prop) and `height` goes back to optional,
+ * so every existing caller keeps its default.
+ */
+export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
   height?: number;
   /** No workspace loaded at all — the tab-wide empty state rather than a card-level one. */
   empty?: boolean;
@@ -135,6 +132,24 @@ export const ChartCard = memo(function ChartCard({
     </section>
   );
 });
+
+/**
+ * A `ChartCardSpec` mounted. `id` is the key of the list that holds the spec, not something the
+ * card draws, so it is the one field that does not travel through.
+ */
+export function SpecCard({ spec }: { spec: ChartCardSpec }) {
+  return (
+    <ChartCard
+      title={spec.title}
+      subtitle={spec.subtitle}
+      option={spec.option}
+      table={spec.table}
+      warnings={spec.warnings}
+      note={spec.note}
+      height={spec.height}
+    />
+  );
+}
 
 /** One row per series, one column per period. An uncovered period is blank, never `$0`. */
 function TableTwin({ table }: { table: ChartTable }) {
