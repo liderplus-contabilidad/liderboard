@@ -44,3 +44,31 @@ describe("las secciones del informe", () => {
     }
   });
 });
+
+describe("qué secciones abren página", () => {
+  const breaking = (input: Parameters<typeof reportSections>[0]) =>
+    reportSections(input)
+      .filter((section) => section.breakBefore)
+      .map((section) => section.id);
+
+  it("solo las tablas de página entera", () => {
+    // Las cuatro primeras se leen de corrido: la portada ocupa dos tercios de hoja y el resumen
+    // son tres tiles. Cada una en su propia página son dos hojas casi en blanco.
+    expect(breaking({ mode: "multi", vertical: true })).toEqual(["vertical", "estado", "centros"]);
+  });
+
+  it("la portada nunca abre página — sería una hoja en blanco antes del informe", () => {
+    for (const mode of ["single", "multi"] as const) {
+      expect(reportSections({ mode, vertical: false })[0]?.breakBefore).toBe(false);
+    }
+  });
+
+  it("las secciones que se leen de corrido no lo declaran", () => {
+    const flowing = reportSections({ mode: "single", vertical: false }).filter((section) =>
+      ["portada", "resumen", "graficos", "analisis"].includes(section.id),
+    );
+
+    expect(flowing).toHaveLength(4);
+    expect(flowing.every((section) => section.breakBefore === false)).toBe(true);
+  });
+});

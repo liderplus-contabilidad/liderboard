@@ -12,6 +12,13 @@
  *   report accumulates, the statement already carries a «% Ing.» column; a vertical analysis over
  *   Ingresos with no second year to compare against is that same column, printed again on its own
  *   page. Give it another base, or a year to compare, and it is a different table.
+ *
+ * **`breakBefore` is the same criterion applied one notch further.** The page break used to live
+ * in `globals.css` on `.print-section`, so EVERY section opened a page — and the cover, which
+ * fills two thirds of a sheet, and the summary, which is three tiles, each left most of a page
+ * blank. The three that declare it are the full-page tables; the four that read continuously do
+ * not. `.print-section > header` carries `break-after: avoid`, so a section that flows still
+ * never leaves its heading stranded at the foot of the previous page.
  */
 import type { ReportSection } from "./types";
 
@@ -19,12 +26,14 @@ const VERTICAL: ReportSection = {
   id: "vertical",
   title: "Análisis vertical",
   subtitle: "Cuánto pesa cada cuenta sobre la base",
+  breakBefore: true,
 };
 
 const CENTERS_ANNEX: ReportSection = {
   id: "centros",
   title: "Anexo: centros de costo",
   subtitle: "Cuánto aporta cada centro",
+  breakBefore: true,
 };
 
 export interface ReportSectionsInput {
@@ -42,15 +51,21 @@ export interface ReportSectionsInput {
  */
 export function reportSections(input: ReportSectionsInput): ReportSection[] {
   return [
-    { id: "portada", title: "Estado de Resultados", subtitle: "Informe" },
-    { id: "resumen", title: "Resumen del periodo", subtitle: "Las cifras de cierre" },
-    { id: "graficos", title: "Gráficos", subtitle: "Cuánto y de qué" },
-    { id: "analisis", title: "Análisis", subtitle: "Cómo cambia" },
+    { id: "portada", title: "Estado de Resultados", subtitle: "Informe", breakBefore: false },
+    {
+      id: "resumen",
+      title: "Resumen del periodo",
+      subtitle: "Las cifras de cierre",
+      breakBefore: false,
+    },
+    { id: "graficos", title: "Gráficos", subtitle: "Cuánto y de qué", breakBefore: false },
+    { id: "analisis", title: "Análisis", subtitle: "Cómo cambia", breakBefore: false },
     ...(input.vertical ? [VERTICAL] : []),
     {
       id: "estado",
       title: "Estado de resultados",
       subtitle: "El detalle que sostiene lo anterior",
+      breakBefore: true,
     },
     ...(input.mode === "multi" ? [CENTERS_ANNEX] : []),
   ];
