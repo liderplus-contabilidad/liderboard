@@ -49,6 +49,13 @@ export interface ReportSection {
   id: ReportSectionId;
   title: string;
   subtitle: string;
+  /**
+   * Whether this section starts a fresh page. It is DECLARED per section and not applied to all
+   * of them by CSS: a section that opens a page and then fills a third of it costs the reader the
+   * page turn anyway, and it is the same criterion `reportSections` already applies to decide
+   * which sections exist at all.
+   */
+  breakBefore: boolean;
 }
 
 /** One column of the by-centers annex: a center, or the Consolidado that closes it. */

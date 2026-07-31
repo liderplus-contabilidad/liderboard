@@ -108,13 +108,19 @@ body {
     padding: 0 !important;
   }
 
-  /* Cada sección abre página; nada se parte por la mitad. */
-  .print-section {
+  /* Abre página la sección que lo DECLARÓ, no todas. Cuando la regla vivía aquí sobre
+     `.print-section`, la portada —dos tercios de hoja— y el resumen —tres tiles— se llevaban
+     cada una su página casi en blanco. Qué secciones lo declaran se decide en
+     `lib/profit-loss/report/sections.ts`, junto a qué secciones existen. */
+  .print-page-break {
     break-before: page;
   }
 
-  .print-section:first-child {
-    break-before: auto;
+  /* Y como ahora hay secciones que se leen de corrido, su encabezado no puede quedarse solo al
+     pie de la página anterior: la primera card mide ~420 px y lleva `break-inside: avoid`, así
+     que sin esto el título cae en el hueco que sobra y su contenido salta de hoja. */
+  .print-section > header {
+    break-after: avoid;
   }
 
   .print-keep {
