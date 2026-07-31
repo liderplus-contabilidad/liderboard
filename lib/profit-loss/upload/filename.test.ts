@@ -34,13 +34,57 @@ describe("parseMonthlyFilename — nombres válidos", () => {
   });
 });
 
+describe("parseMonthlyFilename — nombres que el sistema operativo renombró", () => {
+  it("acepta el sufijo de descarga duplicada, que no trae guion", () => {
+    expect(parseMonthlyFilename("PyG-2026-01 (1).xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("PyG-2026-01 2.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("PyG-2026-01 copia.xlsx")).toEqual({ year: 2026, month: 0 });
+  });
+
+  it("acepta otros separadores entre prefijo, año y mes", () => {
+    expect(parseMonthlyFilename("PyG_2026_01_abc.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("PyG 2026 01.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("PyG.2026.01.xlsx")).toEqual({ year: 2026, month: 0 });
+  });
+
+  it("acepta el ruido que anteponen el correo y los gestores de archivos", () => {
+    expect(parseMonthlyFilename("Copia de PyG-2026-01.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("(1) PyG-2026-01.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("reporte-PyG-2026-01.xlsx")).toEqual({ year: 2026, month: 0 });
+  });
+
+  it("normaliza guiones tipográficos y espacios sobrantes", () => {
+    expect(parseMonthlyFilename("PyG–2026–01–abc.xlsx")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("  PyG-2026-01.xlsx  ")).toEqual({ year: 2026, month: 0 });
+    expect(parseMonthlyFilename("PyG-2026-01.xlsx ")).toEqual({ year: 2026, month: 0 });
+  });
+});
+
 describe("parseMonthlyFilename — nombre sin periodo", () => {
   it("rechaza un nombre que no declara año y mes", () => {
     expect(errorCode("enero.xlsx")).toBe("invalid-filename");
+    expect(errorCode("consolidado-2026.xlsx")).toBe("invalid-filename");
   });
 
-  it("rechaza un nombre con el prefijo en otro lugar", () => {
-    expect(errorCode("reporte-PyG-2026-01.xlsx")).toBe("invalid-filename");
+  it("rechaza el prefijo pegado dentro de otra palabra", () => {
+    expect(errorCode("apygeo-2026-01.xlsx")).toBe("invalid-filename");
+  });
+
+  it("rechaza un tercer dígito tras el mes, que vuelve ambiguo el periodo", () => {
+    expect(errorCode("PyG-2026-012.xlsx")).toBe("invalid-filename");
+  });
+
+  it("rechaza un nombre que no termina en Excel", () => {
+    expect(errorCode("PyG-2026-01.xlsx.pdf")).toBe("invalid-filename");
+    expect(errorCode("PyG-2026-01")).toBe("invalid-filename");
+  });
+
+  it("nombra el archivo recibido en el mensaje, no solo el patrón esperado", () => {
+    try {
+      parseMonthlyFilename("enero.xlsx");
+    } catch (error) {
+      expect((error as PygParseError).message).toContain("enero.xlsx");
+    }
   });
 });
 

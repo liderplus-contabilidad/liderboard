@@ -26,8 +26,9 @@ const MESSAGES: Record<PygParseErrorCode, string> = {
   "no-accounts": "El archivo no contiene filas de cuentas contables reconocibles.",
   "no-header": "No se encontró la fila de cabecera con los períodos del reporte.",
   "invalid-filename":
-    "El nombre del archivo debe seguir el patrón PyG-YYYY-MM-… (ej. PyG-2026-01-darwolf.xlsx). " +
-    "El archivo no trae el mes en su contenido, así que tiene que salir del nombre.",
+    "El nombre del archivo debe llevar PyG con el año y el mes (ej. PyG-2026-01-darwolf.xlsx) " +
+    "y terminar en .xlsx o .xls. El archivo no trae el mes en su contenido, así que tiene que " +
+    "salir del nombre.",
   "month-out-of-range": "El mes en el nombre del archivo debe estar entre 01 y 12.",
   "general-missing": "No se encontró la columna GENERAL en la fila de cabecera.",
   "duplicate-month": "La carga incluye más de un archivo para el mismo mes.",
