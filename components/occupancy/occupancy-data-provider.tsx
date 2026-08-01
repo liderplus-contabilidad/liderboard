@@ -2,10 +2,15 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { consolidate } from "@/lib/occupancy/consolidate";
 import * as occupancyDb from "@/lib/occupancy/db";
 import { toAnnualGrid, toOccupancyGrid, type OccupancyGrid } from "@/lib/occupancy/derive";
+import {
+  deriveHotelIdentity,
+  sameHotelIdentity,
+  type HotelIdentity,
+} from "@/lib/occupancy/hotel-identity";
+import { findHotelForIdentity } from "@/lib/occupancy/hotels";
 import {
   clearMarks,
   emptyFilters,
@@ -32,30 +37,51 @@ import type { Frequency } from "@/lib/period";
 import { normalize } from "@/lib/occupancy/slug";
 import {
   CONSOLIDATED_CENTER_ID,
+  DEFAULT_CENTER_ID,
   type CenterRow,
   type OccupancyDataset,
   type OccupancyParseResult,
 } from "@/lib/occupancy/types";
 
 const EMPTY_DATASETS: OccupancyDataset[] = [];
+const EMPTY_HOTELS: occupancyDb.HotelSummary[] = [];
 
-interface PendingReplace {
-  results: OccupancyParseResult[];
-  hotelName: string;
-  previousHotel: string;
-  centerCount: number;
-}
+/**
+ * Qué hacer con una carga ya parseada. `merge` es el caso normal —el hotel abierto está vacío o los
+ * archivos son suyos—; `clash` es el que abre el diálogo de tres salidas, y lleva todo lo que ese
+ * diálogo necesita para decidir su forma sin volver a leer una tabla.
+ */
+export type ImportPlan =
+  | { kind: "merge" }
+  | { kind: "no-hotel" }
+  | { kind: "mixed"; hotelNames: string[] }
+  | {
+      kind: "clash";
+      current: HotelIdentity;
+      incoming: HotelIdentity;
+      /** El hotel que SÍ tiene esa identidad, o `null`. Es lo que decide la salida principal. */
+      matching: occupancyDb.HotelSummary | null;
+    };
 
 interface OccupancyDataValue {
   datasets: OccupancyDataset[];
-  centers: CenterRow[];
+  /** Cada hotel con lo que guarda — la lista del selector. */
+  hotels: occupancyDb.HotelSummary[];
+  activeHotelId: string | null;
+  activeHotel: occupancyDb.HotelSummary | undefined;
+  /** El nombre que DECLARAN los archivos del hotel abierto; `undefined` si aún no tiene ninguno. */
   hotelName: string | undefined;
+  createHotel: (name: string) => Promise<string>;
+  renameHotel: (hotelId: string, name: string) => Promise<void>;
+  deleteHotel: (hotelId: string) => Promise<void>;
+  selectHotel: (hotelId: string) => Promise<void>;
+  centers: CenterRow[];
   activeCenterId: string | undefined;
   activeCenterName: string | undefined;
   isConsolidated: boolean;
   hasConsolidated: boolean;
   setActiveCenter: (centerId: string) => void;
-  /** Years of the ACTIVE center; `allYears` is every year the workspace holds. */
+  /** Years of the ACTIVE center; `allYears` is every year the hotel holds. */
   years: number[];
   allYears: number[];
   activeYear: number | undefined;
@@ -82,8 +108,17 @@ interface OccupancyDataValue {
   addYear: (year: number) => Promise<void>;
   deleteYear: (year: number) => Promise<void>;
   deleteCenter: (centerId: string) => Promise<void>;
-  /** The whole upload, already parsed and checked as one before anything is written. */
-  importParsed: (results: OccupancyParseResult[]) => Promise<void>;
+  /**
+   * Lo que hay que hacer con una carga, decidido ANTES de escribir nada. Quien pregunta es el modal
+   * de carga, que es quien puede explicarse; quien escribe son las tres funciones de abajo.
+   */
+  planImport: (results: OccupancyParseResult[]) => ImportPlan;
+  /** Carga en el hotel abierto, o en `hotelId` — que además pasa a ser el hotel activo. */
+  importParsed: (results: OccupancyParseResult[], hotelId?: string) => Promise<void>;
+  /** Crea el hotel con ese nombre y carga allí. La única carga que crea un hotel. */
+  importIntoNewHotel: (results: OccupancyParseResult[], name: string) => Promise<void>;
+  /** Reemplaza SOLO el hotel abierto. Los demás no se tocan. */
+  replaceActiveHotel: (results: OccupancyParseResult[]) => Promise<void>;
   importError: string | null;
   importErrorDetails: string[];
   dismissImportError: () => void;
@@ -113,34 +148,64 @@ function yearsOf(datasets: OccupancyDataset[]): number[] {
   return [...new Set(datasets.map((d) => d.year))].sort((a, b) => a - b);
 }
 
+/** Los hoteles que declaran los archivos de una carga, uno por identidad. */
+function hotelsIn(results: OccupancyParseResult[]): OccupancyParseResult[] {
+  return [...new Map(results.map((r) => [normalize(r.dataset.hotelName), r])).values()];
+}
+
 /**
  * Mounted in the dashboard layout so the header can name the hotel while the Datos panel
  * renders the grid.
+ *
+ * Todo lo que lee está acotado al HOTEL abierto, y siempre a través de `db.ts`: con varios hoteles
+ * compartiendo una tabla, una consulta sin acotar mezcla dos empresas en silencio y nada de lo que
+ * hay debajo puede notarlo.
  */
 export function OccupancyDataProvider({ children }: { children: ReactNode }) {
-  const stored = useLiveQuery(() => occupancyDb.listDatasets(), []);
-  const meta = useLiveQuery(() => occupancyDb.getMeta(), []);
-  /** In-session selection; it wins over the persisted one while what it names still exists. */
-  const [selected, setSelected] = useState<{ centerId?: string; year?: number }>({});
+  const hotelRows = useLiveQuery(() => occupancyDb.listHotelSummaries(), []);
+  const activeHotelId = useLiveQuery(() => occupancyDb.getActiveHotelId(), []) ?? null;
+  const stored = useLiveQuery(
+    () =>
+      activeHotelId
+        ? occupancyDb.listDatasets(activeHotelId)
+        : Promise.resolve<OccupancyDataset[]>(EMPTY_DATASETS),
+    [activeHotelId],
+  );
+  /**
+   * In-session selection; it wins over the persisted one while what it names still exists. It
+   * carries its `hotelId` because each hotel remembers its OWN open sucursal-año: switching hotels
+   * must not drag the previous selection onto data that does not exist there.
+   */
+  const [selected, setSelected] = useState<{
+    hotelId: string;
+    centerId?: string;
+    year?: number;
+  } | null>(null);
   const [monthIndex, setMonthIndex] = useState(0);
   // The month is kept while looking at the year, so coming back lands where you left.
   const [gridScope, setGridScope] = useState<"month" | "year">("month");
   const [gridFrequency, setRawGridFrequency] = useState<Frequency>("mensual");
   const [importError, setImportError] = useState<string | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<string[]>([]);
-  const [pendingReplace, setPendingReplace] = useState<PendingReplace | null>(null);
   const [rawFilters, setRawFilters] = useState<OccupancyFilters>(emptyFilters);
 
+  const hotels = hotelRows ?? EMPTY_HOTELS;
   const datasets = stored ?? EMPTY_DATASETS;
-  const ready = stored !== undefined;
+  const ready = hotelRows !== undefined && stored !== undefined;
+
+  const activeHotel = useMemo(
+    () => hotels.find((hotel) => hotel.id === activeHotelId),
+    [hotels, activeHotelId],
+  );
+  const ownSelection = selected?.hotelId === activeHotelId ? selected : null;
 
   const centers = useMemo(() => occupancyDb.centersOf(datasets), [datasets]);
   // One center has nothing to consolidate with: the sum would just be itself.
   const hasConsolidated = centers.length > 1;
 
-  // In-session, then persisted, then the first — each only if it still exists, so deleting a
-  // center cannot strand the view on nothing.
-  const requestedCenter = selected.centerId ?? meta?.activeCenterId;
+  // In-session, then persisted on the hotel, then the first — each only if it still exists, so
+  // deleting a center cannot strand the view on nothing.
+  const requestedCenter = ownSelection?.centerId ?? activeHotel?.activeCenterId;
   const activeCenterId =
     requestedCenter === CONSOLIDATED_CENTER_ID && hasConsolidated
       ? CONSOLIDATED_CENTER_ID
@@ -156,8 +221,8 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   // A center need not hold every year: switching to one that lacks the active year lands on its
   // most recent instead of on an empty grid.
   const activeYear =
-    years.find((y) => y === selected.year) ??
-    years.find((y) => y === meta?.activeYear) ??
+    years.find((y) => y === ownSelection?.year) ??
+    years.find((y) => y === activeHotel?.activeYear) ??
     years[years.length - 1];
 
   const dataset = useMemo(() => {
@@ -202,25 +267,43 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const canEdit = !isConsolidated && dataset !== undefined && gridScope === "month";
   const activeKey = useMemo(
     () =>
-      canEdit && activeCenterId !== undefined && activeYear !== undefined
-        ? { centerId: activeCenterId, year: activeYear }
+      canEdit && activeHotelId !== null && activeCenterId !== undefined && activeYear !== undefined
+        ? { hotelId: activeHotelId, centerId: activeCenterId, year: activeYear }
         : undefined,
-    [canEdit, activeCenterId, activeYear],
+    [canEdit, activeHotelId, activeCenterId, activeYear],
   );
 
-  const setActiveCenter = useCallback((centerId: string) => {
-    // The year is deliberately left to resolve itself against the new center's own years.
-    setSelected((current) => ({ centerId, year: current.year }));
-  }, []);
+  const setActiveCenter = useCallback(
+    (centerId: string) => {
+      if (activeHotelId === null) {
+        return;
+      }
+      // The year is deliberately left to resolve itself against the new center's own years.
+      setSelected((current) => ({
+        hotelId: activeHotelId,
+        centerId,
+        ...(current?.hotelId === activeHotelId && current.year !== undefined
+          ? { year: current.year }
+          : {}),
+      }));
+    },
+    [activeHotelId],
+  );
 
   const setActiveYear = useCallback(
     (year: number) => {
-      setSelected((current) => ({ centerId: current.centerId ?? activeCenterId, year }));
+      if (activeHotelId === null) {
+        return;
+      }
+      setSelected((current) => {
+        const centerId = current?.centerId ?? activeCenterId;
+        return { hotelId: activeHotelId, ...(centerId ? { centerId } : {}), year };
+      });
       if (activeCenterId !== undefined && !isConsolidated) {
-        void occupancyDb.saveActiveView({ centerId: activeCenterId, year });
+        void occupancyDb.saveActiveView({ hotelId: activeHotelId, centerId: activeCenterId, year });
       }
     },
-    [activeCenterId, isConsolidated],
+    [activeHotelId, activeCenterId, isConsolidated],
   );
 
   const saveCell = useCallback(
@@ -270,89 +353,180 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
 
   const addYear = useCallback(
     async (year: number) => {
-      // The consolidated view owns no year, so a blank one goes to the first center.
-      const centerId = isConsolidated ? centers[0]?.id : activeCenterId;
-      if (centerId === undefined) {
+      if (activeHotelId === null) {
         return;
       }
-      await occupancyDb.addYear({ centerId, year });
-      setSelected({ centerId, year });
+      // The consolidated view owns no year, so a blank one goes to the first center — and a hotel
+      // with no sucursal yet gets `principal`, the same one a file with no cost-center line lands in.
+      const centerId = isConsolidated ? centers[0]?.id : activeCenterId;
+      const target = centerId ?? DEFAULT_CENTER_ID;
+      await occupancyDb.addYear({ hotelId: activeHotelId, centerId: target, year });
+      setSelected({ hotelId: activeHotelId, centerId: target, year });
     },
-    [activeCenterId, centers, isConsolidated],
+    [activeHotelId, activeCenterId, centers, isConsolidated],
   );
 
   const deleteYear = useCallback(
     async (year: number) => {
-      if (activeCenterId === undefined || isConsolidated) {
+      if (activeHotelId === null || activeCenterId === undefined || isConsolidated) {
         return;
       }
-      await occupancyDb.deleteYear({ centerId: activeCenterId, year });
-      setSelected({});
+      await occupancyDb.deleteYear({ hotelId: activeHotelId, centerId: activeCenterId, year });
+      setSelected(null);
     },
-    [activeCenterId, isConsolidated],
+    [activeHotelId, activeCenterId, isConsolidated],
   );
 
-  const deleteCenter = useCallback(async (centerId: string) => {
-    await occupancyDb.deleteCenter(centerId);
-    setSelected({});
+  const deleteCenter = useCallback(
+    async (centerId: string) => {
+      if (activeHotelId === null) {
+        return;
+      }
+      await occupancyDb.deleteCenter(activeHotelId, centerId);
+      setSelected(null);
+    },
+    [activeHotelId],
+  );
+
+  const createHotel = useCallback(async (name: string) => {
+    const hotel = await occupancyDb.createHotel(name);
+    setSelected(null);
+    return hotel.id;
   }, []);
 
-  const commit = useCallback(async (results: OccupancyParseResult[], replaceHotel?: string) => {
-    if (replaceHotel !== undefined) {
-      await occupancyDb.replaceAll(results, replaceHotel);
-    } else {
-      // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping ones
-      // (two files landing the same center-year) would race on the same record.
-      for (const parsed of results) {
-        await occupancyDb.mergeParsedDataset(parsed);
+  const renameHotel = useCallback(
+    (hotelId: string, name: string) => occupancyDb.renameHotel(hotelId, name),
+    [],
+  );
+
+  const deleteHotel = useCallback(async (hotelId: string) => {
+    await occupancyDb.deleteHotel(hotelId);
+    setSelected(null);
+  }, []);
+
+  const selectHotel = useCallback(async (hotelId: string) => {
+    await occupancyDb.setActiveHotel(hotelId);
+    // Nothing of the previous hotel's selection carries over: it named data this one does not have.
+    setSelected(null);
+  }, []);
+
+  /**
+   * Where a load lands, decided before anything is written. The mixed-batch check is enforced here
+   * too and not only in the modal: a half-applied mixed upload would leave two companies sharing one
+   * hotel, and THIS is what writes.
+   */
+  const planImport = useCallback(
+    (results: OccupancyParseResult[]): ImportPlan => {
+      if (results.length === 0) {
+        return { kind: "merge" };
       }
+      const declared = hotelsIn(results);
+      if (declared.length > 1) {
+        return { kind: "mixed", hotelNames: declared.map((r) => r.dataset.hotelName) };
+      }
+      if (activeHotelId === null) {
+        return { kind: "no-hotel" };
+      }
+      const incoming: HotelIdentity = { hotelName: results[0].dataset.hotelName };
+      const current = deriveHotelIdentity(datasets);
+      // An empty hotel has no identity: its first upload ADOPTS whatever it brings.
+      if (!current || sameHotelIdentity(current, incoming)) {
+        return { kind: "merge" };
+      }
+      const identities = Object.fromEntries(hotels.map((hotel) => [hotel.id, hotel.identity]));
+      const match = findHotelForIdentity(hotels, identities, incoming);
+      return {
+        kind: "clash",
+        current,
+        incoming,
+        matching: match ? (hotels.find((hotel) => hotel.id === match.id) ?? null) : null,
+      };
+    },
+    [activeHotelId, datasets, hotels],
+  );
+
+  /** Lands the whole selection and leaves the view on the newest thing it wrote. */
+  const commit = useCallback(async (hotelId: string, results: OccupancyParseResult[]) => {
+    // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping ones
+    // (two files landing the same center-year) would race on the same record.
+    for (const parsed of results) {
+      await occupancyDb.mergeParsedDataset(hotelId, parsed);
     }
     const newest = results.reduce<OccupancyParseResult | undefined>(
       (best, parsed) => (!best || parsed.dataset.year >= best.dataset.year ? parsed : best),
       undefined,
     );
     if (newest) {
-      setSelected({ centerId: newest.dataset.centerId, year: newest.dataset.year });
+      setSelected({
+        hotelId,
+        centerId: newest.dataset.centerId,
+        year: newest.dataset.year,
+      });
       setMonthIndex(newest.parsedMonths[0] ?? 0);
     }
   }, []);
 
   const importParsed = useCallback(
-    async (results: OccupancyParseResult[]) => {
+    async (results: OccupancyParseResult[], hotelId?: string) => {
       setImportError(null);
       setImportErrorDetails([]);
       if (results.length === 0) {
         return;
       }
-
-      // Nothing is written until the whole selection is known to belong to ONE hotel: a mixed
-      // upload half-applied would leave two companies sharing one set of tabs. The modal blocks
-      // this earlier; the check stays because THIS is what writes.
-      const hotels = [...new Map(results.map((r) => [normalize(r.dataset.hotelName), r])).values()];
-      if (hotels.length > 1) {
+      const plan = planImport(results);
+      if (plan.kind === "mixed") {
         setImportError(
-          `Los archivos son de hoteles distintos (${hotels
-            .map((r) => r.dataset.hotelName)
-            .join(", ")}); cárgalos por separado.`,
+          `Los archivos son de hoteles distintos (${plan.hotelNames.join(", ")}); cárgalos por separado.`,
         );
         return;
       }
-
-      const incoming = results[0].dataset.hotelName;
-      const current = meta?.hotelName;
-      if (datasets.length > 0 && current && normalize(current) !== normalize(incoming)) {
-        setPendingReplace({
-          results,
-          hotelName: incoming,
-          previousHotel: current,
-          centerCount: centers.length,
-        });
+      const target = hotelId ?? activeHotelId;
+      if (target === null) {
+        setImportError("Crea un hotel antes de cargar un Excel de ocupación.");
         return;
       }
-
-      await commit(results);
+      // A named target is the clash dialog's «Cargar en <hotel>»: nothing is destroyed, the active
+      // hotel simply moves to where the files belong.
+      if (hotelId && hotelId !== activeHotelId) {
+        await occupancyDb.setActiveHotel(hotelId);
+      }
+      await commit(target, results);
     },
-    [centers.length, commit, datasets.length, meta?.hotelName],
+    [activeHotelId, commit, planImport],
+  );
+
+  const importIntoNewHotel = useCallback(
+    async (results: OccupancyParseResult[], name: string) => {
+      setImportError(null);
+      setImportErrorDetails([]);
+      const hotel = await occupancyDb.createHotel(name);
+      await commit(hotel.id, results);
+    },
+    [commit],
+  );
+
+  const replaceActiveHotel = useCallback(
+    async (results: OccupancyParseResult[]) => {
+      setImportError(null);
+      setImportErrorDetails([]);
+      if (activeHotelId === null) {
+        return;
+      }
+      await occupancyDb.replaceHotel(activeHotelId, results);
+      const newest = results.reduce<OccupancyParseResult | undefined>(
+        (best, parsed) => (!best || parsed.dataset.year >= best.dataset.year ? parsed : best),
+        undefined,
+      );
+      if (newest) {
+        setSelected({
+          hotelId: activeHotelId,
+          centerId: newest.dataset.centerId,
+          year: newest.dataset.year,
+        });
+        setMonthIndex(newest.parsedMonths[0] ?? 0);
+      }
+    },
+    [activeHotelId],
   );
 
   const centerUniverse = useMemo(() => centers.map((center) => center.id), [centers]);
@@ -393,8 +567,15 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<OccupancyDataValue>(
     () => ({
       datasets,
+      hotels,
+      activeHotelId,
+      activeHotel,
+      hotelName: activeHotel?.identity?.hotelName,
+      createHotel,
+      renameHotel,
+      deleteHotel,
+      selectHotel,
       centers,
-      hotelName: meta?.hotelName ?? dataset?.hotelName,
       activeCenterId,
       activeCenterName,
       isConsolidated,
@@ -422,7 +603,10 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       addYear,
       deleteYear,
       deleteCenter,
+      planImport,
       importParsed,
+      importIntoNewHotel,
+      replaceActiveHotel,
       importError,
       importErrorDetails,
       dismissImportError,
@@ -440,8 +624,14 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     }),
     [
       datasets,
+      hotels,
+      activeHotelId,
+      activeHotel,
+      createHotel,
+      renameHotel,
+      deleteHotel,
+      selectHotel,
       centers,
-      meta?.hotelName,
       activeCenterId,
       activeCenterName,
       isConsolidated,
@@ -469,7 +659,10 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       addYear,
       deleteYear,
       deleteCenter,
+      planImport,
       importParsed,
+      importIntoNewHotel,
+      replaceActiveHotel,
       importError,
       importErrorDetails,
       dismissImportError,
@@ -487,31 +680,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return (
-    <OccupancyDataContext.Provider value={value}>
-      {children}
-      {/* Here, not in the Datos panel: the upload button sits in the tab bar, outside it. */}
-      <ConfirmDialog
-        open={pendingReplace !== null}
-        variant="destructive"
-        title={`¿Reemplazar los datos de ${pendingReplace?.previousHotel}?`}
-        description={
-          pendingReplace
-            ? `Los archivos son de ${pendingReplace.hotelName} y este espacio guarda ${pendingReplace.previousHotel}. Continuar borra sus ${pendingReplace.centerCount} ${pendingReplace.centerCount === 1 ? "sucursal" : "sucursales"}, con todos sus años y lo que hayas escrito a mano. No se puede deshacer.`
-            : ""
-        }
-        confirmLabel="Reemplazar"
-        onConfirm={() => {
-          const pending = pendingReplace;
-          setPendingReplace(null);
-          if (pending) {
-            void commit(pending.results, pending.hotelName);
-          }
-        }}
-        onCancel={() => setPendingReplace(null)}
-      />
-    </OccupancyDataContext.Provider>
-  );
+  return <OccupancyDataContext.Provider value={value}>{children}</OccupancyDataContext.Provider>;
 }
 
 export function useOccupancyData(): OccupancyDataValue {

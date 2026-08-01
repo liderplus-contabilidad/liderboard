@@ -1,15 +1,14 @@
 "use client";
 
-import { BedDouble } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { monthHasData } from "@/lib/occupancy/derive";
 import type { Frequency } from "@/lib/period";
 import { CenterTabs } from "./center-tabs";
+import { NoHotelsEmptyState, NoOccupancyDataEmptyState } from "./occupancy-empty-state";
 import { MonthTabs } from "./month-tabs";
 import { useOccupancyData } from "./occupancy-data-provider";
 import { OccupancyGrid } from "./occupancy-grid";
@@ -51,6 +50,7 @@ function mismatchDetails(
 export function OccupancyDatosView() {
   const {
     datasets,
+    activeHotelId,
     centers,
     activeCenterId,
     activeCenterName,
@@ -139,16 +139,23 @@ export function OccupancyDatosView() {
     return null;
   }
 
+  // Dos huecos distintos: sin hotel no falta un Excel, falta crear el hotel — y hasta que exista,
+  // no hay dónde cargar nada.
+  if (activeHotelId === null) {
+    return (
+      <div className="px-7 py-5">
+        {banner}
+        <NoHotelsEmptyState />
+      </div>
+    );
+  }
+
   if (datasets.length === 0) {
     return (
       <div className="px-7 py-5">
         {banner}
-        <div className="rounded-[13px] border border-border bg-surface">
-          <EmptyState icon={<BedDouble size={22} />} className="py-14">
-            Sin datos de ocupación. Carga uno o varios Excel a la vez (uno por sucursal y año) con
-            «Cargar Excel», o empieza un año en blanco y escríbelo a mano.
-          </EmptyState>
-          <div className="flex justify-center pb-8">
+        <NoOccupancyDataEmptyState
+          action={
             <Button
               variant="secondary"
               size="sm"
@@ -156,8 +163,11 @@ export function OccupancyDatosView() {
             >
               Empezar {new Date().getFullYear()} en blanco
             </Button>
-          </div>
-        </div>
+          }
+        >
+          Sin datos de ocupación. Carga uno o varios Excel a la vez (uno por sucursal y año) con
+          «Cargar Excel», o empieza un año en blanco y escríbelo a mano.
+        </NoOccupancyDataEmptyState>
       </div>
     );
   }

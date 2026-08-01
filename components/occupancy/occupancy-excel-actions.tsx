@@ -10,7 +10,7 @@ import { OccupancyUploadModal } from "./occupancy-upload-modal";
  * `ExcelActions` rinde un botón plano; el día que exista una segunda opción, pasa a menú sola.
  */
 export function OccupancyExcelActions() {
-  const { dataset, isConsolidated } = useOccupancyData();
+  const { dataset, isConsolidated, activeHotelId } = useOccupancyData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   // El consolidado es sintético: no se descarga porque no es un archivo de nadie.
@@ -45,7 +45,13 @@ export function OccupancyExcelActions() {
   return (
     <>
       <ExcelActions
-        upload={{ onClick: () => setUploadOpen(true) }}
+        // Sin hotel no hay dónde cargar: el motivo se rinde junto al botón, porque lo que falta no
+        // es el archivo sino el paso anterior.
+        upload={{
+          onClick: () => setUploadOpen(true),
+          disabled: activeHotelId === null,
+          disabledReason: "Agrega un hotel primero: cada uno guarda sus propias sucursales.",
+        }}
         downloads={downloads}
         info={{
           title: "Archivos aceptados",

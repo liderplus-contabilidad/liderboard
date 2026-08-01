@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ComparisonCard } from "@/components/ui/comparison-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { cn } from "@/lib/cn";
@@ -30,7 +31,6 @@ import type { BuiltWorkspace } from "@/lib/profit-loss/workspace";
 import {
   compareIdentity,
   describeIdentityChange,
-  type IdentityCard,
   type IdentityMismatchReason,
   type WorkspaceIdentity,
 } from "@/lib/profit-loss/workspace-identity";
@@ -684,11 +684,11 @@ function IdentityClashDialog({
         </div>
 
         <div className="mt-4 flex items-stretch gap-3">
-          <ComparisonCard card={confirmation.cards.current} />
+          <ComparisonCard card={confirmation.cards.current} monoDetail />
           <span className="flex shrink-0 items-center text-faintest">
             <X size={16} />
           </span>
-          <ComparisonCard card={confirmation.cards.incoming} />
+          <ComparisonCard card={confirmation.cards.incoming} monoDetail />
         </div>
 
         <div className="mt-4 flex items-start gap-2.5 rounded-[9px] bg-surface-muted px-3.5 py-3">
@@ -777,22 +777,6 @@ function IdentityClashDialog({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ComparisonCard({ card }: { card: IdentityCard }) {
-  return (
-    <div className="min-w-0 flex-1 rounded-[9px] bg-surface-muted px-3.5 py-3">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-        {card.caption}
-      </p>
-      <p className="mt-1 truncate text-[13px] font-bold text-ink" title={card.name}>
-        {card.name}
-      </p>
-      <p className="mt-0.5 truncate font-mono text-[11.5px] text-faint" title={card.detail}>
-        {card.detail}
-      </p>
     </div>
   );
 }

@@ -2,14 +2,11 @@
 
 import { MessageSquare, Plus, ShieldCheck, SlidersHorizontal, Table2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActiveClient,
-  ClientNameDialog,
-  type ClientOption,
-} from "@/components/dashboard/active-client";
+import { ActiveClient, type ClientOption } from "@/components/dashboard/active-client";
+import { useEntityNaming } from "@/components/dashboard/use-entity-naming";
 import { Button } from "@/components/ui/button";
+import { DiscardedRow } from "@/components/ui/discarded-row";
 import { formatList, pluralize } from "@/lib/format";
-import { findClientByName, normalizeClientName } from "@/lib/profit-loss/clients";
 import {
   describeClientContents,
   type ClientContents,
@@ -38,85 +35,13 @@ function describeClient(client: ClientSummary): string | undefined {
 }
 
 /**
- * PyG's client selector: the prop-driven `ActiveClient` wired to the provider, plus the three
- * dialogs that create, rename and delete. The dialogs live here and not in `ActiveClient` because
- * their copy speaks PyG — «estado de resultados», «centros de costo», «cuentas» — and Ocupaciones,
- * which reuses the same block without a list, must not inherit any of it.
- */
-/**
- * The naming dialog's state and its validation, shared by the two places that create a client:
- * the header's selector and the empty state's CTA. Only one of them is ever on screen, but the
- * rules for a name — trimmed, not empty, ≤60, unique ignoring case and accents — must be the same
- * in both, and the message has to be able to NAME the client already using it.
+ * El diálogo de nombre conectado al provider de PyG. Las reglas y el estado son de
+ * `useEntityNaming`; aquí solo se dice de qué lista se trata — las palabras son las del default,
+ * que son justamente las de PyG.
  */
 function useClientNaming() {
   const { clients, createClient, renameClient } = usePygData();
-  const [naming, setNaming] = useState<{ mode: "create" | "rename"; clientId?: string } | null>(
-    null,
-  );
-  const [name, setName] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const openCreate = useCallback(() => {
-    setName("");
-    setNameError(null);
-    setNaming({ mode: "create" });
-  }, []);
-
-  const openRename = useCallback(
-    (clientId: string) => {
-      setName(clients.find((client) => client.id === clientId)?.name ?? "");
-      setNameError(null);
-      setNaming({ mode: "rename", clientId });
-    },
-    [clients],
-  );
-
-  const submit = useCallback(async () => {
-    if (!naming) {
-      return;
-    }
-    const check = normalizeClientName(name);
-    if (!check.ok) {
-      setNameError(check.message);
-      return;
-    }
-    const taken = findClientByName(check.name, clients, naming.clientId);
-    if (taken) {
-      setNameError(`Ya existe un cliente llamado «${taken.name}».`);
-      return;
-    }
-    setBusy(true);
-    try {
-      if (naming.mode === "create") {
-        await createClient(check.name);
-      } else if (naming.clientId) {
-        await renameClient(naming.clientId, check.name);
-      }
-      setNaming(null);
-    } finally {
-      setBusy(false);
-    }
-  }, [naming, name, clients, createClient, renameClient]);
-
-  const dialog = (
-    <ClientNameDialog
-      open={naming !== null}
-      mode={naming?.mode ?? "create"}
-      value={name}
-      error={nameError}
-      busy={busy}
-      onChange={(next) => {
-        setName(next);
-        setNameError(null);
-      }}
-      onSubmit={() => void submit()}
-      onCancel={() => setNaming(null)}
-    />
-  );
-
-  return { openCreate, openRename, dialog };
+  return useEntityNaming({ entities: clients, onCreate: createClient, onRename: renameClient });
 }
 
 /**
@@ -135,6 +60,12 @@ export function CreateClientButton() {
   );
 }
 
+/**
+ * PyG's client selector: the prop-driven `ActiveClient` wired to the provider, plus the three
+ * dialogs that create, rename and delete. The delete dialog lives here and not in `ActiveClient`
+ * because its copy speaks PyG — «estado de resultados», «centros de costo», «cuentas» — and
+ * Ocupaciones, which reuses the same block, must not inherit any of it.
+ */
 export function PygClientActions() {
   const {
     clients,
@@ -329,24 +260,5 @@ function DeleteClientDialog({
         </div>
       </div>
     </div>
-  );
-}
-
-function DiscardedRow({
-  icon,
-  label,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex items-start gap-2.5 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink-soft">
-      <span className="mt-0.5 shrink-0 text-muted">{icon}</span>
-      <span>
-        <strong className="font-semibold text-ink">{label}</strong> — {children}
-      </span>
-    </li>
   );
 }

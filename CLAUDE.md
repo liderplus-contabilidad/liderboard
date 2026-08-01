@@ -267,8 +267,8 @@ the tiles and the ranking don't shrink by whatever was reclassified.
 **Ocupaciones (hotel occupancy).** `lib/occupancy/` is the pure layer — `parse.ts` reads the
 `OCUPACION_*.xlsx` exports (month blocks stacked on one sheet), `derive.ts` builds the daily
 grid, `export.ts` writes a file that re-imports cleanly, `db.ts` persists in Dexie. **A record
-is one SUCURSAL-YEAR**, keyed `[centerId+year]`: the accountant exports one workbook per
-sucursal per year, and the file declares its own hotel and cost center on two lines under the
+is one HOTEL-SUCURSAL-YEAR**, keyed `[hotelId+centerId+year]`: the accountant exports one workbook
+per sucursal per year, and the file declares its own hotel and cost center on two lines under the
 title (read BY POSITION; a file with no cost-center line falls into the reserved `principal`).
 A record stores ONLY raw inputs — ADR, ocupación, RevPAR, PAX and every total are recomputed,
 and an imported month is shown VERBATIM until its first edit, which flips the whole month to
@@ -282,8 +282,9 @@ keeps the rules and the modal owns reading files. `addFiles` materializes the `F
 its first `await`, because clearing `input.value` empties the live list. Uploads are still
 two-phase — every file is parsed before anything is written, so the "all files from one hotel"
 check cannot half-apply; it is enforced in the modal (which can still explain itself) and kept in
-the provider, which is what writes. Files from another hotel raise a replace confirmation,
-rendered by `OccupancyDataProvider` itself because the upload button lives in the tab bar. Datos stacks three strips, **Sucursal → Año → Mes**; the sucursal strip
+the provider, which is what writes — `planImport` decides WHERE a load lands before anything is
+written, and the modal renders the clash dialog described below, since that is where the files are
+still removable. Datos stacks three strips, **Sucursal → Año → Mes**; the sucursal strip
 renders nothing with a single sucursal, and the Consolidado tab appears only with two or more.
 The MES strip ends in an **«Año»** button: `toAnnualGrid` returns the same `OccupancyGrid` with
 one column per month instead of per day (the type speaks in `columns`/`columnLabels`/`scope`,
@@ -291,6 +292,39 @@ never in days), always computed and always read-only — a month's cell is an ag
 and «Habitaciones disponibles» sums habitaciones-noche there because that is what the occupancy
 of each month divides by. Both axes compose: the year of a sucursal, or the year of the
 Consolidado.
+
+**Ocupaciones holds several HOTELES at once**, the same shape PyG's clientes introduced and for the
+same reason: the firm keeps the occupancy of several hotels, and a single space meant one browser per
+hotel or losing what was loaded. A hotel is a name the user chose plus what the space always held —
+sucursales × years, with their Consolidado. It is created EXPLICITLY (`+ Agregar hotel`), is born
+empty, and no upload ever invents one on its own. **Its label is NOT its identity**: the user calls
+«Manor Galápagos» what the workbook declares as `CULTURA MANOR`, so the name is never compared
+against a file — what is compared is the identity a hotel ADOPTED on its first upload, which
+`hotel-identity.ts` DERIVES from what it holds (`deriveHotelIdentity`) instead of storing, and that
+is what makes «un hotel vacío no tiene identidad» free. PyG's identity is `(sistema, empresa, modo)`;
+here it is ONE field, the declared hotel name, because there is a single parser and the sucursal is
+data inside the hotel rather than a mode of holding it. A file that contradicts the ACTIVE hotel no
+longer replaces the base: `describeHotelChange` returns a dialog with THREE exits whose shape depends
+on whether another hotel already holds that identity — load it there (nothing is destroyed, only the
+active hotel moves), create the hotel it belongs to with an editable proposed name, or —demoted to
+secondary— replace only the OPEN hotel. **The generic half of a name lives in `lib/workspaces.ts`**
+and is shared with PyG (`clients.ts` re-exports it under its own names, so no PyG call changed):
+validation and the 60-char cap, uniqueness ignoring case and accents, alphabetical order,
+`matchesSearch` and `proposeEntityName`. The two LISTS stay separate — an Ocupaciones hotel and a PyG
+cliente are not the same row and share no database. `ActiveClient` takes `labels` so the same header
+control says «hotel» here and «cliente» there. **Storage is partitioned by `hotelId`** (Dexie v4
+creates `centerYears` keyed `[hotelId+centerId+year]` while `datasets` is still readable and v5 drops
+it — the same dance as v2 —, `hotels` absorbs what the singleton `meta` row held, since which
+sucursal and year are open belongs to the hotel and not to the space, and a one-row `active` table
+keeps the open hotel across reloads). The migration is purely ADDITIVE: the current space becomes the
+first hotel named after its `hotelName` (or «Hotel 1»), and a database that never loaded anything
+gets NO hotel. **`db.ts` is the only door to the tables**, and that is the mitigation of this
+design's one real risk: with several hotels sharing one table, an unbounded query mixes two companies
+in silence and nothing below — not `consolidate.ts`, not the series engine, not the grid — can tell.
+`OccupancyDataset` is what the pure layer produces (it belongs to nobody yet) and
+`StoredOccupancyDataset` is that plus its `hotelId`, STAMPED at the door, because which hotel a
+workbook belongs to is decided by which hotel is open, never by the file. A year typed by hand
+carries NO declared name, so it cannot hand its hotel an identity derived from the user's label.
 
 **Ocupaciones › Gráficos** mirrors PyG's shape with its own engine: `lib/occupancy/filters.ts`
 holds the marks, `charts/selection.ts` is the ONE translation into an `OccupancyQuery`,
