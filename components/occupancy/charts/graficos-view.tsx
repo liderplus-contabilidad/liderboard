@@ -1,9 +1,7 @@
 "use client";
 
-import { BedDouble } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { ChartCard } from "@/components/ui/chart-card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatTile } from "@/components/ui/stat-tile";
 import { colorForEntity, colorForPeriod } from "@/lib/charts/palette";
@@ -38,6 +36,7 @@ import {
 import { periodPhrase } from "@/lib/occupancy/filters";
 import { MetricSelect } from "../metric-select";
 import { useOccupancyData } from "../occupancy-data-provider";
+import { NoHotelsEmptyState, NoOccupancyDataEmptyState } from "../occupancy-empty-state";
 import { DayPanel } from "./day-panel";
 import { ReportTables } from "./report-table";
 import { HeatmapCard } from "./heatmap-card";
@@ -114,8 +113,16 @@ function SectionHeading({
 }
 
 export function GraficosView() {
-  const { datasets, ready, filters, activeCenterId, isConsolidated, setChartScope, setMetric } =
-    useOccupancyData();
+  const {
+    datasets,
+    activeHotelId,
+    ready,
+    filters,
+    activeCenterId,
+    isConsolidated,
+    setChartScope,
+    setMetric,
+  } = useOccupancyData();
   const [openDay, setOpenDay] = useState<OpenDay | null>(null);
   // Gráficas por defecto: la pestaña se llama Gráficos y lo primero que se busca es la forma de la
   // temporada; la cifra exacta está a un clic, en la tabla.
@@ -192,15 +199,21 @@ export function GraficosView() {
     return null;
   }
 
+  if (activeHotelId === null) {
+    return (
+      <div className="px-7 py-5">
+        <NoHotelsEmptyState />
+      </div>
+    );
+  }
+
   if (datasets.length === 0) {
     return (
       <div className="px-7 py-5">
-        <div className="rounded-[13px] border border-border bg-surface">
-          <EmptyState icon={<BedDouble size={22} />} className="py-14">
-            Sin datos de ocupación. Cárgalos desde la pestaña Datos, con «Cargar Excel», y vuelve
-            aquí para comparar sucursales, años y periodos.
-          </EmptyState>
-        </div>
+        <NoOccupancyDataEmptyState>
+          Sin datos de ocupación. Cárgalos desde la pestaña Datos, con «Cargar Excel», y vuelve aquí
+          para comparar sucursales, años y periodos.
+        </NoOccupancyDataEmptyState>
       </div>
     );
   }

@@ -19,6 +19,7 @@
  * without asking anything.
  */
 
+import type { ComparisonCardData } from "@/lib/workspaces";
 import { LEGACY_SYSTEM, systemLabel } from "./upload/systems";
 import type { PygDataset, WorkspaceMeta } from "./types";
 
@@ -74,16 +75,15 @@ export function compareIdentity(
   return reasons;
 }
 
-/** Una de las dos tarjetas que el diálogo compara. NUNCA lleva un NIT: ninguna estrategia lo
- * extrae, así que prometerlo sería inventarlo. Lo que se compara es empresa y sistema. */
-export interface IdentityCard {
-  /** «CLIENTE ABIERTO» / «EL ARCHIVO». */
-  caption: string;
-  /** La línea en negrita: la etiqueta del cliente, o la razón social del archivo. */
-  name: string;
-  /** La línea secundaria: la empresa (si difiere de `name`) y el sistema contable. */
-  detail: string;
-}
+/**
+ * Una de las dos tarjetas que el diálogo compara — la forma genérica de `@/lib/workspaces`, que
+ * Ocupaciones usa igual. Aquí `caption` es «CLIENTE ABIERTO»/«EL ARCHIVO», `name` la etiqueta del
+ * cliente o la razón social, y `detail` la empresa (si difiere de `name`) y el sistema contable.
+ *
+ * NUNCA lleva un NIT: ninguna estrategia lo extrae, así que prometerlo sería inventarlo. Lo que se
+ * compara es empresa y sistema.
+ */
+export type IdentityCard = ComparisonCardData;
 
 /** El bloque secundario de 6B: reemplazar el cliente abierto, con su motivo y lo que descarta. */
 export interface IdentityReplaceOption {

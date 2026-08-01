@@ -14,7 +14,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
-import { matchesSearch } from "@/lib/profit-loss/clients";
+import { matchesSearch } from "@/lib/workspaces";
 
 export interface ActiveClientInfo {
   /** Empresa / client shown in bold. */
@@ -33,6 +33,29 @@ export interface ClientOption {
 
 /** Ancho del menú `⋯` de una fila. Se resta del borde derecho del botón para alinearlos. */
 const ROW_MENU_WIDTH = 170;
+
+/**
+ * Las palabras con que un módulo llama a lo que guarda. Este bloque es el mismo control en PyG y en
+ * Ocupaciones, pero el sujeto NO es el mismo —allí es el cliente, aquí el hotel—, y un selector que
+ * dijera «cliente» sobre una lista de hoteles sería una mentira pequeña repetida en diez sitios.
+ *
+ * El default es el de PyG, que es quien lo estrenó, así que sus llamadas no cambian.
+ */
+export interface EntityLabels {
+  /** Singular en minúscula: «cliente», «hotel». Las frases se construyen con él. */
+  subject: string;
+  /** Plural en minúscula: «clientes», «hoteles». */
+  plural: string;
+  /** Lo que un renombrado NO toca, en las palabras del módulo. */
+  renameKeeps: string;
+}
+
+/** Las de PyG, que es quien estrenó el bloque, y por eso son también el default. */
+export const DEFAULT_ENTITY_LABELS: EntityLabels = {
+  subject: "cliente",
+  plural: "clientes",
+  renameKeeps: "sus datos, ajustes y comentarios",
+};
 
 export interface ActiveClientProps {
   client?: ActiveClientInfo;
@@ -53,6 +76,8 @@ export interface ActiveClientProps {
   onCreate?: () => void;
   onRename?: (clientId: string) => void;
   onDelete?: (clientId: string) => void;
+  /** Cómo llama el módulo a lo que lista. Por defecto, el cliente de PyG. */
+  labels?: EntityLabels;
 }
 
 /**
@@ -66,7 +91,7 @@ export interface ActiveClientProps {
 export function ActiveClient({
   client,
   caption = "Estado de resultados",
-  emptyLabel = "Sin cliente seleccionado",
+  emptyLabel,
   emptySubline,
   clients,
   activeClientId,
@@ -74,9 +99,10 @@ export function ActiveClient({
   onCreate,
   onRename,
   onDelete,
+  labels = DEFAULT_ENTITY_LABELS,
 }: ActiveClientProps) {
   const hasClient = Boolean(client?.name);
-  const name = client?.name ?? emptyLabel;
+  const name = client?.name ?? emptyLabel ?? `Sin ${labels.subject} seleccionado`;
   const period = client?.period ?? "N/A";
   const interactive = clients !== undefined;
 
@@ -176,7 +202,7 @@ export function ActiveClient({
       {open && (
         <button
           type="button"
-          aria-label="Cerrar el selector de clientes"
+          aria-label={`Cerrar el selector de ${labels.plural}`}
           onClick={() => close(false)}
           className="fixed inset-0 z-30 cursor-default"
         />
@@ -212,7 +238,7 @@ export function ActiveClient({
         >
           <div className="flex items-center justify-between px-2 pb-2 pt-1">
             <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-              Clientes
+              {labels.plural}
             </span>
             <kbd className="rounded-[5px] border border-border-soft px-1.5 py-0.5 font-mono text-[10px] text-faintest">
               ⌘K
@@ -228,15 +254,17 @@ export function ActiveClient({
               ref={searchRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Buscar cliente…"
-              aria-label="Buscar cliente"
+              placeholder={`Buscar ${labels.subject}…`}
+              aria-label={`Buscar ${labels.subject}`}
               className="h-[34px] w-full rounded-[9px] border border-border bg-surface pl-8 pr-2.5 text-[12.5px] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
           </div>
 
           {visible.length === 0 ? (
             <EmptyState className="py-5">
-              {query ? "Ningún cliente coincide con lo que buscas." : "Todavía no hay clientes."}
+              {query
+                ? `Ningún ${labels.subject} coincide con lo que buscas.`
+                : `Todavía no hay ${labels.plural}.`}
             </EmptyState>
           ) : (
             <ul
@@ -313,7 +341,7 @@ export function ActiveClient({
               className="flex w-full items-center gap-2 rounded-[9px] px-2.5 py-2 text-left text-[13px] font-semibold text-ink transition-colors hover:bg-canvas"
             >
               <Plus size={15} className="text-muted" />
-              Agregar cliente
+              Agregar {labels.subject}
             </button>
           </div>
         </div>
@@ -377,6 +405,7 @@ export function ClientNameDialog({
   onChange,
   onSubmit,
   onCancel,
+  labels = DEFAULT_ENTITY_LABELS,
 }: {
   open: boolean;
   mode: "create" | "rename";
@@ -386,6 +415,7 @@ export function ClientNameDialog({
   onChange: (value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  labels?: EntityLabels;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -415,19 +445,19 @@ export function ClientNameDialog({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">
-              {creating ? "Agregar cliente" : "Renombrar cliente"}
+              {creating ? `Agregar ${labels.subject}` : `Renombrar ${labels.subject}`}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-faint">
               {creating
                 ? "Aparecerá en el selector del header."
-                : "Solo cambia la etiqueta; sus datos, ajustes y comentarios no se tocan."}
+                : `Solo cambia la etiqueta; ${labels.renameKeeps} no se tocan.`}
             </p>
           </div>
         </div>
 
         <label className="mt-4 flex flex-col gap-1.5">
           <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-            Nombre del cliente
+            Nombre del {labels.subject}
           </span>
           <input
             ref={inputRef}
@@ -446,7 +476,7 @@ export function ClientNameDialog({
 
         {creating && (
           <p className="mt-4 rounded-[9px] bg-surface-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-soft">
-            Los datos se cargan después. El cliente se crea vacío y entras a él con{" "}
+            Los datos se cargan después. El {labels.subject} se crea vacío y entras a él con{" "}
             <strong className="font-semibold">Cargar Excel</strong> habilitado.
           </p>
         )}
@@ -456,7 +486,7 @@ export function ClientNameDialog({
             Cancelar
           </Button>
           <Button type="submit" size="sm" disabled={busy}>
-            {creating ? "Crear cliente" : "Guardar"}
+            {creating ? `Crear ${labels.subject}` : "Guardar"}
           </Button>
         </div>
       </form>

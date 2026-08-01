@@ -89,7 +89,11 @@ export interface CenterRow {
   name: string;
 }
 
-/** One center's year. Primary key is the `[centerId+year]` pair. */
+/**
+ * One center's year, as the pure layer produces it: it belongs to NOBODY yet. `db.ts` stamps the
+ * owner at the door (see `StoredOccupancyDataset`), because which hotel a workbook belongs to is
+ * decided by which hotel is open, never by the file.
+ */
 export interface OccupancyDataset {
   centerId: string;
   /** Falls back to the hotel's name for `principal`. */
@@ -105,12 +109,16 @@ export interface OccupancyDataset {
   updatedAt: number;
 }
 
-/** Singleton row: which hotel the workspace holds and what the Datos tab is showing. */
-export interface OccupancyMeta {
-  key: "workspace";
-  hotelName: string;
-  activeCenterId: string;
-  activeYear: number;
+/**
+ * A stored record: one HOTEL-SUCURSAL-YEAR. Primary key is the `[hotelId+centerId+year]` triple, so
+ * two hotels can each hold a `principal` of 2025 without touching each other.
+ *
+ * `hotelId` is the owner and `hotelName` is what the workbook DECLARED — the hotel's identity, not
+ * its label. They are different things: the user calls «Manor Galápagos» what the file calls
+ * `CULTURA MANOR`, and only the second one ever gets compared against a file.
+ */
+export interface StoredOccupancyDataset extends OccupancyDataset {
+  hotelId: string;
 }
 
 export interface OccupancyParseResult {

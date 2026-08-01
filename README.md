@@ -462,8 +462,9 @@ toca los datos, ajustes ni comentarios de los demás.
   ninguna edición: el workspace guardado se convierte en el primer cliente, con su `companyName`
   recortado o `Cliente 1` si viniera vacío, y queda activo. Una base que nunca cargó nada no crea
   ningún cliente y la app arranca en su estado vacío.
-- **Ocupaciones no cambia.** Tiene su propia base y su propio `hotelName`; adoptará esta misma
-  forma en su propio cambio.
+- **Ocupaciones adoptó esta misma forma** en su propio cambio, sobre su propia base: ver
+  «Ocupaciones guarda varios hoteles». Las dos listas siguen separadas; lo que comparten es
+  `lib/workspaces.ts`, la mitad genérica de un nombre.
 
 ## Carga de Excel (PyG › Datos)
 
@@ -643,16 +644,41 @@ export + persistencia Dexie) y está cubierta por vitest; los componentes solo m
 
 ### Cómo se clasifican los datos
 
-- **La unidad de guardado es la sucursal-año**, con clave compuesta `[centerId+year]` en
-  IndexedDB: el contador exporta **un Excel por sucursal y por año**, así que ese par es lo que
-  se escribe, se fusiona y se borra.
+- **La unidad de guardado es la hotel-sucursal-año**, con clave compuesta
+  `[hotelId+centerId+year]` en IndexedDB: el contador exporta **un Excel por sucursal y por año**,
+  así que esa terna es lo que se escribe, se fusiona y se borra.
 - El archivo **se declara a sí mismo**: bajo el título lleva dos líneas, el **hotel** y el
   **centro de costo** (sucursal). Se leen **por posición**, no por etiqueta. Un archivo sin
   línea de centro cae en la sucursal reservada `principal`, rotulada con el nombre del hotel;
   así un hotel de una sola propiedad no es un caso especial en ningún otro sitio.
-- El **hotel activo** se muestra en el header (`ActiveClient`), con el año y la sucursal debajo.
-- El espacio de trabajo es de **un hotel**. Subir archivos de otro pide confirmación y
-  **reemplaza todo** — mezclar dos empresas en un mismo juego de pestañas no se avisaría solo.
+- El **hotel activo** se elige en el header (`ActiveClient` con la lista de hoteles), con el año y
+  la sucursal debajo.
+- El espacio guarda **varios hoteles**, cada uno con lo suyo. Subir archivos de otro no borra nada
+  por defecto: abre un diálogo de tres salidas (ver más abajo).
+
+### Ocupaciones guarda varios hoteles
+
+- **Un hotel es un nombre que elige el usuario** más lo que el espacio ya contenía: sucursales ×
+  años, con su Consolidado. Se crea explícito (`+ Agregar hotel`) y **nace vacío**; ninguna carga
+  inventa un hotel por su cuenta.
+- **La etiqueta no es la identidad.** El usuario llama «Manor Galápagos» a lo que el archivo declara
+  como `CULTURA MANOR`, así que el nombre **nunca** se compara contra el archivo. Lo que se compara
+  es el **nombre de hotel que declara el archivo**, normalizado, que el hotel **adopta** en su
+  primera carga — y se **deriva** de lo que guarda (`deriveHotelIdentity`), no se almacena: por eso
+  un hotel vacío no tiene identidad y su primera carga no puede chocar.
+- **Un archivo de otro hotel abre tres salidas** (`describeHotelChange`), y cuál es la principal lo
+  decide si otro hotel ya tiene esa identidad: **cargarlo allí** (no se destruye nada, solo cambia
+  el hotel activo), **crear el hotel al que pertenece** con un nombre propuesto y editable, o
+  —degradada a secundaria— **reemplazar solo el hotel abierto**. Nada se escribe antes de elegir, y
+  los archivos siguen en la lista de carga si se cancela.
+- **Todo está acotado por `hotelId`** y siempre a través de `db.ts` (Dexie v4/v5: tabla `hotels`
+  —que además guarda qué sucursal y qué año tenía abiertos—, `centerYears` con la clave nueva y una
+  tabla `active` de una fila para que el hotel abierto sobreviva a una recarga). Con varios hoteles
+  compartiendo una tabla, una consulta sin acotar mezclaría dos empresas en silencio.
+- **La migración es aditiva.** Nada se borra: el espacio actual se vuelve el primer hotel, con su
+  `hotelName` o «Hotel 1», y una base que nunca cargó nada no recibe ningún hotel.
+- **Borrar un hotel cuenta lo que descarta** —sucursales, años y meses con datos— y dice que los
+  demás no se tocan.
 
 ### Carga
 
