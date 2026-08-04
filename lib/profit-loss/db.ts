@@ -15,6 +15,7 @@
  */
 import Dexie, { type Table } from "dexie";
 import { sortClients, type PygClient } from "./clients";
+import { CONSOLIDATED_CLIENT_ID, type ClientContribution } from "./consolidate";
 import { segmentAccounts } from "./segment";
 import { assignCenterSlots } from "./workspace";
 import type { CellEdit, ImportedComment, ParsedDataset, PygDataset, WorkspaceMeta } from "./types";
@@ -248,8 +249,10 @@ type LegacyMetaRow = Omit<WorkspaceMetaRow, "loadedMonthsByYear"> & { loadedMont
 export const db = new PygDb();
 
 /** Stamps the open client onto what the pure layer produced. The one place a dataset acquires
- * an owner — see `ParsedDataset`. */
+ * an owner — see `ParsedDataset`. Being that one place, it is also where a dataset can be stopped
+ * from acquiring an owner that is not a client (`assertRealClient`). */
 function owned(clientId: string, datasets: readonly ParsedDataset[]): PygDataset[] {
+  assertRealClient(clientId);
   return datasets.map((dataset) => ({ ...dataset, clientId }));
 }
 
@@ -294,6 +297,7 @@ export async function createClient(name: string): Promise<PygClient> {
 
 /** Renaming touches the label and NOTHING else: the identity is derived from the data. */
 export async function renameClient(clientId: string, name: string): Promise<void> {
+  assertRealClient(clientId);
   await db.clients.update(clientId, { name });
 }
 
@@ -306,6 +310,7 @@ export async function renameClient(clientId: string, name: string): Promise<void
  * one leaves no active client and the app falls back to its empty state.
  */
 export async function deleteClient(clientId: string): Promise<void> {
+  assertRealClient(clientId);
   await db.transaction("rw", db.clients, db.datasets, db.edits, db.meta, db.active, async () => {
     const ids = (await db.datasets.where("clientId").equals(clientId).toArray()).map((d) => d.id);
     if (ids.length > 0) {
@@ -416,6 +421,51 @@ export async function datasetEdits(datasetId: string): Promise<CellEdit[]> {
   return db.edits.where("datasetId").equals(datasetId).toArray();
 }
 
+/**
+ * La ÚNICA lectura de este archivo que no está acotada por un `clientId` — lo que alimenta el
+ * consolidado entre clientes.
+ *
+ * Que exista no contradice la regla de arriba, la confirma: mezclar dos empresas en silencio es
+ * el riesgo, y aquí mezclarlas es exactamente el encargo. Por eso tiene nombre propio, devuelve
+ * cada cliente por SEPARADO —con lo suyo agrupado, no un montón de filas planas— y es el único
+ * sitio donde alguien puede escribirla. Ninguna otra función puede caer en esto por descuido.
+ */
+export async function consolidatedContributions(): Promise<ClientContribution[]> {
+  const [clients, datasets, metaRows, edits] = await Promise.all([
+    db.clients.toArray(),
+    db.datasets.toArray(),
+    db.meta.toArray(),
+    db.edits.toArray(),
+  ]);
+  const metaByClient = new Map(metaRows.map((row) => [row.key, row]));
+  const datasetsByClient = new Map<string, PygDataset[]>();
+  const clientByDataset = new Map<string, string>();
+  for (const dataset of datasets) {
+    datasetsByClient.set(dataset.clientId, [
+      ...(datasetsByClient.get(dataset.clientId) ?? []),
+      dataset,
+    ]);
+    clientByDataset.set(dataset.id, dataset.clientId);
+  }
+  const editsByClient = new Map<string, CellEdit[]>();
+  for (const edit of edits) {
+    const clientId = clientByDataset.get(edit.datasetId);
+    if (clientId === undefined) {
+      continue;
+    }
+    editsByClient.set(clientId, [...(editsByClient.get(clientId) ?? []), edit]);
+  }
+  // Alfabético, el único orden de la lista de clientes — así los avisos nombran a los ausentes
+  // en el mismo orden en que el selector los muestra.
+  return sortClients(clients).map((client) => ({
+    clientId: client.id,
+    name: client.name,
+    datasets: datasetsByClient.get(client.id) ?? [],
+    edits: editsByClient.get(client.id) ?? [],
+    loadedMonthsByYear: metaByClient.get(client.id)?.loadedMonthsByYear ?? {},
+  }));
+}
+
 /** One cell's stored edit, if any — what «Quitar ajuste» reads to keep its comment. */
 export async function getCellEdit(
   datasetId: string,
@@ -451,6 +501,21 @@ async function editsOfDatasets(datasetIds: readonly string[]): Promise<CellEdit[
 // ---------------------------------------------------------------------------
 // Scoped writes
 // ---------------------------------------------------------------------------
+
+/**
+ * El consolidado entre clientes es una lectura derivada: no tiene fila en `clients`, no tiene
+ * partición propia y nada debe aterrizar sobre él.
+ *
+ * La interfaz ya apaga cada control que podría intentarlo, pero eso es una promesa de la UI y
+ * esta es la puerta. Una carga que aterrizara en el centinela crearía una partición fantasma que
+ * ninguna pantalla lista y ningún borrado alcanza — invisible y permanente. Vale una línea por
+ * escritura.
+ */
+function assertRealClient(clientId: string): void {
+  if (clientId === CONSOLIDATED_CLIENT_ID) {
+    throw new Error("El consolidado entre clientes es una vista derivada: no se puede escribir.");
+  }
+}
 
 /**
  * Replaces ONE client's workspace — the destructive path the clash dialog gates behind an
@@ -612,6 +677,7 @@ export async function deleteYear(
   clientId: string,
   year: number,
 ): Promise<{ deletedEdits: number }> {
+  assertRealClient(clientId);
   return db.transaction("rw", db.datasets, db.edits, db.meta, async () => {
     const doomed = await db.datasets.where("[clientId+year]").equals([clientId, year]).toArray();
     if (doomed.length === 0) {
@@ -645,6 +711,7 @@ export async function deleteYear(
 export async function segmentWorkspace(
   clientId: string,
 ): Promise<{ segmented: number; skipped: string[] }> {
+  assertRealClient(clientId);
   return db.transaction("rw", db.datasets, async () => {
     const skipped: string[] = [];
     const next: PygDataset[] = [];
@@ -671,6 +738,7 @@ export async function getWorkspaceMeta(clientId: string): Promise<WorkspaceMeta 
 }
 
 export async function saveActiveCenter(clientId: string, activeCenterId: string): Promise<void> {
+  assertRealClient(clientId);
   const row = await db.meta.get(clientId);
   if (row) {
     await db.meta.put({ ...row, activeCenterId });

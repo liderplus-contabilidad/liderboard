@@ -14,8 +14,9 @@ export interface YearFilterProps {
   onToggle: (year: number) => void;
   /** "Todos los años": clears the selection rather than marking every year. */
   onSelectAll: () => void;
-  /** Deletes a year and resolves with how many adjustments went with it. */
-  onDelete: (year: number) => Promise<number>;
+  /** Deletes a year and resolves with how many adjustments went with it. Sin él, los años se
+   * marcan pero no se borran — el caso del consolidado entre clientes, cuyos años son de otros. */
+  onDelete?: (year: number) => Promise<number>;
 }
 
 /**
@@ -69,22 +70,24 @@ export function YearFilter({ years, selected, onToggle, onSelectAll, onDelete }:
                     <span className="font-mono tabular-nums">{year}</span>
                   </DropdownOption>
                 </span>
-                <button
-                  type="button"
-                  aria-label={`Borrar ${year}`}
-                  onClick={() => setConfirming(year)}
-                  className="mr-1 shrink-0 rounded p-1 text-faintest transition-colors hover:text-negative group-hover/year:text-faint"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    aria-label={`Borrar ${year}`}
+                    onClick={() => setConfirming(year)}
+                    className="mr-1 shrink-0 rounded p-1 text-faintest transition-colors hover:text-negative group-hover/year:text-faint"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
           <div className="mt-1.5 flex justify-end border-t border-border-soft pt-[9px]">
             <InfoTip label="¿Cómo funcionan los años?" align="right">
               Marcar un solo año lo abre para editar. Marcar varios —o ninguno— los muestra uno
-              junto al otro, en solo lectura: dos ejercicios no se suman. Borrar un año descarta
-              también sus ajustes y comentarios.
+              junto al otro, en solo lectura: dos ejercicios no se suman.
+              {onDelete && " Borrar un año descarta también sus ajustes y comentarios."}
             </InfoTip>
           </div>
         </DropdownPanel>
@@ -102,7 +105,7 @@ export function YearFilter({ years, selected, onToggle, onSelectAll, onDelete }:
         confirmLabel="Borrar el año"
         cancelLabel="Cancelar"
         onConfirm={() => {
-          if (confirming === null) {
+          if (confirming === null || !onDelete) {
             return;
           }
           setBusy(true);

@@ -17,6 +17,11 @@ export const CONSOLIDADO_ID = "consolidado";
 export interface PygFilters {
   codes: string[];
   centerIds: string[];
+  /**
+   * Clientes marcados — SOLO tiene sentido en el consolidado entre clientes, y fuera de él se poda
+   * a vacío. Marcar ninguno no es «ningún cliente»: es todos, la misma regla que centro y año.
+   */
+  clientIds: string[];
   /** Marked years. Marking none is not "no years": it is every year the workspace holds. */
   years: number[];
   /** Marked periods, year-less: a mark narrows the axis of EVERY visible year. */
@@ -24,7 +29,7 @@ export interface PygFilters {
 }
 
 export function emptyFilters(): PygFilters {
-  return { codes: [], centerIds: [], years: [], periods: [] };
+  return { codes: [], centerIds: [], clientIds: [], years: [], periods: [] };
 }
 
 /**
@@ -56,6 +61,14 @@ export function withCenterToggled(
   universe: readonly string[],
 ): PygFilters {
   return { ...filters, centerIds: toggled(filters.centerIds, centerId, universe) };
+}
+
+export function withClientToggled(
+  filters: PygFilters,
+  clientId: string,
+  universe: readonly string[],
+): PygFilters {
+  return { ...filters, clientIds: toggled(filters.clientIds, clientId, universe) };
 }
 
 export function withYearToggled(
@@ -97,6 +110,10 @@ export function withCodesCleared(filters: PygFilters): PygFilters {
 /** The "Todos (Consolidado)" shortcut: clears only the center selection. */
 export function withCentersCleared(filters: PygFilters): PygFilters {
   return { ...filters, centerIds: [] };
+}
+
+export function withClientsCleared(filters: PygFilters): PygFilters {
+  return { ...filters, clientIds: [] };
 }
 
 export function withYearsCleared(filters: PygFilters): PygFilters {
@@ -176,6 +193,12 @@ export interface FilterSanitizeContext {
   views: readonly FilterView[];
   /** Every year the workspace holds. */
   loadedYears: readonly number[];
+  /**
+   * Los clientes que el consolidado puede sumar, por id. `[]` fuera del consolidado — que es lo
+   * que hace que una marca no sobreviva a volver a un cliente concreto, donde no querría decir
+   * nada.
+   */
+  clients: readonly string[];
   frequency: Frequency;
 }
 
@@ -212,6 +235,9 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
   const loadedYears = new Set(context.loadedYears);
   const prunedYears = filters.years.filter((year) => loadedYears.has(year));
 
+  const clients = new Set(context.clients);
+  const prunedClientIds = filters.clientIds.filter((id) => clients.has(id));
+
   // A slot carries no year, so the only thing that can strand it is a coarser granularity with
   // fewer slots to land on.
   const axis = periodSlots(context.frequency);
@@ -222,6 +248,7 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
   if (
     prunedCodes.length === filters.codes.length &&
     prunedCenterIds.length === filters.centerIds.length &&
+    prunedClientIds.length === filters.clientIds.length &&
     prunedYears.length === filters.years.length &&
     prunedPeriods.length === filters.periods.length
   ) {
@@ -230,6 +257,7 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
   return {
     codes: prunedCodes,
     centerIds: prunedCenterIds,
+    clientIds: prunedClientIds,
     years: prunedYears,
     periods: prunedPeriods,
   };

@@ -139,6 +139,48 @@ which keeps the comments of accounts the new file also brings and discards the v
 The selector lives in the header and `ActiveClient` stays **prop-driven**: with no `clients` prop it
 renders the read-only block it always was, which is why Ocupaciones is untouched by all of this.
 
+**El CONSOLIDADO ENTRE CLIENTES es la tercera vez que el módulo escribe la misma figura** (centros de
+costo, sucursales, y ahora clientes): una entrada sintética fija arriba del selector —`ClientOption.
+readOnly`, sin menú `⋯`, separada por una línea— que suma TODOS los clientes con datos. Se ofrece con
+dos o más; con uno, el «consolidado» sería ese cliente con otro nombre. `lib/profit-loss/
+consolidate.ts` es la capa pura (espejo de `lib/occupancy/consolidate.ts`) y es pequeña porque el
+motor ya existía: suma **una sola vez**, con todos los centros de todos los clientes aplanados en una
+llamada a `mergeCenters` —la suma es asociativa, así que sumar dentro de cada cliente y luego entre
+clientes da lo mismo, y no aparece una segunda definición de «sumar» que pueda divergir de la
+primera—. Los planes de cuentas se UNEN, no se fusionan: `4.1.01.01.01` de Dingoo y `4.1.1.1.1` de
+MicroPlus quedan como ramas hermanas y la raíz `4` cuadra igual. `mergeCenters` gana un `unit`
+(`"centro"` por defecto) porque su aviso de conflicto estructural ahora tiene que poder decir
+«cliente». **Y planes de distinta PROFUNDIDAD ya no pierden plata**: un código puede ser HOJA en un
+cliente —donde alguien escribió el monto directo— y PADRE en otro que lo desglosa, y como todo
+consumidor recalcula un padre desde sus hijas (`computeRollups`), ese monto se descartaba en silencio
+y el consolidado salía por debajo (500 en `4.1` más 300 repartidos en `4.1.01` daban 300, no 800).
+Ahora se cuelga de una subcuenta sintética `4.1.0` «Sin desglosar» —la única forma de que a la vez
+SUME y se VEA de dónde viene—, esquivando el sufijo si el plan ya ocupa ese código, y el aviso dice
+dónde quedó en vez de decir que se trató como padre. El arreglo vive en `mergeCenters`, así que cubre
+también al Consolidado de centros, donde el mismo agujero existía y casi nunca se disparaba porque el
+plan es compartido. La cobertura es la UNIÓN y los huecos se dicen **por tramos** —«Abr–Jun 2026: 3 de 5
+clientes con datos (faltan Manor y Ambato)»—, nunca uno por mes ni por cuenta: sin ese aviso una suma
+parcial es indistinguible de una caída real del negocio. Un cliente cuya `baseFrequency` no sea la de
+la mayoría queda fuera, nombrado. **Es DERIVADO y nunca se guarda** —una copia quedaría obsoleta al
+siguiente ajuste de cualquier cliente—, así que llega como un estado único de solo lectura y Datos,
+Gráficos, Análisis y la ficha no cambian ni una línea. `CONSOLIDATED_CLIENT_ID` vive en la capa pura
+porque es a la vez lo que `db.ts` guarda en `active` (lo que le da sobrevivir al reload) y lo que el
+selector marca; `consolidatedContributions()` es la ÚNICA lectura de `db.ts` sin `clientId` —que
+exista no contradice la partición, la confirma: mezclar dos empresas en silencio es el riesgo, y aquí
+mezclarlas es el encargo, por eso tiene nombre propio y devuelve cada cliente por separado—, y
+`assertRealClient` rechaza toda escritura contra el centinela, porque una carga que aterrizara ahí
+crearía una partición fantasma que ninguna pantalla lista y ningún borrado alcanza. La descarga
+existe pero **sin la hoja de metadatos oculta** (`buildConsolidatedWorkbook`), para que el archivo no
+pueda re-entrar a un cliente real y reemplazarlo por cuentas que no son suyas. **Qué clientes entran
+se elige en la barra**, no en un control propio: `client-filter.tsx` es el primer desplegable y no se
+rinde fuera del consolidado, igual que `center-filter.tsx` no se rinde en modo estado único.
+`PygFilters` gana `clientIds` con las mismas reglas que el resto —ninguno marcado es TODOS, orden del
+universo, podado en lectura contra `consolidatableIds`—, y `selectContributions` aplica la selección
+ANTES de sumar, así que los avisos de cobertura se recalculan sobre los que quedaron dentro. Marcar
+UNO es legítimo y da ese cliente: la regla de «hacen falta dos» decide si el consolidado se OFRECE
+(`canConsolidate`), no qué puede mirar quien ya entró — vaciarlo al desmarcar el penúltimo sería un
+callejón sin salida.
+
 PyG › Datos loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
 `PygDataProvider` — mounted in the dashboard layout — shares `clients`/`dataset`/`edits`/

@@ -29,6 +29,12 @@ export interface ClientOption {
   name: string;
   /** «Por centros de costo · 2024–2026», or `undefined` for a client with no data yet. */
   caption?: string;
+  /**
+   * Una entrada que se ABRE pero no se administra: sin menú `⋯`, y separada de la lista por una
+   * línea. Es lo que necesita el consolidado entre clientes, que no es una fila guardada sino una
+   * lectura derivada de todas ellas — renombrarlo o eliminarlo no querría decir nada.
+   */
+  readOnly?: boolean;
 }
 
 /** Ancho del menú `⋯` de una fila. Se resta del borde derecho del botón para alinearlos. */
@@ -272,8 +278,17 @@ export function ActiveClient({
               // A scroll would leave the `fixed` menu behind, pointing at a row that has moved.
               onScroll={() => setMenuFor(null)}
             >
-              {visible.map((entry) => (
-                <li key={entry.id}>
+              {visible.map((entry, index) => (
+                <li
+                  key={entry.id}
+                  // Una línea donde termina lo que no se administra y empieza la lista.
+                  className={cn(
+                    entry.readOnly &&
+                      !visible[index + 1]?.readOnly &&
+                      index < visible.length - 1 &&
+                      "mb-1.5 border-b border-border-soft pb-1.5",
+                  )}
+                >
                   <div
                     className={cn(
                       "group flex items-center gap-2 rounded-[9px] px-2 py-1.5 transition-colors hover:bg-canvas",
@@ -303,28 +318,30 @@ export function ActiveClient({
                         {entry.caption ?? "Sin datos cargados"}
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      aria-label={`Opciones de ${entry.name}`}
-                      aria-haspopup="menu"
-                      aria-expanded={menuFor?.id === entry.id}
-                      onClick={(event) => {
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        setMenuFor((current) =>
-                          current?.id === entry.id
-                            ? null
-                            : { id: entry.id, top: rect.bottom + 6, right: rect.right },
-                        );
-                      }}
-                      className={cn(
-                        "shrink-0 rounded-[7px] p-1 text-faint transition-colors hover:bg-surface hover:text-ink",
-                        menuFor?.id === entry.id
-                          ? "opacity-100"
-                          : "opacity-0 group-hover:opacity-100",
-                      )}
-                    >
-                      <MoreHorizontal size={15} />
-                    </button>
+                    {!entry.readOnly && (
+                      <button
+                        type="button"
+                        aria-label={`Opciones de ${entry.name}`}
+                        aria-haspopup="menu"
+                        aria-expanded={menuFor?.id === entry.id}
+                        onClick={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setMenuFor((current) =>
+                            current?.id === entry.id
+                              ? null
+                              : { id: entry.id, top: rect.bottom + 6, right: rect.right },
+                          );
+                        }}
+                        className={cn(
+                          "shrink-0 rounded-[7px] p-1 text-faint transition-colors hover:bg-surface hover:text-ink",
+                          menuFor?.id === entry.id
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100",
+                        )}
+                      >
+                        <MoreHorizontal size={15} />
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}

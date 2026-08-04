@@ -594,6 +594,43 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
   return wb;
 }
 
+/**
+ * El consolidado entre clientes, una hoja por año — deliberadamente **sin** la hoja de metadatos
+ * oculta.
+ *
+ * Esa hoja es lo que hace que un libro de la app vuelva a entrar reconstruyendo su workspace. Aquí
+ * es exactamente lo que no debe pasar: este archivo es la suma de varias empresas, y re-subirlo a
+ * un cliente lo reemplazaría por cuentas que no son suyas, con la razón social de otra. Sin
+ * metadatos, `app-workbook.ts` no lo reclama y el archivo se queda donde sirve — en el correo del
+ * contador, no de vuelta en la base.
+ *
+ * Los ajustes ya vienen aplicados en las cuentas (`consolidate.ts` los pliega antes de sumar), así
+ * que no hay `edits` que pasar.
+ */
+export function buildConsolidatedWorkbook(
+  datasets: readonly PygDataset[],
+  loadedMonthsByYear: Record<number, number[]>,
+): ExcelJS.Workbook {
+  const wb = newWorkbook();
+  const used = new Set<string>();
+  const ordered = [...datasets].sort((a, b) => a.year - b.year);
+  for (const dataset of ordered) {
+    const name = uniqueSheetName(sheetTitle("Consolidado", dataset.year, ordered.length > 1), used);
+    writeStatementSheet(wb, name, dataset, [], loadedMonthsByYear[dataset.year] ?? []);
+  }
+  return wb;
+}
+
+/** `PyG-<años>-consolidado-clientes.xlsx` — fuera del patrón mensual, como «completo». */
+export function consolidatedFilename(years: readonly number[]): string {
+  const sorted = [...years].sort((a, b) => a - b);
+  if (sorted.length === 0) {
+    return "PyG-consolidado-clientes.xlsx";
+  }
+  const span = sorted.length === 1 ? `${sorted[0]}` : `${sorted[0]}-${sorted[sorted.length - 1]}`;
+  return `PyG-${span}-consolidado-clientes.xlsx`;
+}
+
 /** `PyG-<año>-completo.xlsx` — outside the monthly pattern so it never reads as a month. */
 export function multiCenterFilename(years: readonly number[]): string {
   const sorted = [...years].sort((a, b) => a - b);

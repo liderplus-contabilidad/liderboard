@@ -13,6 +13,7 @@ import type { AccountRow, Frequency } from "@/lib/profit-loss/types";
 import { AccountFilter } from "./account-filter";
 import { ActiveFilterChips } from "./active-filter-chips";
 import { CenterFilter } from "./center-filter";
+import { ClientFilter } from "./client-filter";
 import { PeriodFilter } from "./period-filter";
 import { YearFilter } from "./year-filter";
 import { usePygData } from "./pyg-data-provider";
@@ -41,11 +42,15 @@ export function PygToolbar() {
     clearCodes,
     toggleCenter,
     clearCenters,
+    toggleClient,
+    clearClients,
+    clientOptions,
     togglePeriod,
     clearPeriods,
     toggleYear,
     clearYears,
     removeYear,
+    isConsolidated,
     loadedYears,
     dataset,
     views,
@@ -70,6 +75,12 @@ export function PygToolbar() {
       <Toolbar inert={idle} className={cn(idle && "opacity-50")}>
         <ToolbarLabel icon={<SlidersHorizontal size={15} />}>Filtros</ToolbarLabel>
 
+        <ClientFilter
+          clients={clientOptions}
+          selected={filters.clientIds}
+          onToggle={toggleClient}
+          onSelectAll={clearClients}
+        />
         <AccountFilter
           accounts={accountOptions}
           selected={new Set(filters.codes)}
@@ -93,7 +104,8 @@ export function PygToolbar() {
           selected={filters.years}
           onToggle={toggleYear}
           onSelectAll={clearYears}
-          onDelete={removeYear}
+          // Los años del consolidado son de los clientes que lo componen: se borran allí.
+          {...(isConsolidated ? {} : { onDelete: removeYear })}
         />
         <PeriodFilter
           periods={periods}

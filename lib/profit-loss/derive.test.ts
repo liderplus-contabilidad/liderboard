@@ -627,6 +627,76 @@ describe("mergeCenters", () => {
     const { warnings } = mergeCenters([a, b]);
     expect(warnings.some((w) => w.includes("4"))).toBe(true);
   });
+
+  describe("planes desiguales", () => {
+    /** El total de una raíz tras los rollups, que es lo que el módulo entero lee. */
+    const totalOf = (accounts: AccountRow[], code: string): number | undefined =>
+      computeRollups(buildAccountTree(accounts).roots).find((n) => n.code === code)?.values[0];
+
+    it("no pierde lo que un centro anotó en un código que otro desglosa", () => {
+      const shallow = [
+        { code: "4", name: "Ingresos", values: [500] },
+        { code: "4.1", name: "Ventas", values: [500] }, // hoja aquí
+      ];
+      const deep = [
+        { code: "4", name: "Ingresos", values: [300] },
+        { code: "4.1", name: "Ventas", values: [300] }, // padre aquí
+        { code: "4.1.01", name: "Ventas netas", values: [300] },
+      ];
+
+      const { accounts, warnings } = mergeCenters([shallow, deep]);
+
+      // 500 + 300, no 300: el rollup recalcula 4.1 desde sus hijas, así que los 500 tienen que
+      // vivir en una hija propia o desaparecen.
+      expect(totalOf(accounts, "4")).toBe(800);
+      const byCode = new Map(accounts.map((a) => [a.code, a]));
+      expect(byCode.get("4.1.0")).toMatchObject({ name: "Sin desglosar", values: [500] });
+      expect(warnings).toEqual([
+        "La cuenta 4.1 es hoja en un centro y padre en otro; lo que se anotó directamente en ella se suma bajo «Sin desglosar».",
+      ]);
+    });
+
+    it("suma a TODOS los centros que la dejaron sin desglosar", () => {
+      const { accounts } = mergeCenters([
+        [{ code: "4.1", name: "Ventas", values: [500] }],
+        [{ code: "4.1", name: "Ventas", values: [200] }],
+        [
+          { code: "4.1", name: "Ventas", values: [300] },
+          { code: "4.1.01", name: "Ventas netas", values: [300] },
+        ],
+      ]);
+
+      expect(accounts.find((a) => a.code === "4.1.0")?.values).toEqual([700]);
+      expect(totalOf(accounts, "4.1")).toBe(1000);
+    });
+
+    it("no inventa una fila para un cero declarado", () => {
+      const { accounts, warnings } = mergeCenters([
+        [{ code: "4.1", name: "Ventas", values: [0] }],
+        [
+          { code: "4.1", name: "Ventas", values: [300] },
+          { code: "4.1.01", name: "Ventas netas", values: [300] },
+        ],
+      ]);
+
+      expect(accounts.some((a) => a.code === "4.1.0")).toBe(false);
+      expect(warnings).toEqual([]);
+    });
+
+    it("esquiva un código real que ya ocupe el `.0`", () => {
+      const { accounts } = mergeCenters([
+        [{ code: "5.1", name: "Gastos", values: [90] }],
+        [
+          { code: "5.1", name: "Gastos", values: [10] },
+          { code: "5.1.0", name: "Cuenta que sí existe", values: [10] },
+        ],
+      ]);
+
+      expect(accounts.find((a) => a.code === "5.1.00")?.values).toEqual([90]);
+      expect(accounts.find((a) => a.code === "5.1.0")?.name).toBe("Cuenta que sí existe");
+      expect(totalOf(accounts, "5.1")).toBe(100);
+    });
+  });
 });
 
 describe("applyEditsToLeafAccounts", () => {

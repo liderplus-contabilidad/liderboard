@@ -26,6 +26,12 @@ export interface ReportSummaryInput {
   companyName: string;
   /** `null` in a workspace with nothing loaded; the cover then says so instead of guessing. */
   sourceSystemId: string | null;
+  /**
+   * Cómo NOMBRAR el origen cuando no es un sistema contable — el consolidado entre clientes, que
+   * puede venir de varios a la vez y por tanto de ninguno. Sin él, la portada de una suma de
+   * Dingoo y MicroPlus diría «Sin sistema declarado», que es cierto y no significa nada.
+   */
+  systemLabelOverride?: string;
   mode: "single" | "multi";
   filters: PygFilters;
   /** Every account of the resolved view, so a marked code can be named rather than printed. */
@@ -52,7 +58,9 @@ export function describePygReport(input: ReportSummaryInput): ReportCover {
   return {
     clientName: input.clientName,
     companyName: input.companyName,
-    systemLabel: input.sourceSystemId ? systemLabel(input.sourceSystemId) : "Sin sistema declarado",
+    systemLabel:
+      input.systemLabelOverride ??
+      (input.sourceSystemId ? systemLabel(input.sourceSystemId) : "Sin sistema declarado"),
     modeLabel: MODE_LABELS[input.mode],
     scope: describeScope(input),
     filters: describeFilters(input),
