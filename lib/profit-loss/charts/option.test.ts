@@ -4,6 +4,7 @@ import {
   CHART_LINES,
   CHART_MARK,
   CHART_PALETTE,
+  CHART_SECTION,
   CHART_SIGN,
 } from "@/lib/charts/palette";
 import type { ChartBarDatum, ChartOption, ChartParam, ChartPieDatum } from "@/lib/charts/types";
@@ -553,10 +554,12 @@ describe("la cascada se dibuja como barras", () => {
     expect(negativo?.label?.formatter?.(param)).toBe("");
   });
 
-  it("pinta los totales con la ranura 1 y los gastos con el token de signo", () => {
+  it("abre con el color de SU bloque y pinta los pasos con el token de signo", () => {
     const fills = seriesById(waterfallOption(STEPS), "cascada-positivo")?.data as ChartBarDatum[];
 
-    expect(fills[0].itemStyle?.color).toBe(CHART_PALETTE[0]);
+    // La barra de apertura dice «Ingresos»: el mismo tono que la tabla de Datos, no la ranura 1.
+    // El resto sigue codificando DIRECCIÓN, que es otra cosa y no se toca.
+    expect(fills[0].itemStyle?.color).toBe(CHART_SECTION.income);
     expect(fills[1].itemStyle?.color).toBe(CHART_SIGN.negative);
     expect(fills[3].itemStyle?.color).toBe(CHART_SIGN.positive);
   });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CHART_MAX_SERIES, CHART_NEUTRAL, CHART_PALETTE } from "@/lib/charts/palette";
+import {
+  CHART_MAX_SERIES,
+  CHART_NEUTRAL,
+  CHART_PALETTE,
+  CHART_SECTION,
+} from "@/lib/charts/palette";
 import { buildSeries } from "../analytics/series";
 import { makeSource } from "../analytics/fixtures";
 import { emptyFilters, type PygFilters } from "../filters";
@@ -231,12 +236,30 @@ describe("resolución de color", () => {
   });
 
   it("colors a preset's own codes rather than the whole chart of accounts", () => {
-    // "5" sits far down the file; against the full account list it would land past the eighth
+    // "5.1" sits far down the file; against the full account list it would land past the eighth
     // slot and come out neutral, which is why the universe is what the query names.
-    const color = codeColorResolver(["4", "5"]);
+    const color = codeColorResolver(["4.1", "5.1"]);
 
-    expect(color({ code: "4", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[0]);
-    expect(color({ code: "5", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[1]);
+    expect(color({ code: "4.1", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[0]);
+    expect(color({ code: "5.1", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[1]);
+  });
+
+  it("comparar las RAÍCES pinta cada bloque con su color de Datos", () => {
+    // Ahí el color deja de ser identidad arbitraria y dice de qué bloque habla la serie — y tiene
+    // que querer decir lo mismo que en la tabla.
+    const color = codeColorResolver(["4", "5", "6"]);
+
+    expect(color({ code: "4", centerId: "cultura-manor", year: 2026 })).toBe(CHART_SECTION.income);
+    expect(color({ code: "5", centerId: "cultura-manor", year: 2026 })).toBe(CHART_SECTION.cost);
+    expect(color({ code: "6", centerId: "cultura-manor", year: 2026 })).toBe(CHART_SECTION.other);
+  });
+
+  it("pero cuentas de un mismo bloque vuelven a tomar ranura, o serían todas del mismo verde", () => {
+    const color = codeColorResolver(["4.1.01", "4.1.02", "4.1.03"]);
+
+    expect(color({ code: "4.1.01", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[0]);
+    expect(color({ code: "4.1.02", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[1]);
+    expect(color({ code: "4.1.03", centerId: "cultura-manor", year: 2026 })).toBe(CHART_PALETTE[2]);
   });
 
   it("gives a ninth entity the neutral rather than a generated color", () => {
