@@ -18,20 +18,20 @@ const CENTERS = ["consolidado", "cultura-manor", "centro-de-costo-principal", "s
 describe("el orden de las ranuras", () => {
   it("keeps the eight slots in the sequence that makes them separable", () => {
     expect([...CHART_PALETTE]).toEqual([
-      "#2b6cb0",
-      "#eb6834",
-      "#1baf7a",
-      "#eda100",
-      "#e87ba4",
-      "#008300",
-      "#4a3aa7",
-      "#e34948",
+      "#1466c8",
+      "#f4501a",
+      "#00c98a",
+      "#ef9c00",
+      "#f4629b",
+      "#0b7a12",
+      "#5b2fd6",
+      "#ec2d2d",
     ]);
     expect(CHART_MAX_SERIES).toBe(8);
   });
 
   it("gives the third compared entity slot 3, whatever else is on screen", () => {
-    expect(colorForEntity("centro-de-costo-principal", CENTERS)).toBe("#1baf7a");
+    expect(colorForEntity("centro-de-costo-principal", CENTERS)).toBe("#00c98a");
   });
 
   it("never reuses the sign tokens as a series color", () => {

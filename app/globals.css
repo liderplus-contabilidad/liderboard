@@ -30,6 +30,22 @@
   --color-marked: #fef3c7;
   --color-marked-strong: #f6c945;
 
+  /* Row colors indicate the financial statement's root category (income, costs, other) up to level 2. 
+     Colors are sampled from the accountant's workbook for familiarity. Beyond level 2, rows are white 
+     to focus on numbers. Hover states are 10% darker. */
+  --color-section-income: #d7e4bd;
+  --color-section-income-sub: #ebf2de;
+  --color-section-cost: #b7dee8;
+  --color-section-cost-sub: #dbeef4;
+  --color-section-other: #fcd5b5;
+  --color-section-other-sub: #feeada;
+  --color-section-income-hover: #c2cdaa;
+  --color-section-income-sub-hover: #d8dfcc;
+  --color-section-cost-hover: #a5c8d1;
+  --color-section-cost-sub-hover: #c9dbe0;
+  --color-section-other-hover: #e3c0a3;
+  --color-section-other-sub-hover: #ead7c9;
+
   --color-chip: #eef2f6;
   --color-chip-border: #dce3eb;
 

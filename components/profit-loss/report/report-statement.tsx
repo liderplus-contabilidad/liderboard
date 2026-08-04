@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import type { AccumulatedPeriod } from "@/lib/profit-loss/report/accumulate";
 import { sharePct, variationPct } from "@/lib/profit-loss/report/accumulate";
 import type { DatosGrid, DatosRow } from "@/lib/profit-loss/datos-types";
@@ -109,7 +110,9 @@ export function ReportStatement({
             return (
               <tr
                 key={row.code || row.resultKind}
-                className={row.isResult ? "bg-surface-header" : undefined}
+                className={
+                  row.isResult ? "bg-surface-header" : sectionTone(row.code, row.level)?.print
+                }
               >
                 <th
                   scope="row"

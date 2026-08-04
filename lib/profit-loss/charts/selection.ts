@@ -8,7 +8,8 @@
  * drift. Every card goes through `toSeriesQuery`; there is no dimension to declare, so unlike
  * the "Comparar por" model this replaces, there is nothing else to keep in sync with it.
  */
-import { CHART_MAX_SERIES, colorForEntity } from "@/lib/charts/palette";
+import { CHART_MAX_SERIES, CHART_SECTION, colorForEntity } from "@/lib/charts/palette";
+import { sectionOf } from "../datos-sections";
 import type { PygFilters } from "../filters";
 import type {
   AnalyticsSource,
@@ -160,7 +161,20 @@ export function centerColorResolver(centerIds: readonly string[]): (key: SeriesK
  */
 export function codeColorResolver(codes: readonly string[]): (key: SeriesKey) => string {
   const order = [...codes];
+
+  if (order.length > 0 && order.every(isStatementRoot)) {
+    return (key) => sectionFill(key.code) ?? colorForEntity(key.code, order);
+  }
   return (key) => colorForEntity(key.code, order);
+}
+
+function isStatementRoot(code: string): boolean {
+  return !code.includes(".") && sectionOf(code) !== null;
+}
+
+function sectionFill(code: string): string | null {
+  const section = sectionOf(code);
+  return section ? CHART_SECTION[section] : null;
 }
 
 /**

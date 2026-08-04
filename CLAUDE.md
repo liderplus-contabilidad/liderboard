@@ -532,6 +532,21 @@ UI are:
   (app bg) vs `surface` (cards/tables) vs `surface-header`/`surface-muted`/`surface-sunken`,
   `border`/`border-soft`/`border-faint` (increasingly faint separators), the ink ramp
   `ink`→`ink-soft`→`muted`→`faint`→`faintest`, and `warning` for cuadre notices.
+- **El color de una fila de Datos dice de qué BLOQUE del estado es, no cuán honda.** Los tokens
+  `--color-section-{income,cost,other}` (+ `-sub` para el nivel 2, + `-hover` de cada uno) pintan la
+  raíz 4, la 5 y la 6 con **los rellenos exactos del libro del contador**, muestreados de sus
+  capturas: verde oliva `#d7e4bd` la 4, celeste `#b7dee8` la 5, durazno `#fcd5b5` la 6. Solo llega al **nivel 2**; del 3 hacia dentro la tabla
+  vuelve a blanco, porque ahí lo que se lee es la cifra. `lib/profit-loss/datos-sections.ts` (puro +
+  testeado) es la única regla de qué tono toca, y clasifica con `rootSign`/`isNonOperationalCode`
+  —la definición que ya existe de qué raíz suma y cuál resta— en vez de repetirla. El verde NO
+  choca con `positive`: en esta tabla un positivo va en tinta normal y solo el negativo se pinta.
+  Un fondo ROJO sí está descartado, porque borraría esa lectura. El tono va en el `<tr>` (las `td`
+  son transparentes), y la columna fija de la ficha lo repite con `group-hover:` porque es opaca y
+  con `hover:` propio se encendería sola. **El INFORME lo imprime igual** —el estado y el análisis
+  vertical, no el anexo de centros, cuyas filas son centros y no cuentas—, con un tercer campo
+  `print` que es el fondo a secas: una tabla que solo se lee no se enciende al pasar por encima, y
+  la previa del informe sigue siendo pantalla. Llega al papel porque `@media print` ya fuerza
+  `print-color-adjust: exact`, la misma regla que sostiene las bandas de encabezado.
 - **`positive`/`negative` are the SIGN of a value, never a series color.** They never travel
   alone: always with a `▲`/`▼` glyph and the signed value, because color alone is not a reading
   for everyone. `zero` is only the `–` of an empty cell.
@@ -545,7 +560,22 @@ UI are:
 - **Charts consume `lib/charts/palette.ts` only** — `colorForEntity` is the one way a series gets
   a color, the eight slots never re-order or cycle, and no option builder writes a hex. The
   palette hexes deliberately mirror `@theme` (a canvas can't resolve a CSS var); that mirror is
-  the single allowed duplication.
+  the single allowed duplication. Los ocho slots se **saturaron** a pedido de la firma, que los ve
+  junto a su propio Excel: subir el croma NO costó separabilidad, la mejoró (peor par adyacente CVD
+  ΔE 9.1 → 10.8; visión normal 19.6 → 21.7), porque lo que un daltónico distingue es sobre todo la
+  luminosidad. Se midió con el validador de la skill `dataviz`, no a ojo, y los números quedan
+  escritos en el archivo para que nadie los re-derive.
+- **`CHART_SECTION` es la excepción a «el color de una serie es identidad».** Cuando lo comparado
+  son las RAÍCES del estado —«Ingresos contra Costos y Gastos», la apertura de la cascada— el color
+  ya no distingue entidades sino que dice de qué BLOQUE habla la serie, y toma el tono que la tabla
+  de Datos usa para ese mismo bloque: un verde quiere decir «ingresos» en las dos pantallas.
+  `codeColorResolver` lo aplica **solo si todos los códigos comparados son raíces**; «Composición de
+  los ingresos» compara `4.1.01` contra `4.1.02` y vuelve a las ranuras, porque pintarlas del mismo
+  verde las volvería indistinguibles. Son los tonos de `--color-section-*` un paso más hondos: allí
+  son fondos bajo texto oscuro, aquí rellenos que deben caer en la banda L 0.43–0.77. Usar los del
+  Excel tal cual NO es opción y está medido: dan 1,3:1 contra el papel —barras invisibles— y ΔE 7,4
+  entre el verde y el celeste, por debajo del piso de visión normal. Lo que se conserva es el TONO;
+  la luminosidad es otro trabajo. Medido: CVD ΔE 18.1, visión normal ΔE 19.5.
 
 **Reusable side panel.** `components/ui/side-panel.tsx` is a right-anchored, non-modal drawer
 (no scrim, Escape/outside-click to close, focus in on open and back to the opener on close). It's
