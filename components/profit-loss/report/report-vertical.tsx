@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { formatPercent, formatPoints } from "@/lib/format";
+import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import type { AccumulatedPeriod } from "@/lib/profit-loss/report/accumulate";
 import { sharePct } from "@/lib/profit-loss/report/accumulate";
 import type { DatosGrid, DatosRow } from "@/lib/profit-loss/datos-types";
@@ -123,7 +124,7 @@ export function ReportVertical({
             );
             const isBase = row.code === baseRow?.code;
             return (
-              <tr key={row.code}>
+              <tr key={row.code} className={sectionTone(row.code, row.level)?.print}>
                 <th
                   scope="row"
                   // El nombre va también aquí porque la celda lo compone de dos trozos.

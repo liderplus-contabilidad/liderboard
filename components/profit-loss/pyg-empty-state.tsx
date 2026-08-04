@@ -19,7 +19,28 @@ import { PygExcelActions } from "./pyg-excel-actions";
  *   de descarga es un `div`).
  */
 export function PygEmptyState() {
-  const { activeClientId } = usePygData();
+  const { activeClientId, isConsolidated } = usePygData();
+
+  // El consolidado sin nada que sumar es un TERCER hueco: no falta un archivo ni un cliente, sino
+  // un segundo cliente con datos. Ofrecer «Cargar Excel» aquí apuntaría al sitio equivocado, que
+  // es el cliente concreto al que ese archivo pertenece.
+  if (isConsolidated) {
+    return (
+      <div className="flex flex-col items-center gap-4 px-7 py-20">
+        <EmptyState icon={<Building2 size={22} />} className="py-0">
+          <span className="flex flex-col items-center gap-1.5 text-center">
+            <span className="text-[15px] font-bold tracking-[-0.2px] text-ink">
+              Todavía no hay nada que sumar
+            </span>
+            <span className="max-w-[420px]">
+              El consolidado suma el estado de resultados de todos los clientes. Necesita al menos
+              dos con datos cargados: abre uno en el selector y carga su Excel.
+            </span>
+          </span>
+        </EmptyState>
+      </div>
+    );
+  }
 
   if (activeClientId === null) {
     return (

@@ -15,20 +15,46 @@
  * utility — and this is the single mirror point.
  */
 
-/** The eight slots, in the order that makes them separable. Never re-sort, never cycle. */
+/**
+ * The eight slots, in the order that makes them separable. Never re-sort, never cycle.
+ *
+ * Saturados a pedido de la firma, que lee estos gráficos junto a su propio libro de Excel y los
+ * veía apagados al lado. **Subir el croma no costó separabilidad: la mejoró.** Lo que un daltónico
+ * distingue es sobre todo la LUMINOSIDAD y el eje azul-amarillo, así que el paso fue subir croma
+ * manteniendo cada tono dentro de la banda y volver a medir, no elegir a ojo.
+ *
+ * Lo que dice el validador de ESTE orden, para que nadie tenga que volver a derivarlo:
+ * banda de luminosidad PASS (los ocho dentro de L 0.43–0.77), piso de croma PASS,
+ * separación CVD PASS —peor par adyacente ámbar↔verde ΔE 10.8 protan (antes 9.1)— y piso de
+ * visión normal PASS —peor par rosa↔ámbar ΔE 21.7 (antes 19.6)—. El contraste contra la
+ * superficie sigue por debajo de 3:1 en verde, ámbar y rosa, igual que antes: por eso toda serie
+ * lleva leyenda y toda tarjeta tiene su gemela en tabla, que es el relieve que eso exige.
+ */
 export const CHART_PALETTE = [
-  "#2b6cb0",
-  "#eb6834",
-  "#1baf7a",
-  "#eda100",
-  "#e87ba4",
-  "#008300",
-  "#4a3aa7",
-  "#e34948",
+  "#1466c8",
+  "#f4501a",
+  "#00c98a",
+  "#ef9c00",
+  "#f4629b",
+  "#0b7a12",
+  "#5b2fd6",
+  "#ec2d2d",
 ] as const;
 
 /** Lower than the engine's `MAX_SERIES` on purpose: a ninth color would land on top of one. */
 export const CHART_MAX_SERIES = CHART_PALETTE.length;
+
+/**
+ * Fill colors for the three income statement sections.
+ *
+ * Matches the tones used in the data table but with deeper shades for better contrast.
+ * Validated for accessibility: luminance, chroma, and color vision deficiency (CVD) separation pass.
+ */
+export const CHART_SECTION = {
+  income: "#8fb03c",
+  cost: "#3ba3c2",
+  other: "#ee8b39",
+} as const;
 
 /**
  * Exists so `colorForEntity` is total, NOT so a ninth series can be drawn: queries cap at

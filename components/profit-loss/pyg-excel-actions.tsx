@@ -3,6 +3,7 @@
 import { FilePlus2, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { pluralize } from "@/lib/format";
 import { datasetEdits } from "@/lib/profit-loss/db";
 import { CostCenterUploadModal } from "./cost-center-upload-modal";
 import { usePygData } from "./pyg-data-provider";
@@ -26,6 +27,8 @@ import { usePygData } from "./pyg-data-provider";
 export function PygExcelActions() {
   const {
     activeClientId,
+    isConsolidated,
+    contributors,
     dataset,
     datasets,
     views,
@@ -72,6 +75,29 @@ export function PygExcelActions() {
     "Hay varios años a la vista; marca uno solo para bajar un mes en crudo.";
 
   const downloads = useMemo<ExcelDownloadOption[]>(() => {
+    if (isConsolidated) {
+      return [
+        {
+          id: "consolidado",
+          title: "Excel del consolidado",
+          description: `La suma de ${pluralize(contributors.length, "cliente")}, una hoja por año`,
+          icon: FileSpreadsheet,
+          iconClassName: "text-brand",
+          disabled: datasets.length === 0,
+          disabledReason: "Todavía no hay nada que sumar.",
+          run: async () => {
+            const [exportMod, { downloadBlob }] = await Promise.all([
+              import("@/lib/profit-loss/export"),
+              import("@/lib/download"),
+            ]);
+            const workbook = exportMod.buildConsolidatedWorkbook(datasets, loadedMonthsByYear);
+            const blob = await exportMod.workbookToBlob(workbook);
+            downloadBlob(blob, exportMod.consolidatedFilename(loadedYears));
+          },
+        },
+      ];
+    }
+
     if (mode === "multi") {
       const noMonthsReason = "Carga un mes primero.";
       const options: ExcelDownloadOption[] = [
@@ -213,6 +239,8 @@ export function PygExcelActions() {
     ];
     return canWriteRawMonth ? options : options.filter((option) => option.id !== "mes-crudo");
   }, [
+    isConsolidated,
+    contributors.length,
     dataset,
     datasets,
     mode,
@@ -231,10 +259,13 @@ export function PygExcelActions() {
       <ExcelActions
         upload={{
           onClick: () => setUploadOpen(true),
-          disabled: activeClientId === null,
+          disabled: activeClientId === null || isConsolidated,
           // Junto al botón, no en un tooltip: sin cliente, cargar no es lo siguiente que hay que
-          // hacer, y el vacío de al lado ya ofrece lo que sí.
-          disabledReason: "Crea un cliente antes de cargar datos.",
+          // hacer, y el vacío de al lado ya ofrece lo que sí. Sobre el consolidado el motivo es
+          // otro —es una suma derivada—, así que lo dice con sus propias palabras.
+          disabledReason: isConsolidated
+            ? "El consolidado es una suma de todos los clientes: abre uno para cargar datos."
+            : "Crea un cliente antes de cargar datos.",
         }}
         downloads={downloads}
         info={{

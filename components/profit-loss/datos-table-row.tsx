@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo } from "react";
 import { cn } from "@/lib/cn";
 import type { EditorAnchor } from "./cell-editor";
+import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import type { DatosColumn, DatosRow } from "@/lib/profit-loss/datos-types";
 import { formatAmount } from "./datos-utils";
 
@@ -63,10 +64,11 @@ function DatosTableRowImpl({
   // children) stays comment-only instead of falsely looking editable.
   const openable = editable && !row.isResult;
   const valueEditable = openable && Boolean(row.movement);
+  const tone = sectionTone(row.code, row.level, row.isResult);
 
   return (
     <tr
-      className="group hover:bg-surface-muted"
+      className={cn("group", tone?.row ?? "hover:bg-surface-muted")}
       style={{ contentVisibility: "auto", containIntrinsicSize: "auto 39px" }}
     >
       <td
@@ -133,6 +135,7 @@ function DatosTableRowImpl({
       <DetailCell
         code={row.code}
         name={row.name}
+        tone={tone?.sticky}
         // The result row is derived, not an account of the chart of accounts: it has no ficha.
         available={!row.isResult}
         open={detailOpen}
@@ -151,12 +154,14 @@ function DatosTableRowImpl({
 function DetailCell({
   code,
   name,
+  tone,
   available,
   open,
   onOpen,
 }: {
   code: string;
   name: string;
+  tone?: string;
   available: boolean;
   open: boolean;
   onOpen: (code: string) => void;
@@ -166,7 +171,8 @@ function DetailCell({
       className={cn(
         // Its own opaque background: a pinned cell scrolls OVER the amounts, so it cannot let
         // them show through, and it has to follow the row's hover state by hand.
-        "sticky right-0 z-[1] w-[62px] border-b border-l border-border-soft bg-surface p-0 text-center transition-colors group-hover:bg-surface-muted",
+        "sticky right-0 z-[1] w-[62px] border-b border-l border-border-soft p-0 text-center transition-colors",
+        tone || "bg-surface group-hover:bg-surface-muted",
         open && "bg-brand-soft group-hover:bg-brand-soft",
       )}
     >

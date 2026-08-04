@@ -17,10 +17,12 @@ import {
   CHART_LINES,
   CHART_MARK,
   CHART_PALETTE,
+  CHART_SECTION,
   CHART_SIGN,
   CHART_SURFACE,
 } from "@/lib/charts/palette";
 export type { ChartTable, ChartTableRow } from "@/lib/charts/types";
+import { sectionOf } from "../datos-sections";
 import type {
   ChartAxis,
   ChartTable,
@@ -620,7 +622,8 @@ function drawn(value: number): number | null {
  */
 function waterfallColor(step: WaterfallStep): string {
   if (step.kind === "total" && step.code !== RESULT_CODE) {
-    return CHART_PALETTE[0];
+    const section = sectionOf(step.code);
+    return section ? CHART_SECTION[section] : CHART_PALETTE[0];
   }
   return step.value < 0 ? CHART_SIGN.negative : CHART_SIGN.positive;
 }

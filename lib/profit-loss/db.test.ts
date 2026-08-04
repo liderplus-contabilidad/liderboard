@@ -4,6 +4,7 @@ import {
   applyMonthSlice,
   clientDatasets,
   clientEdits,
+  consolidatedContributions,
   countEditsForYears,
   createClient,
   datasetEdits,
@@ -22,6 +23,7 @@ import {
   saveCellEdits,
   setActiveClient,
 } from "./db";
+import { CONSOLIDATED_CLIENT_ID } from "./consolidate";
 import type { ParsedDataset, WorkspaceMeta } from "./types";
 
 function dataset(id: string, year = 2026): ParsedDataset {
@@ -509,5 +511,63 @@ describe("saveCellEdits", () => {
     ).rejects.toThrow();
 
     expect(await db.edits.toArray()).toEqual([]);
+  });
+});
+
+describe("consolidatedContributions", () => {
+  it("returns each client with ONLY its own datasets, edits and coverage", async () => {
+    const a = (await createClient("Alfa")).id;
+    await replaceClientWorkspace(a, [dataset("a26")], meta({ loadedMonthsByYear: { 2026: [0] } }));
+    await saveCellEdit({ datasetId: "a26", code: "4", monthIndex: 0, value: 9 });
+    const b = (await createClient("Beta")).id;
+    await replaceClientWorkspace(
+      b,
+      [dataset("b26")],
+      meta({ loadedMonthsByYear: { 2026: [0, 1] } }),
+    );
+
+    const contributions = await consolidatedContributions();
+
+    // Alfabético, el orden del selector.
+    expect(contributions.map((c) => c.name)).toEqual(["Alfa", "Beta"]);
+    expect(contributions[0].datasets.map((d) => d.id)).toEqual(["a26"]);
+    expect(contributions[0].edits.map((e) => e.datasetId)).toEqual(["a26"]);
+    expect(contributions[0].loadedMonthsByYear).toEqual({ 2026: [0] });
+    // El ajuste de Alfa no alcanza a Beta: la partición se mantiene aunque la lectura sea cruzada.
+    expect(contributions[1].edits).toEqual([]);
+    expect(contributions[1].loadedMonthsByYear).toEqual({ 2026: [0, 1] });
+  });
+
+  it("lists a client with no data as an empty contribution", async () => {
+    await createClient("Recién creado");
+
+    const [contribution] = await consolidatedContributions();
+
+    expect(contribution.datasets).toEqual([]);
+    expect(contribution.loadedMonthsByYear).toEqual({});
+  });
+});
+
+describe("el consolidado no se escribe", () => {
+  it("rejects every write aimed at the sentinel", async () => {
+    await expect(
+      replaceClientWorkspace(CONSOLIDATED_CLIENT_ID, [dataset("x")], meta()),
+    ).rejects.toThrow(/vista derivada/);
+    await expect(applyMonthSlice(CONSOLIDATED_CLIENT_ID, [dataset("x")], meta())).rejects.toThrow(
+      /vista derivada/,
+    );
+    await expect(
+      mergeWorkspaceYears(CONSOLIDATED_CLIENT_ID, [dataset("x")], meta()),
+    ).rejects.toThrow(/vista derivada/);
+    await expect(deleteYear(CONSOLIDATED_CLIENT_ID, 2026)).rejects.toThrow(/vista derivada/);
+    await expect(deleteClient(CONSOLIDATED_CLIENT_ID)).rejects.toThrow(/vista derivada/);
+    await expect(renameClient(CONSOLIDATED_CLIENT_ID, "Otro")).rejects.toThrow(/vista derivada/);
+
+    expect(await db.datasets.toArray()).toEqual([]);
+  });
+
+  it("still lets the sentinel be the OPEN entry — it is a view, not a write", async () => {
+    await setActiveClient(CONSOLIDATED_CLIENT_ID);
+    expect(await getActiveClientId()).toBe(CONSOLIDATED_CLIENT_ID);
   });
 });

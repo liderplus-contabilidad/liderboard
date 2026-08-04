@@ -56,7 +56,13 @@ function makeFilters(overrides: Partial<PygFilters> = {}): PygFilters {
 
 describe("emptyFilters", () => {
   it("starts with nothing marked", () => {
-    expect(emptyFilters()).toEqual({ codes: [], centerIds: [], years: [], periods: [] });
+    expect(emptyFilters()).toEqual({
+      codes: [],
+      centerIds: [],
+      clientIds: [],
+      years: [],
+      periods: [],
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import { useEntityNaming } from "@/components/dashboard/use-entity-naming";
 import { Button } from "@/components/ui/button";
 import { DiscardedRow } from "@/components/ui/discarded-row";
 import { formatList, pluralize } from "@/lib/format";
+import { CONSOLIDATED_CLIENT_ID, CONSOLIDATED_CLIENT_NAME } from "@/lib/profit-loss/consolidate";
 import {
   describeClientContents,
   type ClientContents,
@@ -71,6 +72,9 @@ export function PygClientActions() {
     clients,
     activeClientId,
     activeClient,
+    isConsolidated,
+    consolidatable,
+    contributors,
     dataset,
     mode,
     views,
@@ -82,14 +86,29 @@ export function PygClientActions() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<ClientSummary | null>(null);
 
-  const options = useMemo<ClientOption[]>(
-    () =>
-      clients.map((client) => {
-        const caption = describeClient(client);
-        return { id: client.id, name: client.name, ...(caption ? { caption } : {}) };
-      }),
-    [clients],
-  );
+  const withData = useMemo(() => clients.filter((client) => client.years.length > 0), [clients]);
+
+  const options = useMemo<ClientOption[]>(() => {
+    const rows = clients.map((client) => {
+      const caption = describeClient(client);
+      return { id: client.id, name: client.name, ...(caption ? { caption } : {}) };
+    });
+    // Se ofrece con dos o más clientes con datos. Si ya está abierto se sigue ofreciendo aunque
+    // deje de poder sumarse —borrar el penúltimo cliente— porque si no, la entrada abierta
+    // desaparecería de su propia lista y no habría desde dónde salir.
+    if (!consolidatable && !isConsolidated) {
+      return rows;
+    }
+    return [
+      {
+        id: CONSOLIDATED_CLIENT_ID,
+        name: CONSOLIDATED_CLIENT_NAME,
+        caption: `Suma de ${pluralize(withData.length, "cliente")}`,
+        readOnly: true,
+      },
+      ...rows,
+    ];
+  }, [clients, withData.length, consolidatable, isConsolidated]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleting) {
@@ -119,12 +138,21 @@ export function PygClientActions() {
       : dataset.periodLabel
     : undefined;
 
+  // El consolidado no es una fila de `clients`, así que el bloque no lo encuentra por id: su
+  // nombre y su subtítulo salen de lo que está sumando.
+  const open = isConsolidated
+    ? {
+        name: CONSOLIDATED_CLIENT_NAME,
+        ...(period ? { period: `${period} · ${pluralize(contributors.length, "cliente")}` } : {}),
+      }
+    : activeClient
+      ? { name: activeClient.name, ...(period ? { period } : {}) }
+      : undefined;
+
   return (
     <>
       <ActiveClient
-        {...(activeClient
-          ? { client: { name: activeClient.name, ...(period ? { period } : {}) } }
-          : {})}
+        {...(open ? { client: open } : {})}
         emptySubline="Ningún estado de resultados cargado"
         clients={options}
         activeClientId={activeClientId}

@@ -5,8 +5,8 @@ import { periodSlotLabel } from "@/lib/profit-loss/analytics/period";
 import { usePygData } from "./pyg-data-provider";
 
 /**
- * The active-filter strip under the FILTROS row: one removable chip per marked account, center,
- * year and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
+ * The active-filter strip under the FILTROS row: one removable chip per marked client, account,
+ * center, year and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
  * and only when something is actually marked — an ever-present empty strip would sit over the
  * table for no reason.
  */
@@ -15,15 +15,21 @@ export function ActiveFilterChips() {
     filters,
     accountOptions,
     views,
+    clientOptions,
     toggleCode,
     toggleCenter,
+    toggleClient,
     toggleYear,
     togglePeriod,
     clearFilters,
   } = usePygData();
 
   const total =
-    filters.codes.length + filters.centerIds.length + filters.years.length + filters.periods.length;
+    filters.clientIds.length +
+    filters.codes.length +
+    filters.centerIds.length +
+    filters.years.length +
+    filters.periods.length;
   if (total === 0) {
     return null;
   }
@@ -33,6 +39,13 @@ export function ActiveFilterChips() {
       onClearAll={clearFilters}
       className="border-t border-border-soft bg-surface-sunken px-7 py-2.5"
     >
+      {filters.clientIds.map((id) => (
+        <FilterChip
+          key={`client-${id}`}
+          label={clientOptions.find((option) => option.id === id)?.name ?? id}
+          onRemove={() => toggleClient(id)}
+        />
+      ))}
       {filters.codes.map((code) => (
         <FilterChip
           key={`code-${code}`}

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { StatTile } from "@/components/ui/stat-tile";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatList } from "@/lib/format";
 import { loadedColumnPositions, visibleColumnPositions } from "@/lib/profit-loss/datos-columns";
 import { toDatosGridMultiYear } from "@/lib/profit-loss/derive";
 import { buildAnalisisCards, buildGraficosCards } from "@/lib/profit-loss/charts/cards";
@@ -50,6 +50,8 @@ import { ReportVertical } from "./report-vertical";
 export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const {
     activeClient,
+    isConsolidated,
+    contributors,
     dataset,
     frequency,
     allowed,
@@ -161,9 +163,16 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const cover = useMemo(
     () =>
       describePygReport({
-        clientName: activeClient?.name ?? "Sin cliente",
-        companyName: dataset?.companyName ?? "—",
+        // El consolidado no es un cliente ni tiene razón social: la portada nombra lo que SUMA,
+        // que es la única forma de que el papel diga de quién habla cuando la barra ya no está.
+        clientName: isConsolidated
+          ? "Consolidado entre clientes"
+          : (activeClient?.name ?? "Sin cliente"),
+        companyName: isConsolidated
+          ? formatList(contributors) || "—"
+          : (dataset?.companyName ?? "—"),
         sourceSystemId,
+        ...(isConsolidated ? { systemLabelOverride: "Varios sistemas" } : {}),
         mode,
         filters,
         accounts: accountOptions,

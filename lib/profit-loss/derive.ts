@@ -695,41 +695,72 @@ function overlapsSpan(months: ReadonlySet<number>, period: number, span: number)
   return false;
 }
 
+/** Cómo se llama la subcuenta que recoge lo que un centro anotó sin desglosar. */
+export const UNDISTRIBUTED_NAME = "Sin desglosar";
+
 /**
  * Merges several centers' account rows into one set for the Consolidado view: union of
  * codes, column-wise sum of LEAF values (parents recompute downstream via computeRollups).
- * Assumes a shared chart of accounts across centers; a code that is a leaf in one center and
- * a parent in another is a structural conflict — the parent structure wins and it is warned.
+ *
+ * **Los planes desiguales no pierden plata.** Un código puede ser HOJA en un centro —donde alguien
+ * escribió el monto directamente— y PADRE en otro, que lo desglosa en subcuentas. Como todo
+ * consumidor recalcula un padre desde sus hijas (`computeRollups`), el monto del que no desglosaba
+ * se descartaba en silencio y el consolidado salía por debajo: 500 en `4.1` más 300 repartidos en
+ * `4.1.01` daban 300, no 800.
+ *
+ * Ese monto se cuelga ahora de una subcuenta sintética «Sin desglosar» (`4.1.0`), que es la única
+ * forma de que a la vez SUME y se VEA de dónde viene. El aviso se mantiene, pero para decir dónde
+ * quedó y no que se trató como padre.
+ *
+ * `unit` is what the warning CALLS what it is summing, because the same merge runs one level up:
+ * `consolidate.ts` sums clients with it, and «es hoja en un centro» would then point at the wrong
+ * thing entirely. Only the copy changes — the merge does not care what the columns are.
  */
-export function mergeCenters(centers: AccountRow[][]): {
+export function mergeCenters(
+  centers: AccountRow[][],
+  unit = "centro",
+): {
   accounts: AccountRow[];
   warnings: string[];
 } {
   const warnings: string[] = [];
   const width = centers.find((c) => c.length > 0)?.[0]?.values.length ?? 0;
 
-  // Which codes are parents (some other code extends them) anywhere across the centers.
+  // Qué códigos son padres (algún otro los extiende) en el conjunto de todos los centros, y cuáles
+  // lo son DENTRO de cada centro. Se marcan los ancestros de cada código en una pasada en vez de
+  // comparar cada código contra todos: con cinco clientes de quinientas cuentas, lo segundo son
+  // millones de comparaciones de texto por consolidado.
   const allCodes = new Set<string>();
-  for (const center of centers) {
+  const parents = new Set<string>();
+  const parentsPerCenter = centers.map(() => new Set<string>());
+  centers.forEach((center, index) => {
     for (const account of center) {
       allCodes.add(account.code);
-    }
-  }
-  const isParent = (code: string): boolean => {
-    for (const other of allCodes) {
-      if (other !== code && other.startsWith(`${code}.`)) {
-        return true;
+      for (const ancestor of ancestorCodes(account.code)) {
+        parents.add(ancestor);
+        parentsPerCenter[index].add(ancestor);
       }
     }
-    return false;
-  };
+  });
+  const isParent = (code: string): boolean => parents.has(code);
 
   const order: string[] = [];
   const merged = new Map<string, AccountRow>();
-  const conflicted = new Set<string>();
+  // Lo que cada centro anotó DIRECTAMENTE en un código que el conjunto trata como padre.
+  const undistributed = new Map<string, number[]>();
 
-  for (const center of centers) {
+  centers.forEach((center, index) => {
     for (const account of center) {
+      // Hoja aquí, padre en el conjunto: su monto no lo recogería ningún rollup, así que se
+      // aparta para colgarlo de su propia subcuenta más abajo.
+      if (isParent(account.code) && !parentsPerCenter[index].has(account.code)) {
+        const bucket = undistributed.get(account.code) ?? new Array<number>(width).fill(0);
+        for (let i = 0; i < width; i++) {
+          bucket[i] += account.values[i] ?? 0;
+        }
+        undistributed.set(account.code, bucket);
+      }
+
       const existing = merged.get(account.code);
       if (!existing) {
         order.push(account.code);
@@ -747,27 +778,56 @@ export function mergeCenters(centers: AccountRow[][]): {
         }
       }
     }
-  }
+  });
 
-  // Structural conflict: a code that is a leaf in at least one center but a parent overall.
-  for (const code of order) {
-    if (!isParent(code)) {
+  // Al FINAL del orden, para que cada «Sin desglosar» quede como última hija de la suya y el
+  // desglose real se lea primero. `buildAccountTree` la ancla por prefijo, así que su padre ya
+  // está en el árbol cuando llega.
+  for (const code of [...undistributed.keys()].sort(compareCodes)) {
+    const values = undistributed.get(code) as number[];
+    // Un cero declarado no gana una fila: no aporta al total y solo ensucia el árbol.
+    if (values.every((value) => value === 0)) {
       continue;
     }
-    const leafSomewhere = centers.some(
-      (center) =>
-        center.some((a) => a.code === code) &&
-        !center.some((a) => a.code !== code && a.code.startsWith(`${code}.`)),
+    const childCode = freeChildCode(code, allCodes);
+    allCodes.add(childCode);
+    order.push(childCode);
+    merged.set(childCode, { code: childCode, name: UNDISTRIBUTED_NAME, values });
+    warnings.push(
+      `La cuenta ${code} es hoja en un ${unit} y padre en otro; lo que se anotó directamente en ella se suma bajo «${UNDISTRIBUTED_NAME}».`,
     );
-    if (leafSomewhere && !conflicted.has(code)) {
-      conflicted.add(code);
-      warnings.push(
-        `La cuenta ${code} es hoja en un centro y padre en otro; se trata como padre en el consolidado.`,
-      );
-    }
   }
 
   return { accounts: order.map((code) => merged.get(code) as AccountRow), warnings };
+}
+
+/** `4.1.01.01` → `["4", "4.1", "4.1.01"]`; el propio código no se incluye. */
+function ancestorCodes(code: string): string[] {
+  const segments = code.split(".");
+  return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("."));
+}
+
+/** `${code}.0`, alargando el cero mientras choque con una cuenta real del plan. */
+function freeChildCode(code: string, taken: ReadonlySet<string>): string {
+  let suffix = "0";
+  while (taken.has(`${code}.${suffix}`)) {
+    suffix += "0";
+  }
+  return `${code}.${suffix}`;
+}
+
+/** Orden numérico por segmento — el mismo criterio que `merge-month.ts`, aquí para no importarlo
+ * al revés (ese módulo ya depende de este). */
+function compareCodes(a: string, b: string): number {
+  const segA = a.split(".").map(Number);
+  const segB = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(segA.length, segB.length); i++) {
+    const diff = (segA[i] ?? -1) - (segB[i] ?? -1);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
 }
 
 /**
