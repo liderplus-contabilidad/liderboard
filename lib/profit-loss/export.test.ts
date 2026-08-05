@@ -260,3 +260,263 @@ describe("buildMultiCenterWorkbook", () => {
     expect(new Set(wb.worksheets.map((w) => w.name)).size).toBe(wb.worksheets.length);
   });
 });
+
+// ── «Ocultar cuentas en cero» ──────────────────────────────────────────────
+
+/** A chart of accounts where "4.1.2" moves in one center only and "4.9" moves nowhere. */
+const HIDE_PLAN: AccountRow[] = [
+  { code: "4", name: "Ingresos", values: months() },
+  { code: "4.1", name: "Ventas", values: months() },
+  { code: "4.1.1", name: "Habitaciones", values: months(100) },
+  { code: "4.1.2", name: "Eventos", values: months() },
+  { code: "4.9", name: "Otros ingresos", values: months() },
+  { code: "5", name: "Costos y Gastos", values: months() },
+  { code: "5.1", name: "Sueldos", values: months(40) },
+];
+
+const plan = (overrides: Record<string, number[]> = {}): AccountRow[] =>
+  HIDE_PLAN.map((a) => ({ ...a, values: overrides[a.code] ?? [...a.values] }));
+
+const hideNorte = buildDataset("h-norte", plan(), {
+  role: "center",
+  centerId: "norte",
+  costCenterName: "NORTE",
+});
+const hideSur = buildDataset("h-sur", plan({ "4.1.2": months(0, 55) }), {
+  role: "center",
+  centerId: "sur",
+  costCenterName: "SUR",
+});
+
+/** Every account code written, per visible sheet (the hidden metadata sheet excluded). */
+async function codesBySheet(wb: ExcelJS.Workbook): Promise<Map<string, string[]>> {
+  const buffer = await wb.xlsx.writeBuffer();
+  const reloaded = new ExcelJS.Workbook();
+  await reloaded.xlsx.load(buffer);
+  const out = new Map<string, string[]>();
+  for (const ws of reloaded.worksheets) {
+    if (ws.name === APP_WORKBOOK_META_SHEET) continue;
+    const codes: string[] = [];
+    ws.eachRow((row) => {
+      const code = String(row.getCell(1).value ?? "");
+      if (/^\d/.test(code)) codes.push(code);
+    });
+    out.set(ws.name, codes);
+  }
+  return out;
+}
+
+const multiCenter = (hideEmpty: boolean, edits: CellEdit[] = []) =>
+  buildMultiCenterWorkbook({
+    companyName: "HOTELERA ANDES S.A.",
+    loadedMonthsByYear: { 2026: ALL_MONTHS },
+    hideEmpty,
+    centers: [
+      { dataset: hideNorte, edits },
+      { dataset: hideSur, edits: [] },
+    ],
+  });
+
+describe("buildMultiCenterWorkbook — ocultar cuentas en cero", () => {
+  it("writes the whole chart of accounts when the switch is off", async () => {
+    const sheets = await codesBySheet(multiCenter(false));
+    for (const codes of sheets.values()) {
+      expect(codes).toContain("4.9");
+    }
+  });
+
+  it("omits a code with no movement in ANY sheet", async () => {
+    const sheets = await codesBySheet(multiCenter(true));
+    expect(sheets.size).toBe(3); // Consolidado + NORTE + SUR
+    for (const codes of sheets.values()) {
+      expect(codes).not.toContain("4.9");
+    }
+  });
+
+  it("keeps every sheet on the same chart of accounts", async () => {
+    // "4.1.2" only moves in SUR. Judged sheet by sheet it would vanish from NORTE, and the two
+    // would stop lining up; judged per workbook it stays everywhere, in NORTE with its zeros.
+    const sheets = await codesBySheet(multiCenter(true));
+    const written = [...sheets.values()];
+    expect(written.every((codes) => codes.includes("4.1.2"))).toBe(true);
+    expect(new Set(written.map((codes) => codes.join("|"))).size).toBe(1);
+  });
+
+  it("keeps a zero account that carries a comment", async () => {
+    const commented: CellEdit[] = [
+      {
+        datasetId: hideNorte.id,
+        code: "4.9",
+        monthIndex: 2,
+        comment: "Cerrada este año",
+        updatedAt: 1,
+      },
+    ];
+    const sheets = await codesBySheet(multiCenter(true, commented));
+    for (const codes of sheets.values()) {
+      expect(codes).toContain("4.9");
+    }
+  });
+
+  it("leaves nothing the metadata sheet restores pointing at an absent row", async () => {
+    const commented: CellEdit[] = [
+      {
+        datasetId: hideNorte.id,
+        code: "4.9",
+        monthIndex: 2,
+        comment: "Cerrada este año",
+        updatedAt: 1,
+      },
+      { datasetId: hideNorte.id, code: "5.1", monthIndex: 0, value: 12, updatedAt: 1 },
+    ];
+    const wb = multiCenter(true, commented);
+    const buffer = await wb.xlsx.writeBuffer();
+    const workbook = XLSX.read(buffer as unknown as ArrayBuffer);
+    const meta = rowsToAppWorkbookMeta(
+      XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[APP_WORKBOOK_META_SHEET], {
+        header: 1,
+        raw: true,
+        defval: null,
+      }),
+    );
+    const written = new Set([...(await codesBySheet(wb)).values()].flat());
+    for (const entry of [...meta.comments, ...meta.adjustments]) {
+      expect(written).toContain(entry.code);
+    }
+  });
+});
+
+describe("buildPygWorkbook — ocultar cuentas en cero", () => {
+  const single = buildDataset("h-single", plan());
+
+  it("omits the accounts with no movement in any year of the file", async () => {
+    const sheets = await codesBySheet(
+      buildPygWorkbook([{ dataset: single, edits: [] }], { 2026: ALL_MONTHS }, undefined, true),
+    );
+    const codes = [...sheets.values()].flat();
+    expect(codes).not.toContain("4.9");
+    expect(codes).not.toContain("4.1.2");
+    expect(codes).toContain("4.1.1");
+  });
+
+  it("keeps an account whose zero was PRODUCED by an adjustment", async () => {
+    // 70 en enero, ajustado a 0: la cuenta queda en cero de punta a punta. Omitirla perdería el
+    // ajuste y su valor original, que es justo lo que el archivo tiene que poder devolver.
+    const withOtros = buildDataset("h-single-adj", [
+      ...plan(),
+      { code: "5.9", name: "Multas", values: months(70) },
+    ]);
+    const adjusted: CellEdit[] = [
+      { datasetId: withOtros.id, code: "5.9", monthIndex: 0, value: 0, updatedAt: 1 },
+    ];
+    const sheets = await codesBySheet(
+      buildPygWorkbook(
+        [{ dataset: withOtros, edits: adjusted }],
+        { 2026: ALL_MONTHS },
+        undefined,
+        true,
+      ),
+    );
+    const codes = [...sheets.values()].flat();
+    expect(codes).toContain("5.9");
+    expect(codes).not.toContain("4.9");
+  });
+
+  it("keeps a year's accounts alive when another year moves them", async () => {
+    const y2025 = buildDataset("h-single-2025", plan({ "4.1.2": months(0, 0, 12) }), {
+      year: 2025,
+    });
+    const sheets = await codesBySheet(
+      buildPygWorkbook(
+        [
+          { dataset: y2025, edits: [] },
+          { dataset: single, edits: [] },
+        ],
+        { 2025: ALL_MONTHS, 2026: ALL_MONTHS },
+        undefined,
+        true,
+      ),
+    );
+    expect(sheets.size).toBe(2);
+    for (const codes of sheets.values()) {
+      expect(codes).toContain("4.1.2");
+      expect(codes).not.toContain("4.9");
+    }
+  });
+});
+
+/** The header labels of every visible sheet, in order. */
+async function headersBySheet(wb: ExcelJS.Workbook): Promise<Map<string, string[]>> {
+  const buffer = await wb.xlsx.writeBuffer();
+  const reloaded = new ExcelJS.Workbook();
+  await reloaded.xlsx.load(buffer);
+  const out = new Map<string, string[]>();
+  for (const ws of reloaded.worksheets) {
+    if (ws.name === APP_WORKBOOK_META_SHEET) continue;
+    let labels: string[] = [];
+    ws.eachRow((row) => {
+      const values = (row.values as unknown[]).slice(3).map((v) => String(v ?? ""));
+      if (values[0] === "Enero" || values.includes("Total")) {
+        if (labels.length === 0) labels = values.filter(Boolean);
+      }
+    });
+    out.set(ws.name, labels);
+  }
+  return out;
+}
+
+describe("buildMultiCenterWorkbook — ocultar meses en cero", () => {
+  // «4.1.1» mueve enero en NORTE y marzo en SUR; ningún otro mes se toca en ninguna hoja.
+  const eneroNorte = buildDataset("m-norte", plan({ "4.1.1": months(100) }), {
+    role: "center",
+    centerId: "norte",
+    costCenterName: "NORTE",
+  });
+  const marzoSur = buildDataset("m-sur", plan({ "4.1.1": months(0, 0, 60) }), {
+    role: "center",
+    centerId: "sur",
+    costCenterName: "SUR",
+  });
+  const book = (hideEmpty: boolean) =>
+    buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+      hideEmpty,
+      centers: [
+        { dataset: eneroNorte, edits: [] },
+        { dataset: marzoSur, edits: [] },
+      ],
+    });
+
+  it("writes the twelve months when the switch is off", async () => {
+    for (const labels of (await headersBySheet(book(false))).values()) {
+      expect(labels).toHaveLength(13); // doce meses + Total
+    }
+  });
+
+  it("keeps a month that ANY sheet moved, and drops the rest", async () => {
+    // Enero lo mueve NORTE y marzo lo mueve SUR: los dos sobreviven en LAS DOS hojas, así siguen
+    // alineadas. Los otros diez no los movió nadie.
+    for (const labels of (await headersBySheet(book(true))).values()) {
+      expect(labels).toEqual(["Enero", "Marzo", "Total"]);
+    }
+  });
+
+  it("leaves the Total unchanged, because a dropped month contributed zero", async () => {
+    const totalOf = async (wb: ExcelJS.Workbook) => {
+      const buffer = await wb.xlsx.writeBuffer();
+      const reloaded = new ExcelJS.Workbook();
+      await reloaded.xlsx.load(buffer);
+      const ws = reloaded.worksheets.find((w) => w.name === "NORTE") as ExcelJS.Worksheet;
+      let total: unknown;
+      ws.eachRow((row) => {
+        if (String(row.getCell(1).value ?? "") === "4.1.1") {
+          total = row.getCell(row.cellCount).value;
+        }
+      });
+      return total;
+    };
+    expect(await totalOf(book(true))).toBe(await totalOf(book(false)));
+    expect(await totalOf(book(true))).toBe(100);
+  });
+});

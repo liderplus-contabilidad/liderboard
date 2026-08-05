@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadedColumnPositions, visibleColumnPositions } from "@/lib/profit-loss/datos-columns";
 import type { DatosGrid, DatosRow, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import { toDatosGridMultiYear } from "@/lib/profit-loss/derive";
-import { focusAccounts } from "@/lib/profit-loss/filter";
+import { focusAccounts, movingColumnPositions, pruneEmptyAccounts } from "@/lib/profit-loss/filter";
 import { CONSOLIDADO_ID } from "@/lib/profit-loss/filters";
 import type { Frequency } from "@/lib/profit-loss/types";
 import { CellEditor, type EditorAnchor } from "./cell-editor";
@@ -67,6 +67,8 @@ export function DatosView() {
     loadedMonthsByYear,
     visibleYears,
     activeSlices,
+    hideZeroRows,
+    toggleHideZeroRows,
   } = usePygData();
 
   const [sort, setSort] = useState<DatosSort | null>(null);
@@ -116,22 +118,43 @@ export function DatosView() {
     });
   }, [mode, dataset, loadedMonthsByYear, effectiveFrequency, grid.columns]);
   const markedCodes = useMemo(() => new Set(filters.codes), [filters.codes]);
+
+  const periodColumns = useMemo(
+    () => visibleColumnPositions(grid.columns, filters.periods),
+    [filters.periods, grid.columns],
+  );
   // Account focus decides which rows show; amounts (and Utilidad) are untouched. Depth is
   // handled by the collapse state (`collapsed`, from the "Nivel" filter + per-row toggles).
   const filteredRows = useMemo(
     () => focusAccounts(grid.rows, markedCodes),
     [grid.rows, markedCodes],
   );
-  const visibleRows = useMemo(
-    () => flattenSorted(filteredRows, collapsed, sort),
-    [filteredRows, collapsed, sort],
+  // Rows and columns are judged against the SAME table — the rows over every filtered column, the
+  // columns over every focused row — rather than one after the other, so neither can hide the
+  // other's evidence (see `movingColumnPositions`).
+  const shownRows = useMemo(
+    () => (hideZeroRows ? pruneEmptyAccounts(filteredRows, periodColumns) : filteredRows),
+    [hideZeroRows, filteredRows, periodColumns],
   );
-  // The "Periodo" filter bounds which columns render; the column POSITION travels through, and
-  // the column itself carries the period index an edit writes against. No periods marked shows
-  // the whole axis.
   const visibleColumns = useMemo(
-    () => visibleColumnPositions(grid.columns, filters.periods),
-    [filters.periods, grid.columns],
+    () => (hideZeroRows ? movingColumnPositions(filteredRows, periodColumns) : periodColumns),
+    [hideZeroRows, filteredRows, periodColumns],
+  );
+  const hiddenColumnCount = periodColumns.length - visibleColumns.length;
+
+  const hiddenCount = useMemo(
+    () => (shownRows === filteredRows ? 0 : countAccounts(filteredRows) - countAccounts(shownRows)),
+    [filteredRows, shownRows],
+  );
+
+  const effectiveSort = useMemo(
+    () =>
+      sort && typeof sort.key === "object" && !visibleColumns.includes(sort.key.col) ? null : sort,
+    [sort, visibleColumns],
+  );
+  const visibleRows = useMemo(
+    () => flattenSorted(shownRows, collapsed, effectiveSort),
+    [shownRows, collapsed, effectiveSort],
   );
 
   // A newly loaded workspace should surface its own warnings even if the previous banner
@@ -236,12 +259,16 @@ export function DatosView() {
         grid={grid}
         rows={visibleRows}
         visibleColumns={visibleColumns}
-        sort={sort}
+        sort={effectiveSort}
         editable={editable}
         readOnlyReason={readOnlyReason}
         flash={flash}
         loadedColumns={loadedColumns}
         openDetailCode={detailCode}
+        hideZeroRows={hideZeroRows}
+        hiddenCount={hiddenCount}
+        hiddenColumnCount={hiddenColumnCount}
+        onToggleHideZeroRows={toggleHideZeroRows}
         onSort={onSort}
         onToggle={toggleCollapsed}
         onEditCell={onEditCell}
@@ -310,6 +337,14 @@ function nextSort(prev: DatosSort | null, key: DatosSortKey): DatosSort | null {
     return { key, dir: "desc" };
   }
   return null;
+}
+
+/** Account rows in a tree, summaries excluded — the two sides of "cuántas se ocultaron". */
+function countAccounts(rows: DatosRow[]): number {
+  return rows.reduce(
+    (total, row) => total + (row.isResult ? 0 : 1) + countAccounts(row.children ?? []),
+    0,
+  );
 }
 
 /** Depth-first lookup of a row by account code. */

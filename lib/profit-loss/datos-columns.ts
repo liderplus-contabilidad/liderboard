@@ -11,8 +11,26 @@
  */
 import { aggregateCoverage } from "./analytics/source";
 import type { PeriodSlot } from "./analytics/types";
-import type { DatosColumn } from "./datos-types";
+import type { DatosColumn, DatosGrid, DatosRow } from "./datos-types";
 import type { Frequency } from "./types";
+
+/**
+ * How a header names a column.
+ *
+ * A Total column stays the full year even when a period mark bounds the columns — relabeled so
+ * nobody reads it as the sum of what happens to be visible. With several years the suffix rides
+ * along ("Total 25" → "Total año 25").
+ *
+ * It lives here rather than inside the Datos table because the printed report asks the same
+ * question, and a report that named its columns differently from the screen would be describing a
+ * different table.
+ */
+export function columnHeaderLabel(column: DatosColumn, trimmed: boolean): string {
+  if (column.kind !== "total" || !trimmed) {
+    return column.label;
+  }
+  return column.label.replace(/^Total/, "Total año");
+}
 
 /**
  * The positions the «Periodo» filter leaves visible; every one when nothing is marked.
@@ -77,4 +95,31 @@ export function loadedColumnPositions(input: LoadedColumnsInput): ReadonlySet<nu
     }
   });
   return positions;
+}
+
+/**
+ * The grid with only the columns at `positions`, cells realigned to them.
+ *
+ * The screen never needs this — `DatosTable` renders positions out of the full grid and leaves the
+ * cells where they are. The printed report does: it hands the table a grid whose `columns[i]` IS
+ * the i-th printed column, so nothing downstream has to carry a position map into a `<colgroup>`
+ * that already speaks in order.
+ */
+export function sliceColumns(grid: DatosGrid, positions: readonly number[]): DatosGrid {
+  if (positions.length === grid.columns.length) {
+    return grid;
+  }
+  return {
+    ...grid,
+    columns: positions.map((position) => grid.columns[position] as DatosColumn),
+    rows: sliceRows(grid.rows, positions),
+  };
+}
+
+function sliceRows(rows: readonly DatosRow[], positions: readonly number[]): DatosRow[] {
+  return rows.map((row) => ({
+    ...row,
+    cells: positions.map((position) => row.cells[position] ?? { value: null }),
+    ...(row.children ? { children: sliceRows(row.children, positions) } : {}),
+  }));
 }

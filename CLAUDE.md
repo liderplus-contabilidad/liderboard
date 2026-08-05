@@ -272,6 +272,76 @@ is the module's one definition of "percentage over an account"; `toPctOfRevenue`
 percentages, and a base that is `null` or `0` empties the column with one warning naming the
 period — never one warning per account.
 
+**«Ocultar cuentas en cero» es el tercer criterio de qué filas se ven**, junto al enfoque por cuenta
+y la profundidad por nivel, y vive donde los otros dos: `lib/profit-loss/filter.ts` (puro + testeado).
+Una fila no tiene movimiento cuando toda celda juzgada vale 0 o `null` **y** no carga comentario ni
+ajuste — las dos anotaciones pesan tanto como la cifra, porque un ajuste puede PRODUCIR el cero
+(500 → 0) y un comentario en una cuenta parada es la nota que dice por qué lo está; sin esa excepción
+la descarga perdería el ajuste con su valor original y la hoja de metadatos apuntaría a una fila
+ausente. Se juzga la RAMA, no la fila: un padre que cuadra en 0 porque dos hijas se cancelan se queda,
+y las filas de resultado nunca se ocultan. Y lo que sostiene esa excepción es que **lo guardado sea
+verdad**: `storedAdjustment` (en `derive.ts`, aplicado en el punto de ESCRITURA y también al gemelo
+de una reclasificación) descarta un valor que coincide con el del archivo, así que teclear una cifra
+y volver a la original no deja ajuste ninguno. Sin esa regla la app afirmaba un ajuste inexistente y
+lo arrastraba a los cuatro lectores a la vez — la celda pintada, la nota «Valor original: $0 → $0»
+del Excel, el conflicto al recargar el mes y esta poda. El interruptor está en la cabecera de la tarjeta de Datos
+—no en la barra— porque lo lee una sola tarjeta, la misma regla que el «Ver por» de Ocupaciones y el
+«Base» de Análisis; no es un `PygFilters`, no produce chip y Gráficos y Análisis dibujan lo mismo
+encendido o apagado. **Y hay una regla gemela para las COLUMNAS** (`movingColumnPositions`), bajo el mismo
+`hasMovement`: un periodo en el que no se movió nada se va igual que una cuenta. Filas y columnas se
+juzgan contra la MISMA tabla —las filas sobre las columnas que deja «Periodo», las columnas sobre las
+filas que deja «Cuenta»—, nunca una después de la otra: eso quita la circularidad y regala el
+invariante que importa, que la celda que salva a una fila salva también a su columna, así que ninguna
+fila queda viva con su única cifra escondida. La columna de Total no necesita caso propio (un año con
+un solo mes movido totaliza a ese mes y sobrevive) y ocultar un mes vacío **no** descuadra el Total,
+porque un mes vacío suma cero — por eso esto no activa el rótulo «Total año» que sí pone el filtro
+«Periodo». En pantalla juzga las columnas VISIBLES (lo que se ve es lo que se juzga), el pie cuenta lo
+que quitó de las dos clases, y un orden por una columna que se esconde se anula mientras lo esté y
+vuelve al mostrarla. **En el Excel las filas se OMITEN, y el criterio es POR LIBRO**: un código
+—y un MES— sale solo si no se mueve en NINGUNA hoja, así las doce hojas de un «Excel completo» siguen
+compartiendo un plan de cuentas y las mismas columnas, y se pueden leer en paralelo. Quitar meses del
+libro es seguro porque `app-workbook.ts` los lee POR RÓTULO de cabecera y no por posición, y la
+cobertura viaja aparte en la hoja de metadatos: un mes cargado que no vendió nada vuelve como cargado
+y en cero, no como nunca cargado. `writeStatementSheet` recibe el grid ya
+construido justamente para eso — el conjunto a omitir (`emptyAccountCodes`) se calcula sobre todas las
+hojas antes de escribir ninguna. La descarga sigue al interruptor y lo DICE en la descripción de cada
+opción; «un mes en crudo» no entra, porque existe para parecerse al export del sistema contable, donde
+una cuenta en cero es parte de la rejilla.
+
+**El INFORME imprimible saca TODO lo disponible, y la hoja donde cabe se DERIVA.** La sección «Estado
+de resultados» ya no imprime un acumulado del centro que resolvió la barra: imprime una tabla por
+cada vista del selector —el Consolidado primero, detrás cada centro y «Sin centro de costo»— con las
+columnas que Datos tiene en pantalla (las que deja el filtro «Periodo», con el Total de cada año,
+etiquetadas por el mismo `columnHeaderLabel` que la tabla — por eso subió a `datos-columns.ts` junto
+a `visibleColumnPositions` y `sliceColumns`). Es el equivalente en papel del «Excel completo», y
+recorre las MISMAS `views` del proveedor en vez de reconstruir quién existe, porque una segunda
+definición de «los centros» se separaría de la primera en cuanto alguien cargara uno nuevo. **No hay
+control que elegir**: la firma pide el detalle completo, y `accumulate.ts` sobrevive solo porque el
+análisis vertical aún lo necesita. **Una tabla es un centro-AÑO**, y eso es lo que hace que quepa: un
+centro con dos años son 26 columnas que no entran ni apaisadas, y año por año son 13, que es justo lo
+que entra — no es una concesión al papel, un estado de resultados ES de un ejercicio, y el eje de
+Datos ya lleva el año en cada columna. El orden es año por fuera (ascendente, como Datos) y centro
+por dentro; el rótulo nombra el año solo cuando hay varios, porque con uno la portada ya lo declara.
+Cada tabla abre página —dos estados encadenados en la misma hoja se leen como uno solo con las
+cuentas repetidas—, todas comparten UN `fit` dimensionado por la que más columnas tenga, y el aviso
+del corte de nivel sale una sola vez, bajo la última. La poda de cuentas sin movimiento es POR TABLA
+—al revés que en el Excel, donde el criterio es por libro para que las hojas se lean en paralelo—,
+porque aquí cada tabla se lee sola en su página; y `pruneEmptyColumns` hace lo mismo con los
+periodos, que en papel es lo que más pesa: como `fit` se dimensiona por el mayor número de columnas,
+quitar los meses vacíos es lo que puede devolver la sección de apaisada a vertical. NO se imprimen `Var.` ni `% Ing.`: una variación
+entre dos meses no es lo que esa cabecera significa, y son las dos columnas que estorban cuando ya
+hay trece — quitar `% Ing.` es también lo que devuelve la sección «Análisis vertical» a existir
+siempre, ya que se omitía justamente por repetirla. Lo que NO hereda de Datos es el ORDEN (un estado
+impreso se lee en orden de plan) ni el árbol replegado (el corte lo pone «Detalle», que es del
+informe y no puede replegarle nada a nadie en pantalla). `report/page-fit.ts` (puro + testeado) es la
+única regla de si cabe: prueba vertical y luego apaisado, bajando la tipografía 10.5 → 9.5 → 8.5 px, y
+mide por COTA —diez caracteres de mono, que cubren `-$1,171,420`— porque medir el texto real exigiría
+un canvas y no se podría testear. Hasta seis columnas queda en el cuerpo vertical; de ocho a trece
+**la sección se lleva su propia hoja apaisada** y el resto del informe sigue vertical. Esa hoja es un
+`<article>` HERMANO con su ancho real (1123 px) y una `@page` con nombre: hubo páginas apaisadas antes
+y se quitaron porque vivían DENTRO del cuerpo vertical y tenían que desbordarlo con un margen
+negativo, que en pantalla se lee como una tabla escapándose de la hoja.
+
 **Account ficha:** each account row exposes a hover "ficha" trigger (own column, `sticky
 right-0` so it survives horizontal scroll) that opens `AccountDetailPanel` in a `SidePanel`.
 The panel runs ONE analytics query for the account and formats `buildAccountDetail`

@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
 import { OccupancyExcelActions } from "@/components/occupancy/occupancy-excel-actions";
 import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
+import { PygDriftNotice } from "@/components/profit-loss/pyg-drift-notice";
 import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygReportButton } from "@/components/profit-loss/report/pyg-report-button";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
@@ -48,6 +49,7 @@ const OccupancyGraficosView = dynamic(
 interface ModuleViews {
   rightSlot?: (tab: ModuleTabId) => ReactNode;
   toolbar?: (tab: ModuleTabId) => ReactNode;
+  notice?: (tab: ModuleTabId) => ReactNode;
   panel?: (tab: ModuleTabId) => ReactNode;
 }
 
@@ -62,6 +64,7 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
       </div>
     ),
     toolbar: () => <PygToolbar />,
+    notice: (tab) => (tab === "datos" ? <PygDriftNotice /> : null),
     panel: (tab) => {
       switch (tab) {
         case "datos":
@@ -139,6 +142,7 @@ export function ModuleTabs({ slug }: { slug: string }) {
       </div>
 
       {views.toolbar?.(activeTab.id)}
+      {views.notice?.(activeTab.id)}
 
       <div
         id={`panel-${mod.slug}`}

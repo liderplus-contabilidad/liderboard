@@ -438,3 +438,108 @@ describe("round-trip — un mes en crudo (estado único)", () => {
     expect(slice.centers[0].accounts.find((a) => a.code === "4")?.values).toEqual([400]);
   });
 });
+
+describe("round-trip — «Ocultar cuentas en cero»", () => {
+  /** Un centro con dos cuentas: «4» se mueve, «5» no la usó nadie. */
+  function withUnused(id: string, name: string, order: number, generalValue: number): PygDataset {
+    const base = center(id, name, order, generalValue);
+    return {
+      ...base,
+      accounts: [...base.accounts, { code: "5", name: "Costos y Gastos", values: [...MONTHS] }],
+    };
+  }
+
+  it("el archivo recortado vuelve a entrar y devuelve lo que sí lleva", async () => {
+    const workbook = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: [0, 2] },
+      hideEmpty: true,
+      centers: [
+        { dataset: withUnused("norte", "SUCURSAL NORTE", 0, 700), edits: [] },
+        { dataset: withUnused("sur", "SUCURSAL SUR", 1, 80), edits: [] },
+      ],
+    });
+    const staged = resolveUpload(multiCenterFilename([2026]), await toBuffer(workbook));
+    const { datasets, meta } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    expect(datasets).toHaveLength(2);
+    for (const dataset of datasets) {
+      expect(dataset.accounts.map((a) => a.code)).toEqual(["4"]);
+    }
+    expect(datasets.find((d) => d.costCenterName === "SUCURSAL NORTE")?.accounts[0].values[0]).toBe(
+      700,
+    );
+    expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
+  });
+
+  it("una cuenta en cero con comentario sobrevive al viaje y recupera su nota", async () => {
+    // Es la razón por la que «anotada ≠ en cero»: sin la excepción, el comentario de la hoja de
+    // metadatos apuntaría a una fila que el archivo ya no lleva.
+    const comment: CellEdit[] = [
+      { datasetId: "norte", code: "5", monthIndex: 0, comment: "Cerrada este año", updatedAt: 1 },
+    ];
+    const workbook = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: [0, 2] },
+      hideEmpty: true,
+      centers: [
+        { dataset: withUnused("norte", "SUCURSAL NORTE", 0, 700), edits: comment },
+        { dataset: withUnused("sur", "SUCURSAL SUR", 1, 80), edits: [] },
+      ],
+    });
+    const staged = resolveUpload(multiCenterFilename([2026]), await toBuffer(workbook));
+    const { datasets, commentsByDataset } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    const norte = datasets.find((d) => d.costCenterName === "SUCURSAL NORTE");
+    expect(norte?.accounts.map((a) => a.code)).toEqual(["4", "5"]);
+    const seeds = commentsByDataset.find((c) => c.datasetId === norte?.id)?.comments ?? [];
+    expect(seeds).toContainEqual(
+      expect.objectContaining({ code: "5", monthIndex: 0, comment: "Cerrada este año" }),
+    );
+  });
+
+  it("el estado único recortado también vuelve a entrar", async () => {
+    const dataset: PygDataset = {
+      ...singleDataset("solo", [500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      accounts: [
+        { code: "4", name: "Ingresos", values: [500, ...MONTHS.slice(1)] },
+        { code: "5", name: "Costos y Gastos", values: [...MONTHS] },
+      ],
+    };
+    const workbook = buildPygWorkbook([{ dataset, edits: [] }], { 2026: [0] }, undefined, true);
+    const staged = resolveUpload("PyG NOMIK 2026.xlsx", await toBuffer(workbook));
+    const { datasets } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].accounts.map((a) => a.code)).toEqual(["4"]);
+    expect(datasets[0].accounts[0].values[0]).toBe(500);
+  });
+});
+
+describe("round-trip — meses ocultos", () => {
+  it("un libro sin los meses vacíos devuelve los valores en su mes correcto", async () => {
+    // `app-workbook.ts` mapea los meses POR RÓTULO de cabecera, no por posición, así que quitar
+    // columnas no descoloca nada: enero sigue siendo enero aunque febrero no esté.
+    const workbook = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: [0, 2] },
+      hideEmpty: true,
+      centers: [
+        { dataset: center("norte", "SUCURSAL NORTE", 0, 100), edits: [] },
+        { dataset: center("sur", "SUCURSAL SUR", 1, 40), edits: [] },
+      ],
+    });
+    const staged = resolveUpload(multiCenterFilename([2026]), await toBuffer(workbook));
+    const { datasets, meta } = staged as Extract<StagedUpload, { kind: "workspace" }>;
+
+    const norte = datasets.find((d) => d.costCenterName === "SUCURSAL NORTE");
+    const values = norte?.accounts.find((a) => a.code === "4")?.values;
+    expect(values?.[0]).toBe(100); // Enero, escrito
+    expect(values?.[2]).toBe(150); // Marzo, escrito
+    expect(values?.[1]).toBe(0); // Febrero, ausente del archivo → cero
+    expect(values).toHaveLength(12);
+    // Y la cobertura sigue viniendo de la hoja de metadatos, no de qué columnas se escribieron:
+    // un mes cargado que no vendió nada vuelve como CARGADO y en cero, no como nunca cargado.
+    expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
+  });
+});

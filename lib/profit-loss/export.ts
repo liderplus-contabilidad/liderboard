@@ -13,8 +13,9 @@
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
-import type { DatosCell, DatosColumn, DatosRow } from "./datos-types";
+import type { DatosCell, DatosColumn, DatosGrid, DatosRow } from "./datos-types";
 import { applyEditsToLeafAccounts, mergeCenters, toDatosGrid } from "./derive";
+import { emptyAccountCodes, movingColumnPositions } from "./filter";
 import {
   appWorkbookMetaToRows,
   APP_WORKBOOK_META_SHEET,
@@ -62,16 +63,28 @@ export function buildPygWorkbook(
    * identity (a MicroPlus workspace stays MicroPlus). Defaults to the only system that could
    * have produced a single-mode workspace before MicroPlus existed. */
   sourceSystemId: string = LEGACY_SYSTEM,
+  /** «Ocultar ceros» — omits the accounts and the months with no movement in ANY year of the
+   * file. */
+  hideEmpty = false,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
   const sheetRows: AppWorkbookSheet[] = [];
   const ordered = [...slices].sort((a, b) => a.dataset.year - b.dataset.year);
 
-  for (const { dataset, edits } of ordered) {
-    const name = uniqueSheetName(sheetTitle(SHEET_NAME, dataset.year, ordered.length > 1), used);
-    writeStatementSheet(wb, name, dataset, edits, loadedMonthsByYear[dataset.year] ?? []);
-    sheetRows.push({ sheetName: name, year: dataset.year, centerId: SINGLE_WORKBOOK_CENTER_KEY });
+  const sheets = ordered.map(({ dataset, edits }) => ({
+    name: uniqueSheetName(sheetTitle(SHEET_NAME, dataset.year, ordered.length > 1), used),
+    dataset,
+    edits,
+    loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
+  }));
+  writeStatementSheets(wb, sheets, hideEmpty);
+  for (const sheet of sheets) {
+    sheetRows.push({
+      sheetName: sheet.name,
+      year: sheet.dataset.year,
+      centerId: SINGLE_WORKBOOK_CENTER_KEY,
+    });
   }
 
   attachWorkbookMetadata(
@@ -92,6 +105,65 @@ export function buildPygWorkbook(
   return wb;
 }
 
+/** One statement worksheet still to be written — name resolved, grid not yet built. */
+interface StatementSheet {
+  name: string;
+  dataset: PygDataset;
+  edits: CellEdit[];
+  /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
+  loadedMonths?: number[];
+}
+
+const NO_OMISSIONS: ReadonlySet<string> = new Set();
+
+/**
+ * Writes every statement worksheet of a workbook, in order.
+ *
+ * The grids are built HERE rather than inside each sheet because `hideEmpty` is decided
+ * over the whole file at once: a code is omitted only when it has no movement in ANY sheet (see
+ * `emptyAccountCodes`), so every sheet keeps the same chart of accounts and they can be read side
+ * by side. Nothing annotated is ever omitted, which is what keeps the hidden metadata sheet from
+ * pointing at rows that aren't there.
+ */
+function writeStatementSheets(
+  wb: ExcelJS.Workbook,
+  sheets: readonly StatementSheet[],
+  hideEmpty: boolean,
+): void {
+  const grids = sheets.map((sheet) =>
+    toDatosGrid(sheet.dataset, sheet.edits, sheet.dataset.baseFrequency),
+  );
+  const omit = hideEmpty ? emptyAccountCodes(grids) : NO_OMISSIONS;
+  const months = hideEmpty ? movingMonths(grids) : null;
+  sheets.forEach((sheet, index) => writeStatementSheet(wb, sheet, grids[index], omit, months));
+}
+
+/**
+ * The month indices worth a column, ascending — a month survives if ANY sheet moved it, the same
+ * per-workbook rule the omitted codes follow and for the same reason: the sheets are read side by
+ * side, and a month present in one and missing in the next stops them lining up.
+ *
+ * Dropping an empty month does NOT unbalance the Total: an empty month contributes zero, so what
+ * the sheet still shows adds up to exactly the total it always did.
+ */
+function movingMonths(grids: readonly DatosGrid[]): number[] {
+  const moving = new Set<number>();
+  for (const grid of grids) {
+    const positions = grid.columns.flatMap((column, index) =>
+      column.kind === "period" ? [index] : [],
+    );
+    for (const position of movingColumnPositions(grid.rows, positions)) {
+      const column = grid.columns[position];
+      // The column carries its own period index; the sheet's month columns are that index, not
+      // the position, which is what makes this survive a grid that ever stops starting at Enero.
+      if (column.kind === "period") {
+        moving.add(column.index);
+      }
+    }
+  }
+  return [...moving].sort((a, b) => a - b);
+}
+
 /**
  * Writes one Estado de Resultados worksheet (preamble → header → rows → result) into `wb`.
  * `loadedMonths`, when given (the by-centers workspace), leaves an unloaded month's cells
@@ -100,20 +172,22 @@ export function buildPygWorkbook(
  */
 function writeStatementSheet(
   wb: ExcelJS.Workbook,
-  name: string,
-  dataset: PygDataset,
-  edits: CellEdit[],
-  loadedMonths?: number[],
+  { name, dataset, edits, loadedMonths }: StatementSheet,
+  grid: DatosGrid,
+  omit: ReadonlySet<string>,
+  months: readonly number[] | null,
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(name);
   const isMonthly = dataset.baseFrequency !== "anual";
+  // Which month columns this sheet writes, in order. `null` is every month — the shape the file
+  // has always had, and the one it keeps whenever the switch is off.
+  const written = isMonthly ? (months ?? MONTHS_FULL_ES.map((_, index) => index)) : [];
 
   writePreamble(ws, dataset);
-  const headerRowNumber = writeHeader(ws, isMonthly);
-  setColumnWidths(ws, isMonthly);
+  const headerRowNumber = writeHeader(ws, isMonthly, written);
+  setColumnWidths(ws, written.length + (isMonthly ? 1 : 0));
   freeze(ws, headerRowNumber);
 
-  const grid = toDatosGrid(dataset, edits, dataset.baseFrequency);
   const originals = new Map(dataset.accounts.map((account) => [account.code, account.values]));
   const valueEdits = indexValueEdits(edits);
   emitDataRows(ws, grid.rows, {
@@ -122,6 +196,8 @@ function writeStatementSheet(
     originals,
     valueEdits,
     loadedMonths,
+    omit,
+    months: written,
   });
   return ws;
 }
@@ -161,6 +237,12 @@ interface EmitContext {
   valueEdits: Map<string, CellEdit>;
   /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
   loadedMonths?: number[];
+  /** Account codes to leave out — empty unless «Ocultar ceros» is on. A code in here has no
+   * movement anywhere in the workbook, so its whole subtree is in here too. */
+  omit: ReadonlySet<string>;
+  /** Month indices to write, ascending; every month unless «Ocultar ceros» is on. Empty for an
+   * annual sheet, which has no month columns at all. */
+  months: readonly number[];
 }
 
 function newWorkbook(): ExcelJS.Workbook {
@@ -187,8 +269,8 @@ function writePreamble(ws: ExcelJS.Worksheet, dataset?: PygDataset): void {
   ws.addRow([]);
 }
 
-function writeHeader(ws: ExcelJS.Worksheet, isMonthly: boolean): number {
-  const labels = isMonthly ? [...MONTHS_FULL_ES, "Total"] : ["Total"];
+function writeHeader(ws: ExcelJS.Worksheet, isMonthly: boolean, months: readonly number[]): number {
+  const labels = isMonthly ? [...months.map((month) => MONTHS_FULL_ES[month]), "Total"] : ["Total"];
   const row = ws.addRow(["", "", ...labels]);
   row.font = { bold: true };
   row.eachCell((cell) => {
@@ -197,11 +279,10 @@ function writeHeader(ws: ExcelJS.Worksheet, isMonthly: boolean): number {
   return row.number;
 }
 
-function setColumnWidths(ws: ExcelJS.Worksheet, isMonthly: boolean): void {
+function setColumnWidths(ws: ExcelJS.Worksheet, valueCols: number): void {
   ws.getColumn(CODE_COL).width = 12;
   ws.getColumn(NAME_COL).width = 42;
-  const valueCols = isMonthly ? 13 : 1; // 12 months + Total, or a single Total
-  for (let i = 0; i < valueCols; i++) {
+  for (let i = 0; i < Math.max(1, valueCols); i++) {
     ws.getColumn(FIRST_VALUE_COL + i).width = 13;
   }
 }
@@ -222,6 +303,11 @@ function indexValueEdits(edits: CellEdit[]): Map<string, CellEdit> {
 
 function emitDataRows(ws: ExcelJS.Worksheet, rows: DatosRow[], ctx: EmitContext): void {
   for (const row of rows) {
+    // An omitted code takes its subtree with it: a descendant with movement would have kept its
+    // ancestors out of the set, so nothing under this row survives either.
+    if (!row.isResult && ctx.omit.has(row.code)) {
+      continue;
+    }
     writeDataRow(ws, row, ctx);
     if (row.children) {
       emitDataRows(ws, row.children, ctx);
@@ -235,10 +321,15 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
   // The grid's own Total cell rides along in `row.cells`; the sheet writes the period columns
   // and then that total, so the two are separated here rather than re-summed.
   const periodCells = row.cells.filter((_, index) => ctx.columns[index]?.kind !== "total");
-  const values = periodCells.map((cell, monthIndex) =>
-    loaded(monthIndex) ? (cell.value ?? 0) : null,
+  const valueAt = (monthIndex: number): number | null =>
+    loaded(monthIndex) ? (periodCells[monthIndex]?.value ?? 0) : null;
+  const values = ctx.months.map(valueAt);
+  // Summed over EVERY month, not just the written ones — though the two agree by construction,
+  // since a month is only ever dropped for having nothing in it.
+  const total = periodCells.reduce(
+    (sum: number, _cell, monthIndex) => sum + (valueAt(monthIndex) ?? 0),
+    0,
   );
-  const total = values.reduce((sum: number, value) => sum + (value ?? 0), 0);
   const r = ws.addRow([row.code, row.name, ...values, ...(ctx.isMonthly ? [total] : [])]);
 
   const isParent = Boolean(row.children?.length);
@@ -247,7 +338,7 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
   }
   r.getCell(NAME_COL).alignment = { indent: Math.max(0, row.level - 1) };
 
-  const lastValueCol = FIRST_VALUE_COL + periodCells.length - 1;
+  const lastValueCol = FIRST_VALUE_COL + values.length - 1;
   const lastCol = ctx.isMonthly ? lastValueCol + 1 : lastValueCol;
   for (let col = FIRST_VALUE_COL; col <= lastCol; col++) {
     r.getCell(col).numFmt = CURRENCY_FMT;
@@ -260,13 +351,16 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
     return; // no notes on the summary row
   }
 
-  periodCells.forEach((cell, monthIndex) => {
-    if (!loaded(monthIndex)) {
+  // Anchored to the WRITTEN column, not to the month index: with months dropped the two no
+  // longer coincide, and a note on the wrong column is worse than no note.
+  ctx.months.forEach((monthIndex, offset) => {
+    const cell = periodCells[monthIndex];
+    if (!cell || !loaded(monthIndex)) {
       return;
     }
     const note = cellNote(row.code, monthIndex, cell, ctx);
     if (note) {
-      r.getCell(FIRST_VALUE_COL + monthIndex).note = note;
+      r.getCell(FIRST_VALUE_COL + offset).note = note;
     }
   });
 }
@@ -314,6 +408,10 @@ export interface MultiCenterInput {
   sourceSystemId?: string;
   /** Every center-year of the workspace. Grouped and ordered here, not by the caller. */
   centers: { dataset: PygDataset; edits: CellEdit[] }[];
+  /** «Ocultar ceros» — omits the accounts and the months with no movement in ANY sheet of the
+   * file, never sheet by sheet, so every center keeps the same chart of accounts and the same
+   * columns. */
+  hideEmpty?: boolean;
 }
 
 /**
@@ -333,6 +431,7 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
   const sheetRows: AppWorkbookSheet[] = [];
 
   const years = [...new Set(input.centers.map((c) => c.dataset.year))].sort((a, b) => a - b);
+  const sheets: StatementSheet[] = [];
 
   for (const year of years) {
     const ofYear = input.centers
@@ -356,23 +455,26 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
       accounts: merged.accounts,
       resultFromFile: [],
     };
-    writeStatementSheet(
-      wb,
-      uniqueSheetName(sheetTitle("Consolidado", year, years.length > 1), used),
-      consolidated,
-      [],
+    sheets.push({
+      name: uniqueSheetName(sheetTitle("Consolidado", year, years.length > 1), used),
+      dataset: consolidated,
+      edits: [],
       loadedMonths,
-    );
+    });
 
     for (const { dataset, edits } of ofYear) {
       const name = uniqueSheetName(
         sheetTitle(dataset.costCenterName || dataset.centerId || "Centro", year, years.length > 1),
         used,
       );
-      writeStatementSheet(wb, name, dataset, edits, loadedMonths);
+      sheets.push({ name, dataset, edits, loadedMonths });
       sheetRows.push({ sheetName: name, year, centerId: dataset.centerId ?? dataset.id });
     }
   }
+
+  // The Consolidado sheet is part of the judgement, not an exception to it: an account nobody
+  // moved sums to zero there too, so it never keeps a row alive on its own.
+  writeStatementSheets(wb, sheets, input.hideEmpty ?? false);
 
   attachWorkbookMetadata(
     wb,
@@ -610,14 +712,22 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
 export function buildConsolidatedWorkbook(
   datasets: readonly PygDataset[],
   loadedMonthsByYear: Record<number, number[]>,
+  /** «Ocultar ceros» — lo que ningún cliente movió, cuenta o mes, no llega al archivo. */
+  hideEmpty = false,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
   const ordered = [...datasets].sort((a, b) => a.year - b.year);
-  for (const dataset of ordered) {
-    const name = uniqueSheetName(sheetTitle("Consolidado", dataset.year, ordered.length > 1), used);
-    writeStatementSheet(wb, name, dataset, [], loadedMonthsByYear[dataset.year] ?? []);
-  }
+  writeStatementSheets(
+    wb,
+    ordered.map((dataset) => ({
+      name: uniqueSheetName(sheetTitle("Consolidado", dataset.year, ordered.length > 1), used),
+      dataset,
+      edits: [],
+      loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
+    })),
+    hideEmpty,
+  );
   return wb;
 }
 

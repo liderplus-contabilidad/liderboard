@@ -1,8 +1,9 @@
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { columnHeaderLabel } from "@/lib/profit-loss/datos-columns";
 import { sectionTone } from "@/lib/profit-loss/datos-sections";
-import type { AccumulatedPeriod } from "@/lib/profit-loss/report/accumulate";
 import { sharePct, variationPct } from "@/lib/profit-loss/report/accumulate";
+import type { StatementFit } from "@/lib/profit-loss/report/page-fit";
 import type { DatosGrid, DatosRow } from "@/lib/profit-loss/datos-types";
 import { flattenSorted } from "../datos-utils";
 
@@ -17,36 +18,43 @@ const BASE_INDENT = 10;
 const MAX_COLUMN_PCT = 16;
 
 /**
- * The Estado de Resultados as it prints: one accumulated column per year, then the variation
- * between the two most recent, then the weight of each account over Ingresos.
+ * The Estado de Resultados as it prints.
  *
  * It does NOT reuse `DatosTable`, and that is deliberate: that component is the editable grid —
  * sortable sticky headers, a pinned ficha column, per-cell edit buttons, and a
  * `max-h-[62vh] overflow-auto` scroller which on paper would print only the part that happened
  * to be visible.
  *
- * **The column axis is the whole design.** Datos and the Excel carry the twelve months, and that
- * is where a month-by-month figure gets looked up. On a page those thirteen columns leave 27 px
- * per figure once the account names have taken their share, which is not a narrow table — it is
- * digits drawn on top of each other. `accumulate.ts` collapses them to the four columns below,
- * which fit A4 vertical with roughly a third of each column to spare, and that slack is the point:
- * it is what survives a client whose figures run a digit longer than the test data's.
+ * **The column axis is the whole design, and it is not decided here.** The report reads in two
+ * ways, and both arrive already built in `grid.columns`:
  *
- * The tree arrives already accumulated and pruned; nothing is decided here.
+ * - ACUMULADO (the default): `accumulate.ts` collapses the periods into one column per year, plus
+ *   the variation between the two most recent and the weight over Ingresos. Four columns that fit
+ *   A4 vertical with a third of each to spare, and that slack is what survives a client whose
+ *   figures run a digit longer than the test data's.
+ * - COMO EN DATOS: the very columns the screen shows. Thirteen of them do not fit vertical — which
+ *   is why `statementFit` sends that reading to its own landscape sheet — and `Var.`/`% Ing.` are
+ *   not printed there: a variation between two months is not what that header means, and they are
+ *   the two columns that are in the way once there are thirteen.
+ *
+ * The tree arrives already pruned; nothing is decided here.
  */
 export function ReportStatement({
   grid,
-  periods,
   baseRow,
   notes,
   collapsed,
   hiddenAccounts,
+  fit,
+  showComparison,
+  trimmed,
+  caption,
+  captionColor,
+  breakBefore,
 }: {
-  /** The accumulated grid: `grid.columns[i]` is `periods[i]`. */
+  /** The grid to print, with its columns already resolved to the chosen reading. */
   grid: DatosGrid;
-  /** Newest year first — `[0]` is the report's period, the rest its comparatives. */
-  periods: readonly AccumulatedPeriod[];
-  /** Ingresos, accumulated over the same columns — the denominator of «% Ing.». */
+  /** Ingresos over the same columns — the denominator of «% Ing.». */
   baseRow: DatosRow | undefined;
   /** Comparability notes from the accumulation, printed under the table. */
   notes: readonly string[];
@@ -54,6 +62,18 @@ export function ReportStatement({
   collapsed: ReadonlySet<string>;
   /** How many accounts the cap left out, said out loud under the table. */
   hiddenAccounts: number;
+  /** Which sheet this table is on, and how big its type may be. */
+  fit: StatementFit;
+  /** Whether `Var.` and `% Ing.` are printed — only over accumulated years. */
+  showComparison: boolean;
+  /** Whether the «Periodo» filter trimmed the axis, which is what renames a Total. */
+  trimmed: boolean;
+  /** Qué centro es esta tabla; `null` cuando el informe imprime uno solo y ya lo dice la portada. */
+  caption?: string | null;
+  /** El punto de color del centro en el selector, para que la tabla se reconozca desde la barra. */
+  captionColor?: string | undefined;
+  /** Abre página. Lo pone quien coloca las tablas, no la tabla: la primera no abre ninguna. */
+  breakBefore?: boolean;
 }) {
   // No sort — a printed statement reads in plan order. It DOES fold: the level cap is what keeps
   // a six-deep chart of accounts from arriving indented into a column too narrow for its names.
@@ -61,27 +81,51 @@ export function ReportStatement({
 
   // La variación existe solo con un año contra otro; con uno solo la columna no se declara, en
   // vez de dibujarse llena de rayas.
-  const comparing = periods.length >= 2;
-  const columnCount = periods.length + (comparing ? 1 : 0) + 1;
-  const columnPct = Math.min(MAX_COLUMN_PCT, 60 / columnCount);
+  const comparing = showComparison && grid.columns.length >= 2;
+  const extra = showComparison ? (comparing ? 2 : 1) : 0;
+  const columnCount = grid.columns.length + extra;
+  const columnPct = Math.max(
+    Math.min(MAX_COLUMN_PCT, 60 / columnCount),
+    (fit.columnWidth / fit.sheetWidth) * 100,
+  );
+  const padX = fit.cellPaddingX / 2;
 
-  if (periods.length === 0) {
+  if (grid.columns.length === 0) {
     return (
       <p className="rounded-[13px] border border-border bg-surface px-4 py-6 text-[11.5px] text-muted">
-        {notes[0]}
+        {notes[0] ?? "No hay nada cargado dentro de lo que muestra el informe."}
       </p>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-[13px] border border-border bg-surface">
+    <div
+      className={cn(
+        "overflow-hidden rounded-[13px] border border-border bg-surface",
+        breakBefore && "print-page-break",
+      )}
+    >
+      {caption && (
+        <header className="flex items-center gap-2 border-b border-border bg-surface-header px-3 py-2">
+          {captionColor && (
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+              style={{ backgroundColor: captionColor }}
+            />
+          )}
+          <span className="text-[12.5px] font-semibold text-ink">{caption}</span>
+        </header>
+      )}
       {/*
         `table-layout: fixed` con `<colgroup>` fija el reparto: sin él cada columna reclama el
         ancho de su contenido y la última se sale del papel. Lo que NO hace por sí solo es que el
         contenido quepa —una cifra más ancha que su columna se dibuja encima de la vecina, en
-        silencio—; eso lo decide el número de columnas, y por eso son cuatro.
+        silencio—; eso lo decide `statementFit`, y por eso el ancho y la tipografía vienen de ahí.
       */}
-      <table className="w-full table-fixed border-collapse text-[10.5px]">
+      <table
+        className="w-full table-fixed border-collapse"
+        style={{ fontSize: `${fit.fontSize}px` }}
+      >
         <colgroup>
           <col style={{ width: `${100 - columnCount * columnPct}%` }} />
           {Array.from({ length: columnCount }, (_, index) => (
@@ -90,16 +134,27 @@ export function ReportStatement({
         </colgroup>
         <thead>
           <tr className="bg-surface-header">
-            <th className="border-b border-border px-2.5 py-2 text-left text-[9px] font-semibold uppercase tracking-[0.5px] text-muted">
+            <th
+              className="border-b border-border py-2 text-left text-[9px] font-semibold uppercase tracking-[0.5px] text-muted"
+              style={{ paddingLeft: padX, paddingRight: padX }}
+            >
               Cuenta
             </th>
-            {periods.map((period, index) => (
-              <Head key={period.year} bordered={index > 0}>
-                {period.label}
+            {grid.columns.map((column, index) => (
+              <Head key={index} bordered={index > 0} padX={padX}>
+                {columnHeaderLabel(column, trimmed)}
               </Head>
             ))}
-            {comparing && <Head bordered>Var.</Head>}
-            <Head bordered>% Ing.</Head>
+            {comparing && (
+              <Head bordered padX={padX}>
+                Var.
+              </Head>
+            )}
+            {showComparison && (
+              <Head bordered padX={padX}>
+                % Ing.
+              </Head>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -135,14 +190,15 @@ export function ReportStatement({
                   </span>
                 </th>
 
-                {periods.map((period, index) => {
+                {grid.columns.map((_, index) => {
                   const value = row.cells[index]?.value ?? null;
                   return (
                     <Cell
-                      key={period.year}
+                      key={index}
                       bordered={index > 0}
                       bold={Boolean(row.isResult)}
                       tone={amountTone(value, Boolean(row.isResult))}
+                      padX={padX}
                     >
                       {value === null || value === 0 ? "–" : formatCurrency(value)}
                     </Cell>
@@ -150,18 +206,21 @@ export function ReportStatement({
                 })}
 
                 {comparing && (
-                  <Cell bordered bold={Boolean(row.isResult)} tone="text-ink-soft">
+                  <Cell bordered bold={Boolean(row.isResult)} tone="text-ink-soft" padX={padX}>
                     <Variation value={variationPct(current, previous)} />
                   </Cell>
                 )}
 
-                <Cell
-                  bordered
-                  bold={Boolean(row.isResult)}
-                  tone={row.isResult ? "text-ink" : "text-ink-soft"}
-                >
-                  {share(current, baseRow?.cells[0]?.value ?? null)}
-                </Cell>
+                {showComparison && (
+                  <Cell
+                    bordered
+                    bold={Boolean(row.isResult)}
+                    tone={row.isResult ? "text-ink" : "text-ink-soft"}
+                    padX={padX}
+                  >
+                    {share(current, baseRow?.cells[0]?.value ?? null)}
+                  </Cell>
+                )}
               </tr>
             );
           })}
@@ -186,13 +245,22 @@ export function ReportStatement({
   );
 }
 
-function Head({ children, bordered }: { children: React.ReactNode; bordered?: boolean }) {
+function Head({
+  children,
+  bordered,
+  padX,
+}: {
+  children: React.ReactNode;
+  bordered?: boolean;
+  padX: number;
+}) {
   return (
     <th
       className={cn(
-        "border-b border-border px-2.5 py-2 text-right text-[9px] font-semibold text-muted",
+        "border-b border-border py-2 text-right text-[9px] font-semibold text-muted",
         bordered && "border-l border-border-soft",
       )}
+      style={{ paddingLeft: padX, paddingRight: padX }}
     >
       {children}
     </th>
@@ -204,20 +272,23 @@ function Cell({
   bordered,
   bold,
   tone,
+  padX,
 }: {
   children: React.ReactNode;
   bordered?: boolean;
   bold?: boolean;
   tone: string;
+  padX: number;
 }) {
   return (
     <td
       className={cn(
-        "whitespace-nowrap border-b border-border-soft px-2.5 py-1.5 text-right font-mono tabular-nums",
+        "overflow-hidden whitespace-nowrap border-b border-border-soft py-1.5 text-right font-mono tabular-nums",
         bordered && "border-l border-border-soft",
         bold ? "font-bold" : "font-semibold",
         tone,
       )}
+      style={{ paddingLeft: padX, paddingRight: padX }}
     >
       {children}
     </td>

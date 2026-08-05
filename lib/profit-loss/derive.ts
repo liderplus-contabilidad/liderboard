@@ -831,6 +831,32 @@ function compareCodes(a: string, b: string): number {
 }
 
 /**
+ * The value a cell edit should STORE: `undefined` when it is exactly what the file already holds.
+ *
+ * Typing a figure and then typing the original back is not an adjustment, and the app must not
+ * record one — a stored no-op paints the cell as adjusted, writes «Valor original: $0 → $0» into
+ * the downloaded workbook, makes a later reload of that month look like a conflict, and keeps the
+ * row alive under «Ocultar cuentas en cero» for a change nobody made. Deciding it HERE, at the
+ * write, is what lets every one of those readers stay as it is: what is stored is true.
+ *
+ * A cleared cell (`null`) is a zero, the same reading the whole engine makes of an edit's value;
+ * a code or month the file doesn't report reads as a file zero, which is what an account added by
+ * a later month is before that month arrives.
+ */
+export function storedAdjustment(
+  accounts: readonly AccountRow[],
+  code: string,
+  monthIndex: number,
+  value: number | null | undefined,
+): number | null | undefined {
+  if (value === undefined) {
+    return undefined; // comment-only edit: there is no value to compare
+  }
+  const original = accounts.find((account) => account.code === code)?.values[monthIndex] ?? 0;
+  return (value ?? 0) === original ? undefined : value;
+}
+
+/**
  * Overlays leaf value-edits onto a flat AccountRow list (the shape mergeCenters consumes),
  * so the computed Consolidado reflects per-center edits. Only leaf codes take a value; parents
  * recompute downstream. Non-value edits (comment-only) are ignored here.

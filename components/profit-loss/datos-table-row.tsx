@@ -18,7 +18,7 @@ export interface DatosTableRowProps {
   /** The grid's whole column plan; `row.cells[i]` aligns to `columns[i]`. */
   columns: DatosColumn[];
   /** Positions in `columns` to render, in order — the "Periodo" filter's doing. */
-  visibleColumns: number[];
+  visibleColumns: readonly number[];
   editable: boolean;
   /** Which columns the workspace has actually loaded, by position; `null` = no restriction
    * (single-statement mode). An unloaded column renders empty and never opens for editing,
