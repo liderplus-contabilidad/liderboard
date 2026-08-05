@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { DatosRow } from "./datos-types";
+import type { DatosCell, DatosGrid, DatosRow } from "./datos-types";
 import {
   accountOptions,
   collapsedForLevel,
   deepestLevel,
+  emptyAccountCodes,
   focusAccounts,
   matchExpandLevel,
+  movingColumnPositions,
+  pruneEmptyAccounts,
   visibleAccountOptions,
 } from "./filter";
 import type { AccountRow } from "./types";
@@ -218,5 +221,179 @@ describe("matchExpandLevel", () => {
 
   it("returns null for a custom collapse state", () => {
     expect(matchExpandLevel(MONTHLY_ACCOUNTS, new Set(["4.1"]), deepest)).toBeNull();
+  });
+});
+
+/** A row whose cells are given straight, so a test can say exactly what each column holds. */
+function valued(code: string, cells: DatosCell[], children?: DatosRow[]): DatosRow {
+  return {
+    code,
+    name: code,
+    level: code.split(".").length,
+    cells,
+    ...(children ? { children } : {}),
+  };
+}
+
+/** `n` cells, all zero — the shape a "sin movimiento" row has. */
+function zeros(n = 3): DatosCell[] {
+  return Array.from({ length: n }, () => ({ value: 0 }) as DatosCell);
+}
+
+describe("pruneEmptyAccounts", () => {
+  it("drops a branch with no movement anywhere in it", () => {
+    const rows = [
+      valued("4", [{ value: 10 }], [valued("4.1", [{ value: 10 }])]),
+      valued("5", [{ value: 0 }], [valued("5.1", [{ value: 0 }]), valued("5.2", [{ value: 0 }])]),
+    ];
+    expect(codes(pruneEmptyAccounts(rows, null))).toEqual(["4", "4.1"]);
+  });
+
+  it("keeps a parent that rolls up to zero because its children cancel out", () => {
+    const rows = [
+      valued(
+        "4",
+        [{ value: 0 }],
+        [valued("4.1", [{ value: 100 }]), valued("4.2", [{ value: -100 }])],
+      ),
+    ];
+    expect(codes(pruneEmptyAccounts(rows, null))).toEqual(["4", "4.1", "4.2"]);
+  });
+
+  it("treats an unloaded month (null) exactly as a zero", () => {
+    const rows = [valued("4", [{ value: null }, { value: null }])];
+    expect(pruneEmptyAccounts(rows, null)).toEqual([]);
+  });
+
+  it("keeps a zero row that carries a comment", () => {
+    const rows = [valued("4", [{ value: 0 }, { value: 0, comment: "Sin ventas en febrero" }])];
+    expect(codes(pruneEmptyAccounts(rows, null))).toEqual(["4"]);
+  });
+
+  it("keeps a row whose zero was PRODUCED by an adjustment", () => {
+    // 500 → 0. Omitting it from a download would lose the adjustment and its original value.
+    const rows = [valued("4", [{ value: 0, edited: true }, { value: 0 }])];
+    expect(codes(pruneEmptyAccounts(rows, null))).toEqual(["4"]);
+  });
+
+  it("never drops a result row, even at zero", () => {
+    const rows = [valued("4", zeros()), RESULT_ROW];
+    expect(pruneEmptyAccounts(rows, null)).toEqual([RESULT_ROW]);
+  });
+
+  it("judges only the given column positions", () => {
+    const rows = [valued("4", [{ value: 0 }, { value: 80 }])];
+    expect(codes(pruneEmptyAccounts(rows, [1]))).toEqual(["4"]);
+    expect(pruneEmptyAccounts(rows, [0])).toEqual([]);
+  });
+
+  it("keeps a parent alive on its own comment, as a leaf", () => {
+    const rows = [
+      valued("4", [{ value: 0, comment: "Cuenta sin uso este año" }], [valued("4.1", zeros(1))]),
+    ];
+    const pruned = pruneEmptyAccounts(rows, null);
+    expect(codes(pruned)).toEqual(["4"]);
+    expect(pruned[0].children).toEqual([]);
+  });
+
+  it("returns the very same array when nothing is pruned", () => {
+    const rows = [valued("4", [{ value: 10 }], [valued("4.1", [{ value: 10 }])])];
+    const pruned = pruneEmptyAccounts(rows, null);
+    expect(pruned).toBe(rows);
+    expect(pruned[0]).toBe(rows[0]);
+  });
+
+  it("preserves the reference of an untouched sibling subtree", () => {
+    const kept = valued("4", [{ value: 10 }], [valued("4.1", [{ value: 10 }])]);
+    const rows = [kept, valued("5", zeros(1))];
+    const pruned = pruneEmptyAccounts(rows, null);
+    expect(pruned).not.toBe(rows);
+    expect(pruned[0]).toBe(kept);
+  });
+});
+
+describe("emptyAccountCodes", () => {
+  const grid = (rows: DatosRow[]): DatosGrid => ({
+    id: "g",
+    title: "Estado de Resultados",
+    columns: [{ kind: "period", label: "Ene", year: 2026, index: 0 }],
+    rows,
+  });
+
+  it("keeps a code that has movement in ANY sheet of the workbook", () => {
+    // "4.2" only moves in the second sheet; the first must still write it, so both sheets keep
+    // the same chart of accounts and can be read side by side.
+    const norte = grid([
+      valued("4", [{ value: 10 }], [valued("4.1", [{ value: 10 }]), valued("4.2", zeros(1))]),
+    ]);
+    const sur = grid([
+      valued("4", [{ value: 7 }], [valued("4.1", zeros(1)), valued("4.2", [{ value: 7 }])]),
+    ]);
+    expect(emptyAccountCodes([norte, sur])).toEqual(new Set());
+  });
+
+  it("omits a code with no movement in any sheet", () => {
+    const norte = grid([
+      valued("4", [{ value: 10 }], [valued("4.1", [{ value: 10 }]), valued("4.9", zeros(1))]),
+    ]);
+    const sur = grid([
+      valued("4", [{ value: 7 }], [valued("4.1", [{ value: 7 }]), valued("4.9", zeros(1))]),
+    ]);
+    expect(emptyAccountCodes([norte, sur])).toEqual(new Set(["4.9"]));
+  });
+
+  it("never omits a result row's code", () => {
+    expect(emptyAccountCodes([grid([valued("4", zeros(1)), RESULT_ROW])])).toEqual(new Set(["4"]));
+  });
+});
+
+describe("movingColumnPositions", () => {
+  const ALL = [0, 1, 2];
+
+  it("returns the very same array when every column moves", () => {
+    const rows = [valued("4", [{ value: 1 }, { value: 2 }, { value: 3 }])];
+    expect(movingColumnPositions(rows, ALL)).toBe(ALL);
+  });
+
+  it("drops the columns nothing moved in", () => {
+    const rows = [
+      valued("4", [{ value: 0 }, { value: 5 }, { value: 0 }]),
+      valued("5", [{ value: 0 }, { value: 0 }, { value: 0 }]),
+    ];
+    expect(movingColumnPositions(rows, ALL)).toEqual([1]);
+  });
+
+  it("looks inside the whole tree, not just the top rows", () => {
+    const rows = [
+      valued("4", zeros(), [valued("4.1", [{ value: 0 }, { value: 0 }, { value: 9 }])]),
+    ];
+    expect(movingColumnPositions(rows, ALL)).toEqual([2]);
+  });
+
+  it("counts a comment and an adjustment as movement, like the row rule", () => {
+    const rows = [
+      valued("4", [{ value: 0, comment: "cerrada" }, { value: 0, edited: true }, { value: 0 }]),
+    ];
+    expect(movingColumnPositions(rows, ALL)).toEqual([0, 1]);
+  });
+
+  it("judges only the positions it is given", () => {
+    const rows = [valued("4", [{ value: 7 }, { value: 0 }, { value: 7 }])];
+    expect(movingColumnPositions(rows, [1])).toEqual([]);
+  });
+
+  it("leaves no row alive with its only figure hidden", () => {
+    // El invariante que hace que juzgar filas y columnas a la vez sea seguro: la celda que salva
+    // a «4.1» salva también a su columna, así que la fila nunca queda sin nada que enseñar.
+    const rows = [
+      valued("4", [{ value: 0 }, { value: 4 }], [valued("4.1", [{ value: 0 }, { value: 4 }])]),
+    ];
+    const columns = movingColumnPositions(rows, [0, 1]);
+    const kept = pruneEmptyAccounts(rows, [0, 1]);
+    for (const row of codes(kept)) {
+      expect(row).toBeTruthy();
+    }
+    expect(columns).toEqual([1]);
+    expect(codes(kept)).toEqual(["4", "4.1"]);
   });
 });

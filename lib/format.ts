@@ -45,7 +45,9 @@ export function formatCurrency(value: number, options?: { cents?: boolean }): st
  * misread a statement can carry to the client unnoticed. Rejecting it lands on `null`, which
  * every caller already treats as "leave the cell alone".
  */
-const AMOUNT_SHAPE = /^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/;
+export const AMOUNT_PATTERN = String.raw`(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?`;
+
+const AMOUNT_SHAPE = new RegExp(`^-?${AMOUNT_PATTERN}$`);
 
 /**
  * Inverse of the Ecuadorian formatters for editable numeric inputs: parses an amount

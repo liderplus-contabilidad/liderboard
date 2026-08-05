@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DatosCell, DatosGrid, DatosRow } from "../datos-types";
-import { pruneEmptyRows, pruneVerticalRows } from "./prune";
+import { pruneEmptyColumns, pruneEmptyRows, pruneVerticalRows } from "./prune";
 
 function cells(...values: (number | null)[]): DatosCell[] {
   return values.map((value) => ({ value }));
@@ -160,5 +160,54 @@ describe("la poda del análisis vertical", () => {
     );
 
     expect(pruned.rows.map((r) => r.code)).toEqual(["4"]);
+  });
+});
+
+describe("pruneEmptyColumns", () => {
+  const gridWith = (rows: DatosRow[], columnCount: number): DatosGrid => ({
+    id: "g",
+    title: "Estado de Resultados",
+    columns: [
+      ...Array.from({ length: columnCount - 1 }, (_, index) => ({
+        kind: "period" as const,
+        label: `P${index}`,
+        year: 2026,
+        index,
+      })),
+      { kind: "total" as const, label: "Total", year: 2026 },
+    ],
+    rows,
+  });
+
+  it("returns the very same grid when every column moved", () => {
+    const input = gridWith([row("4", [1, 2, 3])], 3);
+    expect(pruneEmptyColumns(input)).toBe(input);
+  });
+
+  it("drops a period nothing moved in", () => {
+    const input = gridWith([row("4", [5, 0, 5])], 3);
+    expect(pruneEmptyColumns(input).columns.map((c) => c.label)).toEqual(["P0", "Total"]);
+  });
+
+  it("treats an unloaded period (null) as an empty one", () => {
+    const input = gridWith([row("4", [5, null, 5])], 3);
+    expect(pruneEmptyColumns(input).columns.map((c) => c.label)).toEqual(["P0", "Total"]);
+  });
+
+  it("looks inside the whole tree", () => {
+    const input = gridWith([row("4", [0, 0, 7], [row("4.1", [0, 7, 7])])], 3);
+    expect(pruneEmptyColumns(input).columns.map((c) => c.label)).toEqual(["P1", "Total"]);
+  });
+
+  it("keeps the printed periods adding up to the Total", () => {
+    const input = gridWith([row("4", [30, 0, 20, 50])], 4);
+    const pruned = pruneEmptyColumns(input);
+    const cells = pruned.rows[0].cells.map((cell) => cell.value ?? 0);
+    const total = cells[cells.length - 1];
+    expect(cells.slice(0, -1).reduce((sum, value) => sum + value, 0)).toBe(total);
+  });
+
+  it("drops the Total too when the whole year is empty", () => {
+    expect(pruneEmptyColumns(gridWith([row("4", [0, 0, 0])], 3)).columns).toEqual([]);
   });
 });

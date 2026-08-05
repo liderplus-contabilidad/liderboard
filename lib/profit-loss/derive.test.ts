@@ -10,6 +10,7 @@ import {
   mergeCenters,
   periodLabels,
   planSummaries,
+  storedAdjustment,
   toDatosGrid,
 } from "./derive";
 import type { DatosRow } from "./datos-types";
@@ -718,5 +719,40 @@ describe("applyEditsToLeafAccounts", () => {
   it("returns the same reference when there are no value edits", () => {
     const accounts = [{ code: "4", name: "Ingresos", values: [1] }];
     expect(applyEditsToLeafAccounts(accounts, [])).toBe(accounts);
+  });
+});
+
+describe("storedAdjustment", () => {
+  const accounts: AccountRow[] = [
+    { code: "4.1", name: "Ventas", values: [0, 500] },
+    { code: "5.1", name: "Sueldos", values: [80, 80] },
+  ];
+
+  it("drops a value that matches what the file already holds", () => {
+    // Typing 100 into a cell the file has at 0 and then typing 0 back is not an adjustment: the
+    // cell is exactly what the file said. Storing it would paint the cell, annotate the download
+    // with «Valor original: $0 → $0» and keep the row alive under «Ocultar cuentas en cero».
+    expect(storedAdjustment(accounts, "4.1", 0, 0)).toBeUndefined();
+    expect(storedAdjustment(accounts, "5.1", 1, 80)).toBeUndefined();
+  });
+
+  it("treats clearing a cell (null) as a zero", () => {
+    expect(storedAdjustment(accounts, "4.1", 0, null)).toBeUndefined();
+    expect(storedAdjustment(accounts, "4.1", 1, null)).toBeNull(); // el archivo dice 500
+  });
+
+  it("keeps a value that really differs from the file", () => {
+    expect(storedAdjustment(accounts, "4.1", 1, 0)).toBe(0);
+    expect(storedAdjustment(accounts, "4.1", 0, 120)).toBe(120);
+  });
+
+  it("passes a comment-only edit through untouched", () => {
+    expect(storedAdjustment(accounts, "4.1", 0, undefined)).toBeUndefined();
+  });
+
+  it("reads an unknown code or month as a file zero", () => {
+    expect(storedAdjustment(accounts, "9.9", 0, 0)).toBeUndefined();
+    expect(storedAdjustment(accounts, "9.9", 0, 5)).toBe(5);
+    expect(storedAdjustment(accounts, "4.1", 11, 0)).toBeUndefined();
   });
 });

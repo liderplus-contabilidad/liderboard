@@ -5,7 +5,7 @@
  * and `useMemo` can wrap the work. Unchanged subtrees keep their node reference, so the
  * memoized rows don't all re-render when a filter changes.
  */
-import type { DatosRow } from "./datos-types";
+import type { DatosCell, DatosGrid, DatosRow } from "./datos-types";
 import { buildAccountTree, type AccountNode } from "./derive";
 import type { AccountRow } from "./types";
 
@@ -114,6 +114,117 @@ function keepFocused(
     }
   }
   return keptChildren.length > 0 ? { ...node, children: keptChildren } : null;
+}
+/**
+ * Checks if a row has movement based on values, comments, or edits. A `null` cell is treated as 0.
+ * Filters cells by `positions` if provided, otherwise checks all cells.
+ */
+export function hasMovement(row: DatosRow, positions: readonly number[] | null): boolean {
+  if (positions === null) {
+    return row.cells.some(moves);
+  }
+  return positions.some((position) => {
+    const cell = row.cells[position];
+    return cell !== undefined && moves(cell);
+  });
+}
+
+function moves(cell: DatosCell): boolean {
+  return (cell.value ?? 0) !== 0 || Boolean(cell.comment) || cell.edited === true;
+}
+
+/**
+ * Removes branches with no movement. Keeps `isResult` rows and parents with active children.
+ * Preserves references for unchanged subtrees.
+ */
+export function pruneEmptyAccounts(
+  rows: DatosRow[],
+  positions: readonly number[] | null,
+): DatosRow[] {
+  const out: DatosRow[] = [];
+  let changed = false;
+  for (const row of rows) {
+    const kept = keepWithMovement(row, positions);
+    if (kept !== null) {
+      out.push(kept);
+    }
+    changed ||= kept !== row;
+  }
+  return changed ? out : rows;
+}
+
+function keepWithMovement(node: DatosRow, positions: readonly number[] | null): DatosRow | null {
+  if (node.isResult) {
+    return node;
+  }
+  if (!node.children?.length) {
+    return hasMovement(node, positions) ? node : null;
+  }
+  const children = pruneEmptyAccounts(node.children, positions);
+  if (children === node.children) {
+    return node;
+  }
+  if (children.length > 0) {
+    return { ...node, children };
+  }
+  return hasMovement(node, positions) ? { ...node, children } : null;
+}
+
+/**
+ * Identifies columns with movement based on `positions`. Returns the original array if all columns move.
+ */
+export function movingColumnPositions(
+  rows: readonly DatosRow[],
+  positions: readonly number[],
+): readonly number[] {
+  const moving = new Set<number>();
+  const walk = (list: readonly DatosRow[]): void => {
+    for (const row of list) {
+      if (moving.size === positions.length) {
+        return;
+      }
+      for (const position of positions) {
+        const cell = row.cells[position];
+        if (!moving.has(position) && cell !== undefined && moves(cell)) {
+          moving.add(position);
+        }
+      }
+      if (row.children) {
+        walk(row.children);
+      }
+    }
+  };
+  walk(rows);
+  return moving.size === positions.length
+    ? positions
+    : positions.filter((position) => moving.has(position));
+}
+
+/**
+ * Finds account codes with no movement across all grids. Ensures alignment across sheets.
+ */
+export function emptyAccountCodes(grids: readonly DatosGrid[]): Set<string> {
+  const all = new Set<string>();
+  const kept = new Set<string>();
+  for (const grid of grids) {
+    collectCodes(grid.rows, all);
+    collectCodes(pruneEmptyAccounts(grid.rows, null), kept);
+  }
+  for (const code of kept) {
+    all.delete(code);
+  }
+  return all;
+}
+
+function collectCodes(rows: readonly DatosRow[], out: Set<string>): void {
+  for (const row of rows) {
+    if (!row.isResult) {
+      out.add(row.code);
+    }
+    if (row.children) {
+      collectCodes(row.children, out);
+    }
+  }
 }
 
 /**

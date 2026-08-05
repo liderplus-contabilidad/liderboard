@@ -1,8 +1,10 @@
 "use client";
 
 import { MessageSquare } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { formatNumber, parseCurrency } from "@/lib/format";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { evaluateAmount } from "@/lib/calc";
+import { cn } from "@/lib/cn";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { formatAmount } from "./datos-utils";
 
 /** Where the editor should anchor — the clicked cell's viewport rect. */
@@ -14,6 +16,16 @@ export interface EditorAnchor {
 }
 
 const POPOVER_WIDTH = 288;
+
+const HINT_ID = "cell-editor-value-hint";
+
+const HINT_TONES = {
+  tip: "text-faint",
+  result: "font-mono tabular-nums text-brand",
+  error: "text-negative",
+} as const;
+
+const CALC_TIP = "Puedes escribir una operación: =1200*12";
 
 /**
  * A cell edit/comment popover, positioned next to the clicked cell (fixed, so the
@@ -81,18 +93,38 @@ export function CellEditor({
     setPos({ top, left });
   }, [anchor]);
 
+  // A blank field clears the cell; anything else is an amount or an operation ("=1200*12").
+  const evaluated = useMemo(() => (value.trim() === "" ? null : evaluateAmount(value)), [value]);
+  const blocked = valueEditable && evaluated !== null && !evaluated.ok;
+
+  const hint = useMemo((): { text: string; tone: keyof typeof HINT_TONES } => {
+    if (evaluated === null) {
+      return { text: CALC_TIP, tone: "tip" };
+    }
+    if (!evaluated.ok) {
+      return { text: evaluated.error, tone: "error" };
+    }
+    // A plainly written amount needs no echo of itself — the hint stays offered instead.
+    return evaluated.isFormula
+      ? { text: `= ${formatCurrency(evaluated.value, { cents: true })}`, tone: "result" }
+      : { text: CALC_TIP, tone: "tip" };
+  }, [evaluated]);
+
   const submit = () => {
     if (!valueEditable) {
       onSave(initialValue, comment.trim());
       return;
     }
-    const trimmed = value.trim();
-    if (trimmed === "") {
+    if (evaluated === null) {
       onSave(null, comment.trim()); // cleared cell
       return;
     }
-    const parsed = parseCurrency(trimmed);
-    onSave(parsed ?? initialValue, comment.trim()); // unparseable → keep the original value
+    // Unparseable input used to fall back to the original value, which looked exactly like a
+    // saved edit; now it blocks the save and the line under the field says why.
+    if (!evaluated.ok) {
+      return;
+    }
+    onSave(evaluated.value, comment.trim());
   };
 
   const displayValue = formatAmount(initialValue);
@@ -128,7 +160,6 @@ export function CellEditor({
               </span>
               <input
                 ref={inputRef}
-                inputMode="decimal"
                 value={value}
                 onChange={(event) => setValue(event.target.value)}
                 onKeyDown={(event) => {
@@ -136,9 +167,22 @@ export function CellEditor({
                     submit();
                   }
                 }}
-                className="h-9 w-full rounded-lg border border-border bg-surface pl-6 pr-2.5 text-right font-mono text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+                aria-invalid={blocked}
+                aria-describedby={HINT_ID}
+                className={cn(
+                  "h-9 w-full rounded-lg border bg-surface pl-6 pr-2.5 text-right font-mono text-[13px] tabular-nums text-ink outline-none",
+                  blocked ? "border-negative" : "border-border focus:border-brand",
+                )}
               />
             </div>
+            {/* One line doing three jobs — hint, result, error — so nothing shifts as you type. */}
+            <p
+              id={HINT_ID}
+              aria-live="polite"
+              className={cn("mt-1 text-[11px] leading-snug", HINT_TONES[hint.tone])}
+            >
+              {hint.text}
+            </p>
           </label>
         ) : (
           <div className="mb-3">
@@ -180,7 +224,8 @@ export function CellEditor({
           <button
             type="button"
             onClick={submit}
-            className="h-8 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-hover"
+            disabled={blocked}
+            className="h-8 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             Guardar
           </button>

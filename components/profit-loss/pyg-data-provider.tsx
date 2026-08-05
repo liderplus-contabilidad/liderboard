@@ -43,6 +43,7 @@ import {
   applyEditsToLeafAccounts,
   FREQUENCY_ORDER,
   mergeCenters,
+  storedAdjustment,
   type YearSlice,
 } from "@/lib/profit-loss/derive";
 import {
@@ -280,6 +281,8 @@ interface PygDataValue {
   collapsed: Set<string>;
   toggleCollapsed: (code: string) => void;
   setExpandLevel: (level: number | "all") => void;
+  hideZeroRows: boolean;
+  toggleHideZeroRows: () => void;
 }
 
 const PygDataContext = createContext<PygDataValue | null>(null);
@@ -321,6 +324,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const [frequency, setFrequencyState] = useState<Frequency>("mensual");
   const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [hideZeroRows, setHideZeroRows] = useState(false);
 
   // La única lectura cruzada, y solo mientras el consolidado está abierto.
   const contributions =
@@ -594,6 +598,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [accounts],
   );
 
+  const toggleHideZeroRows = useCallback(() => setHideZeroRows((prev) => !prev), []);
+
   const commitWorkspace = useCallback(
     async (built: BuiltWorkspace) => {
       if (!openClientId) {
@@ -780,15 +786,29 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         return null;
       }
       const twin = twinWriteFor(dataset.accounts, edits, code, monthIndex, value);
+      const adjustment = storedAdjustment(dataset.accounts, code, monthIndex, value);
+      const twinAdjustment = twin
+        ? storedAdjustment(dataset.accounts, twin.code, twin.monthIndex, twin.value)
+        : undefined;
       await saveCellEdits([
         {
           datasetId: dataset.id,
           code,
           monthIndex,
-          ...(value !== undefined ? { value } : {}),
+          ...(adjustment !== undefined ? { value: adjustment } : {}),
           ...(comment ? { comment } : {}),
         },
-        ...(twin ? [{ datasetId: dataset.id, ...twin }] : []),
+        ...(twin
+          ? [
+              {
+                datasetId: dataset.id,
+                code: twin.code,
+                monthIndex: twin.monthIndex,
+                ...(twinAdjustment !== undefined ? { value: twinAdjustment } : {}),
+                ...(twin.comment ? { comment: twin.comment } : {}),
+              },
+            ]
+          : []),
       ]);
       return twin && { code: twin.code, monthIndex: twin.monthIndex };
     },
@@ -872,6 +892,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       collapsed,
       toggleCollapsed,
       setExpandLevel,
+      hideZeroRows,
+      toggleHideZeroRows,
     }),
     [
       clients,
@@ -930,6 +952,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       collapsed,
       toggleCollapsed,
       setExpandLevel,
+      hideZeroRows,
+      toggleHideZeroRows,
     ],
   );
 
