@@ -67,10 +67,16 @@ export const MODULES: DashboardModule[] = [
     icon: ShoppingBag,
     tabs: [TAB_GRAFICOS, TAB_DATOS],
   },
+  {
+    slug: "payroll",
+    label: "Rol de Pagos",
+    title: "Rol de Pagos",
+    icon: Receipt,
+    // Sin pestañas: la vista inicial (Historial de nómina) es la página entera, y no monta
+    // `ModuleTabs`.
+    tabs: [],
+  },
 ];
-
-/** Module previewed in the sidebar but not yet available. */
-export const COMING_SOON = { label: "Rol de Pagos", icon: Receipt } as const;
 
 export const DEFAULT_MODULE = MODULES[0];
 

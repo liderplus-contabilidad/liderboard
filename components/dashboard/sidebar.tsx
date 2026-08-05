@@ -10,7 +10,6 @@ import { MODULES } from "@/lib/modules";
 export function DashboardSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  // const ComingSoonIcon = COMING_SOON.icon;
 
   return (
     <aside
@@ -85,22 +84,6 @@ export function DashboardSidebar() {
             </Link>
           );
         })}
-
-        {/* <div
-          title={collapsed ? `${COMING_SOON.label} · Próximamente` : undefined}
-          className={cn(
-            "flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-sm font-medium text-faint",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          <ComingSoonIcon size={18} strokeWidth={1.9} className="shrink-0" />
-          <span className={cn("flex-1", collapsed && "sr-only")}>{COMING_SOON.label}</span>
-          {!collapsed && (
-            <span className="rounded-full border border-border bg-canvas px-[7px] py-0.5 text-[9.5px] font-semibold uppercase tracking-[0.4px] text-faint">
-              Próximamente
-            </span>
-          )}
-        </div> */}
       </nav>
 
       {!collapsed && (
