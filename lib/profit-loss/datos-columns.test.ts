@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DatosColumn } from "./datos-types";
-import { loadedColumnPositions, visibleColumnPositions } from "./datos-columns";
+import {
+  columnHeaderLabel,
+  loadedColumnPositions,
+  sliceColumns,
+  visibleColumnPositions,
+} from "./datos-columns";
+import type { DatosGrid } from "./datos-types";
 
 /** Dos años seguidos, cada uno con sus meses y su Total al cierre. */
 function twoYears(): DatosColumn[] {
@@ -74,5 +80,65 @@ describe("qué columnas están realmente cargadas", () => {
 
     expect(loaded.has(0)).toBe(true);
     expect(loaded.has(1)).toBe(false);
+  });
+});
+
+describe("cómo se nombra una columna", () => {
+  const total = twoYears()[2] as DatosColumn;
+  const period = twoYears()[0] as DatosColumn;
+
+  it("un Total sin recorte se llama como venía", () => {
+    expect(columnHeaderLabel(total, false)).toBe("Total 25");
+  });
+
+  it("un Total recortado dice que es del AÑO, no de lo que se ve", () => {
+    expect(columnHeaderLabel(total, true)).toBe("Total año 25");
+  });
+
+  it("una columna de periodo no cambia con el recorte", () => {
+    expect(columnHeaderLabel(period, true)).toBe("Ene 25");
+    expect(columnHeaderLabel(period, false)).toBe("Ene 25");
+  });
+});
+
+describe("quedarse con unas columnas", () => {
+  const grid: DatosGrid = {
+    id: "default",
+    title: "Estado",
+    columns: twoYears(),
+    rows: [
+      {
+        code: "4",
+        name: "Ingresos",
+        level: 1,
+        cells: [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }, { value: 5 }, { value: 6 }],
+        children: [
+          {
+            code: "4.1",
+            name: "Ventas",
+            level: 2,
+            cells: [
+              { value: 1 },
+              { value: 2 },
+              { value: 3 },
+              { value: 4 },
+              { value: 5 },
+              { value: 6 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("realinea las celdas de toda la rama", () => {
+    const sliced = sliceColumns(grid, [3, 4, 5]);
+    expect(sliced.columns.map((column) => column.label)).toEqual(["Ene 26", "Feb 26", "Total 26"]);
+    expect(sliced.rows[0]?.cells.map((cell) => cell.value)).toEqual([4, 5, 6]);
+    expect(sliced.rows[0]?.children?.[0]?.cells.map((cell) => cell.value)).toEqual([4, 5, 6]);
+  });
+
+  it("devuelve el mismo grid cuando no hay nada que quitar", () => {
+    expect(sliceColumns(grid, [0, 1, 2, 3, 4, 5])).toBe(grid);
   });
 });

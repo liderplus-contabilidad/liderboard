@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { cn } from "@/lib/cn";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DropdownContextValue {
@@ -219,5 +220,15 @@ export function DropdownFooter({ children }: { children: ReactNode }) {
     <div className="mt-1.5 flex items-center justify-between border-t border-border-soft pt-[9px]">
       {children}
     </div>
+  );
+}
+
+export function DropdownDone({ children = "Listo" }: { children?: ReactNode }) {
+  const { setOpen } = useDropdownContext("DropdownDone");
+
+  return (
+    <Button variant="primary" size="sm" onClick={() => setOpen(false)}>
+      {children}
+    </Button>
   );
 }

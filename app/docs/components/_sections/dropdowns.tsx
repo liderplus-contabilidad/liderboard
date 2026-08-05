@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dropdown,
+  DropdownDone,
   DropdownFooter,
   DropdownOption,
   DropdownPanel,
@@ -89,9 +90,7 @@ export function DropdownsSection() {
               <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
                 Quitar selección
               </Button>
-              <Button variant="primary" size="sm">
-                Listo
-              </Button>
+              <DropdownDone />
             </DropdownFooter>
           </DropdownPanel>
         </Dropdown>

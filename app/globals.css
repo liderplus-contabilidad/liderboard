@@ -81,14 +81,15 @@ body {
   background-clip: content-box;
 }
 
-/* ── Impresión ─────────────────────────────────────────────────────────────
-   El informe de PyG se monta en un portal sobre <body> con este id y se
-   imprime con window.print(). Nada más de la app llega al papel.
+/* ── Printing ─────────────────────────────────────────────────────────────
+  The Profit and Loss report is mounted in a portal over <body> with this id
+  and printed using window.print(). Nothing else from the app is included in
+  the print output.
 
-   Soltar html/body NO es opcional: el bloqueo de arriba (height:100% +
-   overflow:hidden) hace que el navegador pagine solo lo que cabe en el
-   viewport, así que sin esto el PDF sale de UNA página con la primera
-   pantalla y el resto del informe simplemente no existe. */
+  Releasing html/body IS NOT optional: the lock above (height:100% +
+  overflow:hidden) causes the browser to paginate only what fits in the
+  viewport, so without this the PDF ends up as ONE page with the first screen
+  and the rest of the report simply missing. */
 @media print {
   html,
   body {
@@ -106,13 +107,14 @@ body {
     overflow: visible;
   }
 
-  /* Los controles de la propia vista previa no son parte del informe. */
+  /* The preview controls themselves are not part of the report. */
   .print-hide {
     display: none !important;
   }
 
-  /* En pantalla la hoja tiene un ancho fijo para que los gráficos se midan contra la página;
-     al imprimir manda la página, que ya trae sus márgenes. */
+  /* On screen, the sheet has a fixed width so that charts are measured against
+    the page; when printing, the page takes precedence, which already includes
+    its margins. */
   .report-sheet,
   .report-page {
     width: auto !important;
@@ -124,17 +126,19 @@ body {
     padding: 0 !important;
   }
 
-  /* Abre página la sección que lo DECLARÓ, no todas. Cuando la regla vivía aquí sobre
-     `.print-section`, la portada —dos tercios de hoja— y el resumen —tres tiles— se llevaban
-     cada una su página casi en blanco. Qué secciones lo declaran se decide en
-     `lib/profit-loss/report/sections.ts`, junto a qué secciones existen. */
+  /* The section that DECLARED the page break opens it, not all sections. When
+    the rule lived here over `.print-section`, the cover page —two-thirds of
+    a sheet— and the summary —three tiles— each took almost a blank page.
+    Which sections declare it is decided in
+    `lib/profit-loss/report/sections.ts`, along with which sections exist. */
   .print-page-break {
     break-before: page;
   }
 
-  /* Y como ahora hay secciones que se leen de corrido, su encabezado no puede quedarse solo al
-     pie de la página anterior: la primera card mide ~420 px y lleva `break-inside: avoid`, así
-     que sin esto el título cae en el hueco que sobra y su contenido salta de hoja. */
+  /* And since there are now sections that are read continuously, their header
+    cannot be left alone at the bottom of the previous page: the first card
+    measures ~420 px and has `break-inside: avoid`, so without this the title
+    falls into the leftover space and its content jumps to the next page. */
   .print-section > header {
     break-after: avoid;
   }
@@ -143,7 +147,7 @@ body {
     break-inside: avoid;
   }
 
-  /* Un <thead> de una tabla real se repite solo en cada página. */
+  /* A <thead> of a real table repeats only on each page. */
   thead {
     display: table-header-group;
   }
@@ -152,27 +156,30 @@ body {
     break-inside: avoid;
   }
 
-  /* NO hay pie repetido: `position: fixed` es la única vía en Chrome y la identidad del informe
-     ya la lleva la portada. El navegador añade su propia numeración si el lector la deja
-     activada en el diálogo. */
+  /* There is NO repeated footer: `position: fixed` is the only way in Chrome,
+    and the report's identity is already carried by the cover page. The browser
+    adds its own numbering if the reader enables it in the dialog. */
 
-  /* Sin esto el navegador descarta los fondos, y una tabla contable sin sus
-     bandas de encabezado deja de leerse como una tabla. */
+  /* Without this, the browser discards backgrounds, and a financial table
+    without its header bands is no longer readable as a table. */
   * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 }
 
-/* UNA sola orientación, A4 vertical, y eso es una decisión de contenido antes que de CSS.
-   Hubo páginas apaisadas mientras el estado imprimía trece columnas de meses; para verse en la
-   previa tal como iban a salir tenían que desbordarse del cuerpo vertical del informe
-   (`margin-left` negativo), lo que en pantalla se lee como una tabla escapándose de la hoja, y
-   ni así cabían: 688 px de ancho útil menos los nombres de cuenta dejan 27 px por cifra, y una
-   cifra de seis dígitos mide 46. El informe acumula el periodo en vez de desglosarlo
-   (`lib/profit-loss/report/accumulate.ts`), sus tablas son de cuatro columnas y entran aquí con
-   holgura. Los doce meses siguen estando en Datos y en el Excel, que es donde se consultan. */
+/* The report is designed for A4 portrait orientation due to its content structure. 
+  Landscape pages are used only for specific sections requiring wider layouts. */
 @page {
   size: A4 portrait;
   margin: 14mm 14mm 16mm;
+}
+
+@page apaisada {
+  size: A4 landscape;
+  margin: 14mm 14mm 16mm;
+}
+
+.report-page-landscape {
+  page: apaisada;
 }

@@ -1,12 +1,17 @@
 "use client";
 
 import { Printer, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { StatTile } from "@/components/ui/stat-tile";
+import { cn } from "@/lib/cn";
 import { formatCurrency, formatList } from "@/lib/format";
-import { loadedColumnPositions, visibleColumnPositions } from "@/lib/profit-loss/datos-columns";
+import {
+  loadedColumnPositions,
+  sliceColumns,
+  visibleColumnPositions,
+} from "@/lib/profit-loss/datos-columns";
 import { toDatosGridMultiYear } from "@/lib/profit-loss/derive";
 import { buildAnalisisCards, buildGraficosCards } from "@/lib/profit-loss/charts/cards";
 import { expandSlots } from "@/lib/profit-loss/charts/selection";
@@ -21,10 +26,12 @@ import {
   levelLabel,
   REPORT_LEVELS,
 } from "@/lib/profit-loss/report/level";
-import { pruneEmptyRows } from "@/lib/profit-loss/report/prune";
+import { statementFit } from "@/lib/profit-loss/report/page-fit";
+import { pruneEmptyColumns, pruneEmptyRows } from "@/lib/profit-loss/report/prune";
 import { reportSections } from "@/lib/profit-loss/report/sections";
 import { describePygReport } from "@/lib/profit-loss/report/summary";
 import type { ReportSection as ReportSectionSpec } from "@/lib/profit-loss/report/types";
+import type { DatosGrid } from "@/lib/profit-loss/datos-types";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { ReportCards } from "./report-cards";
@@ -102,7 +109,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
           : null,
       frequency: effectiveFrequency,
     });
-    const pruned = pruneEmptyRows(accumulated.grid);
+    const pruned = pruneEmptyColumns(pruneEmptyRows(accumulated.grid));
     return {
       ...accumulated,
       grid: pruned,
@@ -119,15 +126,50 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
     verticalBaseCode,
   ]);
 
+  // El corte de nivel del INFORME. Es estado local a propósito: el `collapsed` del proveedor
+  // gobierna la tabla de Datos y el filtro «Nivel» de la barra, y elegir aquí una profundidad
+  // para imprimir no puede replegarle el árbol a nadie en pantalla.
+  const [level, setLevel] = useState<number>(DEFAULT_REPORT_LEVEL);
+
+  const tables = useMemo(() => {
+    const years = [...visibleYears].sort((a, b) => a - b);
+    const several = years.length > 1;
+    const out: {
+      key: string;
+      name: string | null;
+      color: string | undefined;
+      grid: DatosGrid;
+      trimmed: boolean;
+    }[] = [];
+
+    for (const year of years) {
+      for (const view of views) {
+        const slice = view.slices.find((candidate) => candidate.dataset.year === year);
+        if (!slice) {
+          continue;
+        }
+        const grid = toDatosGridMultiYear([slice], effectiveFrequency);
+        const positions = visibleColumnPositions(grid.columns, filters.periods);
+        out.push({
+          key: `${view.id}-${year}`,
+          name: several ? `${view.name} · ${year}` : view.name,
+          color: view.color,
+          grid: pruneEmptyColumns(pruneEmptyRows(sliceColumns(grid, positions))),
+          trimmed: positions.length < grid.columns.length,
+        });
+      }
+    }
+    return out;
+  }, [views, visibleYears, effectiveFrequency, filters.periods]);
+
+  const columnCount = Math.max(0, ...tables.map((table) => table.grid.columns.length));
+  const fit = statementFit(columnCount);
+
   const periodRefs = useMemo(
     () => expandSlots(filters.periods, [context.year]),
     [filters.periods, context.year],
   );
 
-  // El corte de nivel del INFORME. Es estado local a propósito: el `collapsed` del proveedor
-  // gobierna la tabla de Datos y el filtro «Nivel» de la barra, y elegir aquí una profundidad
-  // para imprimir no puede replegarle el árbol a nadie en pantalla.
-  const [level, setLevel] = useState<number>(DEFAULT_REPORT_LEVEL);
   const reportCollapsed = useMemo(
     () => collapsedAtLevel(accountOptions, level),
     [accountOptions, level],
@@ -138,14 +180,15 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   );
 
   /**
-   * Whether the vertical analysis earns its page. Over Ingresos and with no second year to
-   * compare against it is the statement's own «% Ing.» column, printed again — see
+   * Whether the vertical analysis deserves its page. Over Revenue and with no second year to
+   * compare against, it is the statement's own «% Rev.» column, printed again — see
    * `reportSections`.
+   *
+   * And since the statement now prints the breakdown from Data, that «% Rev.» column no longer
+   * exists — nothing repeats it, so the section always has something to present. It is the ONLY
+   * vertical reading left in the report.
    */
-  const showVertical =
-    statement !== null &&
-    statement.periods.length > 0 &&
-    (verticalBaseCode !== REVENUE_ROOT || statement.periods.length >= 2);
+  const showVertical = statement !== null && statement.periods.length > 0;
 
   const annex = useMemo(() => {
     if (mode !== "multi") {
@@ -199,6 +242,35 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   useEscapeToClose(onClose);
   usePrintTitle(`PyG-${activeClient?.name ?? "informe"}-${visibleYears.join("-")}`);
 
+  const statementSection = (
+    <ReportSection section={sectionOf("estado")}>
+      {tables.map((table, index) => (
+        <ReportStatement
+          key={table.key}
+          grid={table.grid}
+          caption={table.name}
+          captionColor={table.color}
+          breakBefore={index > 0}
+          showComparison={false}
+          baseRow={undefined}
+          notes={EMPTY_NOTES}
+          collapsed={reportCollapsed}
+          hiddenAccounts={index === tables.length - 1 ? hiddenAccounts : 0}
+          fit={fit}
+          trimmed={table.trimmed}
+        />
+      ))}
+    </ReportSection>
+  );
+
+  const annexSection = annex ? (
+    <ReportSection section={sectionOf("centros")}>
+      <ReportCentersAnnex annex={annex} />
+    </ReportSection>
+  ) : null;
+
+  const landscape = fit.orientation === "landscape";
+
   return createPortal(
     // Una región, no un `role="dialog"` ni un `<dialog>` modal: no atrapa el foco ni vuelve
     // inerte lo de atrás, y anunciarse como modal sin hacerlo es peor que no anunciarlo. El
@@ -217,93 +289,108 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
             <strong className="font-semibold">Guardar como PDF</strong>.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <label className="flex items-center gap-2 text-[12px] text-muted">
-            Detalle
-            <select
-              value={level}
-              onChange={(event) => setLevel(Number(event.target.value))}
-              className="h-[34px] rounded-[9px] border border-border bg-surface px-2.5 text-[12.5px] font-medium text-ink"
-            >
-              {REPORT_LEVELS.map((option) => (
-                <option key={option} value={option}>
-                  {levelLabel(option)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button size="toolbar" icon={<Printer size={14} />} onClick={() => window.print()}>
-            Guardar PDF
-          </Button>
-          <Button size="toolbar" variant="secondary" icon={<X size={14} />} onClick={onClose}>
-            Cerrar
-          </Button>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2.5">
+            <label className="flex items-center gap-2 text-[12px] text-muted">
+              Detalle
+              <select
+                value={level}
+                onChange={(event) => setLevel(Number(event.target.value))}
+                className="h-[34px] rounded-[9px] border border-border bg-surface px-2.5 text-[12.5px] font-medium text-ink"
+              >
+                {REPORT_LEVELS.map((option) => (
+                  <option key={option} value={option}>
+                    {levelLabel(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button size="toolbar" icon={<Printer size={14} />} onClick={() => window.print()}>
+              Guardar PDF
+            </Button>
+            <Button size="toolbar" variant="secondary" icon={<X size={14} />} onClick={onClose}>
+              Cerrar
+            </Button>
+          </div>
+          {tables.length > 1 && (
+            <p className="text-[11px] text-faint">
+              El estado sale completo: {tables.length} tablas, una por centro y año
+              {landscape ? ", en hojas apaisadas" : ""}.
+            </p>
+          )}
+          {tables.length === 1 && landscape && (
+            <p className="text-[11px] text-faint">
+              El estado se lleva una hoja apaisada; el resto del informe sigue vertical.
+            </p>
+          )}
         </div>
       </header>
 
-      {/* 794px es A4 vertical a 96 dpi, y el padding son sus márgenes: así el contenido mide
-          exactamente lo que medirá impreso, y los gráficos —que se dibujan contra el ancho de su
-          contenedor— salen del mismo tamaño en pantalla y en el papel, sin reescalados. */}
-      <div className="report-sheet mx-auto my-6 w-[794px] max-w-full">
-        <article className="report-page flex flex-col gap-9 rounded-[13px] bg-surface px-[53px] py-[53px] shadow-[0_10px_30px_rgba(15,23,42,0.08)] print:rounded-none print:shadow-none">
-          <ReportCover cover={cover} />
+      <ReportSheet>
+        <ReportCover cover={cover} />
 
-          <ReportSection section={sectionOf("resumen")}>
-            <div className="print-keep flex gap-4">
-              {graficos.tiles.map((tile) => (
-                <StatTile
-                  key={tile.id}
-                  label={tile.label}
-                  value={tile.value === null ? null : formatCurrency(tile.value)}
-                  hint={graficos.periodName}
-                  sign={tile.sign}
-                />
-              ))}
-            </div>
-          </ReportSection>
-
-          <ReportSection section={sectionOf("graficos")}>
-            <ReportCards cards={graficos.cards} />
-          </ReportSection>
-
-          <ReportSection section={sectionOf("analisis")}>
-            <ReportCards cards={analisis.cards} />
-          </ReportSection>
-
-          {showVertical && statement && (
-            <ReportSection section={sectionOf("vertical")}>
-              <ReportVertical
-                grid={statement.grid}
-                periods={statement.periods}
-                baseRow={statement.base}
-                centerName={centerName(views, activeCenterId)}
-                collapsed={reportCollapsed}
+        <ReportSection section={sectionOf("resumen")}>
+          <div className="print-keep flex gap-4">
+            {graficos.tiles.map((tile) => (
+              <StatTile
+                key={tile.id}
+                label={tile.label}
+                value={tile.value === null ? null : formatCurrency(tile.value)}
+                hint={graficos.periodName}
+                sign={tile.sign}
               />
-            </ReportSection>
-          )}
+            ))}
+          </div>
+        </ReportSection>
 
-          <ReportSection section={sectionOf("estado")}>
-            {statement && (
-              <ReportStatement
-                grid={statement.grid}
-                periods={statement.periods}
-                baseRow={statement.revenue}
-                notes={statement.notes}
-                collapsed={reportCollapsed}
-                hiddenAccounts={hiddenAccounts}
-              />
-            )}
+        <ReportSection section={sectionOf("graficos")}>
+          <ReportCards cards={graficos.cards} />
+        </ReportSection>
+
+        <ReportSection section={sectionOf("analisis")}>
+          <ReportCards cards={analisis.cards} />
+        </ReportSection>
+
+        {showVertical && statement && (
+          <ReportSection section={sectionOf("vertical")}>
+            <ReportVertical
+              grid={statement.grid}
+              periods={statement.periods}
+              baseRow={statement.base}
+              centerName={centerName(views, activeCenterId)}
+              collapsed={reportCollapsed}
+            />
           </ReportSection>
+        )}
 
-          {annex && (
-            <ReportSection section={sectionOf("centros")}>
-              <ReportCentersAnnex annex={annex} />
-            </ReportSection>
-          )}
-        </article>
-      </div>
+        {!landscape && statementSection}
+        {!landscape && annexSection}
+      </ReportSheet>
+
+      {landscape && <ReportSheet landscape>{statementSection}</ReportSheet>}
+      {landscape && annexSection && <ReportSheet>{annexSection}</ReportSheet>}
     </section>,
     document.body,
+  );
+}
+
+/** Estable, para que las tablas que no llevan aviso no re-rendericen por una lista nueva. */
+const EMPTY_NOTES: readonly string[] = [];
+
+function ReportSheet({ children, landscape }: { children: ReactNode; landscape?: boolean }) {
+  return (
+    <div
+      className={cn("report-sheet mx-auto my-6 max-w-full", landscape ? "w-[1123px]" : "w-[794px]")}
+    >
+      <article
+        className={cn(
+          "report-page flex flex-col gap-9 rounded-[13px] bg-surface px-[53px] py-[53px] shadow-[0_10px_30px_rgba(15,23,42,0.08)] print:rounded-none print:shadow-none",
+          landscape && "report-page-landscape",
+        )}
+      >
+        {children}
+      </article>
+    </div>
   );
 }
 

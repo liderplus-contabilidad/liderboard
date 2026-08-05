@@ -2,6 +2,7 @@
 
 import { CalendarRange, FileSpreadsheet } from "lucide-react";
 import {
+  DropdownDone,
   DropdownFooter,
   DropdownOption,
   Dropdown,
@@ -56,9 +57,7 @@ export function PeriodFilter({ periods, selected, onToggle, onClear }: PeriodFil
               <Button variant="ghost" size="sm" onClick={onClear}>
                 Quitar selección
               </Button>
-              <Button variant="primary" size="sm">
-                Listo
-              </Button>
+              <DropdownDone />
             </DropdownFooter>
           </>
         )}

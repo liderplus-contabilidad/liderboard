@@ -8,10 +8,10 @@
  * a page turn**, and that sentence is the whole criterion:
  *
  * - the by-centers annex only exists in multi mode;
- * - the vertical analysis only exists when it says something the statement does not. Since the
- *   report accumulates, the statement already carries a «% Ing.» column; a vertical analysis over
- *   Ingresos with no second year to compare against is that same column, printed again on its own
- *   page. Give it another base, or a year to compare, and it is a different table.
+ * - the vertical analysis only exists while the workspace has something to divide. It used to
+ *   answer to a second condition —«¿lo dice ya el estado?»— back when the statement accumulated
+ *   and carried its own «% Ing.» column. The statement now prints the Datos breakdown, which has
+ *   no such column, so this is the report's ONE vertical reading and it is never a repeat.
  *
  * **`breakBefore` is the same criterion applied one notch further.** The page break used to live
  * in `globals.css` on `.print-section`, so EVERY section opened a page — and the cover, which
@@ -64,7 +64,10 @@ export function reportSections(input: ReportSectionsInput): ReportSection[] {
     {
       id: "estado",
       title: "Estado de resultados",
-      subtitle: "El detalle que sostiene lo anterior",
+      subtitle:
+        input.mode === "multi"
+          ? "El detalle completo: el Consolidado y cada centro, periodo a periodo"
+          : "El detalle completo, periodo a periodo",
       breakBefore: true,
     },
     ...(input.mode === "multi" ? [CENTERS_ANNEX] : []),

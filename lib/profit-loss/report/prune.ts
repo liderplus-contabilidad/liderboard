@@ -14,6 +14,7 @@
  * never as `$0`.
  */
 import type { VerticalAnalysis } from "../charts/vertical";
+import { sliceColumns } from "../datos-columns";
 import type { DatosGrid, DatosRow } from "../datos-types";
 
 /**
@@ -23,8 +24,9 @@ import type { DatosGrid, DatosRow } from "../datos-types";
  * hanging off nothing. Summary rows (`isResult`) always survive: a result of zero is still the
  * result, and a statement that closes without its «Utilidad o Pérdida» is not a statement.
  *
- * `columns` is left untouched: pruning answers which ROWS are worth printing, and a period with
- * no movement in any account is still a period the report declared it would show.
+ * `columns` is left untouched HERE: this answers which ROWS are worth printing. The columns are
+ * `pruneEmptyColumns`'s question, asked separately so neither prune can hide the other's evidence
+ * — a cell that saves its row saves its column too.
  */
 export function pruneEmptyRows(grid: DatosGrid): DatosGrid {
   return { ...grid, rows: pruneRows(grid.rows) };
@@ -50,6 +52,30 @@ function pruneRows(rows: readonly DatosRow[]): DatosRow[] {
 /** Whether a row has a single cell worth reading: not null, and not zero. */
 function hasMovement(row: DatosRow): boolean {
   return row.cells.some((cell) => cell.value !== null && cell.value !== 0);
+}
+
+/**
+ * Removes columns with no activity in any account. Each table is processed independently.
+ * The Total column is retained if it reflects any activity; otherwise, it is removed.
+ */
+export function pruneEmptyColumns(grid: DatosGrid): DatosGrid {
+  const positions: number[] = [];
+  for (let position = 0; position < grid.columns.length; position++) {
+    if (columnHasMovement(grid.rows, position)) {
+      positions.push(position);
+    }
+  }
+  return sliceColumns(grid, positions);
+}
+
+function columnHasMovement(rows: readonly DatosRow[], position: number): boolean {
+  return rows.some((row) => {
+    const cell = row.cells[position];
+    return (
+      (cell !== undefined && cell.value !== null && cell.value !== 0) ||
+      (row.children !== undefined && columnHasMovement(row.children, position))
+    );
+  });
 }
 
 /**

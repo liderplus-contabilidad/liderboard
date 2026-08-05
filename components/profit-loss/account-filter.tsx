@@ -3,7 +3,13 @@
 import { ListTree } from "lucide-react";
 import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Dropdown, DropdownFooter, DropdownPanel, DropdownTrigger } from "@/components/ui/dropdown";
+import {
+  Dropdown,
+  DropdownDone,
+  DropdownFooter,
+  DropdownPanel,
+  DropdownTrigger,
+} from "@/components/ui/dropdown";
 import type { AccountOption } from "@/lib/profit-loss/filter";
 import { AccountTreeList } from "./account-tree-list";
 
@@ -46,9 +52,7 @@ export function AccountFilter({ accounts, selected, onToggle, onClear }: Account
             <Button variant="ghost" size="sm" onClick={onClear}>
               Quitar selección
             </Button>
-            <Button variant="primary" size="sm">
-              Listo
-            </Button>
+            <DropdownDone />
           </DropdownFooter>
         )}
       </DropdownPanel>

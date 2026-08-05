@@ -4,30 +4,29 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronsUpDown,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   Lock,
   MousePointerClick,
   PanelRight,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
+import { columnHeaderLabel } from "@/lib/profit-loss/datos-columns";
 import type { EditorAnchor } from "./cell-editor";
 import { DatosTableRow } from "./datos-table-row";
-import type {
-  DatosColumn,
-  DatosGrid,
-  DatosSort,
-  DatosSortKey,
-} from "@/lib/profit-loss/datos-types";
+import type { DatosGrid, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
 import type { FlatRow } from "./datos-utils";
 
 export interface DatosTableProps {
   grid: DatosGrid;
   rows: FlatRow[];
-  /** Positions in `grid.columns` to render, in order — the "Periodo" filter's doing; every
-   * position when nothing is marked. */
-  visibleColumns: number[];
+  /** Positions in `grid.columns` to render, in order — the "Periodo" filter's doing, minus the
+   * ones the zero prune took; every position when nothing is marked and it is off. */
+  visibleColumns: readonly number[];
   sort: DatosSort | null;
   editable: boolean;
   /** Why editing is off, named for the banner; `null` while `editable` is true. */
@@ -39,6 +38,15 @@ export interface DatosTableProps {
   flash: { code: string; col: number } | null;
   /** Account whose ficha is open, so its row can stay marked; `null` when none is. */
   openDetailCode: string | null;
+  /** Whether «Ocultar cuentas en cero» is on — the same switch the download menu reads. */
+  hideZeroRows: boolean;
+  /** How many account rows it took out; 0 while it is off. Named in the footer, because a table
+   * that quietly drops rows is a table nobody can trust the account count of. */
+  hiddenCount: number;
+  /** How many period columns went the same way — a hidden month is even easier to miss than a
+   * hidden row, since the header simply reads on to the next one. */
+  hiddenColumnCount: number;
+  onToggleHideZeroRows: () => void;
   onSort: (key: DatosSortKey) => void;
   onToggle: (code: string) => void;
   onEditCell: (code: string, col: number, anchor: EditorAnchor, valueEditable: boolean) => void;
@@ -53,18 +61,6 @@ function sameKey(a: DatosSortKey, b: DatosSortKey): boolean {
   return a === b;
 }
 
-/**
- * A Total column stays the full year even when a period mark bounds the columns — relabeled so
- * nobody reads it as the sum of what happens to be visible. With several years the suffix rides
- * along ("Total 25" → "Total año 25").
- */
-function headerLabel(column: DatosColumn, trimmed: boolean): string {
-  if (column.kind !== "total" || !trimmed) {
-    return column.label;
-  }
-  return column.label.replace(/^Total/, "Total año");
-}
-
 /** One editable Estado de Resultados grid — for the whole company or a cost center. */
 export function DatosTable({
   grid,
@@ -76,6 +72,10 @@ export function DatosTable({
   loadedColumns,
   flash,
   openDetailCode,
+  hideZeroRows,
+  hiddenCount,
+  hiddenColumnCount,
+  onToggleHideZeroRows,
   onSort,
   onToggle,
   onEditCell,
@@ -96,18 +96,39 @@ export function DatosTable({
           )}
           <span className="truncate text-sm font-semibold text-ink">{grid.title}</span>
         </div>
-        {grid.utilidad && (
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-semibold tabular-nums",
-              grid.utilidad.positive
-                ? "bg-positive/10 text-positive"
-                : "bg-negative/10 text-negative",
-            )}
-          >
-            {grid.utilidad.label}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2.5">
+          {/* Lives here and not in the filter bar: it reads a single card, like Ocupaciones'
+              «Ver por». What it also reaches is the download, which mounts right above. Absent
+              with no statement, where there is nothing to hide and the empty state does the
+              talking. */}
+          {grid.rows.length > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-pressed={hideZeroRows}
+              onClick={onToggleHideZeroRows}
+              icon={hideZeroRows ? <Eye size={14} /> : <EyeOff size={14} />}
+              className={cn(
+                "font-medium",
+                hideZeroRows && "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+              )}
+            >
+              {hideZeroRows ? "Mostrar ceros" : "Ocultar ceros"}
+            </Button>
+          )}
+          {grid.utilidad && (
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[11.5px] font-semibold tabular-nums",
+                grid.utilidad.positive
+                  ? "bg-positive/10 text-positive"
+                  : "bg-negative/10 text-negative",
+              )}
+            >
+              {grid.utilidad.label}
+            </span>
+          )}
+        </div>
       </header>
 
       {grid.rows.length === 0 ? (
@@ -141,7 +162,7 @@ export function DatosTable({
                         // The rule that closes a year's block, and the one that opens the next.
                         className={column.kind === "total" ? "border-l border-border" : undefined}
                       >
-                        {headerLabel(column, trimmed)}
+                        {columnHeaderLabel(column, trimmed)}
                       </SortableTh>
                     );
                   })}
@@ -209,7 +230,13 @@ export function DatosTable({
               <PanelRight size={13} />
               «ficha» abre el rendimiento de la cuenta
             </LegendItem>
-            <span className="ml-auto font-mono">{accountCount} cuentas</span>
+            <span className="ml-auto font-mono">
+              {accountCount} cuentas
+              {hiddenCount > 0 &&
+                ` · ${hiddenCount} en cero ${hiddenCount === 1 ? "oculta" : "ocultas"}`}
+              {hiddenColumnCount > 0 &&
+                ` · ${hiddenColumnCount} ${hiddenColumnCount === 1 ? "periodo oculto" : "periodos ocultos"}`}
+            </span>
           </footer>
         </>
       )}
