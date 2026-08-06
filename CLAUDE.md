@@ -603,6 +603,21 @@ testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no cha
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
 
+**Una cifra de Gráficos o Análisis es el TOTAL del periodo seleccionado**, nunca el valor de una de
+sus columnas. Marcar seis meses y leer el de junio era lo que hacía `lastCoveredIndex`, de cuando no
+existía el filtro «Periodo» y la última columna cargada era el único periodo del que se podía
+hablar; hoy lo que manda es `coveredPeriods` + `sumOver`/`amountsOver` (`presets.ts`), y el rango se
+resuelve UNA vez en `cards.ts` y viaja con la lista, para que dos tarjetas de la misma pantalla no
+digan «Ene–Jul» y «Ene–Dic». Un periodo sin cobertura no cuenta como `0`: una cuenta sin cobertura
+en ninguno da `null` y su tarjeta queda vacía. Dos tarjetas son la excepción y por la misma razón —
+lo que calculan no es una suma—: el **% sobre ingresos** es `Σ cuenta ÷ Σ ingresos` y jamás el
+promedio de los porcentajes de cada mes (la regla que el análisis vertical ya aplica a su «Total
+año»; con la base en `0` se vacía y lo dice, una sola línea nombrando el rango), y la **variación**
+compara dos columnas, así que no hereda el rótulo del rango sino que nombra su propio par («Jul
+contra Jun»). `periodRangeLabel` (`analytics/period.ts`) es la única forma de nombrar un conjunto de
+periodos y distingue el rango continuo del que tiene huecos: Ene y Mar marcados son «Ene, Mar», y
+«Ene–Mar» afirmaría que febrero está sumado.
+
 **Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. **El
 MOTOR es la única fuente de toda cifra en pantalla** y el Excel sirve solo para SUBIR información:
 lo guardado es la ficha del empleado más lo que se CAPTURA del mes (`PayrollMonthlyCapture`), y las

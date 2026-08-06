@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { makeDataset, CENTRO_VACIO_SOURCE, CULTURA_MANOR_SOURCE } from "../analytics/fixtures";
-import { periodsForYear } from "../analytics/period";
+import { periodRangeLabel, periodsForYear } from "../analytics/period";
 import { buildAnalyticsSource } from "../analytics/source";
 import type { AnalyticsSource } from "../analytics/types";
 import { buildAccountTree, computeResult, computeRollups } from "../derive";
 import type { PygDataset } from "../types";
-import { buildWaterfall, RESULT_CODE, waterfallRangeLabel, type WaterfallStep } from "./waterfall";
+import { buildWaterfall, RESULT_CODE, type WaterfallStep } from "./waterfall";
 
 const MENSUAL = { frequency: "mensual" } as const;
 
@@ -262,7 +262,7 @@ describe("la cascada resume los periodos cubiertos", () => {
     const { periods } = buildWaterfall(CULTURA_MANOR_SOURCE, MENSUAL);
 
     // El dataset se llama «Ene–Dic 2026»; la cobertura dice otra cosa y es la que manda.
-    expect(waterfallRangeLabel(periods)).toBe("Ene–Jul");
+    expect(periodRangeLabel(periods)).toBe("Ene–Jul");
   });
 
   it("suma solo los periodos que la selección dejó en el eje", () => {
@@ -279,7 +279,7 @@ describe("la cascada resume los periodos cubiertos", () => {
   it("suma el mismo dinero leída por trimestre", () => {
     const { steps, periods } = buildWaterfall(CULTURA_MANOR_SOURCE, { frequency: "trimestral" });
 
-    expect(waterfallRangeLabel(periods)).toBe("T1–T3");
+    expect(periodRangeLabel(periods)).toBe("T1–T3");
     expect(steps[0].value).toBe(INCOME);
     expect(steps.at(-1)?.end).toBe(RESULT);
   });
@@ -289,7 +289,7 @@ describe("la cascada resume los periodos cubiertos", () => {
 
     expect(steps).toEqual([]);
     expect(periods).toEqual([]);
-    expect(waterfallRangeLabel(periods)).toBe("");
+    expect(periodRangeLabel(periods)).toBe("");
   });
 
   it("avisa cuando la fuente no se puede leer a esa frecuencia", () => {
