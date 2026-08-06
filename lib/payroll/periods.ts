@@ -5,12 +5,32 @@
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { matchesSearch as matchesLabel } from "@/lib/workspaces";
-import type { PayrollPeriodKind } from "./types";
+import type { PayrollPeriodKind, PayrollPeriodStatus } from "./types";
 
 const KIND_LABELS: Record<PayrollPeriodKind, string> = { ordinario: "Ordinario" };
+const STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
+  captura: "En captura",
+  cerrado: "Cerrado",
+};
 
 export function periodKindLabel(kind: PayrollPeriodKind): string {
   return KIND_LABELS[kind];
+}
+
+export function periodStatusLabel(status: PayrollPeriodStatus): string {
+  return STATUS_LABELS[status];
+}
+
+/** «Nómina en captura» / «Nómina cerrada» — la sublínea del detalle. Va aparte de
+ *  `periodStatusLabel` porque concuerda con «nómina» (femenino) y aquella con «período», y
+ *  anteponer la palabra a la etiqueta del badge daría «Nómina Cerrado». */
+const ROSTER_STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
+  captura: "Nómina en captura",
+  cerrado: "Nómina cerrada",
+};
+
+export function rosterStatusLabel(status: PayrollPeriodStatus): string {
+  return ROSTER_STATUS_LABELS[status];
 }
 
 /** Most recent first: by year, then by month within the year. */
@@ -49,6 +69,25 @@ export function hasPeriod(
 }
 
 /**
+ * La fuente de «Copiar nómina de X»: el período MÁS RECIENTE estrictamente ANTERIOR al destino
+ * — nunca el más reciente que existe. Sin esa distinción, rellenar un mes hacia atrás (el
+ * cliente ya tiene junio y se registra abril) copiaría del futuro. `null` sin ningún período
+ * anterior al destino.
+ */
+export function sourceForCopy<T extends { year: number; monthIndex: number }>(
+  existing: readonly T[],
+  targetYear: number,
+  targetMonthIndex: number,
+): T | null {
+  const before = existing.filter(
+    (period) =>
+      period.year < targetYear ||
+      (period.year === targetYear && period.monthIndex < targetMonthIndex),
+  );
+  return before.length === 0 ? null : sortPeriodsDesc(before)[0];
+}
+
+/**
  * The `(año, mes)` the "Nuevo período" dialog preselects: the month after the most recent período,
  * or the current month when the cliente has none yet. `today` arrives as a parameter — never
  * `Date.now()` inside pure code — so the caller can test this deterministically.
@@ -64,4 +103,25 @@ export function proposeNextPeriod(
   return latest.monthIndex === 11
     ? { year: latest.year + 1, monthIndex: 0 }
     : { year: latest.year, monthIndex: latest.monthIndex + 1 };
+}
+
+/**
+ * El período INMEDIATAMENTE anterior o siguiente a `currentId`, en el orden real de los períodos
+ * guardados — lo que el navegador `‹ JULIO 2026 ›` de la pantalla de detalle usa para decidir si
+ * una flecha se apaga. `null` sin vecino de ese lado, o si `currentId` no aparece en `periods`.
+ */
+export function adjacentPeriod<T extends { id: string; year: number; monthIndex: number }>(
+  periods: readonly T[],
+  currentId: string,
+  direction: "prev" | "next",
+): T | null {
+  // Most-recent-first: "siguiente" (más nuevo) queda ANTES del actual en este orden; "anterior"
+  // (más viejo) queda DESPUÉS.
+  const ordered = sortPeriodsDesc(periods);
+  const index = ordered.findIndex((period) => period.id === currentId);
+  if (index === -1) {
+    return null;
+  }
+  const targetIndex = direction === "next" ? index - 1 : index + 1;
+  return ordered[targetIndex] ?? null;
 }

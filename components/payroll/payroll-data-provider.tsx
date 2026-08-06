@@ -12,12 +12,19 @@ import {
   withYearToggled,
   type PayrollFilters,
 } from "@/lib/payroll/filters";
+import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
 import { hasPeriod, periodLongLabel } from "@/lib/payroll/periods";
 import { buildPayrollSummary, type PayrollSummary } from "@/lib/payroll/summary";
-import type { PayrollPeriod, PayrollPeriodKind } from "@/lib/payroll/types";
+import type {
+  ParsedPayrollEmployeeLine,
+  PayrollPeriod,
+  PayrollRosterSummary,
+} from "@/lib/payroll/types";
 
 const EMPTY_PERIODS: PayrollPeriod[] = [];
 const EMPTY_CLIENTS: payrollDb.PayrollClientSummary[] = [];
+const EMPTY_ROSTER: Map<string, PayrollRosterSummary> = new Map();
+const EMPTY_FINANCIALS: Map<string, PayrollPeriodFinancials> = new Map();
 
 interface PayrollDataValue {
   clients: payrollDb.PayrollClientSummary[];
@@ -30,6 +37,13 @@ interface PayrollDataValue {
   /** Every período of the active cliente, unfiltered — the count `PayrollEmptyState` reads to
    * decide between "sin períodos" and the table. */
   periods: PayrollPeriod[];
+  /** Empleados y áreas de CADA período del cliente activo, derivado de su nómina guardada —
+   * nunca un total persistido junto a ella. Keyed by `period.id`. */
+  rosterByPeriod: Map<string, PayrollRosterSummary>;
+  /** Los cuatro totales de CADA período del cliente activo, derivados de su nómina guardada —
+   * misma regla que `rosterByPeriod`. Sin entrada para un período que aún no recibió `figures`.
+   * Keyed by `period.id`. */
+  financialsByPeriod: Map<string, PayrollPeriodFinancials>;
   /** Years the active cliente holds, newest first — the "Año" filter's universe. */
   years: number[];
   filters: PayrollFilters;
@@ -44,7 +58,15 @@ interface PayrollDataValue {
   /** The período already registered at `(year, monthIndex)`, in its long label, or `null` — what
    * lets "Nuevo período" name the clash instead of failing in the abstract. */
   periodClash: (year: number, monthIndex: number) => string | null;
-  createPeriod: (year: number, monthIndex: number, kind?: PayrollPeriodKind) => Promise<void>;
+  /** `copyFrom` is a período id: with it, the new período's nómina is copied from that período's
+   * (see `db.createPeriod`); without it, the período is born blank. */
+  createPeriod: (year: number, monthIndex: number, copyFrom?: string) => Promise<void>;
+  /** Escribe la nómina que trajo un archivo, REEMPLAZANDO la que el período tuviera — ver
+   * `db.importRoster` para por qué reemplaza en vez de fusionar. */
+  importRoster: (periodId: string, lines: readonly ParsedPayrollEmployeeLine[]) => Promise<void>;
+  /** Borra un período y su nómina en una transacción; quien llama decide a dónde navegar
+   *  después (la pantalla de detalle vuelve a `/payroll`). */
+  deletePeriod: (periodId: string) => Promise<void>;
   /** False only on the very first Dexie read, so the empty state doesn't flash. */
   ready: boolean;
 }
@@ -69,10 +91,25 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
         : Promise.resolve<PayrollPeriod[]>(EMPTY_PERIODS),
     [activeClientId],
   );
+  // Depends on `periods` (which período ids to look up) but re-runs on its own whenever the
+  // `employees` table changes — Dexie tracks the tables a live query touches, deps here are only
+  // for the extra reactivity `periods` itself doesn't already give it.
+  const rosterRows = useLiveQuery(
+    () => payrollDb.rosterCounts((stored ?? EMPTY_PERIODS).map((period) => period.id)),
+    [stored],
+  );
+  // Mismo precedente batcheado que `rosterRows`: una consulta para TODOS los períodos visibles,
+  // en vez de una por fila.
+  const financialsRows = useLiveQuery(
+    () => payrollDb.periodFinancials((stored ?? EMPTY_PERIODS).map((period) => period.id)),
+    [stored],
+  );
   const [rawFilters, setRawFilters] = useState<PayrollFilters>(emptyFilters);
 
   const clients = clientRows ?? EMPTY_CLIENTS;
   const periods = stored ?? EMPTY_PERIODS;
+  const rosterByPeriod = rosterRows ?? EMPTY_ROSTER;
+  const financialsByPeriod = financialsRows ?? EMPTY_FINANCIALS;
   const ready = clientRows !== undefined && stored !== undefined;
 
   const activeClient = useMemo(
@@ -93,7 +130,10 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
   // Las tarjetas leen el conjunto FILTRADO — no `periods` crudo — para que sus cifras siempre
   // cuadren con lo que la tabla de abajo está mostrando: un "Períodos registrados: 5" sobre una
   // tabla que la búsqueda dejó en 2 sería una tarjeta mintiendo por omisión.
-  const summary = useMemo(() => buildPayrollSummary(visiblePeriods), [visiblePeriods]);
+  const summary = useMemo(
+    () => buildPayrollSummary(visiblePeriods, rosterByPeriod, financialsByPeriod),
+    [visiblePeriods, rosterByPeriod, financialsByPeriod],
+  );
 
   const createClient = useCallback(async (name: string) => {
     const client = await payrollDb.createClient(name);
@@ -126,6 +166,16 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const importRoster = useCallback(
+    (periodId: string, lines: readonly ParsedPayrollEmployeeLine[]) =>
+      payrollDb.importRoster(periodId, lines),
+    [],
+  );
+
+  const deletePeriod = useCallback(async (periodId: string) => {
+    await payrollDb.deletePeriod(periodId);
+  }, []);
+
   const periodClash = useCallback(
     (year: number, monthIndex: number) =>
       hasPeriod(periods, year, monthIndex) ? periodLongLabel(year, monthIndex) : null,
@@ -133,11 +183,16 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
   );
 
   const createPeriod = useCallback(
-    async (year: number, monthIndex: number, kind: PayrollPeriodKind = "ordinario") => {
+    async (year: number, monthIndex: number, copyFrom?: string) => {
       if (!activeClientId) {
         return;
       }
-      await payrollDb.createPeriod(activeClientId, year, monthIndex, kind);
+      await payrollDb.createPeriod(
+        activeClientId,
+        year,
+        monthIndex,
+        copyFrom ? { copyFrom } : undefined,
+      );
     },
     [activeClientId],
   );
@@ -152,6 +207,8 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       deleteClient,
       selectClient,
       periods,
+      rosterByPeriod,
+      financialsByPeriod,
       years,
       filters,
       toggleYear,
@@ -161,6 +218,8 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       summary,
       periodClash,
       createPeriod,
+      importRoster,
+      deletePeriod,
       ready,
     }),
     [
@@ -172,6 +231,8 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       deleteClient,
       selectClient,
       periods,
+      rosterByPeriod,
+      financialsByPeriod,
       years,
       filters,
       toggleYear,
@@ -181,6 +242,8 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       summary,
       periodClash,
       createPeriod,
+      importRoster,
+      deletePeriod,
       ready,
     ],
   );

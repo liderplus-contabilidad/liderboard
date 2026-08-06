@@ -3,8 +3,8 @@
 import { Building2, CalendarPlus } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreatePayrollClientButton } from "./payroll-client-actions";
+import { NewPeriodButton } from "./new-period-popover";
 import { usePayrollData } from "./payroll-data-provider";
-import { NewPeriodButton } from "./new-period-dialog";
 
 /**
  * El vacío de Rol de Pagos, en sus dos formas — como en PyG, solo una se resuelve dentro de este

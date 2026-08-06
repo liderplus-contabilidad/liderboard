@@ -5,12 +5,16 @@ import { HeadCell } from "@/components/data-table/grid-cells";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchInput } from "@/components/ui/search-input";
 import { StatTile } from "@/components/ui/stat-tile";
-import { formatAmount, formatNumber, pluralize } from "@/lib/format";
-import { NewPeriodButton } from "./new-period-dialog";
+import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
+import type { PayrollRosterSummary } from "@/lib/payroll/types";
+import { NewPeriodButton } from "./new-period-popover";
 import { usePayrollData } from "./payroll-data-provider";
 import { PayrollEmptyState } from "./payroll-empty-state";
 import { PayrollPeriodRow } from "./payroll-period-row";
 import { PayrollYearFilter } from "./payroll-year-filter";
+
+/** Lo que una fila lee cuando su período todavía no tiene ninguna línea de nómina. */
+const EMPTY_ROSTER: PayrollRosterSummary = { employees: 0, areas: 0 };
 
 /**
  * Historial de nómina: la vista inicial de Rol de Pagos. Sin `ModuleTabs` — el módulo no tiene
@@ -20,6 +24,8 @@ export function PayrollHistoryView() {
   const {
     activeClientId,
     periods,
+    rosterByPeriod,
+    financialsByPeriod,
     visiblePeriods,
     years,
     filters,
@@ -59,7 +65,9 @@ export function PayrollHistoryView() {
         <StatTile label="Empleados en nómina" value={formatNumber(summary.latestEmployees)} mono />
         <StatTile
           label="Líquido acumulado"
-          value={summary.netAccrued === null ? null : formatAmount(summary.netAccrued)}
+          value={
+            summary.netAccrued === null ? null : formatCurrency(summary.netAccrued, { cents: true })
+          }
           mono
         />
       </div>
@@ -109,7 +117,12 @@ export function PayrollHistoryView() {
             </thead>
             <tbody>
               {visiblePeriods.map((period) => (
-                <PayrollPeriodRow key={period.id} period={period} />
+                <PayrollPeriodRow
+                  key={period.id}
+                  period={period}
+                  roster={rosterByPeriod.get(period.id) ?? EMPTY_ROSTER}
+                  financials={financialsByPeriod.get(period.id)}
+                />
               ))}
             </tbody>
           </DataGrid>

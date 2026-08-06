@@ -10,8 +10,16 @@
  */
 import Dexie, { type Table } from "dexie";
 import { sortByName } from "@/lib/workspaces";
+import { computePeriodFinancials, type PayrollPeriodFinancials } from "./period-detail";
 import { sortPeriodsDesc } from "./periods";
-import type { PayrollClient, PayrollPeriod, PayrollPeriodKind } from "./types";
+import { copyRoster } from "./roster";
+import type {
+  ParsedPayrollEmployeeLine,
+  PayrollClient,
+  PayrollEmployeeLine,
+  PayrollPeriod,
+  PayrollRosterSummary,
+} from "./types";
 
 /** The one-row table that remembers which cliente is open, so it survives a reload. */
 interface ActiveClientRow {
@@ -24,6 +32,7 @@ const ACTIVE_KEY = "active";
 class PayrollDb extends Dexie {
   clients!: Table<PayrollClient, string>;
   periods!: Table<PayrollPeriod, string>;
+  employees!: Table<PayrollEmployeeLine, string>;
   active!: Table<ActiveClientRow, string>;
 
   constructor() {
@@ -34,6 +43,13 @@ class PayrollDb extends Dexie {
       // Dexie rejects the second `add` instead of silently overwriting the first.
       periods: "id, clientId, &[clientId+year+monthIndex]",
       active: "key",
+    });
+    // v2: la ficha del empleado (`PayrollEmployeeLine`), lo que una copia de nómina arrastra.
+    // Puramente ADITIVA — Dexie no baja de versión, y la v1 puede existir ya en el navegador de
+    // quien probó el módulo antes de este cambio — así que solo se agrega la tabla nueva; nada de
+    // lo de v1 se toca ni se re-declara.
+    this.version(2).stores({
+      employees: "id, periodId",
     });
   }
 }
@@ -72,15 +88,16 @@ export async function renameClient(clientId: string, name: string): Promise<void
 }
 
 /**
- * Deletes a cliente and every período that hangs off it, in ONE transaction. No other cliente is
- * touched.
+ * Deletes a cliente, every período that hangs off it, AND the nómina of those períodos, in ONE
+ * transaction. No other cliente is touched.
  *
  * Deleting the OPEN cliente hands the module to the first remaining one BY NAME; deleting the last
  * one leaves no active cliente, and the module falls back to its empty state.
  */
 export async function deleteClient(clientId: string): Promise<void> {
-  await db.transaction("rw", db.clients, db.periods, db.active, async () => {
+  await db.transaction("rw", db.clients, db.periods, db.employees, db.active, async () => {
     const doomed = await db.periods.where("clientId").equals(clientId).primaryKeys();
+    await db.employees.where("periodId").anyOf(doomed).delete();
     await db.periods.bulkDelete(doomed);
     await db.clients.delete(clientId);
 
@@ -157,26 +174,153 @@ export async function listPeriods(clientId: string): Promise<PayrollPeriod[]> {
 }
 
 /**
- * Creates an empty período: born `"captura"`, `totals` ausente — no se ha cargado ningún Excel
- * todavía. The owner is stamped HERE, at the door, the same as every other module's `db.ts`.
+ * Creates an empty período: born `"captura"`, `totals` ausente — no existen cálculos todavía. The
+ * owner is stamped HERE, at the door, the same as every other module's `db.ts`.
  *
- * Duplicate rejection with a message that NAMES the period is the dialog's job (it already holds
+ * Duplicate rejection with a message that NAMES the period is the popover's job (it already holds
  * the loaded list); the unique compound index below is the safety net under it.
+ *
+ * With `copyFrom`, the período AND its nómina (copied via `copyRoster`) are written in ONE
+ * transaction, so a failure partway through cannot leave a período half-populated.
  */
 export async function createPeriod(
   clientId: string,
   year: number,
   monthIndex: number,
-  kind: PayrollPeriodKind,
+  options?: { copyFrom?: string },
 ): Promise<PayrollPeriod> {
   const period: PayrollPeriod = {
     id: crypto.randomUUID(),
     clientId,
     year,
     monthIndex,
-    kind,
+    kind: "ordinario",
     status: "captura",
   };
-  await db.periods.add(period);
+
+  const copyFrom = options?.copyFrom;
+  if (!copyFrom) {
+    await db.periods.add(period);
+    return period;
+  }
+
+  await db.transaction("rw", db.periods, db.employees, async () => {
+    await db.periods.add(period);
+    const sourceLines = await db.employees.where("periodId").equals(copyFrom).toArray();
+    const copiedLines: PayrollEmployeeLine[] = copyRoster(sourceLines).map((line) => ({
+      ...line,
+      id: crypto.randomUUID(),
+      periodId: period.id,
+    }));
+    if (copiedLines.length > 0) {
+      await db.employees.bulkAdd(copiedLines);
+    }
+  });
   return period;
+}
+
+/**
+ * Deletes a período AND its nómina, in ONE transaction. No other período — of this cliente or any
+ * other — is touched.
+ */
+export async function deletePeriod(periodId: string): Promise<void> {
+  await db.transaction("rw", db.periods, db.employees, async () => {
+    await db.employees.where("periodId").equals(periodId).delete();
+    await db.periods.delete(periodId);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Nómina (la ficha de cada empleado de un período)
+// ---------------------------------------------------------------------------
+
+/** La nómina de UN período, sin orden particular — lo que arrastra una copia. */
+export async function listEmployees(periodId: string): Promise<PayrollEmployeeLine[]> {
+  return db.employees.where("periodId").equals(periodId).toArray();
+}
+
+/**
+ * Escribe la nómina que trajo un archivo, REEMPLAZANDO la que el período tuviera, en UNA
+ * transacción.
+ *
+ * Reemplazar y no fusionar es lo correcto porque el rol de pagos ES el mes entero: su hoja
+ * `GENERAL` lista a todos los empleados que cobraron. Fusionar dejaría vivo a quien el contador
+ * dio de baja —seguiría sumando en los KPIs sin aparecer en ningún archivo— y ningún control de la
+ * pantalla podría notarlo. Por eso también es seguro que un mismo mes se cargue dos veces: la
+ * segunda carga vuelve a dejar exactamente lo que el archivo dice.
+ *
+ * Lo que se pierde al reemplazar es la ficha copiada del mes anterior, y eso es justo lo que se
+ * quiere: el archivo trae su propia ficha y es la del contador.
+ */
+export async function importRoster(
+  periodId: string,
+  lines: readonly ParsedPayrollEmployeeLine[],
+): Promise<void> {
+  await db.transaction("rw", db.employees, async () => {
+    await db.employees.where("periodId").equals(periodId).delete();
+    if (lines.length > 0) {
+      await db.employees.bulkAdd(
+        lines.map((line) => ({ ...line, id: crypto.randomUUID(), periodId })),
+      );
+    }
+  });
+}
+
+/**
+ * Cuenta empleados y áreas distintas de VARIOS períodos a la vez, en una sola consulta — la
+ * columna EMPLEADOS de toda la tabla y el resumen la leen de aquí, en vez de una consulta por
+ * fila. Cada `periodId` debe pertenecer a un cliente ya conocido por quien llama (nunca una
+ * lectura sin acotar).
+ */
+export async function rosterCounts(
+  periodIds: readonly string[],
+): Promise<Map<string, PayrollRosterSummary>> {
+  const result = new Map<string, PayrollRosterSummary>();
+  if (periodIds.length === 0) {
+    return result;
+  }
+  const lines = await db.employees
+    .where("periodId")
+    .anyOf(periodIds as string[])
+    .toArray();
+  const byPeriod = new Map<string, PayrollEmployeeLine[]>();
+  for (const line of lines) {
+    byPeriod.set(line.periodId, [...(byPeriod.get(line.periodId) ?? []), line]);
+  }
+  for (const periodId of periodIds) {
+    const own = byPeriod.get(periodId) ?? [];
+    result.set(periodId, { employees: own.length, areas: new Set(own.map((l) => l.area)).size });
+  }
+  return result;
+}
+
+/**
+ * Los cuatro totales (`gross`/`deductions`/`net`/`cost`) de VARIOS períodos a la vez, en una sola
+ * consulta — el mismo precedente batcheado que `rosterCounts`. La derivación es de
+ * `computePeriodFinancials` (`lib/payroll/period-detail.ts`, puro y testeado); esta función solo
+ * hace la lectura acotada y agrupa por período. Un período SIN ningún empleado con `figures` no
+ * aparece en el mapa — no es cero, es «no hay».
+ */
+export async function periodFinancials(
+  periodIds: readonly string[],
+): Promise<Map<string, PayrollPeriodFinancials>> {
+  const result = new Map<string, PayrollPeriodFinancials>();
+  if (periodIds.length === 0) {
+    return result;
+  }
+  const lines = await db.employees
+    .where("periodId")
+    .anyOf(periodIds as string[])
+    .toArray();
+  const byPeriod = new Map<string, PayrollEmployeeLine[]>();
+  for (const line of lines) {
+    byPeriod.set(line.periodId, [...(byPeriod.get(line.periodId) ?? []), line]);
+  }
+  for (const periodId of periodIds) {
+    const financials = computePeriodFinancials(byPeriod.get(periodId) ?? []);
+    if (financials) {
+      result.set(periodId, financials);
+    }
+  }
+  return result;
 }

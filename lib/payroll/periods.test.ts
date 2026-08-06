@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjacentPeriod,
   hasPeriod,
   matchesSearch,
   periodKindLabel,
   periodLongLabel,
   periodShortLabel,
+  periodStatusLabel,
   proposeNextPeriod,
   sortPeriodsDesc,
+  sourceForCopy,
 } from "./periods";
 
 describe("periodLongLabel / periodShortLabel", () => {
@@ -26,6 +29,13 @@ describe("periodLongLabel / periodShortLabel", () => {
 describe("periodKindLabel", () => {
   it("nombra el único tipo que existe por ahora", () => {
     expect(periodKindLabel("ordinario")).toBe("Ordinario");
+  });
+});
+
+describe("periodStatusLabel", () => {
+  it("nombra los dos estados", () => {
+    expect(periodStatusLabel("captura")).toBe("En captura");
+    expect(periodStatusLabel("cerrado")).toBe("Cerrado");
   });
 });
 
@@ -87,6 +97,49 @@ describe("hasPeriod", () => {
   });
 });
 
+describe("sourceForCopy", () => {
+  it("nombra el período más reciente ANTERIOR al destino", () => {
+    const existing = [
+      { year: 2026, monthIndex: 2 }, // marzo
+      { year: 2026, monthIndex: 5 }, // junio
+    ];
+    // Destino: julio → la fuente es junio, el más reciente antes de julio.
+    expect(sourceForCopy(existing, 2026, 6)).toEqual({ year: 2026, monthIndex: 5 });
+  });
+
+  it(
+    "relleno hacia atrás: la fuente se resuelve contra el DESTINO, no contra el período más " +
+      "reciente que existe — el cliente tiene marzo y junio de 2026; el destino es abril, así " +
+      "que la fuente es marzo, no junio",
+    () => {
+      const existing = [
+        { year: 2026, monthIndex: 2 }, // marzo
+        { year: 2026, monthIndex: 5 }, // junio
+      ];
+      expect(sourceForCopy(existing, 2026, 3)).toEqual({ year: 2026, monthIndex: 2 });
+    },
+  );
+
+  it("sin ningún período anterior al destino, no hay fuente", () => {
+    const existing = [{ year: 2026, monthIndex: 5 }];
+    expect(sourceForCopy(existing, 2026, 0)).toBeNull();
+  });
+
+  it("sin ningún período registrado, no hay fuente", () => {
+    expect(sourceForCopy([], 2026, 5)).toBeNull();
+  });
+
+  it("cruza el año: diciembre del año anterior es fuente de enero", () => {
+    const existing = [{ year: 2025, monthIndex: 11 }];
+    expect(sourceForCopy(existing, 2026, 0)).toEqual({ year: 2025, monthIndex: 11 });
+  });
+
+  it("el mismo mes del destino no cuenta como anterior", () => {
+    const existing = [{ year: 2026, monthIndex: 5 }];
+    expect(sourceForCopy(existing, 2026, 5)).toBeNull();
+  });
+});
+
 describe("proposeNextPeriod", () => {
   it("con ningún período previo, propone el mes de HOY", () => {
     expect(proposeNextPeriod([], new Date(2026, 4, 15))).toEqual({ year: 2026, monthIndex: 4 });
@@ -119,5 +172,40 @@ describe("proposeNextPeriod", () => {
       year: 2026,
       monthIndex: 3,
     });
+  });
+});
+
+describe("adjacentPeriod", () => {
+  const periods = [
+    { id: "a", year: 2026, monthIndex: 2 }, // marzo
+    { id: "b", year: 2026, monthIndex: 5 }, // junio
+    { id: "c", year: 2026, monthIndex: 6 }, // julio
+  ];
+
+  it("«siguiente» es el período más nuevo inmediato", () => {
+    expect(adjacentPeriod(periods, "b", "next")).toEqual(periods[2]);
+  });
+
+  it("«anterior» es el período más viejo inmediato", () => {
+    expect(adjacentPeriod(periods, "b", "prev")).toEqual(periods[0]);
+  });
+
+  it("sin vecino más nuevo, «siguiente» es null", () => {
+    expect(adjacentPeriod(periods, "c", "next")).toBeNull();
+  });
+
+  it("sin vecino más viejo, «anterior» es null", () => {
+    expect(adjacentPeriod(periods, "a", "prev")).toBeNull();
+  });
+
+  it("un id que no existe en la lista no tiene vecinos", () => {
+    expect(adjacentPeriod(periods, "z", "next")).toBeNull();
+    expect(adjacentPeriod(periods, "z", "prev")).toBeNull();
+  });
+
+  it("un solo período no tiene vecinos en ningún sentido", () => {
+    const solo = [{ id: "a", year: 2026, monthIndex: 2 }];
+    expect(adjacentPeriod(solo, "a", "next")).toBeNull();
+    expect(adjacentPeriod(solo, "a", "prev")).toBeNull();
   });
 });
