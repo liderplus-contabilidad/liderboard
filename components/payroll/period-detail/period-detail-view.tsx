@@ -4,9 +4,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { BookText, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { EmptyState } from "@/components/ui/empty-state";
 import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { listEmployees } from "@/lib/payroll/db";
+import { buildJournalEntry } from "@/lib/payroll/journal";
+import { JOURNAL_MOCK_AMOUNTS } from "@/lib/payroll/journal-mock";
 import {
   computePeriodFinancials,
   computeReconciliationCounts,
@@ -17,6 +18,7 @@ import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 import { DeletePeriodDialog } from "../delete-period-dialog";
 import { usePayrollData } from "../payroll-data-provider";
 import { EmployeeTable } from "./employee-table";
+import { JournalEntryCard } from "./journal-entry-card";
 import { PayrollExcelActions } from "./payroll-excel-actions";
 import { PeriodHeader } from "./period-header";
 import { PeriodKpiCard } from "./period-kpi-card";
@@ -67,6 +69,13 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     () => lines.filter((line) => matchesEmployeeSearch(line, search)),
     [lines, search],
   );
+  // La costura con las cifras reales: cuando el asiento se alimente del período abierto, el
+  // único cambio es el argumento de `buildJournalEntry` — ni la tarjeta ni la fila se enteran.
+  // OJO al hacer esa costura: si el argumento pasa a derivarse de `lines`, este array de
+  // dependencias tiene que dejar de estar vacío, o el asiento queda congelado en el primer
+  // render. `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-
+  // deps` no está para atraparlo.
+  const journalEntry = useMemo(() => buildJournalEntry(JOURNAL_MOCK_AMOUNTS), []);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -143,9 +152,12 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
             />
           </>
         ) : (
-          <EmptyState className="rounded-[13px] border border-border bg-surface py-16">
-            El asiento contable todavía no está disponible para este período.
-          </EmptyState>
+          <JournalEntryCard
+            entry={journalEntry}
+            year={period.year}
+            monthIndex={period.monthIndex}
+            sample
+          />
         )}
       </div>
 

@@ -589,6 +589,36 @@ testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no cha
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
 
+**Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. Las
+cifras del mes (`PayrollEmployeeFigures`) se leen VERBATIM del archivo y nunca se recalculan: el
+rol trae más de mil fórmulas y su cuadre es el del contador, y una segunda definición de «aporte
+IESS» se separaría de la suya al centavo — ausente no es cero, es que el período aún no recibió su
+archivo. Nada derivado se persiste (`PayrollRosterSummary`, los totales del período, el asiento
+mismo): una copia guardada aparte quedaría desactualizada y la pantalla diría una cosa y los datos
+otra. `sameToTheCentavo` (`lib/payroll/amounts.ts`) es la única definición de «mismo importe» del
+módulo, porque el rol llega con ruido de coma flotante (`457.69000000000005`) — con `===` cuatro de
+cinco empleados conciliados salían «con diferencia».
+
+**El asiento contable** es UNO solo y consolidado del rol entero, no uno por área. La hoja
+`ASIENTOS` del rol de muestra trae cinco bloques rotulados por área, pero solo el último es el
+asiento vivo: todas sus fórmulas leen `GENERAL!39`, la fila `SUMAN` (`F39 = F13+F23+F26+F32+F38`);
+los otros cuatro son el molde por área que quedó pegado de la plantilla, y dos están cruzados — el
+bloque rotulado «RESTAURANTE» lee en realidad la fila 32, que es COCINA. Por eso el rótulo del
+Excel no llega a la pantalla: el bloque vivo se llama «ADMINISTRACION DEL PERSONAL» y suma el rol
+entero; copiarlo haría creer que la tabla muestra solo Administración. El catálogo
+(`lib/payroll/journal.ts`) declara las 24 cuentas una sola vez; su clave es el `id`, no el `code`
+— `214001` aparece dos veces (aporte IESS personal 9.45 % y patronal 12.15 %) y dos cuentas no
+traen código —, y los nombres van VERBATIM con las erratas del contador («Anticpo Empleados»,
+«Vacaciones Pagar») porque son los rótulos con los que él coteja pantalla contra hoja.
+`sourceColumns` anota de qué columnas de `GENERAL!39` sale cada importe; nadie las lee todavía, es
+el mapa dejado para cuando se cablee. El catálogo es la constante y los importes el argumento —
+`buildJournalEntry(amounts)` —; hoy el mapa lo produce `journal-mock.ts`, un archivo que existe
+para borrarse, y mañana lo producirá el período; la construcción vive en
+`period-detail-view.tsx`, que es la costura. **Bug conocido del Excel, sin corregir**: `214002
+Prestamos IESS por Pagar` lee `AB39` («PRESTAMOS EMPRESARIALES», 0) cuando el préstamo IESS real
+está en `Y39` («PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS», 64.25) — de ahí el descuadre de 64.25 de
+la hoja del contador; la muestra usa la columna correcta.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind
