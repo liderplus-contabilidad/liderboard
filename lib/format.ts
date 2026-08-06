@@ -87,6 +87,26 @@ export function formatAmount(value: number): string {
   return EC_AMOUNT.format(value);
 }
 
+/**
+ * Un importe de tabla: con símbolo y centavos, y RAYA cuando no hay nada que decir.
+ *
+ * Es la forma en que toda cifra de dinero se rinde en una rejilla de esta app, y vive aquí —y no
+ * en el módulo que la estrenó— porque PyG y Rol de Pagos tienen que escribir el mismo número
+ * igual. Dos definiciones de «cómo se ve un importe» se separan en cuanto una de las dos cambie,
+ * y el usuario coteja las dos pantallas contra el mismo Excel.
+ *
+ * El cero se pinta igual que la ausencia, a propósito: en una columna de trece conceptos, doce
+ * ceros compiten con las cifras que sí dicen algo, y la raya se lee como «aquí no hay nada» de un
+ * vistazo. Donde el cero SÍ es una afirmación —un total, una diferencia conciliada— se usa
+ * `formatCurrency` directamente.
+ */
+export function formatCurrencyOrDash(value: number | null): string {
+  if (value === null || value === 0) {
+    return "–";
+  }
+  return formatCurrency(value, { cents: true });
+}
+
 /** Percentage with one decimal, Spanish spacing ("12.4 %"). */
 export function formatPercent(value: number, fractionDigits = 1): string {
   return `${formatPoints(value, fractionDigits)} %`;

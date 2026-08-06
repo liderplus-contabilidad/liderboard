@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  ChevronDown,
-  FileSpreadsheet,
-  Info,
-  Loader2,
-  Upload,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronDown, FileSpreadsheet, Loader2, Upload, X, type LucideIcon } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DisabledReasonPill } from "@/components/ui/disabled-reason-pill";
 import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/cn";
 
@@ -67,10 +60,7 @@ export function ExcelActions({
   return (
     <div className="flex items-center gap-2.5">
       {upload.disabled && upload.disabledReason && (
-        <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-border bg-surface px-3.5 text-[12.5px] font-medium text-muted">
-          <Info size={14} className="shrink-0 text-faint" />
-          {upload.disabledReason}
-        </span>
+        <DisabledReasonPill>{upload.disabledReason}</DisabledReasonPill>
       )}
       <Button
         size="toolbar"

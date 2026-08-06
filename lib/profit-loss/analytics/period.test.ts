@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { comparePeriodRefs, periodLabel, periodsAlign, periodsForYear } from "./period";
+import {
+  comparePeriodRefs,
+  periodLabel,
+  periodRangeLabel,
+  periodsAlign,
+  periodsForYear,
+} from "./period";
 import { seriesKeyId, type PeriodRef } from "./types";
 
 const ENE_2026: PeriodRef = { year: 2026, frequency: "mensual", index: 0 };
@@ -24,6 +30,31 @@ describe("periodLabel", () => {
     expect(
       periodLabel({ year: 2026, frequency: "trimestral", index: 3 }, { multiYear: true }),
     ).toBe("T4 26");
+  });
+});
+
+describe("periodRangeLabel", () => {
+  const meses = periodsForYear(2026, "mensual");
+
+  it("collapses a contiguous set into a range", () => {
+    // El archivo llega hasta julio: el rango es el de la cobertura, no el del año.
+    expect(periodRangeLabel(meses.slice(0, 7))).toBe("Ene–Jul");
+    expect(periodRangeLabel(periodsForYear(2026, "trimestral").slice(0, 3))).toBe("T1–T3");
+  });
+
+  it("enumerates a set with holes instead of claiming what is between", () => {
+    // «Ene–Mar» afirmaría que febrero está sumado, y no lo está.
+    expect(periodRangeLabel([meses[0], meses[2]])).toBe("Ene, Mar");
+    expect(periodRangeLabel([meses[0], meses[2], meses[4]])).toBe("Ene, Mar, May");
+  });
+
+  it("names a single period by itself, and an empty set with nothing", () => {
+    expect(periodRangeLabel([meses[6]])).toBe("Jul");
+    expect(periodRangeLabel([])).toBe("");
+  });
+
+  it("carries the year suffix through when the query spans several", () => {
+    expect(periodRangeLabel(meses.slice(0, 2), { multiYear: true })).toBe("Ene 26–Feb 26");
   });
 });
 

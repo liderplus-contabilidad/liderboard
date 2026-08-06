@@ -5,15 +5,16 @@ import { MAX_SERIES, buildSeries } from "../analytics/series";
 import type { AnalyticsSource } from "../analytics/types";
 import type { SelectionContext } from "./selection";
 import {
-  amountOf,
-  amountsAt,
+  amountsOver,
   childrenOf,
+  coveredPeriods,
   compositionQuery,
   excludedNote,
   intersectWithMarked,
   lastCoveredIndex,
   leavesOf,
   presetQuery,
+  sumOver,
   topByMagnitude,
   topEntries,
 } from "./presets";
@@ -122,25 +123,46 @@ describe("de qué se compone un total", () => {
 describe("el periodo activo", () => {
   const bundle = buildSeries([MANOR], presetQuery(["4", "5"], CONTEXT));
 
-  it("is the last period with movement, not the last of the year", () => {
-    // The file reaches July: index 6, not 11.
+  it("son los periodos cubiertos, no los doce del año", () => {
+    // El archivo llega hasta julio: siete columnas de las doce del eje.
+    expect(coveredPeriods(bundle).map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("la variación sigue necesitando la última, y es la séptima", () => {
     expect(lastCoveredIndex(bundle)).toBe(6);
   });
 
-  it("is -1 when nothing was covered", () => {
+  it("sin cobertura no hay periodos, ni entradas, ni cifra", () => {
     const empty = buildSeries([{ ...MANOR, coverage: new Set() }], presetQuery(["4"], CONTEXT));
 
+    expect(coveredPeriods(empty)).toEqual([]);
     expect(lastCoveredIndex(empty)).toBe(-1);
-    expect(amountsAt(empty, -1)).toEqual([]);
-    expect(amountOf(empty, "4", -1)).toBeNull();
+    expect(amountsOver(empty)).toEqual([]);
+    expect(sumOver(empty, "4")).toBeNull();
   });
 
-  it("reads each account's amount at that period", () => {
-    const index = lastCoveredIndex(bundle);
+  it("suma cada cuenta sobre el eje entero, no una de sus columnas", () => {
+    // Julio vale 25.229 de ingreso; los siete meses cubiertos valen bastante más.
+    expect(sumOver(bundle, "4")).toBe(
+      bundle.series
+        .find((series) => series.key.code === "4")
+        ?.points.reduce((sum, point) => sum + (point.value ?? 0), 0),
+    );
+    expect(sumOver(bundle, "4")).toBeGreaterThan(25_229);
+    expect(amountsOver(bundle).map((entry) => entry.code)).toEqual(["4", "5"]);
+  });
 
-    expect(amountOf(bundle, "4", index)).toBe(25_229);
-    expect(amountOf(bundle, "5", index)).toBe(20_121);
-    expect(amountsAt(bundle, index).map((entry) => entry.code)).toEqual(["4", "5"]);
+  it("un periodo cubierto en cero no es lo mismo que uno sin cargar", () => {
+    // La cuenta existe y su único mes cubierto vale 0: el total es 0, no `null`.
+    const enCero: AnalyticsSource = {
+      ...MANOR,
+      coverage: new Set([0]),
+      valuesByCode: new Map([["4", Array.from({ length: 12 }, () => 0)]]),
+    };
+    const bundleEnCero = buildSeries([enCero], presetQuery(["4"], CONTEXT));
+
+    expect(sumOver(bundleEnCero, "4")).toBe(0);
+    expect(sumOver(bundleEnCero, "5")).toBeNull();
   });
 });
 

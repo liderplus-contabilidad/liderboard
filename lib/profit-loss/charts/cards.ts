@@ -16,16 +16,10 @@
  * exactly the divergence this module exists to close.
  */
 import type { ChartCardSpec, ChartTable } from "@/lib/charts/types";
-import { periodLabel } from "../analytics/period";
+import { periodLabel, periodRangeLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
-import {
-  toPareto,
-  toPctOfRevenue,
-  toPieSlices,
-  type AmountEntry,
-  type ParetoResult,
-} from "../analytics/structure";
-import type { AnalyticsSource, Series, SeriesBundle } from "../analytics/types";
+import { toPareto, toPieSlices, type AmountEntry, type ParetoResult } from "../analytics/structure";
+import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
 import {
@@ -41,9 +35,9 @@ import {
   waterfallTable,
 } from "./option";
 import {
-  amountOf,
-  amountsAt,
+  amountsOver,
   compositionQuery,
+  coveredPeriods,
   excludedNote,
   expenseRootsOf,
   intersectWithMarked,
@@ -52,6 +46,7 @@ import {
   leavesOfAny,
   presetQuery,
   REVENUE_ROOT,
+  sumOver,
   topByMagnitude,
   topEntries,
 } from "./presets";
@@ -63,7 +58,7 @@ import {
   toSeriesQuery,
   type SelectionContext,
 } from "./selection";
-import { buildWaterfall, waterfallRangeLabel } from "./waterfall";
+import { buildWaterfall } from "./waterfall";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
@@ -78,17 +73,22 @@ export interface CardTile {
 }
 
 export interface GraficosCards {
-  /** Index of the closing period; `-1` when nothing is covered. */
-  period: number;
+  /** The periods the figures sum, in axis order; empty when nothing is covered. */
+  periods: PeriodRef[];
   periodName: string;
   tiles: CardTile[];
   cards: ChartCardSpec[];
 }
 
 export interface AnalisisCards {
-  period: number;
+  periods: PeriodRef[];
   periodName: string;
   cards: ChartCardSpec[];
+}
+
+/** How a set of covered periods is named on screen; nothing covered is not a range. */
+function nameOf(periods: readonly PeriodRef[]): string {
+  return periods.length > 0 ? periodRangeLabel(periods) : "Sin movimiento";
 }
 
 /**
@@ -99,20 +99,6 @@ export interface AnalisisCards {
 export function entryColor(codes: string[]): (code: string) => string {
   const resolve = codeColorResolver(codes);
   return (code) => resolve({ code, centerId: "", year: 0 });
-}
-
-/** One entry per series at one period, dropping the ones with no coverage there. */
-export function atPeriod(series: Series[], index: number): AmountEntry[] {
-  if (index < 0) {
-    return [];
-  }
-  return series
-    .map((entry) => ({
-      code: entry.key.code,
-      label: entry.label,
-      value: entry.points[index]?.value ?? null,
-    }))
-    .filter((entry): entry is AmountEntry => entry.value !== null);
 }
 
 /** The change of each account against the previous period, signed. */
@@ -163,9 +149,15 @@ function paretoNote(pareto: ParetoResult): string | undefined {
  * Gráficos answers *how much and of what*: amounts per period, comparisons between accounts and
  * centers, composition of a total.
  *
- * The closing period is resolved ONCE and travels out with the list. A statement whose revenue
- * stops in July but keeps booking a small cost through December has coverage to December; if
- * each card resolved its own, one subtitle would read «Jul» and the next «Dic» over the same
+ * A figure here is the TOTAL of the periods the filter bar left in play — six months marked is a
+ * six-month figure, and with nothing marked it is the whole covered year, which is what the
+ * cascade beside it already declared it was summing. Reading a single closing column was what the
+ * tab did back when there was no «Periodo» filter and the last loaded month was the only period
+ * anyone could speak of.
+ *
+ * That span is resolved ONCE and travels out with the list. A statement whose revenue stops in
+ * July but keeps booking a small cost through December has coverage to December; if each card
+ * resolved its own, one subtitle would read «Ene–Jul» and the next «Ene–Dic» over the same
  * screen. Returning it alongside makes that unicity structural instead of a convention.
  */
 export function buildGraficosCards(context: SelectionContext, filters: PygFilters): GraficosCards {
@@ -178,13 +170,11 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
 
   const defaultCodes = defaultEvolutionCodes(source);
   const totals = runQuery(presetQuery(defaultCodes, context, { periods: periodRefs }));
-  const period = lastCoveredIndex(totals);
-  const periodName = totals.periods[period]
-    ? periodLabel(totals.periods[period])
-    : "Sin movimiento";
+  const periods = coveredPeriods(totals);
+  const periodName = nameOf(periods);
 
-  const revenue = amountOf(totals, REVENUE_ROOT, period);
-  const expenseParts = defaultCodes.slice(1).map((root) => amountOf(totals, root, period));
+  const revenue = sumOver(totals, REVENUE_ROOT);
+  const expenseParts = defaultCodes.slice(1).map((root) => sumOver(totals, root));
   const expense = expenseParts.every((value) => value === null)
     ? null
     : expenseParts.reduce((sum: number, value) => sum + (value ?? 0), 0);
@@ -207,7 +197,7 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const composition = runQuery(
     compositionQuery(compositionCodes, context, { periods: periodRefs }),
   );
-  const slices = toPieSlices(amountsAt(composition, period));
+  const slices = toPieSlices(amountsOver(composition));
   const sliceColor = entryColor(slices.slices.map((slice) => slice.code));
   const compositionEmptyNote =
     revenueLeaves.length > 0 && compositionCodes.length === 0
@@ -219,7 +209,7 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
   const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = runQuery(compositionQuery(rankingCodes, context, { periods: periodRefs }));
-  const ranking = topEntries(amountsAt(expenses, period));
+  const ranking = topEntries(amountsOver(expenses));
   const rankingColor = entryColor(ranking.entries.map((entry) => entry.code));
   const rankingEmptyNote =
     expenseLeaves.length > 0 && rankingCodes.length === 0
@@ -237,10 +227,10 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
       })
     : null;
   const steps = waterfall?.steps ?? [];
-  const range = waterfallRangeLabel(waterfall?.periods ?? []);
+  const range = periodRangeLabel(waterfall?.periods ?? []);
 
   return {
-    period,
+    periods,
     periodName,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },
@@ -336,37 +326,56 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
   const expenseLeaves = leavesOfAny(source, expenseRootsOf(source));
   const expenseCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = runQuery(compositionQuery(expenseCodes, context, { periods: periodRefs }));
-  const period = lastCoveredIndex(expenses);
-  const periodName = expenses.periods[period]
-    ? periodLabel(expenses.periods[period])
-    : "Sin movimiento";
+  const periods = coveredPeriods(expenses);
+  const periodName = nameOf(periods);
   const expensesEmptyNote =
     expenseLeaves.length > 0 && expenseCodes.length === 0
       ? "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos."
       : undefined;
 
-  // % over revenue of the largest expenses — each against the revenue of ITS OWN source, which
-  // is what makes two centers of very different size comparable.
-  const topExpenses = topEntries(amountsAt(expenses, period)).entries;
-  const topCodes = new Set(topExpenses.map((entry) => entry.code));
-  const shares = expenses.series
-    .filter((series) => topCodes.has(series.key.code))
-    .map((series) => toPctOfRevenue(series, sources));
+  // % over revenue of the largest expenses. Over a span it is `Σ cuenta ÷ Σ ingresos` and never
+  // the average of each period's percentage — the same rule the vertical analysis applies to its
+  // «Total año», and for the same reason: an average of ratios is not the ratio of the sums, and
+  // a thin month would weigh as much as a full one.
+  const topExpenses = topEntries(amountsOver(expenses)).entries;
+  const revenue = sumOver(
+    runQuery(presetQuery([REVENUE_ROOT], context, { periods: periodRefs })),
+    REVENUE_ROOT,
+  );
   // Ranked before the colors are resolved: the slot order has to match the drawn order, or the
   // first bar of the card comes out painted slot 6.
-  const shareEntries = topEntries(atPeriod(shares, period)).entries;
+  const shareEntries = topEntries(
+    revenue === null || revenue === 0
+      ? []
+      : topExpenses.map((entry) => ({ ...entry, value: (entry.value / revenue) * 100 })),
+  ).entries;
   const shareColor = entryColor(shareEntries.map((entry) => entry.code));
+  // A base of 0 or with no coverage empties the card with ONE line naming the span — never one
+  // warning per account, which would bury the reason under the list it explains.
+  const shareEmptyNote =
+    topExpenses.length > 0 && (revenue === null || revenue === 0)
+      ? `Los ingresos de ${periodName} no dan base para el porcentaje.`
+      : undefined;
 
   // Variation against the previous period: the sign is the reading, so it goes out with an icon
   // and the signed value too, never as color alone.
-  const variation = topByMagnitude(variationEntries(expenses, period));
+  const lastPeriod = lastCoveredIndex(expenses);
+  const variation = topByMagnitude(variationEntries(expenses, lastPeriod));
   const variationColor = signColorOf(variation.entries);
+  // The one card that does NOT speak about the span: it compares two columns, so it names them.
+  // Inheriting «Ene–Jun» here would announce a variation over six months that nothing computed.
+  const variationName =
+    periods.length === 0
+      ? "Sin movimiento"
+      : lastPeriod > 0
+        ? `${periodLabel(expenses.periods[lastPeriod])} contra ${periodLabel(expenses.periods[lastPeriod - 1])}`
+        : "Sin periodo anterior";
 
-  const pareto = toPareto(amountsAt(expenses, period));
+  const pareto = toPareto(amountsOver(expenses));
   const paretoColor = entryColor(pareto.entries.map((entry) => entry.code));
 
   return {
-    period,
+    periods,
     periodName,
     cards: [
       {
@@ -382,13 +391,13 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
             ? entryTable(shareEntries, { colorOf: shareColor, unit: "porcentaje" }, "% ingresos")
             : EMPTY_TABLE,
         warnings: expenses.warnings,
-        ...withNote(expensesEmptyNote),
+        ...withNote(expensesEmptyNote ?? shareEmptyNote),
         height: 300,
       },
       {
         id: "variacion",
         title: "Variación contra el periodo anterior",
-        subtitle: periodName,
+        subtitle: variationName,
         option: variation.entries.length > 0 ? variationBarOption(variation.entries) : null,
         table:
           variation.entries.length > 0

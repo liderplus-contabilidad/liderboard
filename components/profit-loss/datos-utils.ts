@@ -3,7 +3,7 @@
  * work (flattening the tree, sorting, totals) can be wrapped in `useMemo` and
  * unit-reasoned in isolation.
  */
-import { formatCurrency } from "@/lib/format";
+import { formatCurrencyOrDash } from "@/lib/format";
 import type { DatosRow, DatosSort } from "@/lib/profit-loss/datos-types";
 import { planSummaries } from "@/lib/profit-loss/derive";
 
@@ -16,10 +16,7 @@ export interface FlatRow {
 
 /** Cell/total display: app-wide currency, or an en-dash for empty/zero. */
 export function formatAmount(value: number | null): string {
-  if (value === null || value === 0) {
-    return "–";
-  }
-  return formatCurrency(value, { cents: true });
+  return formatCurrencyOrDash(value);
 }
 
 // Sorting by the Total column needs no case of its own any more: it is an ordinary column, so

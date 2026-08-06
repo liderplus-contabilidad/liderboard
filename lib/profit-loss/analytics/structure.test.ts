@@ -188,7 +188,7 @@ describe("toPareto", () => {
     expect(result.excluded).toHaveLength(2);
   });
 
-  /** La cola de un plan real: cuarenta cuentas de céntimos dibujadas una sobre otra. */
+  /** La cola de un plan real: cuarenta cuentas de centavos dibujadas una sobre otra. */
   const tail: AmountEntry[] = Array.from({ length: 24 }, (_, i) => ({
     code: `5.1.${i}`,
     label: `Cuenta ${i}`,

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 import { cn } from "@/lib/cn";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "danger-solid";
@@ -14,6 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   trailingIcon?: ReactNode;
   /** Square button that renders only its icon (children are ignored). */
   iconOnly?: boolean;
+  /** React 19 reads `ref` as a plain prop on function components — no `forwardRef` needed. Used
+   *  to anchor a `Dropdown` popover to a `Button` trigger instead of `DropdownTrigger`'s own
+   *  filter-button look. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -45,10 +49,12 @@ export function Button({
   type = "button",
   className,
   children,
+  ref,
   ...props
 }: ButtonProps) {
   return (
     <button
+      ref={ref}
       type={type}
       className={cn(
         "inline-flex items-center justify-center rounded-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",

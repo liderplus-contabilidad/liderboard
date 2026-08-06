@@ -10,7 +10,7 @@
  * `computeResult` puts in the «Utilidad o Pérdida» row of the Datos tab, and no grouping rule
  * is allowed to lose or duplicate a cent on the way there.
  */
-import { periodLabel, periodsForYear } from "../analytics/period";
+import { periodsForYear } from "../analytics/period";
 import { signFor } from "../analytics/series";
 import { aggregateCoverage, canReexpress } from "../analytics/source";
 import type { AnalyticsSource, PeriodRef } from "../analytics/types";
@@ -269,19 +269,6 @@ export function groupsUnder(source: AnalyticsSource, root: string): string[] {
 /** Accounts with no parent in the source — what `computeResult` sums with its sign. */
 function rootsOf(source: AnalyticsSource): string[] {
   return [...source.valuesByCode.keys()].filter((code) => !source.parentByCode.has(code));
-}
-
-/**
- * The range the card declares, taken from the periods the derivation actually summed and never
- * from the file's year: a statement that reaches July is «Ene–Jul», not 2026.
- */
-export function waterfallRangeLabel(periods: readonly PeriodRef[]): string {
-  if (periods.length === 0) {
-    return "";
-  }
-  const first = periodLabel(periods[0]);
-  const last = periodLabel(periods[periods.length - 1]);
-  return first === last ? first : `${first}–${last}`;
 }
 
 /** Every period of the source's year at `frequency`, narrowed by `options.periods`. */

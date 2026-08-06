@@ -9,8 +9,9 @@ import {
 import type { AnalyticsSource } from "../analytics/types";
 import { emptyFilters, type PygFilters } from "../filters";
 import type { Frequency } from "../types";
+import { buildSeries } from "../analytics/series";
 import { buildAnalisisCards, buildGraficosCards } from "./cards";
-import { expenseRootsOf } from "./presets";
+import { expenseRootsOf, presetQuery, sumOver } from "./presets";
 import { activeSource, type SelectionContext } from "./selection";
 
 /**
@@ -39,6 +40,21 @@ const MANOR = ctx([CULTURA_MANOR_SOURCE], "cultura-manor");
 const SEGMENTADO = ctx([CULTURA_MANOR_SEGMENTADO_SOURCE], "cultura-manor");
 const VACIO = ctx([CENTRO_VACIO_SOURCE], "centro-vacio");
 const DOS_CENTROS = ctx([CULTURA_MANOR_SOURCE, CENTRO_PRINCIPAL_SOURCE], "cultura-manor");
+/** Mismo centro con toda la raíz 4 en cero: la base del porcentaje desaparece, los gastos no. */
+const SIN_INGRESOS = ctx(
+  [
+    {
+      ...CULTURA_MANOR_SOURCE,
+      valuesByCode: new Map(
+        [...CULTURA_MANOR_SOURCE.valuesByCode].map(([code, values]) => [
+          code,
+          code.startsWith("4") ? values.map(() => 0) : values,
+        ]),
+      ),
+    },
+  ],
+  "cultura-manor",
+);
 
 function withFilters(overrides: Partial<PygFilters>): PygFilters {
   return { ...emptyFilters(), ...overrides };
@@ -100,14 +116,14 @@ describe("el contrato de la lista", () => {
   });
 });
 
-/* ------------------------------------------------------- un solo periodo de cierre */
+/* ------------------------------------------------------- el periodo del que se habla */
 
-describe("el periodo de cierre", () => {
-  it("con cobertura hasta julio, cierra en julio y no en diciembre", () => {
+describe("el periodo del que hablan las tarjetas", () => {
+  it("son los periodos CUBIERTOS, no los doce del año", () => {
     const graficos = buildGraficosCards(MANOR, emptyFilters());
 
-    expect(graficos.period).toBe(6);
-    expect(graficos.periodName).toBe("Jul");
+    expect(graficos.periods.map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(graficos.periodName).toBe("Ene–Jul");
   });
 
   it("es el mismo para las dos pestañas y para todos los subtítulos de una", () => {
@@ -116,33 +132,59 @@ describe("el periodo de cierre", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[1].subtitle).toBe("Jul");
-    for (const card of [...graficos.cards.slice(0, 3), ...analisis.cards]) {
-      expect(card.subtitle).toContain("Jul");
+    expect(graficos.cards[1].subtitle).toBe("Ene–Jul");
+    for (const card of [...graficos.cards.slice(0, 3), analisis.cards[0], analisis.cards[2]]) {
+      expect(card.subtitle).toContain("Ene–Jul");
     }
   });
 
-  it("sin un solo periodo cubierto es -1, «Sin movimiento» y cifras nulas", () => {
-    const { period, periodName, tiles } = buildGraficosCards(VACIO, emptyFilters());
+  it("sin un solo periodo cubierto no hay periodos, es «Sin movimiento» y las cifras son nulas", () => {
+    const { periods, periodName, tiles } = buildGraficosCards(VACIO, emptyFilters());
 
-    expect(period).toBe(-1);
+    expect(periods).toEqual([]);
     expect(periodName).toBe("Sin movimiento");
     expect(tiles.map((tile) => tile.value)).toEqual([null, null, null]);
     expect(tiles.every((tile) => tile.sign === undefined)).toBe(true);
   });
 });
 
-/* ---------------------------------------------------------------- las cifras de cierre */
+/* ---------------------------------------------------------------- las cifras del periodo */
 
-describe("las cifras de cierre", () => {
-  it("son ingresos, gastos y el resultado del periodo de cierre", () => {
+describe("las cifras del periodo", () => {
+  it("son el TOTAL de lo cubierto, no la última columna del eje", () => {
     const { tiles } = buildGraficosCards(MANOR, emptyFilters());
 
+    // Un mes normal factura 25.229; los siete cubiertos suman 176.303 (febrero no trae Ventas
+    // Eventos). Leer una sola columna era lo que dejaba la tarjeta en 25.229 con seis meses a la
+    // vista.
     expect(tiles).toEqual([
-      { id: "ingresos", label: "Ingresos", value: 25229 },
-      { id: "gastos", label: "Costos y Gastos", value: 20121 },
-      { id: "resultado", label: "Utilidad", value: 5108, sign: "positivo" },
+      { id: "ingresos", label: "Ingresos", value: 176303 },
+      { id: "gastos", label: "Costos y Gastos", value: 140847 },
+      { id: "resultado", label: "Utilidad", value: 35456, sign: "positivo" },
     ]);
+  });
+
+  it("con periodos marcados suma ESOS y lo dice", () => {
+    const { periodName, tiles } = buildGraficosCards(
+      MANOR,
+      withFilters({
+        periods: [0, 1, 2, 3, 4, 5].map((index) => ({ frequency: "mensual" as const, index })),
+      }),
+    );
+
+    expect(periodName).toBe("Ene–Jun");
+    // Los siete meses menos julio.
+    expect(tiles[0].value).toBe(176303 - 25229);
+  });
+
+  it("con un solo periodo marcado es ese periodo", () => {
+    const { periodName, tiles } = buildGraficosCards(
+      MANOR,
+      withFilters({ periods: [{ frequency: "mensual", index: 6 }] }),
+    );
+
+    expect(periodName).toBe("Jul");
+    expect(tiles[0].value).toBe(25229);
   });
 
   it("un estado segmentado suma LAS DOS raíces de gasto, no solo la 5", () => {
@@ -150,10 +192,10 @@ describe("las cifras de cierre", () => {
 
     const { tiles } = buildGraficosCards(SEGMENTADO, emptyFilters());
 
-    // 20.901 en la raíz 5 (los 20.121 de siempre más los 780 de la rama 5.2 que quedó) y 900
-    // reclasificados a la raíz 6: dejar fuera la 6 daría una utilidad 900 más alta.
-    expect(tiles[1].value).toBe(21801);
-    expect(tiles[2].value).toBe(25229 - 21801);
+    // 20.901 mensuales en la raíz 5 (los 20.121 de siempre más los 780 de la rama 5.2 que quedó)
+    // y 900 reclasificados a la raíz 6: dejar fuera la 6 daría una utilidad 6.300 más alta.
+    expect(tiles[1].value).toBe(21801 * 7);
+    expect(tiles[2].value).toBe(176303 - 21801 * 7);
   });
 });
 
@@ -216,7 +258,8 @@ describe("lo que marcan los filtros", () => {
     );
 
     expect(cards[0].table.columns).toEqual(["Ene", "Mar"]);
-    expect(periodName).toBe("Mar");
+    // «Ene–Mar» afirmaría que febrero está sumado, y el filtro lo dejó fuera.
+    expect(periodName).toBe("Ene, Mar");
   });
 
   it("varios centros marcados cruzan cada cuenta con cada centro", () => {
@@ -228,7 +271,7 @@ describe("lo que marcan los filtros", () => {
     // El eje de comparación no se declara: dos cuentas por defecto (Ingresos y Costos y Gastos)
     // contra dos centros marcados son cuatro series, y eso es lo que la tarjeta anuncia.
     expect(cards[0].table.rows).toHaveLength(4);
-    expect(cards[0].subtitle).toBe("4 series · Jul");
+    expect(cards[0].subtitle).toBe("4 series · Ene–Jul");
   });
 });
 
@@ -267,6 +310,75 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
     expect(rows[1].id).toBe("5.1.5.12");
     expect(rows[0].color).toBe(CHART_PALETTE[0]);
     expect(rows[1].color).toBe(CHART_PALETTE[1]);
+  });
+});
+
+/* ------------------------------------------------- lo que se calcula sobre las sumas */
+
+describe("el porcentaje sobre ingresos", () => {
+  it("es Σ cuenta ÷ Σ ingresos, no el promedio de los porcentajes de cada mes", () => {
+    const bundle = buildSeries([CULTURA_MANOR_SOURCE], presetQuery(["4", "5.1.1.1.1"], MANOR));
+    const sueldo = sumOver(bundle, "5.1.1.1.1") as number;
+    const ingresos = sumOver(bundle, "4") as number;
+
+    // Febrero no trae Ventas Eventos, así que su porcentaje es más alto que el de los demás: el
+    // promedio de los siete porcentajes NO es el porcentaje de las sumas, y es esta la que vale.
+    const promedioDeRazones =
+      bundle.series
+        .find((series) => series.key.code === "5.1.1.1.1")!
+        .points.reduce((sum, point, index) => {
+          const base = bundle.series.find((series) => series.key.code === "4")!.points[index].value;
+          return sum + (point.value !== null && base ? (point.value / base) * 100 : 0);
+        }, 0) / 7;
+    const razonDeSumas = (sueldo / ingresos) * 100;
+    expect(promedioDeRazones).not.toBeCloseTo(razonDeSumas, 6);
+
+    const { cards } = buildAnalisisCards(MANOR, emptyFilters());
+    expect(cards[0].table.rows[0].id).toBe("5.1.1.1.1");
+    expect(cards[0].table.rows[0].values[0]).toBe(`${razonDeSumas.toFixed(1)} %`);
+  });
+
+  it("con los ingresos del periodo en cero no divide: se vacía y lo dice", () => {
+    const { cards } = buildAnalisisCards(SIN_INGRESOS, emptyFilters());
+
+    expect(cards[0].option).toBeNull();
+    expect(cards[0].table.rows).toEqual([]);
+    expect(cards[0].note).toBe("Los ingresos de Ene–Jul no dan base para el porcentaje.");
+  });
+});
+
+describe("la variación nombra las dos columnas que compara", () => {
+  it("no hereda el rango, que anunciaría una variación de siete meses", () => {
+    const { cards } = buildAnalisisCards(MANOR, emptyFilters());
+
+    expect(cards[1].subtitle).toBe("Jul contra Jun");
+  });
+
+  it("sobre un rango marcado compara las dos últimas columnas de ESE rango", () => {
+    const { cards } = buildAnalisisCards(
+      MANOR,
+      withFilters({
+        periods: [0, 1, 2, 3, 4, 5].map((index) => ({ frequency: "mensual" as const, index })),
+      }),
+    );
+
+    expect(cards[1].subtitle).toBe("Jun contra May");
+  });
+
+  it("con una sola columna en el eje lo declara en vez de dibujar", () => {
+    const { cards } = buildAnalisisCards(
+      MANOR,
+      withFilters({ periods: [{ frequency: "mensual", index: 6 }] }),
+    );
+
+    expect(cards[1].subtitle).toBe("Sin periodo anterior");
+    expect(cards[1].option).toBeNull();
+  });
+
+  it("sin cobertura alguna dice que no hubo movimiento", () => {
+    const { cards } = buildAnalisisCards(VACIO, emptyFilters());
+
+    expect(cards[1].subtitle).toBe("Sin movimiento");
   });
 });
 

@@ -122,8 +122,10 @@ export function leavesOf(source: AnalyticsSource | undefined, ancestor: string):
 }
 
 /**
- * The last period ANY series covered — "the period" a stat tile and a composition speak about.
- * The 2026 files stop in July, so it is July and not December. `-1` when nothing is covered.
+ * The last period ANY series covered. It is no longer "the period" a tile speaks about — that is
+ * the whole covered span now — but the variation card still needs it: comparing against the
+ * previous period is a question about two columns, and this names the later one. `-1` when
+ * nothing is covered.
  */
 export function lastCoveredIndex(bundle: SeriesBundle): number {
   let last = -1;
@@ -137,27 +139,49 @@ export function lastCoveredIndex(bundle: SeriesBundle): number {
   return last;
 }
 
-/** Each series' amount at one period, dropping the ones that period does not cover. */
-export function amountsAt(bundle: SeriesBundle, index: number): AmountEntry[] {
-  if (index < 0) {
-    return [];
-  }
+/**
+ * The periods the bundle actually covers, in axis order — "the period" a tile, a composition or
+ * a ranking speaks about, and what names it on screen.
+ *
+ * The axis is already whatever the filter bar left (`presetQuery` passes the marked periods to
+ * the engine), so this only drops the ones the file never reached: a query over Ene–Dic on a
+ * statement that stops in July covers Ene–Jul.
+ */
+export function coveredPeriods(bundle: SeriesBundle): PeriodRef[] {
+  return bundle.periods.filter((_, index) =>
+    bundle.series.some((series) => series.points[index]?.value !== null),
+  );
+}
+
+/**
+ * Each series summed over the periods the bundle carries, dropping the ones with no coverage in
+ * ANY of them. A covered period valued at 0 contributes its zero; a never-loaded one contributes
+ * nothing — which is the difference between a total of zero and no total at all.
+ */
+export function amountsOver(bundle: SeriesBundle): AmountEntry[] {
   return bundle.series
     .map((series) => ({
       code: series.key.code,
       label: series.label,
-      value: series.points[index]?.value ?? null,
+      value: sumPoints(series),
     }))
     .filter((entry): entry is AmountEntry => entry.value !== null);
 }
 
-/** The value of one account at one period, or `null` when it has no coverage there. */
-export function amountOf(bundle: SeriesBundle, code: string, index: number): number | null {
-  if (index < 0) {
-    return null;
-  }
+/** One account summed over the bundle's periods, or `null` when it covers none of them. */
+export function sumOver(bundle: SeriesBundle, code: string): number | null {
   const series = bundle.series.find((candidate) => candidate.key.code === code);
-  return series?.points[index]?.value ?? null;
+  return series ? sumPoints(series) : null;
+}
+
+function sumPoints(series: SeriesBundle["series"][number]): number | null {
+  let total: number | null = null;
+  for (const point of series.points) {
+    if (point.value !== null) {
+      total = (total ?? 0) + point.value;
+    }
+  }
+  return total;
 }
 
 export interface Ranking {

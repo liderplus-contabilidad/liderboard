@@ -193,6 +193,18 @@ export interface ChartTableRow {
   /** Stable across renders: a series key id, or the entity's own code. */
   id: string;
   label: string;
+  /**
+   * What identifies the entity WITHOUT being its name — an employee's role beside the employee.
+   * The chart never draws it: in a legend or a tooltip it competes with the name, and here there
+   * is room for both.
+   */
+  sublabel?: string;
+  /**
+   * Renders with more weight than the rows around it. It is what separates a TOTAL from what it
+   * totals when both are series of the same chart; without it a `TOTAL` row reads as one more
+   * entity in the list.
+   */
+  emphasis?: boolean;
   color: string;
   /** Already formatted; `null` is a period with no coverage and must render EMPTY, not `$0`. */
   values: (string | null)[];

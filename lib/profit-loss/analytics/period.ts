@@ -22,6 +22,34 @@ export function periodLabel(ref: PeriodRef, options: PeriodLabelOptions = {}): s
 }
 
 /**
+ * The name of a SET of periods — what a tile, a composition or the cascade calls the span it
+ * summed. It is one definition because two of them would name the same span differently on the
+ * same screen.
+ *
+ * A contiguous set collapses into a range («Ene–Jul»); one with holes is enumerated («Ene, Mar»),
+ * because «Ene–Mar» claims febrero is inside and the figure underneath does not include it.
+ */
+export function periodRangeLabel(
+  periods: readonly PeriodRef[],
+  options: PeriodLabelOptions = {},
+): string {
+  if (periods.length === 0) {
+    return "";
+  }
+  const labels = periods.map((period) => periodLabel(period, options));
+  if (labels.length === 1) {
+    return labels[0];
+  }
+  const contiguous = periods.every(
+    (period, position) =>
+      position === 0 ||
+      (period.year === periods[position - 1].year &&
+        period.index === periods[position - 1].index + 1),
+  );
+  return contiguous ? `${labels[0]}–${labels[labels.length - 1]}` : labels.join(", ");
+}
+
+/**
  * A year-less slot's label — «Ene», «T1». The filter bar marks slots, not dated periods, so
  * there is no year to append: the mark narrows every visible year at once.
  */

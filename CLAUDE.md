@@ -89,7 +89,21 @@ ordered `MODULES` array (`{ slug, label, title, icon, tabs }`) plus `DEFAULT_MOD
 and `findModuleBySlug()`. Both the sidebar nav and the header breadcrumb/title derive
 from it — there is no duplicated module list. **To add a module:** add an entry to
 `MODULES` and create the matching `app/(dashboard)/<slug>/page.tsx`. Route slugs are
-English; the Spanish name goes in `label`/`title`.
+English; the Spanish name goes in `label`/`title`. A module may declare `children`
+(`DashboardSubmodule`) — pages that hang off it at `/<padre>/<hijo>`, rendered indented under it
+and **visibles por defecto**, porque un subitem que solo aparece al entrar en su padre no se puede
+descubrir. Plegarlos es del usuario, con un chevron en el padre: el sidebar guarda lo PLEGADO (no lo
+desplegado), así que un módulo nuevo con hijos nace visible sin sembrar nada. Dos casos ignoran ese
+pliegue por el mismo motivo —un hijo escondido sin control a la vista es inalcanzable—: la barra
+colapsada, donde no hay dónde poner el chevron, y el padre de la página ABIERTA, que se borraría del
+menú justo cuando estás en ella. The nesting is ONE level: this nav is a list, not a tree, and a second level has
+nowhere to render in the 72 px collapsed rail (where a child keeps its icon and `title` and drops
+the indent). The header's breadcrumb grows a third level ONLY when the second segment matches a
+declared child (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that
+check its identifier would land in the breadcrumb and the `<h1>`. The entity selector still
+resolves off the PARENT, so a subitem keeps its module's control without declaring it. **A module
+with no real page does not get an entry**: an item that leads to a permanent «próximamente»
+teaches the user not to press it, and eventually not to read the one beside it either.
 
 **Components.** Reusable primitives live in `components/ui/` — prefer them over ad-hoc
 markup. Module-specific compositions live in `components/<module>/` (`components/profit-loss/`,
@@ -588,6 +602,180 @@ holds only the presentation half — `transform`/`chartType`/`sources`/`colorOf`
 testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no chart declares two
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
+
+**Una cifra de Gráficos o Análisis es el TOTAL del periodo seleccionado**, nunca el valor de una de
+sus columnas. Marcar seis meses y leer el de junio era lo que hacía `lastCoveredIndex`, de cuando no
+existía el filtro «Periodo» y la última columna cargada era el único periodo del que se podía
+hablar; hoy lo que manda es `coveredPeriods` + `sumOver`/`amountsOver` (`presets.ts`), y el rango se
+resuelve UNA vez en `cards.ts` y viaja con la lista, para que dos tarjetas de la misma pantalla no
+digan «Ene–Jul» y «Ene–Dic». Un periodo sin cobertura no cuenta como `0`: una cuenta sin cobertura
+en ninguno da `null` y su tarjeta queda vacía. Dos tarjetas son la excepción y por la misma razón —
+lo que calculan no es una suma—: el **% sobre ingresos** es `Σ cuenta ÷ Σ ingresos` y jamás el
+promedio de los porcentajes de cada mes (la regla que el análisis vertical ya aplica a su «Total
+año»; con la base en `0` se vacía y lo dice, una sola línea nombrando el rango), y la **variación**
+compara dos columnas, así que no hereda el rótulo del rango sino que nombra su propio par («Jul
+contra Jun»). `periodRangeLabel` (`analytics/period.ts`) es la única forma de nombrar un conjunto de
+periodos y distingue el rango continuo del que tiene huecos: Ene y Mar marcados son «Ene, Mar», y
+«Ene–Mar» afirmaría que febrero está sumado.
+
+**Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. **El
+MOTOR es la única fuente de toda cifra en pantalla** y el Excel sirve solo para SUBIR información:
+lo guardado es la ficha del empleado más lo que se CAPTURA del mes (`PayrollMonthlyCapture`), y las
+veinte columnas del rol —incluidos los cuatro totales del período y el líquido de cada fila— las
+deriva `lib/payroll/engine/` en cada render. El archivo del contador ya no deja copia de sus
+propias salidas: `rol-general-grid.ts` ni siquiera localiza `TOTAL INGRESO`, `TOTAL EGRESOS`,
+`LIQUIDO A RECIBIR` ni `COSTO TOTAL`; lo que sí lee es `PAGADO` (`BZ`), que es un insumo y entra
+como un capturado más. Contrastar la app contra el libro es trabajo de `engine/golden.test.ts`, que
+reproduce las 20 columnas de los seis empleados de marzo 2026 con igualdad EXACTA — una pantalla
+que enseña las cifras del archivo junto a un veredicto calculado no es un contraste, es dos
+verdades a la vez. Nada derivado se persiste (`PayrollRosterSummary`, los totales del período, el
+asiento mismo): una copia guardada aparte quedaría desactualizada y la pantalla diría una cosa y
+los datos otra. Un período **no tiene estado**: nació con uno («en captura» / «cerrado») que nada
+sabía poner en «cerrado» y que no compuertaba nada, así que todo período decía lo mismo para
+siempre. `computeLinePayroll` (`employee-input.ts`) es la ÚNICA composición de ficha + captura →
+motor, y existe porque estaba escrita a mano en cada consumidor: la de la tabla comparaba lo que
+declaró el archivo mientras la del motor comparaba lo tecleado, y el badge de conciliación y la
+cifra de al lado podían discrepar.
+
+**La CONCILIACIÓN es la clasificación del `difference` del motor** (`CA = AP − BZ`), no una segunda
+resta: `reconciliationStatusOf` (`period-detail.ts`) solo mira si es `null` (nadie declaró lo
+pagado → «sin conciliar»), cero («conciliado») o cualquier otra cosa («con diferencia»). El colapso
+del ruido sub-centavo vive en `compute.ts` y en ningún otro sitio, apoyado en `sameToTheCentavo`
+(`lib/payroll/amounts.ts`), la única definición de «mismo importe» del módulo — el rol llega con
+`457.69000000000005` y con `===` cuatro de cinco conciliados salían «con diferencia». Como `paid`
+es del MES y vive en la captura, **un alta a mano concilia sin ningún Excel de por medio**. Y como
+el motor deriva el rol de la ficha, `computePeriodFinancials` devuelve `undefined` solo con la
+nómina VACÍA: ya no existe el estado «el período no recibió su archivo», así que una nómina copiada
+del mes anterior enseña sus cuatro KPIs desde el primer render, que es el caso de uso principal.
+
+**El asiento contable** es UNO solo y consolidado del rol entero, no uno por área — y **el libro del
+contador lo escribe DOS VECES**, lo cual solo se ve siguiendo fórmulas, nunca rótulos. La hoja
+`ASIENTOS` trae cinco bloques rotulados por área: cuatro leen subtotales de área (dos con los
+rótulos cruzados entre sí — «RESTAURANTE» lee la fila 32, que es COCINA) y el quinto sí cubre el rol
+entero, porque lee `GENERAL!39`, la fila `SUMAN` (`F39 = F13+F23+F26+F32+F38`). Pero **ese bloque
+descuadra por 64.25 y no es el que manda**: `GENERAL!43-71` lleva la versión que el contador
+corrigió sobre el mismo molde y **cuadra sola** (`C71 = D71 = 3,889.06`, con su celda de control
+`C73 = 0`). La regla en una línea: `ASIENTOS` descuadra, `GENERAL!43-71` cuadra, manda la que
+cuadra. Lo que las separa: los aportes IESS fundidos en **una** cuenta `2.1.7.1.9` (`X+AU+Y+AW`),
+con las cuatro que reemplaza anuladas a `*0` justo encima; los **décimos al derecho** (`621004` ←
+`AS`+`O`, `621005` ← `AT`+`N`, que `ASIENTOS` cruza); cada cuenta leyendo la columna que su rótulo
+dice (`Viaticos` ← `R`, no `V`, que pasa a su propia `Bono ND`); y destino para `Z`, `AI` y `AN`
+(licencia sin sueldo, tiempo parcial, permiso médico), que en `ASIENTOS` no acreditan a nadie y
+descuadrarían el asiento con el primer empleado a tiempo parcial. El rótulo del Excel
+(«ADMINISTRACION DEL PERSONAL», que ambas versiones arrastran del molde) **no** llega a la
+pantalla: suma el rol entero y copiarlo haría creer que la tabla muestra solo Administración. El
+catálogo (`lib/payroll/journal.ts`) declara las 24 cuentas una sola vez; **su clave es el `id`, no
+el `code`** — `621001` aparece dos veces (el gasto en el debe, las licencias en el haber) y dos
+cuentas no traen código —, y los nombres van VERBATIM con las erratas del contador («Anticpo
+Empleados», «Vacaciones Pagar», el código truncado `6` de `Bono ND`) porque son los rótulos con los
+que él coteja pantalla contra hoja; la única excepción es la cuenta de licencias, a la que la hoja
+no da nombre porque comparte fila con el débito de `621001`. El catálogo es la constante y los
+importes el argumento — `buildJournalEntry(amounts)`, con `JournalAmounts` tipado contra los `id`
+del catálogo para que un `id` mal escrito no compile —, y la construcción vive en
+`period-detail-view.tsx`, que es la costura.
+
+**`sourceColumns` NO es documentación: es lo que el asiento ejecuta.** Cada cuenta anota de qué
+columnas del rol sale su importe, y `journal-amounts.ts` RECORRE esa anotación para sumar la nómina
+entera a través del motor — en vez de 25 sumas escritas a mano, que serían una segunda definición de
+«de dónde sale este importe» capaz de separarse de la anotación sin que nada lo delate; y lo que el
+contador revisa contra su hoja es la anotación. Su mapa habla el vocabulario del MOTOR
+(`PayrollEmployeeComputation` + `PayrollEmployeeInput`) y no el del almacenamiento, aunque compartan
+campos: eso es lo que deja pasar `GOLDEN_MARCH_2026` —seis entradas transcritas del `.xls`— por la
+MISMA suma que la pantalla y cotejar el asiento contra `GENERAL!43-71`, que es la única evidencia
+externa de que la costura acierta (3.889,06 en ambos lados y las nueve cuentas con movimiento al
+centavo). `RolColumn` se deriva del propio catálogo, así que una columna sin destino **no compila**:
+el fallo contrario es invisible —daría cero, el interruptor de ocultar ceros escondería la cuenta y
+el asiento descuadraría sin causa a la vista—.
+
+**Son 25 cuentas, no 24, y la 25.ª no sale del libro.** «Seguro Privado» (debe, sin código como
+`Viaticos`) la añade esta app porque sin ella el asiento DESCUADRA por el importe de `Q`: esa
+columna suma al ingreso y le llega al empleado por el haber dentro de `AP`, y ninguna de las 24 la
+recoge por el debe —`Debe = (W − Q) + provisiones`, `Haber = W + provisiones`—. En el archivo real
+de marzo `Q` vale cero, y por eso el agujero no se veía. Es una desviación deliberada, anotada en su
+propia entrada y **pendiente de confirmar con la firma**; si prefieren otro destino, cambia esa
+entrada y su fila del mapa. Como consecuencia del álgebra, el DEBE del asiento equivale al costo
+total del período cuando `Q` es cero, que es lo que hace que cuadre con los KPIs y con Sueldos por
+Áreas.
+
+**El COMPROBANTE en PDF** (`lib/payroll/payslip/`, con `pdf-lib`) reproduce la hoja `INDIVIDUAL` del
+libro — el papel que el empleado firma. Tres capas y la que dibuja no decide nada: `document.ts`
+(puro) baja el comprobante a TEXTO, con los importes ya formateados, que es lo que permite cotejarlo
+contra el Excel comparando cadenas en vez de números contra otro cálculo; `layout.ts` (puro, con un
+`measure` inyectado para no arrastrar `pdf-lib`) lo coloca en cajas y por eso se puede afirmar sin
+generar un PDF que ninguna se sale de la hoja; `render.ts` las recorre y dibuja. Tipografía
+**Helvetica**, una de las base-14 del formato: cero bytes embebidos y dígitos de ancho fijo, además
+de métricamente compatible con la Arial del libro. Se importa en dinámico, como `exceljs`.
+Tres reglas son al revés que en la PANTALLA de detalle, y a propósito: **se imprimen las 26 filas
+siempre** con `-` donde no hay importe (`visibleIncomeConcepts` esconde los capturados en cero
+porque una tabla no puede parecer un formulario a medio llenar; el papel ES un formulario de
+posición fija, y quien lo revisa busca el anticipo en la cuarta fila de egresos); **el orden es el de
+COLUMNAS del libro**, así que el fondo de reserva sale duodécimo y no séptimo — y eso no obliga a una
+segunda lista, se ordena por el campo `column` que `concepts.ts` ya trae; y **no salen las cuatro
+filas de egreso sin rótulo** (`AJ`–`AM`), que el catálogo excluye desde antes. Los rótulos son
+`payslipLabel`, campo OBLIGATORIO del catálogo y no un mapa aparte —un mapa se queda corto al añadir
+un concepto y ningún test de cifras lo delata—, verbatim con las erratas del contador
+(`DESCUENTO TIEMPO PACIAL`). El `(*)` de la columna `Cantidad` marca los dos ingresos que
+`bases.ts` dice que «no son base de nada, solo llegan al total», y `concepts.test.ts` lo vuelve
+ejecutable: sumar 1 a un marcado no puede mover NINGUNA de las cinco bases —se prueban las cinco y no
+solo la aportable, porque los dos décimos tampoco la mueven y sí llevan provisión, así que con una
+sola el test los marcaría por error—. **Una copia por hoja**, no las dos que el Excel imprime lado a
+lado: allí la derecha no tiene identidad propia (`M5 = +D5`) y es papel carbón resuelto con columnas,
+que en un PDF lo resuelve el diálogo de impresión. Se conservan las PROPORCIONES de las tres columnas
+(163 : 84 : 108) estiradas al ancho de la A4 y **no el tamaño**: el bloque real son 355 px —`H` e `I`
+del `Print_Area` son el canal entre copias y no llevan nada—, o sea 266 pt, donde el rótulo más largo
+pediría un cuerpo de 6 pt. Un rótulo se extiende hasta el inicio de `Cantidad` si su fila la usa y
+hasta `Valores` si no, que es el desbordamiento hacia celdas vacías que el Excel hace por su cuenta,
+escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee la razón social de
+`GENERAL!B1` pero nadie la persiste todavía. Nada se guarda — el comprobante se arma en la descarga
+desde la ficha y el motor, la misma regla que el asiento y los totales del período.
+**Todo importe lleva el `$`** de `formatCurrency`, filas incluidas, aunque el libro las deje sin
+símbolo y solo ponga `US$` en sus tres totales: un solo dialecto del dólar entre la pantalla y el
+papel. Lo que sí se conserva es la raya del cero, y solo en las FILAS — un total en cero escribe
+`$0.00`, porque la raya de una fila dice «nada que declarar» y un total es una afirmación sobre el
+mes que tras una raya parecería un dato que falta.
+**La JERARQUÍA es del documento y los COLORES son del libro**, que es la única desviación deliberada
+de la fidelidad: cinco bloques con peso distinto —encabezado, panel de identidad, las dos secciones
+y la banda del líquido— en vez de la rejilla plana del Excel, porque un papel que se firma se lee de
+un vistazo. Las bandas de sección toman `--color-section-income` y `--color-section-cost`, los
+rellenos del propio contador que Datos ya usa en la raíz 4 y la 5, así que un verde dice «ingresos»
+en su Excel, en la pantalla y aquí; los hexes viven en `payslip/palette.ts`, espejo del `@theme` —
+la misma duplicación permitida que `lib/charts/palette.ts`, porque ni un canvas ni un PDF resuelven
+una variable CSS. `LIQUIDO A RECIBIR` es la ÚNICA banda oscura (`ink`, texto blanco) y NO usa
+`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. Un
+cero va en `faint` para no competir con las pocas cifras que dicen algo, la franja alterna es tan
+clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de escribirse con `_`.
+`layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
+revés, una banda taparía su propio rótulo.
+
+**SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
+`EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL
+(`employerCost`, `AY`) por área y por empleado a lo largo de meses y años. **No es un módulo** —lo
+fue, vacío, y se borró— porque no tiene datos propios: lee los períodos y la nómina del cliente
+activo de Rol de Pagos, y como hermano se quedaba sin el selector de cliente que necesita para
+significar algo. Una sola cifra y ningún selector de métrica: es la que dice la hoja. **Las dos
+lecturas no son dos pantallas sino el resultado de marcar áreas** —ninguna o varias dan el
+consolidado por área, exactamente una da el detalle de sus empleados con el cargo debajo del
+nombre—, que es por cuarta vez la figura de `resolveActiveCenterId`; una pestaña «Consolidado / Por
+área» habría creado un segundo sitio donde elegir lo mismo. `lib/payroll/salaries/` es la capa pura:
+`identity.ts` (la cédula normalizada, con el nombre de respaldo cuando la ficha no la trae —sin ella
+«SANDOVAL» serían tres filas de un mes cada una, porque cada período guarda su propia ficha— y sin
+fundir nunca las dos evidencias), `filters.ts` (`areas`/`years`/`months`, las reglas de marcas de
+siempre), `grid.ts` y `chart.ts`. **Tres reglas viven en `grid.ts` porque pueden estar mal**: una
+columna existe solo si existe su PERÍODO (un mes que nadie registró no es un mes en cero); una celda
+vacía se escribe con RAYA y no es un `$0.00` (el hueco de quien no había ingresado frente al cero
+que una ficha presente afirma — la misma distinción que la cobertura de PyG); y el total suma **las
+filas presentes**, no el universo, para que la fila de cierre cuadre a ojo con lo que tiene encima,
+que es justo para lo que la pantalla existe. Un empleado que cambia de área suma cada mes bajo la
+que declara la ficha de ESE período, y en el detalle de un área sus meses en la otra quedan vacíos.
+El TOTAL va también como SERIE de la gráfica —aplasta la escala, y se acepta: es la barra naranja de
+su hoja y es lo que él busca—. `chart.ts` es un builder PROPIO, no el `barOption` de PyG, que está
+escrito sobre los tipos de su motor de analytics: el precedente es `lib/occupancy/charts/option.ts`.
+**El tope de series recorta la GRÁFICA y no la TABLA** (`ChartCard` recibe `option` y `table` por
+separado): dibuja el cierre más las de mayor costo acumulado —acumulado, para que mover una marca de
+mes no le cambie el elenco— y declara al pie cuántas dejó fuera, mientras la tabla las lista todas.
+`ChartTableRow` ganó por esto `sublabel` y `emphasis`, opcionales e inertes para quien no los pase.
+Las marcas son estado LOCAL de la vista y no del provider del layout: la regla es que un provider
+vive ahí porque la cabecera lee de su mismo estado, y de este módulo la cabecera solo lee el cliente.
 
 ## Design system
 

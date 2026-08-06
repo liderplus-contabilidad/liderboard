@@ -8,10 +8,13 @@ export interface StatTileProps {
   hint?: string;
   /** ALWAYS drawn with an icon and the signed value too: color alone is not a reading. */
   sign?: "positivo" | "negativo";
+  /** Renders `value` in IBM Plex Mono — the app's convention for figures and codes, opt-in
+   * because most callers pass currency already reading fine in the sans figures. */
+  mono?: boolean;
 }
 
 /** A total is a number, not a chart: a one-bar plot is an axis and a legend for one figure. */
-export function StatTile({ label, value, hint, sign }: StatTileProps) {
+export function StatTile({ label, value, hint, sign, mono }: StatTileProps) {
   const Icon = sign === "negativo" ? TrendingDown : TrendingUp;
 
   return (
@@ -22,6 +25,7 @@ export function StatTile({ label, value, hint, sign }: StatTileProps) {
       <p
         className={cn(
           "mt-1 flex items-center gap-1.5 text-[21px] font-semibold tabular-nums",
+          mono && "font-mono",
           sign === "positivo" && "text-positive",
           sign === "negativo" && "text-negative",
           !sign && "text-ink",

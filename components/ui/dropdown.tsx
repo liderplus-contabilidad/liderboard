@@ -6,6 +6,7 @@ import {
   type ReactNode,
   type RefObject,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -29,6 +30,16 @@ function useDropdownContext(component: string): DropdownContextValue {
     throw new Error(`<${component}> must be rendered inside <Dropdown>.`);
   }
   return context;
+}
+
+/**
+ * Exposes the root's open state and trigger ref for a CUSTOM trigger — anything that isn't
+ * `DropdownTrigger`'s own filter-button look, e.g. a primary `Button` like «+ Nuevo período».
+ * `DropdownPanel` still owns the positioning; the custom trigger only needs to toggle `open` and
+ * hand its own element to `triggerRef` (`<Button ref={triggerRef} .../>`).
+ */
+export function useDropdown(): DropdownContextValue {
+  return useDropdownContext("useDropdown");
 }
 
 /** Root: owns the open/closed state and positions its children. */
@@ -159,6 +170,19 @@ function PositionedPanel({
       observer.disconnect();
     };
   }, [align, triggerRef]);
+
+  // Escape closes from anywhere in the panel; a click outside already does via the backdrop
+  // button below. Only bound while open — `PositionedPanel` unmounts on close, so this never
+  // lingers on an invisible panel.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setOpen]);
 
   return (
     <>

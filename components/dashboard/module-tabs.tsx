@@ -9,13 +9,13 @@ import { PygDriftNotice } from "@/components/profit-loss/pyg-drift-notice";
 import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
 import { PygReportButton } from "@/components/profit-loss/report/pyg-report-button";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
-import { cn } from "@/lib/cn";
+import { TabBar } from "@/components/ui/tab-bar";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
 
 /**
  * The panels are the ONLY thing here that is code-split, and it is this registry that makes it
  * worth doing: importing them statically put ECharts (~700 KB) in the shared client chunk of
- * EVERY route — including `/salaries` and `/sales`, which render `ComingSoon` and draw nothing.
+ * EVERY route — including `/sales`, which renders `ComingSoon` and draws nothing.
  * Each panel now arrives when its tab is first opened.
  *
  * `ssr: false` because every panel reads the workspace from IndexedDB: on the server they can
@@ -106,48 +106,23 @@ export function ModuleTabs({ slug }: { slug: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-end justify-between gap-6 border-b border-border bg-surface px-7 pt-[18px]">
-        <div role="tablist" aria-label={`Vistas de ${mod.label}`} className="flex items-end gap-6">
-          {mod.tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.id === activeTab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                id={`tab-${mod.slug}-${tab.id}`}
-                aria-selected={active}
-                aria-controls={`panel-${mod.slug}`}
-                onClick={() => setActiveId(tab.id)}
-                className={cn(
-                  "relative flex items-center gap-2 py-2.5 text-sm font-semibold transition-colors",
-                  active ? "text-brand" : "text-faint hover:text-muted",
-                )}
-              >
-                <Icon size={16} strokeWidth={1.9} />
-                {tab.label}
-                {active && (
-                  <span className="absolute inset-x-0 -bottom-px h-[2.5px] rounded-[3px] bg-brand" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* La barra alinea el slot una sola vez, a la altura de las etiquetas: así el mismo
-            componente sirve fuera de ella (el vacío de PyG) sin arrastrar la compensación. */}
-        <div className="pb-[11px]">{views.rightSlot?.(activeTab.id)}</div>
-      </div>
+      <TabBar
+        items={mod.tabs}
+        value={activeTab.id}
+        onChange={setActiveId}
+        ariaLabel={`Vistas de ${mod.label}`}
+        idPrefix={mod.slug}
+        rightSlot={views.rightSlot?.(activeTab.id)}
+        className="shrink-0 px-7 pt-[18px]"
+      />
 
       {views.toolbar?.(activeTab.id)}
       {views.notice?.(activeTab.id)}
 
       <div
-        id={`panel-${mod.slug}`}
+        id={`${mod.slug}-panel`}
         role="tabpanel"
-        aria-labelledby={`tab-${mod.slug}-${activeTab.id}`}
+        aria-labelledby={`${mod.slug}-tab-${activeTab.id}`}
         className="flex-1 overflow-auto bg-canvas"
       >
         {panel}
