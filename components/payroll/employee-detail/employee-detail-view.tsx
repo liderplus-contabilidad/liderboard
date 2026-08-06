@@ -13,12 +13,11 @@ import {
   type OvertimeHoursField,
 } from "@/lib/payroll/concepts";
 import { listEmployees, updateEmployee } from "@/lib/payroll/db";
-import { computeEmployeePayroll } from "@/lib/payroll/engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
-import { emptyCapture, toEngineInput } from "@/lib/payroll/employee-input";
+import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
 import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
 import { downloadPayslips, payslipFilename } from "@/lib/payroll/payslip/download";
-import { employeeReconciliationStatus } from "@/lib/payroll/period-detail";
+import { reconciliationStatusOf } from "@/lib/payroll/period-detail";
 import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "@/lib/payroll/types";
 import { usePayrollData } from "../payroll-data-provider";
 import { PeriodNotFound } from "../period-detail/period-not-found";
@@ -40,7 +39,7 @@ const EMPTY_ADDED: ReadonlySet<string> = new Set();
  * saber quién va antes y quién después — y revisar un rol es justamente recorrerlo. Es una sola
  * consulta y son decenas de filas, así que traerlas todas cuesta menos que dos consultas.
  *
- * Nada calculado se guarda: cada cifra sale de `computeEmployeePayroll` en el render. Es la misma
+ * Nada calculado se guarda: cada cifra sale de `computeLinePayroll` en el render. Es la misma
  * regla que el resto del módulo (`PayrollRosterSummary`, los totales del período) y aquí pesa más
  * que en ningún sitio: una cifra persistida quedaría obsoleta en cuanto alguien corrija los días
  * trabajados, y la pantalla diría una cosa y el Excel otra sin que nada lo delate.
@@ -76,7 +75,7 @@ export function EmployeeDetailView({
   // Siempre hay rol que calcular: sin captura, lo capturado vale cero y las cifras derivadas
   // salen igual de la ficha. La app sirve sin Excel, y este es el punto donde eso se decide.
   const computed = useMemo(
-    () => (line ? computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS) : null),
+    () => (line ? computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS) : null),
     [line],
   );
   const capture = useMemo(() => line?.capture ?? emptyCapture(), [line]);
@@ -243,7 +242,10 @@ export function EmployeeDetailView({
       />
 
       <div className="mt-4">
-        <EmployeeDetailCard status={employeeReconciliationStatus(line)} number={index + 1}>
+        <EmployeeDetailCard
+          status={reconciliationStatusOf(computed?.difference ?? null)}
+          number={index + 1}
+        >
           <EmployeeIdentityCards
             clientName={activeClient?.name ?? ""}
             costCenter={costCenterFor(line.area)}
@@ -258,7 +260,7 @@ export function EmployeeDetailView({
             accumulatesReserveFund={line.accumulatesReserveFund}
             days={line.days}
             baseSalary={line.baseSalary}
-            paid={line.capture?.paid ?? line.figures?.paid ?? null}
+            paid={line.capture?.paid ?? null}
             onDaysChange={(days) => void updateEmployee(line.id, { days })}
             onBaseSalaryChange={(baseSalary) => void updateEmployee(line.id, { baseSalary })}
             onPaidChange={(paid) => patchCapture({ paid })}

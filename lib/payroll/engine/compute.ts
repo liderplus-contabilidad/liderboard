@@ -169,7 +169,7 @@ export function computeEmployeePayroll(
   // líquido es una suma sin redondear que llega con ruido (`457.69000000000005`) mientras lo
   // pagado está tecleado a mano con dos decimales (`457.69`), así que toda diferencia real es
   // un número entero de centavos y cualquier resto es del binario. Es la misma regla que
-  // `sameToTheCentavo` ya aplica en `period-detail.ts`, y es también lo que hace el archivo:
+  // `sameToTheCentavo` ya aplica en el asiento, y es también lo que hace el archivo:
   // Excel colapsa a cero una resta despreciable frente a sus operandos, por eso `CA15` guarda
   // `0` y no `5,7e-14`. Lo que NO se toca es una diferencia de verdad: la de VEGA sigue siendo
   // `-41.70999999999992`, con su ruido, exactamente como el libro la guarda.

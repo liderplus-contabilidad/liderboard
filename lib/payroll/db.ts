@@ -10,6 +10,8 @@
  */
 import Dexie, { type Table } from "dexie";
 import { sortByName } from "@/lib/workspaces";
+import { computeLinePayroll } from "./employee-input";
+import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
 import { computePeriodFinancials, type PayrollPeriodFinancials } from "./period-detail";
 import { sortPeriodsDesc } from "./periods";
 import { copyRoster } from "./roster";
@@ -195,7 +197,6 @@ export async function createPeriod(
     year,
     monthIndex,
     kind: "ordinario",
-    status: "captura",
   };
 
   const copyFrom = options?.copyFrom;
@@ -257,8 +258,7 @@ export async function listEmployees(periodId: string): Promise<PayrollEmployeeLi
  * corrigen al capturar el mes, y la captura entera.
  *
  * El nombre, el cargo, la cédula y el código sectorial NO están: son identidad, se corrigen en la
- * ficha y no en el rol de un mes. `figures` tampoco — es el testimonio del archivo y reescribirlo
- * borraría aquello contra lo que `compareAgainstFile` contrasta.
+ * ficha y no en el rol de un mes.
  */
 export type PayrollEmployeePatch = Partial<
   Pick<PayrollEmployeeLine, "days" | "baseSalary" | "capture">
@@ -348,9 +348,9 @@ export async function rosterCounts(
 /**
  * Los cuatro totales (`gross`/`deductions`/`net`/`cost`) de VARIOS períodos a la vez, en una sola
  * consulta — el mismo precedente batcheado que `rosterCounts`. La derivación es de
- * `computePeriodFinancials` (`lib/payroll/period-detail.ts`, puro y testeado); esta función solo
- * hace la lectura acotada y agrupa por período. Un período SIN ningún empleado con `figures` no
- * aparece en el mapa — no es cero, es «no hay».
+ * `computePeriodFinancials` (`lib/payroll/period-detail.ts`, puro y testeado) sobre el rol que el
+ * motor calcula por línea (`computeLinePayroll`); esta función solo hace la lectura acotada y
+ * agrupa por período. Un período SIN empleados no aparece en el mapa — no es cero, es «no hay».
  */
 export async function periodFinancials(
   periodIds: readonly string[],
@@ -368,7 +368,11 @@ export async function periodFinancials(
     byPeriod.set(line.periodId, [...(byPeriod.get(line.periodId) ?? []), line]);
   }
   for (const periodId of periodIds) {
-    const financials = computePeriodFinancials(byPeriod.get(periodId) ?? []);
+    const financials = computePeriodFinancials(
+      (byPeriod.get(periodId) ?? []).map((line) =>
+        computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS),
+      ),
+    );
     if (financials) {
       result.set(periodId, financials);
     }

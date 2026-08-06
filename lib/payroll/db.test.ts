@@ -1,7 +1,9 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { beforeEach, describe, expect, it } from "vitest";
-import { emptyCapture } from "./employee-input";
+import { computeLinePayroll, emptyCapture } from "./employee-input";
+import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
+import { computePeriodFinancials } from "./period-detail";
 import type { PayrollEmployeeLine } from "./types";
 import {
   addEmployee,
@@ -24,9 +26,6 @@ import {
   rosterCounts,
   setActiveClient,
 } from "./db";
-
-/** Cifras verbatim de una línea, con `paid` conciliado — la forma que produce el parser. */
-const FIGURES = { gross: 620.5, deductions: 58.61, net: 561.89, cost: 712.3, paid: 561.89 };
 
 /** The cliente every scoped case runs inside; a second one appears only where isolation is the point. */
 let clientId = "";
@@ -160,9 +159,8 @@ describe("aislamiento entre clientes", () => {
 });
 
 describe("períodos", () => {
-  it("creates an empty período: captura, sin nómina cargada", async () => {
+  it("creates an empty período: sin nómina cargada", async () => {
     const period = await createPeriod(clientId, 2026, 5);
-    expect(period.status).toBe("captura");
     expect(period.clientId).toBe(clientId);
     expect((await periodFinancials([period.id])).has(period.id)).toBe(false);
   });
@@ -326,33 +324,34 @@ describe("rosterCounts", () => {
 });
 
 describe("periodFinancials", () => {
-  it("suma gross/deductions/net/cost SOLO de los empleados con figures, por período, en una sola consulta", async () => {
+  it("suma el rol CALCULADO de cada período, agrupando en una sola consulta", async () => {
     const p1 = await createPeriod(clientId, 2026, 2);
     const p2 = await createPeriod(clientId, 2026, 3);
-    await db.employees.bulkAdd([
-      employeeLine({
-        periodId: p1.id,
-        name: "Ana Torres",
-        figures: { gross: 500, deductions: 50, net: 450, cost: 600, paid: 450 },
-      }),
-      employeeLine({
-        periodId: p1.id,
-        name: "Luis Vera",
-        figures: { gross: 300, deductions: 30, net: 270, cost: 360, paid: null },
-      }),
-      // sin figures: el período aún no recibió su archivo para este empleado.
-      employeeLine({ periodId: p1.id, name: "Sin figuras" }),
-    ]);
+    const ana = employeeLine({ periodId: p1.id, name: "Ana Torres", baseSalary: 500 });
+    const luis = employeeLine({ periodId: p1.id, name: "Luis Vera", baseSalary: 300 });
+    await db.employees.bulkAdd([ana, luis]);
 
     const financials = await periodFinancials([p1.id, p2.id]);
 
-    expect(financials.get(p1.id)).toEqual({ gross: 800, deductions: 80, net: 720, cost: 960 });
+    // Contra la MISMA derivación pura que la pantalla usa: lo que esta prueba afirma es el
+    // acotado y el agrupado por período, no la aritmética del motor —esa la fija `golden.test.ts`.
+    expect(financials.get(p1.id)).toEqual(
+      computePeriodFinancials(
+        [ana, luis].map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
+      ),
+    );
     expect(financials.has(p2.id)).toBe(false);
   });
 
-  it("un período sin ningún empleado con figures no aparece en el mapa — no es cero, es «no hay»", async () => {
+  it("un empleado sin NADA capturado ya totaliza: el motor deriva su rol de la ficha", async () => {
     const period = await createPeriod(clientId, 2026, 2);
     await db.employees.add(employeeLine({ periodId: period.id }));
+
+    expect((await periodFinancials([period.id])).get(period.id)?.net).toBeGreaterThan(0);
+  });
+
+  it("un período SIN empleados no aparece en el mapa — no es cero, es «no hay»", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
 
     expect((await periodFinancials([period.id])).has(period.id)).toBe(false);
   });
@@ -408,17 +407,16 @@ describe("migración v1 → v2 (aditiva)", () => {
 });
 
 describe("importRoster", () => {
-  it("escribe la nómina que trajo el archivo, con `figures` intactas", async () => {
+  it("escribe la nómina que trajo el archivo, con su captura intacta", async () => {
     const period = await createPeriod(clientId, 2026, 2);
+    const capture = { ...emptyCapture(), bonus: 40, paid: 561.89 };
 
-    await importRoster(period.id, [
-      { ...employeeLine({ name: "Silvia Morales" }), figures: FIGURES },
-    ]);
+    await importRoster(period.id, [{ ...employeeLine({ name: "Silvia Morales" }), capture }]);
 
     const stored = await listEmployees(period.id);
     expect(stored).toHaveLength(1);
     expect(stored[0].name).toBe("Silvia Morales");
-    expect(stored[0].figures).toEqual(FIGURES);
+    expect(stored[0].capture).toEqual(capture);
     // El dueño se estampa en la puerta, no lo trae el archivo.
     expect(stored[0].periodId).toBe(period.id);
   });
@@ -469,7 +467,7 @@ describe("importRoster", () => {
 describe("updateEmployee", () => {
   it("guarda la captura del mes y la deja legible tal cual", async () => {
     const period = await createPeriod(clientId, 2026, 2);
-    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    await importRoster(period.id, [employeeLine()]);
     const [stored] = await listEmployees(period.id);
 
     const capture = { ...emptyCapture(), overtimeHours50: 5.5, paid: 457.69 };
@@ -481,7 +479,7 @@ describe("updateEmployee", () => {
 
   it("guarda los campos de ficha que la pantalla edita", async () => {
     const period = await createPeriod(clientId, 2026, 2);
-    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    await importRoster(period.id, [employeeLine()]);
     const [stored] = await listEmployees(period.id);
 
     await updateEmployee(stored.id, { days: 15, baseSalary: 500 });
@@ -495,7 +493,7 @@ describe("updateEmployee", () => {
     // Un parche parcial no puede borrar la ficha por omisión: la pantalla escribe un campo a la
     // vez, y `days` no debería llevarse por delante el nombre ni la captura.
     const period = await createPeriod(clientId, 2026, 2);
-    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    await importRoster(period.id, [employeeLine()]);
     const [stored] = await listEmployees(period.id);
     await updateEmployee(stored.id, { capture: { ...emptyCapture(), bonus: 40 } });
 
@@ -505,12 +503,11 @@ describe("updateEmployee", () => {
     expect(reloaded.days).toBe(20);
     expect(reloaded.name).toBe(stored.name);
     expect(reloaded.capture?.bonus).toBe(40);
-    expect(reloaded.figures).toEqual(stored.figures);
   });
 
   it("un empleado que no existe no crea uno nuevo", async () => {
     const period = await createPeriod(clientId, 2026, 2);
-    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    await importRoster(period.id, [employeeLine()]);
 
     await updateEmployee("no-existe", { days: 99 });
 

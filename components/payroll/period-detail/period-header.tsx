@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
-import { periodLongLabel, rosterStatusLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
+import { periodLongLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
 
 /** La descarga necesita una nómina: sin empleados no hay comprobante que emitir. */
@@ -82,8 +82,7 @@ export function PeriodHeader({
             <PeriodNavArrow direction="next" target={next} />
           </div>
           <p className="mt-2 text-[13px] text-faint">
-            {rosterStatusLabel(period.status)} · {formatNumber(employeeCount)}{" "}
-            {employeeCount === 1 ? "empleado" : "empleados"} · líquido{" "}
+            {formatNumber(employeeCount)} {employeeCount === 1 ? "empleado" : "empleados"} · líquido{" "}
             {financials ? formatCurrency(financials.net, { cents: true }) : "—"}
           </p>
         </div>

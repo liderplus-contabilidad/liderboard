@@ -6,11 +6,10 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { GridRow } from "@/components/data-table/data-grid";
 import { Cell } from "@/components/data-table/grid-cells";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
-import { periodKindLabel, periodLongLabel, periodStatusLabel } from "@/lib/payroll/periods";
+import { periodKindLabel, periodLongLabel } from "@/lib/payroll/periods";
 import type { PayrollPeriod, PayrollRosterSummary } from "@/lib/payroll/types";
 import { DeletePeriodDialog } from "./delete-period-dialog";
 import { NewPeriodForm } from "./new-period-popover";
@@ -122,11 +121,6 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
         <Cell numeric tone={hasFinancials ? "default" : "muted"} className="font-mono">
           {financials ? formatCurrency(financials.cost, { cents: true }) : "–"}
         </Cell>
-        <Cell>
-          <Badge variant={period.status === "cerrado" ? "positive" : "warning"}>
-            {periodStatusLabel(period.status)}
-          </Badge>
-        </Cell>
         <Cell align="right">
           <span className="flex items-center justify-end gap-1">
             <Link
@@ -219,15 +213,20 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
           document.body,
         )}
 
-      {deleting && (
-        <DeletePeriodDialog
-          period={period}
-          employeeCount={roster.employees}
-          busy={busy}
-          onConfirm={() => void confirmDelete()}
-          onCancel={() => setDeleting(false)}
-        />
-      )}
+      {/* Al `body`, como el menú de arriba y por la misma razón que allí no se ve: esto se rinde
+          desde una FILA, así que sin portal el `<div>` del diálogo queda de hermano del `<tr>`
+          dentro del `<tbody>` — HTML inválido, y React lo delata como error de hidratación. */}
+      {deleting &&
+        createPortal(
+          <DeletePeriodDialog
+            period={period}
+            employeeCount={roster.employees}
+            busy={busy}
+            onConfirm={() => void confirmDelete()}
+            onCancel={() => setDeleting(false)}
+          />,
+          document.body,
+        )}
     </>
   );
 }

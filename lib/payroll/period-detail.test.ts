@@ -1,14 +1,43 @@
 import { describe, expect, it } from "vitest";
+import { computeLinePayroll } from "./employee-input";
+import { computeEmployeePayroll } from "./engine/compute";
+import { GOLDEN_MARCH_2026 } from "./engine/golden.fixtures";
+import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
+import type { PayrollEmployeeComputation } from "./engine/types";
 import {
   computePeriodFinancials,
   computeReconciliationCounts,
-  employeeReconciliationStatus,
   matchesEmployeeSearch,
+  reconciliationStatusOf,
 } from "./period-detail";
-import type { PayrollEmployeeFigures, PayrollEmployeeLine } from "./types";
+import type { PayrollEmployeeLine } from "./types";
 
-function figures(overrides: Partial<PayrollEmployeeFigures> = {}): PayrollEmployeeFigures {
-  return { gross: 500, deductions: 50, net: 450, cost: 600, paid: 450, ...overrides };
+function computation(
+  overrides: Partial<PayrollEmployeeComputation> = {},
+): PayrollEmployeeComputation {
+  return {
+    unifiedSalary: 460,
+    overtimePay50: 0,
+    overtimePay100: 0,
+    overtimePay25: 0,
+    overtimeTotal: 0,
+    fourteenthMonthly: 39.5,
+    thirteenthMonthly: 38.33,
+    reserveFundPaid: 0,
+    grossIncome: 500,
+    iessEmployee: 43.47,
+    totalDeductions: 50,
+    netPay: 450,
+    thirteenthProvision: 0,
+    fourteenthProvision: 0,
+    iessEmployer: 55.89,
+    vacationProvision: 19.17,
+    reserveFundAccrued: 0,
+    totalProvision: 100,
+    employerCost: 600,
+    difference: 0,
+    ...overrides,
+  };
 }
 
 function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
@@ -30,39 +59,38 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
   };
 }
 
-describe("employeeReconciliationStatus", () => {
-  it("sin figures, no está conciliado ni con diferencia", () => {
-    expect(employeeReconciliationStatus(line())).toBe("sin-conciliar");
+describe("reconciliationStatusOf", () => {
+  it("sin PAGADO declarado, no está conciliado ni con diferencia", () => {
+    expect(reconciliationStatusOf(null)).toBe("sin-conciliar");
   });
 
-  it("con figures pero paid === null, tampoco es ninguna de las dos cosas", () => {
-    expect(employeeReconciliationStatus(line({ figures: figures({ paid: null }) }))).toBe(
-      "sin-conciliar",
-    );
+  it("diferencia cero: conciliado", () => {
+    expect(reconciliationStatusOf(0)).toBe("conciliado");
   });
 
-  it("paid igual a net: conciliado", () => {
-    expect(employeeReconciliationStatus(line({ figures: figures({ net: 450, paid: 450 }) }))).toBe(
-      "conciliado",
-    );
+  it("cualquier diferencia, en cualquier signo: con diferencia", () => {
+    expect(reconciliationStatusOf(-41.70999999999992)).toBe("diferencia");
+    expect(reconciliationStatusOf(0.01)).toBe("diferencia");
   });
 
-  it("paid distinto de net: con diferencia", () => {
-    expect(employeeReconciliationStatus(line({ figures: figures({ net: 450, paid: 400 }) }))).toBe(
-      "diferencia",
-    );
+  // El colapso del ruido sub-centavo es del MOTOR, no de aquí: esta función clasifica lo que
+  // aquél ya decidió. Si volviera a compararse por tolerancia en este punto habría dos
+  // definiciones de «cuadra» y podrían separarse, que es exactamente lo que pasaba cuando esto
+  // comparaba lo que declaraba el archivo mientras el motor comparaba lo tecleado.
+  it("no aplica tolerancia propia: un valor no nulo es diferencia aunque sea ínfimo", () => {
+    expect(reconciliationStatusOf(5.7e-14)).toBe("diferencia");
   });
 });
 
 describe("computeReconciliationCounts", () => {
   it("cuenta conciliados y con diferencia por separado, sin contar el resto en ninguno", () => {
-    const lines = [
-      line({ id: "a", figures: figures({ net: 450, paid: 450 }) }), // conciliado
-      line({ id: "b", figures: figures({ net: 450, paid: 400 }) }), // diferencia
-      line({ id: "c", figures: figures({ paid: null }) }), // sin conciliar
-      line({ id: "d" }), // sin figures — tampoco cuenta
-    ];
-    expect(computeReconciliationCounts(lines)).toEqual({ reconciled: 1, withDifference: 1 });
+    expect(
+      computeReconciliationCounts([
+        computation({ difference: 0 }),
+        computation({ difference: -50 }),
+        computation({ difference: null }),
+      ]),
+    ).toEqual({ reconciled: 1, withDifference: 1 });
   });
 
   it("una nómina vacía no cuenta nada", () => {
@@ -71,25 +99,27 @@ describe("computeReconciliationCounts", () => {
 });
 
 describe("computePeriodFinancials", () => {
-  it("suma gross/deductions/net/cost SOLO de los empleados con figures", () => {
-    const lines = [
-      line({ id: "a", figures: figures({ gross: 500, deductions: 50, net: 450, cost: 600 }) }),
-      line({ id: "b", figures: figures({ gross: 300, deductions: 30, net: 270, cost: 360 }) }),
-      line({ id: "c" }), // sin figures: no debe entrar en la suma
-    ];
-    expect(computePeriodFinancials(lines)).toEqual({
-      gross: 800,
-      deductions: 80,
-      net: 720,
-      cost: 960,
-    });
+  it("suma gross/deductions/net/cost de todo el rol calculado", () => {
+    expect(
+      computePeriodFinancials([
+        computation({ grossIncome: 500, totalDeductions: 50, netPay: 450, employerCost: 600 }),
+        computation({ grossIncome: 300, totalDeductions: 30, netPay: 270, employerCost: 360 }),
+      ]),
+    ).toEqual({ gross: 800, deductions: 80, net: 720, cost: 960 });
   });
 
-  it("undefined, no cero, cuando NINGÚN empleado tiene figures — el período no recibió su archivo", () => {
-    expect(computePeriodFinancials([line(), line({ id: "b" })])).toBeUndefined();
+  // Antes el corte era «ningún empleado trae figures», o sea «no llegó el archivo». Ese estado ya
+  // no existe: el motor deriva el rol de la ficha, así que una nómina copiada del mes anterior
+  // totaliza desde el primer momento y lo único sin totales es un período SIN empleados.
+  it("una nómina sin nada capturado SÍ totaliza: el motor la deriva de la ficha", () => {
+    const totals = computePeriodFinancials([
+      computeLinePayroll(line(), DEFAULT_PAYROLL_PARAMETERS),
+    ]);
+    expect(totals).toBeDefined();
+    expect(totals?.net).toBeGreaterThan(0);
   });
 
-  it("una nómina vacía tampoco tiene totales", () => {
+  it("undefined, no cero, solo cuando el período no tiene empleados", () => {
     expect(computePeriodFinancials([])).toBeUndefined();
   });
 });
@@ -109,43 +139,30 @@ describe("matchesEmployeeSearch", () => {
   });
 });
 
-describe("conciliación contra las cifras REALES del rol del contador", () => {
-  // En el archivo real el líquido (`AP`) es resultado de una fórmula y llega con ruido de coma
-  // flotante, mientras lo pagado (`BZ`) está tecleado a mano. Comparados con `===`, estos cuatro
-  // salían «con diferencia» por 5,7e-14 y la tarjeta de KPIs decía lo contrario del archivo.
-  it.each([
-    ["MORALES MENA SILVIA JIMENA", 457.69000000000005, 457.69],
-    ["SANDOVAL COLIMBA PEDRO MANUEL", 523.3700000000001, 523.37],
-    ["ACOSTA MARIA PASTORA", 520.9899999999999, 520.99],
-    ["SORIA CHALA MISHELL FERNANDA", 321.94000000000005, 321.94],
-  ])("%s queda conciliado pese al ruido de coma flotante", (_name, net, paid) => {
-    expect(employeeReconciliationStatus(line({ figures: figures({ net, paid }) }))).toBe(
-      "conciliado",
+describe("conciliación del rol REAL de marzo 2026, a través del motor", () => {
+  // El mismo fixture de oro del motor, leído por la tarjeta de KPIs: así lo que se afirma no es
+  // que esta función clasifique bien un número inventado, sino que el archivo del contador da
+  // 5 conciliados y 1 con diferencia CUANDO las cifras las calcula la app. Sin esto, el ruido de
+  // coma flotante del libro (`457.69000000000005` contra `457.69` tecleado) podría volver a
+  // teñir de «con diferencia» a cuatro de los seis y nada lo notaría.
+  const computations = GOLDEN_MARCH_2026.map((employee) =>
+    computeEmployeePayroll(employee.input, DEFAULT_PAYROLL_PARAMETERS),
+  );
+
+  it("da 5 conciliados y 1 con diferencia, no al revés", () => {
+    expect(computeReconciliationCounts(computations)).toEqual({
+      reconciled: 5,
+      withDifference: 1,
+    });
+  });
+
+  it("la única diferencia real es la de VEGA GARCIA, de $41.71", () => {
+    const withDifference = GOLDEN_MARCH_2026.filter(
+      (_, index) => reconciliationStatusOf(computations[index].difference) === "diferencia",
     );
-  });
-
-  it("VEGA GARCIA sí tiene una diferencia real de $41.71", () => {
-    expect(
-      employeeReconciliationStatus(line({ figures: figures({ net: 516.83, paid: 558.54 }) })),
-    ).toBe("diferencia");
-  });
-
-  it("un CENTAVO de diferencia sigue siendo una diferencia — la tolerancia es solo del ruido", () => {
-    expect(
-      employeeReconciliationStatus(line({ figures: figures({ net: 500, paid: 500.01 }) })),
-    ).toBe("diferencia");
-  });
-
-  it("el archivo real da 5 conciliados y 1 con diferencia, no al revés", () => {
-    const counts = computeReconciliationCounts([
-      line({ figures: figures({ net: 457.69000000000005, paid: 457.69 }) }),
-      line({ figures: figures({ net: 516.83, paid: 558.54 }) }),
-      line({ figures: figures({ net: 523.3700000000001, paid: 523.37 }) }),
-      line({ figures: figures({ net: 520.9899999999999, paid: 520.99 }) }),
-      line({ figures: figures({ net: 521.94, paid: 521.94 }) }),
-      line({ figures: figures({ net: 321.94000000000005, paid: 321.94 }) }),
+    expect(withDifference.map((employee) => employee.name)).toEqual([
+      "VEGA GARCIA MARIANA DE JESUS",
     ]);
-
-    expect(counts).toEqual({ reconciled: 5, withDifference: 1 });
+    expect(computations[1].difference).toBeCloseTo(-41.71, 2);
   });
 });

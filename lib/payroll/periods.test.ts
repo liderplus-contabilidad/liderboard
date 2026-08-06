@@ -6,7 +6,6 @@ import {
   periodKindLabel,
   periodLongLabel,
   periodShortLabel,
-  periodStatusLabel,
   proposeNextPeriod,
   sortPeriodsDesc,
   sourceForCopy,
@@ -29,13 +28,6 @@ describe("periodLongLabel / periodShortLabel", () => {
 describe("periodKindLabel", () => {
   it("nombra el único tipo que existe por ahora", () => {
     expect(periodKindLabel("ordinario")).toBe("Ordinario");
-  });
-});
-
-describe("periodStatusLabel", () => {
-  it("nombra los dos estados", () => {
-    expect(periodStatusLabel("captura")).toBe("En captura");
-    expect(periodStatusLabel("cerrado")).toBe("Cerrado");
   });
 });
 

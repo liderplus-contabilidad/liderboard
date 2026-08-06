@@ -110,24 +110,12 @@ describe("toEngineInput", () => {
     expect(input.accumulatesReserveFund).toBe(false);
   });
 
-  it("`paid` sale de las cifras del archivo, y es null cuando el archivo no lo declara", () => {
-    expect(toEngineInput(line({ capture: capture() }))?.paid).toBeNull();
-
-    const conPagado = toEngineInput(
-      line({
-        capture: capture(),
-        figures: { gross: 567.98, deductions: 110.29, net: 457.69, cost: 649.15, paid: 457.69 },
-      }),
-    );
-    expect(conPagado.paid).toBe(457.69);
-
-    const sinPagado = toEngineInput(
-      line({
-        capture: capture(),
-        figures: { gross: 567.98, deductions: 110.29, net: 457.69, cost: 649.15, paid: null },
-      }),
-    );
-    expect(sinPagado.paid).toBeNull();
+  it("`paid` sale de la captura, y es null mientras nadie lo declare", () => {
+    // Es del MES y se TECLEA, así que da igual si lo escribió quien arma el rol o lo trajo el
+    // `BZ` de un archivo: para el motor son la misma cosa, y por eso un alta a mano concilia.
+    expect(toEngineInput(line({ capture: capture() })).paid).toBeNull();
+    expect(toEngineInput(line({ capture: capture({ paid: 457.69 }) })).paid).toBe(457.69);
+    expect(toEngineInput(line()).paid).toBeNull();
   });
 
   it("las provisiones viajan a las banderas del motor", () => {
@@ -152,8 +140,8 @@ describe("toEngineInput", () => {
           overtimeHours50: 5.5,
           approvedOvertime: 0, // `M15` trae `*0`
           deductions: { ...NO_DEDUCTIONS, iessLoans: 64.25 },
+          paid: 457.69,
         }),
-        figures: { gross: 567.98, deductions: 110.29, net: 457.69, cost: 649.15, paid: 457.69 },
       }),
     );
     const result = computeEmployeePayroll(input, DEFAULT_PAYROLL_PARAMETERS);

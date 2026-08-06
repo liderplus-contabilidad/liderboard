@@ -15,8 +15,8 @@ export interface ParsedPayrollWorkbook {
   year: number;
   /** 0–11, read from `GENERAL!B2`. */
   monthIndex: number;
-  /** Every line carries `figures`: this is always the month the file declares, never a roster
-   * copy with no numbers yet. */
+  /** Every line carries its `capture`: this is always the month the file declares, never a roster
+   * copy with nothing captured yet. */
   lines: ParsedPayrollEmployeeLine[];
   /** Avisos en español, agrupados por tipo — nunca uno por empleado ni uno por columna. */
   warnings: string[];

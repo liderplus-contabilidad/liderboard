@@ -91,13 +91,13 @@ describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
   });
 
   it("un rótulo repetido más abajo no desplaza al primero", () => {
-    // Simula lo que el archivo real hace con LIQUIDO A RECIBIR (AP y BH) y PAGADO (BZ y CC): la
+    // Simula lo que el archivo real hace con PAGADO, que aparece en BZ y otra vez en CC: la
     // etiqueta real va primero, una copia repetida más abajo no debe ganar.
     const grid: Cell[][] = ROL_GENERAL_AOA.map((row) => [...row]);
-    const withDuplicate = [...grid, ["", "LIQUIDO A RECIBIR"] as Cell[]];
+    const withDuplicate = [...grid, ["", "PAGADO"] as Cell[]];
     const columns = locateColumns(withDuplicate);
     const original = locateColumns(ROL_GENERAL_AOA);
-    expect(columns.netCol).toBe(original.netCol);
+    expect(columns.paidCol).toBe(original.paidCol);
   });
 });
 

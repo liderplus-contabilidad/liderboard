@@ -4,6 +4,8 @@ import { AlertTriangle, FileSpreadsheet, Loader2, Upload, X } from "lucide-react
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
+import { computeLinePayroll } from "@/lib/payroll/employee-input";
+import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { computePeriodFinancials } from "@/lib/payroll/period-detail";
 import { periodLongLabel } from "@/lib/payroll/periods";
 import type { ParsedPayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
@@ -118,7 +120,13 @@ export function RolUploadModal({ period, periods, currentCount, onClose }: RolUp
     }
   }, [staged, importRoster, period.id, onClose]);
 
-  const totals = staged ? computePeriodFinancials(staged.lines) : undefined;
+  // La previa totaliza con el MOTOR, igual que la pantalla del período: así lo que se enseña
+  // antes de confirmar es exactamente lo que se verá después de cargar.
+  const totals = staged
+    ? computePeriodFinancials(
+        staged.lines.map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
+      )
+    : undefined;
   const canConfirm = staged !== null && staged.rejection === null && !saving;
 
   return (

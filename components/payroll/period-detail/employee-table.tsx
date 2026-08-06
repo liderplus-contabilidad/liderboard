@@ -9,17 +9,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SearchInput } from "@/components/ui/search-input";
 import { pluralize } from "@/lib/format";
 import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
-import { EmployeeRow } from "./employee-row";
+import { type EmployeeRowData, EmployeeRow } from "./employee-row";
 import { RegisterEmployeeModal } from "./register-employee-modal";
 
 interface EmployeeTableProps {
   /** El período al que va a parar un alta — también es lo que el modal nombra en su subtítulo. */
   period: PayrollPeriod;
   /** La nómina completa del período, SIN filtrar — decide entre el vacío «no tiene empleados» y
-   *  el de «ningún empleado coincide con lo que buscas». */
+   *  el de «ningún empleado coincide con lo que buscas», y es lo que el modal de alta lee para
+   *  rechazar un duplicado. */
   lines: readonly PayrollEmployeeLine[];
-  /** `lines` después del buscador — lo que la tabla pinta. */
-  visibleLines: readonly PayrollEmployeeLine[];
+  /** `lines` con su rol calculado, después del buscador — lo que la tabla pinta. */
+  visibleRows: readonly EmployeeRowData[];
   search: string;
   onSearchChange: (value: string) => void;
 }
@@ -27,7 +28,7 @@ interface EmployeeTableProps {
 export function EmployeeTable({
   period,
   lines,
-  visibleLines,
+  visibleRows,
   search,
   onSearchChange,
 }: EmployeeTableProps) {
@@ -44,7 +45,7 @@ export function EmployeeTable({
           className="min-w-[220px] flex-1"
         />
         <span className="text-[11.5px] font-medium text-faint">
-          {pluralize(visibleLines.length, "empleado")}
+          {pluralize(visibleRows.length, "empleado")}
         </span>
         <Button
           variant="secondary"
@@ -61,7 +62,7 @@ export function EmployeeTable({
           Este período todavía no tiene empleados. Agrégalos uno por uno o copia la nómina del mes
           anterior.
         </EmptyState>
-      ) : visibleLines.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <EmptyState className="py-14">Ningún empleado coincide con lo que buscas.</EmptyState>
       ) : (
         <DataGrid minWidth={760}>
@@ -82,8 +83,8 @@ export function EmployeeTable({
             </tr>
           </thead>
           <tbody>
-            {visibleLines.map((line) => (
-              <EmployeeRow key={line.id} line={line} />
+            {visibleRows.map((row) => (
+              <EmployeeRow key={row.line.id} line={row.line} computed={row.computed} />
             ))}
           </tbody>
         </DataGrid>

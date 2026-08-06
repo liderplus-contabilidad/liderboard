@@ -2,13 +2,15 @@
  * El puente entre lo que la base guarda de un empleado y lo que el motor consume.
  *
  * Existe porque las dos formas responden a preguntas distintas y no deben fusionarse:
- * `PayrollEmployeeLine` es cómo se ALMACENA —ficha estable + captura del mes + lo que el archivo
- * dijo—, y `PayrollEmployeeInput` es lo que el CÁLCULO necesita, sin identidad ni procedencia.
- * Que el motor no conozca `id`, `periodId` ni `name` es lo que lo mantiene testeable contra el
- * libro del contador sin inventarse un empleado.
+ * `PayrollEmployeeLine` es cómo se ALMACENA —ficha estable más la captura del mes—, y
+ * `PayrollEmployeeInput` es lo que el CÁLCULO necesita, sin identidad ni procedencia. Que el motor
+ * no conozca `id`, `periodId` ni `name` es lo que lo mantiene testeable contra el libro del
+ * contador sin inventarse un empleado.
  */
-import type { PayrollEmployeeInput } from "./engine/types";
-import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "./types";
+import { computeEmployeePayroll } from "./engine/compute";
+import type { PayrollParameters } from "./engine/parameters";
+import type { PayrollEmployeeComputation, PayrollEmployeeInput } from "./engine/types";
+import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "./types";
 
 /**
  * Una captura en blanco: todo en cero y sin recorte de horas extras.
@@ -62,16 +64,18 @@ export function emptyCapture(): PayrollMonthlyCapture {
  *
  * Es la diferencia con PyG, de donde se copió al principio la regla contraria: allí un mes no
  * cargado no es un mes en cero porque nadie declaró esas cifras, mientras que aquí la ficha
- * DECLARA el sueldo y el resto se deriva. Lo que sí conserva esa distinción es `figures`: sin
- * archivo no hay `PAGADO` y el empleado queda «sin conciliar», que no es lo mismo que cuadrado.
+ * DECLARA el sueldo y el resto se deriva. Lo que sí conserva esa distinción es `paid`: sin
+ * nadie que declare lo transferido queda `null` y el empleado sale «sin conciliar», que no es lo
+ * mismo que cuadrado.
  *
  * Reparto de responsabilidades entre las dos mitades, que es lo que decide qué campo sale de
  * dónde: el fondo de reserva (`hasReserveFund`, `accumulatesReserveFund`) es de la FICHA porque
  * depende de la antigüedad y de una elección del empleado, no del mes — si viajara en la
- * captura, copiar la nómina del mes anterior lo perdería. `paid` sale de `figures` porque es lo
- * que el archivo declara haber transferido, no algo que se capture al armar el rol.
+ * captura, copiar la nómina del mes anterior lo perdería. `paid` es del MES y por eso vive en la
+ * captura, la teclee quien arma el rol o la traiga el `BZ` de un archivo: para el motor son
+ * indistinguibles, que es lo que permite conciliar un alta a mano sin ningún Excel de por medio.
  */
-export function toEngineInput(line: PayrollEmployeeLine): PayrollEmployeeInput {
+export function toEngineInput(line: ParsedPayrollEmployeeLine): PayrollEmployeeInput {
   const capture = line.capture ?? emptyCapture();
 
   return {
@@ -93,12 +97,31 @@ export function toEngineInput(line: PayrollEmployeeLine): PayrollEmployeeInput {
     // Copia, no referencia: quien reciba esta entrada puede editarla para previsualizar un
     // cambio sin que eso toque lo guardado hasta que alguien decida escribirlo.
     deductions: { ...capture.deductions },
-    // Lo tecleado gana sobre lo que trajo el archivo: si alguien corrigió el pagado en pantalla,
-    // sabe más que el `BZ` del que salió.
-    paid: capture.paid ?? line.figures?.paid ?? null,
+    paid: capture.paid,
     flags: {
       provisionsThirteenth: capture.provisionsThirteenth,
       provisionsFourteenth: capture.provisionsFourteenth,
     },
   };
+}
+
+/**
+ * El rol de UNA línea guardada: la composición de `toEngineInput` con el motor, declarada aquí
+ * una sola vez.
+ *
+ * Existe porque esa pareja de llamadas la necesitan cuatro consumidores —la tarjeta de KPIs, la
+ * tabla de la nómina, la ficha del empleado y la descarga de comprobantes— y estaba escrita a
+ * mano en cada uno. Con una sola definición, ninguna pantalla puede quedarse con una versión
+ * distinta de «el rol de este empleado»; sin ella, ya pasó: el badge de conciliación comparaba
+ * una cosa y el motor otra.
+ */
+export function computeLinePayroll(
+  // `ParsedPayrollEmployeeLine` y no `PayrollEmployeeLine`: el rol de una línea no depende de su
+  // `id` ni de su `periodId`, y pedir la forma sin dueño es lo que deja a la PREVIA de una carga
+  // totalizar lo que el archivo trae antes de que exista en la base — con esta misma definición,
+  // no con una copia.
+  line: ParsedPayrollEmployeeLine,
+  parameters: PayrollParameters,
+): PayrollEmployeeComputation {
+  return computeEmployeePayroll(toEngineInput(line), parameters);
 }

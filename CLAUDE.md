@@ -589,15 +589,35 @@ testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no cha
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
 
-**Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. Las
-cifras del mes (`PayrollEmployeeFigures`) se leen VERBATIM del archivo y nunca se recalculan: el
-rol trae más de mil fórmulas y su cuadre es el del contador, y una segunda definición de «aporte
-IESS» se separaría de la suya al centavo — ausente no es cero, es que el período aún no recibió su
-archivo. Nada derivado se persiste (`PayrollRosterSummary`, los totales del período, el asiento
-mismo): una copia guardada aparte quedaría desactualizada y la pantalla diría una cosa y los datos
-otra. `sameToTheCentavo` (`lib/payroll/amounts.ts`) es la única definición de «mismo importe» del
-módulo, porque el rol llega con ruido de coma flotante (`457.69000000000005`) — con `===` cuatro de
-cinco empleados conciliados salían «con diferencia».
+**Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. **El
+MOTOR es la única fuente de toda cifra en pantalla** y el Excel sirve solo para SUBIR información:
+lo guardado es la ficha del empleado más lo que se CAPTURA del mes (`PayrollMonthlyCapture`), y las
+veinte columnas del rol —incluidos los cuatro totales del período y el líquido de cada fila— las
+deriva `lib/payroll/engine/` en cada render. El archivo del contador ya no deja copia de sus
+propias salidas: `rol-general-grid.ts` ni siquiera localiza `TOTAL INGRESO`, `TOTAL EGRESOS`,
+`LIQUIDO A RECIBIR` ni `COSTO TOTAL`; lo que sí lee es `PAGADO` (`BZ`), que es un insumo y entra
+como un capturado más. Contrastar la app contra el libro es trabajo de `engine/golden.test.ts`, que
+reproduce las 20 columnas de los seis empleados de marzo 2026 con igualdad EXACTA — una pantalla
+que enseña las cifras del archivo junto a un veredicto calculado no es un contraste, es dos
+verdades a la vez. Nada derivado se persiste (`PayrollRosterSummary`, los totales del período, el
+asiento mismo): una copia guardada aparte quedaría desactualizada y la pantalla diría una cosa y
+los datos otra. Un período **no tiene estado**: nació con uno («en captura» / «cerrado») que nada
+sabía poner en «cerrado» y que no compuertaba nada, así que todo período decía lo mismo para
+siempre. `computeLinePayroll` (`employee-input.ts`) es la ÚNICA composición de ficha + captura →
+motor, y existe porque estaba escrita a mano en cada consumidor: la de la tabla comparaba lo que
+declaró el archivo mientras la del motor comparaba lo tecleado, y el badge de conciliación y la
+cifra de al lado podían discrepar.
+
+**La CONCILIACIÓN es la clasificación del `difference` del motor** (`CA = AP − BZ`), no una segunda
+resta: `reconciliationStatusOf` (`period-detail.ts`) solo mira si es `null` (nadie declaró lo
+pagado → «sin conciliar»), cero («conciliado») o cualquier otra cosa («con diferencia»). El colapso
+del ruido sub-centavo vive en `compute.ts` y en ningún otro sitio, apoyado en `sameToTheCentavo`
+(`lib/payroll/amounts.ts`), la única definición de «mismo importe» del módulo — el rol llega con
+`457.69000000000005` y con `===` cuatro de cinco conciliados salían «con diferencia». Como `paid`
+es del MES y vive en la captura, **un alta a mano concilia sin ningún Excel de por medio**. Y como
+el motor deriva el rol de la ficha, `computePeriodFinancials` devuelve `undefined` solo con la
+nómina VACÍA: ya no existe el estado «el período no recibió su archivo», así que una nómina copiada
+del mes anterior enseña sus cuatro KPIs desde el primer render, que es el caso de uso principal.
 
 **El asiento contable** es UNO solo y consolidado del rol entero, no uno por área — y **el libro del
 contador lo escribe DOS VECES**, lo cual solo se ve siguiendo fórmulas, nunca rótulos. La hoja

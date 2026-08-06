@@ -10,7 +10,6 @@ function period(overrides: Partial<PayrollPeriod> = {}): PayrollPeriod {
     year: 2026,
     monthIndex: 5,
     kind: "ordinario",
-    status: "captura",
     ...overrides,
   };
 }

@@ -121,10 +121,6 @@ type ColumnKey =
   | "medicalLeaveDeductionCol"
   | "thirteenthProvisionCol"
   | "fourteenthProvisionCol"
-  | "grossCol"
-  | "deductionsCol"
-  | "netCol"
-  | "costCol"
   | "paidCol";
 
 export type RolGeneralColumns = Record<ColumnKey, number | null> & {
@@ -181,7 +177,6 @@ const LABEL_SPECS: readonly LabelSpec[] = [
   }, // S
   { key: "variableCommissionCol", label: "comision variable", display: "COMISION VARIABLE" }, // T
   { key: "bonusCol", label: "bono cumplimiento", display: "BONO CUMPLIMIENTO" }, // V
-  { key: "grossCol", label: "total ingreso", display: "TOTAL INGRESO" }, // W
   {
     key: "iessLoansCol", // Y
     label: "prestamos quirografarios e hipotecarios",
@@ -216,11 +211,8 @@ const LABEL_SPECS: readonly LabelSpec[] = [
     label: "descuento permiso medico",
     display: "Descuento PERMISO MEDICO",
   },
-  { key: "deductionsCol", label: "total egresos", display: "TOTAL EGRESOS" }, // AO
-  { key: "netCol", label: "liquido a recibir", display: "LIQUIDO A RECIBIR" }, // AP
   { key: "thirteenthProvisionCol", label: "xiii", display: "XIII" }, // AS
   { key: "fourteenthProvisionCol", label: "xiv", display: "XIV" }, // AT
-  { key: "costCol", label: "costo total", display: "COSTO TOTAL" }, // AY
   { key: "accumulatesReserveFundCol", label: "ac fr", display: "AC FR" }, // AZ
   { key: "hasReserveFundCol", label: "fr", display: "FR" }, // BA
   { key: "contractTypeCol", label: "tc", display: "TC" }, // BB
@@ -339,10 +331,6 @@ export interface RolGeneralEmployeeRow {
   /** `AS`, `AT` — el importe provisionado, del que se deduce si el mes provisiona los décimos. */
   thirteenthProvisionRaw: number;
   fourteenthProvisionRaw: number;
-  gross: number;
-  deductions: number;
-  net: number;
-  cost: number;
   /** `null` only when the workbook never declared a `PAGADO` column at all — `paidCol === null`.
    * A column that exists but is blank for this one employee reads as `0`, the same convention
    * every other figure in this row follows. */
@@ -444,10 +432,6 @@ export function readEmployeeRows(
       medicalLeaveDeduction: num("medicalLeaveDeductionCol"),
       thirteenthProvisionRaw: num("thirteenthProvisionCol"),
       fourteenthProvisionRaw: num("fourteenthProvisionCol"),
-      gross: num("grossCol"),
-      deductions: num("deductionsCol"),
-      net: num("netCol"),
-      cost: num("costCol"),
       paid: columns.paidCol === null ? null : num("paidCol"),
     });
   }

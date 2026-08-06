@@ -117,8 +117,7 @@ function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
     },
     provisionsThirteenth: row.thirteenthProvisionRaw !== 0,
     provisionsFourteenth: row.fourteenthProvisionRaw !== 0,
-    // `BZ` viaja también a la captura, no solo a `figures`: es un valor TECLEADO, y la pantalla
-    // lo deja corregir. `figures.paid` conserva lo que este archivo declaró, para el contraste.
+    // `BZ` entra como un capturado más: es un valor TECLEADO, y la pantalla lo deja corregir.
     paid: row.paid,
   };
 }
@@ -174,13 +173,6 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
       accumulatesReserveFund: readsAsYes(row.accumulatesReserveFundRaw),
       days: row.days,
       capture: toCapture(row),
-      figures: {
-        gross: row.gross,
-        deductions: row.deductions,
-        net: row.net,
-        cost: row.cost,
-        paid: row.paid,
-      },
     };
   });
 

@@ -5,31 +5,34 @@
  * diría una cosa y la tabla de abajo otra.
  */
 import { matchesSearch } from "@/lib/workspaces";
-import { sameToTheCentavo } from "./amounts";
-import type { PayrollEmployeeFigures, PayrollEmployeeLine } from "./types";
+import type { PayrollEmployeeComputation } from "./engine/types";
+import type { PayrollEmployeeLine } from "./types";
 
 /**
- * Conciliado: el archivo declaró lo pagado (`figures.paid`) y coincide con el líquido
- * (`figures.net`). Con diferencia: lo declaró y NO coincide. Sin conciliar: no hay `figures`
- * todavía, o las hay pero `paid` es `null` — ninguna de las otras dos, y la etiqueta no debe
- * fingir que sí.
+ * Conciliado: se declaró lo pagado y coincide con el líquido que CALCULA el motor. Con
+ * diferencia: se declaró y no coincide. Sin conciliar: nadie declaró lo pagado todavía —
+ * ninguna de las otras dos, y la etiqueta no debe fingir que sí.
+ *
+ * Se clasifica el `difference` que el motor ya produjo (`CA = AP − BZ`) en vez de volver a
+ * restar: el motor es el único sitio donde se decide qué es «cuadrar», incluido el colapso del
+ * ruido sub-centavo, y una segunda resta aquí podía separarse de la suya — y se separaba, porque
+ * esto comparaba lo que dijo el archivo mientras el motor comparaba lo tecleado.
  */
 export type EmployeeReconciliationStatus = "conciliado" | "diferencia" | "sin-conciliar";
 
-export function employeeReconciliationStatus(
-  line: Pick<PayrollEmployeeLine, "figures">,
+export function reconciliationStatusOf(
+  difference: PayrollEmployeeComputation["difference"],
 ): EmployeeReconciliationStatus {
-  const figures = line.figures;
-  if (!figures || figures.paid === null) {
+  if (difference === null) {
     return "sin-conciliar";
   }
-  return sameToTheCentavo(figures.paid, figures.net) ? "conciliado" : "diferencia";
+  return difference === 0 ? "conciliado" : "diferencia";
 }
 
 /**
  * Cómo se rinde cada estado de conciliación: el tono del `Badge` y su rótulo.
  *
- * Vive junto a `employeeReconciliationStatus` y no en un componente porque lo leen DOS pantallas
+ * Vive junto a `reconciliationStatusOf` y no en un componente porque lo leen DOS pantallas
  * —la fila de la nómina y la cabecera del detalle— y un rótulo que discrepe entre ellas haría
  * dudar de la cifra, no del rótulo. Las variantes son nombres de token, no React, así que la capa
  * pura puede nombrarlas sin arrastrar la de presentación.
@@ -50,16 +53,16 @@ export interface PayrollReconciliationCounts {
 
 /**
  * El desglose de la tarjeta «Empleados»: cuántos de la nómina están conciliados y cuántos con
- * diferencia. El resto (sin `figures`, o con `paid === null`) no entra en ninguno de los dos
- * conteos — contarlo en cualquiera sería una etiqueta mintiendo por omisión.
+ * diferencia. El resto (sin `PAGADO` declarado) no entra en ninguno de los dos conteos —
+ * contarlo en cualquiera sería una etiqueta mintiendo por omisión.
  */
 export function computeReconciliationCounts(
-  lines: readonly PayrollEmployeeLine[],
+  computations: readonly PayrollEmployeeComputation[],
 ): PayrollReconciliationCounts {
   let reconciled = 0;
   let withDifference = 0;
-  for (const line of lines) {
-    const status = employeeReconciliationStatus(line);
+  for (const computation of computations) {
+    const status = reconciliationStatusOf(computation.difference);
     if (status === "conciliado") {
       reconciled += 1;
     } else if (status === "diferencia") {
@@ -77,30 +80,33 @@ export interface PayrollPeriodFinancials {
 }
 
 /**
- * Los cuatro totales de la tarjeta de KPIs, SIEMPRE sumados de la nómina guardada. `undefined`
- * cuando NINGÚN empleado tiene `figures` todavía — el período no recibió su archivo, y eso no es
- * lo mismo que una nómina con cifras en cero.
+ * Los cuatro totales de la tarjeta de KPIs, SIEMPRE sumados del rol que el motor calcula para
+ * cada línea. `undefined` solo con la nómina VACÍA: un período sin empleados no tiene totales,
+ * y eso no es lo mismo que una nómina con cifras en cero.
+ *
+ * Antes el corte era «ningún empleado trae `figures`», o sea «no llegó el archivo». Ya no existe
+ * ese estado: el motor deriva el rol completo de la ficha —el sueldo unificado sale del sueldo
+ * base y los días, y lo no capturado vale cero de verdad (ver `toEngineInput`)—, así que una
+ * nómina recién copiada del mes anterior enseña sus cuatro KPIs desde el primer render, que es
+ * el caso de uso principal del módulo.
+ *
+ * Recibe cómputos y no líneas para que la previa de una carga pueda totalizar lo que el archivo
+ * trae ANTES de que exista en la base y tenga `id`/`periodId`, con la misma definición de «los
+ * cuatro totales» que después leerá la tarjeta de KPIs.
  */
 export function computePeriodFinancials(
-  // Solo `figures`, no la línea entera: así la previa de una carga puede totalizar lo que el
-  // archivo trae ANTES de que exista en la base y tenga `id`/`periodId`, con la misma definición
-  // de «los cuatro totales» que después leerá la tarjeta de KPIs.
-  lines: readonly Pick<PayrollEmployeeLine, "figures">[],
+  computations: readonly PayrollEmployeeComputation[],
 ): PayrollPeriodFinancials | undefined {
-  const withFigures = lines
-    .map((line) => line.figures)
-    .filter((figures): figures is PayrollEmployeeFigures => figures !== undefined);
-
-  if (withFigures.length === 0) {
+  if (computations.length === 0) {
     return undefined;
   }
 
-  return withFigures.reduce<PayrollPeriodFinancials>(
-    (totals, figures) => ({
-      gross: totals.gross + figures.gross,
-      deductions: totals.deductions + figures.deductions,
-      net: totals.net + figures.net,
-      cost: totals.cost + figures.cost,
+  return computations.reduce<PayrollPeriodFinancials>(
+    (totals, computation) => ({
+      gross: totals.gross + computation.grossIncome,
+      deductions: totals.deductions + computation.totalDeductions,
+      net: totals.net + computation.netPay,
+      cost: totals.cost + computation.employerCost,
     }),
     { gross: 0, deductions: 0, net: 0, cost: 0 },
   );

@@ -97,7 +97,7 @@ export function PayrollHistoryView() {
         ) : visiblePeriods.length === 0 ? (
           <EmptyState className="py-14">Ningún período coincide con lo que buscas.</EmptyState>
         ) : (
-          <DataGrid minWidth={870}>
+          <DataGrid minWidth={790}>
             <thead>
               <tr>
                 <HeadCell width={210}>Período</HeadCell>
@@ -111,7 +111,6 @@ export function PayrollHistoryView() {
                 <HeadCell align="right" width={130}>
                   Costo total
                 </HeadCell>
-                <HeadCell width={110}>Estado</HeadCell>
                 <HeadCell align="right" width={90} />
               </tr>
             </thead>

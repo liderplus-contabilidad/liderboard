@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { listEmployees } from "@/lib/payroll/db";
-import { emptyCapture, toEngineInput } from "@/lib/payroll/employee-input";
-import { computeEmployeePayroll } from "@/lib/payroll/engine/compute";
+import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
 import { JOURNAL_MOCK_AMOUNTS } from "@/lib/payroll/journal-mock";
@@ -51,8 +50,11 @@ const TAB_ID_PREFIX = "payroll-period";
  * pero la pantalla nunca la RINDE hasta confirmar que ese período está en la lista del cliente
  * activo, así que ningún dato de otro cliente llega a pintarse.
  *
- * Con datos o sin ellos rinde igual: la carga del Excel llena las `figures` de cada línea, y sin
- * ellas la pantalla lee su ausencia como «no hay» y no como cero (KPIs en raya, celdas en guion).
+ * Todas las cifras salen del MOTOR, calculadas una sola vez aquí y repartidas: los KPIs, la tabla
+ * y los comprobantes leen el mismo `rows`, así que no pueden discrepar. Una nómina sin ningún
+ * archivo cargado rinde igual de completa — la ficha declara el sueldo y lo no capturado vale cero
+ * de verdad (ver `toEngineInput`) —, y lo único que queda vacío sin datos es la conciliación, que
+ * necesita que alguien declare lo PAGADO.
  */
 export function PeriodDetailView({ periodId }: { periodId: string }) {
   const router = useRouter();
@@ -68,11 +70,22 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   const prev = period ? adjacentPeriod(periods, period.id, "prev") : null;
   const next = period ? adjacentPeriod(periods, period.id, "next") : null;
 
-  const financials = useMemo(() => computePeriodFinancials(lines), [lines]);
-  const reconciliation = useMemo(() => computeReconciliationCounts(lines), [lines]);
-  const visibleLines = useMemo(
-    () => lines.filter((line) => matchesEmployeeSearch(line, search)),
-    [lines, search],
+  // El rol de cada línea, calculado UNA vez para toda la pantalla. Todo lo de abajo se deriva de
+  // aquí — KPIs, tabla y comprobantes —, que es lo que garantiza que las tres cosas digan lo mismo.
+  const rows = useMemo(
+    () =>
+      lines.map((line) => ({
+        line,
+        computed: computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS),
+      })),
+    [lines],
+  );
+  const computations = useMemo(() => rows.map((row) => row.computed), [rows]);
+  const financials = useMemo(() => computePeriodFinancials(computations), [computations]);
+  const reconciliation = useMemo(() => computeReconciliationCounts(computations), [computations]);
+  const visibleRows = useMemo(
+    () => rows.filter((row) => matchesEmployeeSearch(row.line, search)),
+    [rows, search],
   );
   // La costura con las cifras reales: cuando el asiento se alimente del período abierto, el
   // único cambio es el argumento de `buildJournalEntry` — ni la tarjeta ni la fila se enteran.
@@ -91,15 +104,15 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
    */
   const [downloading, setDownloading] = useState(false);
   const downloadPayslipsForPeriod = useCallback(async () => {
-    if (!period || lines.length === 0) {
+    if (!period || rows.length === 0) {
       return;
     }
     setDownloading(true);
     try {
-      const documents = lines.map((line, index) =>
+      const documents = rows.map(({ line, computed }, index) =>
         buildPayslipDocument({
           line,
-          computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+          computed,
           capture: line.capture ?? emptyCapture(),
           year: period.year,
           monthIndex: period.monthIndex,
@@ -111,7 +124,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, lines, period]);
+  }, [activeClient?.name, rows, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -185,7 +198,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
             <EmployeeTable
               period={period}
               lines={lines}
-              visibleLines={visibleLines}
+              visibleRows={visibleRows}
               search={search}
               onSearchChange={setSearch}
             />

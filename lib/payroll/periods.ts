@@ -5,32 +5,12 @@
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { matchesSearch as matchesLabel } from "@/lib/workspaces";
-import type { PayrollPeriodKind, PayrollPeriodStatus } from "./types";
+import type { PayrollPeriodKind } from "./types";
 
 const KIND_LABELS: Record<PayrollPeriodKind, string> = { ordinario: "Ordinario" };
-const STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
-  captura: "En captura",
-  cerrado: "Cerrado",
-};
 
 export function periodKindLabel(kind: PayrollPeriodKind): string {
   return KIND_LABELS[kind];
-}
-
-export function periodStatusLabel(status: PayrollPeriodStatus): string {
-  return STATUS_LABELS[status];
-}
-
-/** «Nómina en captura» / «Nómina cerrada» — la sublínea del detalle. Va aparte de
- *  `periodStatusLabel` porque concuerda con «nómina» (femenino) y aquella con «período», y
- *  anteponer la palabra a la etiqueta del badge daría «Nómina Cerrado». */
-const ROSTER_STATUS_LABELS: Record<PayrollPeriodStatus, string> = {
-  captura: "Nómina en captura",
-  cerrado: "Nómina cerrada",
-};
-
-export function rosterStatusLabel(status: PayrollPeriodStatus): string {
-  return ROSTER_STATUS_LABELS[status];
 }
 
 /** Most recent first: by year, then by month within the year. */

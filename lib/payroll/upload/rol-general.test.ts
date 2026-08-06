@@ -48,23 +48,20 @@ describe("parseRolGeneral — archivo bien formado", () => {
     expect(result.monthIndex).toBe(2);
   });
 
-  it("produce 3 empleados, cada uno con figures presente", () => {
+  it("produce 3 empleados, cada uno con su captura presente", () => {
     const result = parseRolGeneral(bufferOf(ROL_GENERAL_AOA));
     expect(result.lines).toHaveLength(3);
     for (const line of result.lines) {
-      expect(line.figures).toBeDefined();
+      expect(line.capture).toBeDefined();
     }
   });
 
-  it("no recalcula: los 5 valores del mes se leen VERBATIM de sus columnas", () => {
+  // El archivo sirve para SUBIR información, no para dictar cifras: sus columnas de resultado
+  // (`TOTAL INGRESO`, `TOTAL EGRESOS`, `LIQUIDO A RECIBIR`, `COSTO TOTAL`) ni se leen — las
+  // calcula el motor. Lo que sí entra es `PAGADO`, que es un insumo y no un resultado.
+  it("lee el PAGADO del libro como un capturado más", () => {
     const [primero] = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
-    expect(primero?.figures).toEqual({
-      gross: 600,
-      deductions: 50,
-      net: 550,
-      cost: 650,
-      paid: 550,
-    });
+    expect(primero?.capture?.paid).toBe(550);
   });
 
   it("una cédula guardada como número se lee igual que una guardada como texto", () => {
@@ -255,7 +252,7 @@ describe("parseRolGeneral — SUBTOTAL, SUMAN y el asiento contable posterior se
 describe("parseRolGeneral — PAGADO puede no existir en el libro", () => {
   it("paid = null para todos los empleados, con un aviso nombrando la columna", () => {
     const result = parseRolGeneral(bufferOf(ROL_GENERAL_NO_PAGADO_AOA));
-    expect(result.lines.every((l) => l.figures?.paid === null)).toBe(true);
+    expect(result.lines.every((l) => l.capture?.paid === null)).toBe(true);
     expect(result.warnings).toContain("No se encontraron las columnas: PAGADO.");
   });
 });

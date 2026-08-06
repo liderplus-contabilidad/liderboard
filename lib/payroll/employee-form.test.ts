@@ -269,7 +269,7 @@ describe("toEmployeeLine", () => {
     expect(line.capture?.overtimeHours100).toBe(2);
   });
 
-  it("no inventa cifras del archivo: una alta a mano no trae `figures`", () => {
-    expect(toEmployeeLine(form({ overtimeHours50: 5.5 })).figures).toBeUndefined();
+  it("no declara un PAGADO que nadie tecleó: el alta nace sin conciliar", () => {
+    expect(toEmployeeLine(form({ overtimeHours50: 5.5 })).capture?.paid).toBeNull();
   });
 });

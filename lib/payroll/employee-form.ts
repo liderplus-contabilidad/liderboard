@@ -206,8 +206,9 @@ function hasMonthlyCapture(values: EmployeeFormValues): boolean {
  * hora extra, un recorte tecleado o una provisión encendida, la captura se adjunta ENTERA
  * (`emptyCapture()` como base), porque lo que el motor consume es una captura completa.
  *
- * Un alta a mano nunca trae `figures`: esas son las cifras que un archivo declara, y aquí no hay
- * archivo. Sin ellas el empleado queda «sin conciliar», que es exactamente lo que es.
+ * Sin captura no hay `PAGADO` declarado, así que el empleado nace «sin conciliar» — que es
+ * exactamente lo que es. En cuanto alguien teclee lo transferido, concilia contra el rol que el
+ * motor calcula, sin ningún archivo de por medio.
  */
 export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmployeeLine {
   const line: ParsedPayrollEmployeeLine = {
