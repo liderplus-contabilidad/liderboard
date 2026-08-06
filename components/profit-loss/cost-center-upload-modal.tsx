@@ -441,8 +441,8 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-6">
-        <div className="w-full max-w-[560px] rounded-2xl border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-          <header className="flex items-center justify-between border-b border-border px-5 py-3.5">
+        <div className="flex max-h-full w-full max-w-[560px] flex-col rounded-2xl border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+          <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
             <h2 className="text-sm font-semibold text-ink">
               {summary ? "Carga completa" : "Cargar Excel"}
             </h2>
@@ -456,93 +456,98 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
             </button>
           </header>
 
-          {summary ? (
-            <SummaryPanel summary={summary} onRemoveAdjustment={removeAdjustment} />
-          ) : (
-            <div className="p-5">
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  void addFiles(e.dataTransfer.files);
-                }}
-                className={cn(
-                  "flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors",
-                  dragOver
-                    ? "border-brand bg-brand-soft"
-                    : "border-border bg-canvas hover:border-faint",
-                )}
-              >
-                <Upload size={22} className="text-muted" />
-                <span className="text-[13px] font-medium text-ink">
-                  Arrastra los archivos o haz clic para seleccionar
-                </span>
-                <span className="text-[11.5px] text-faint">
-                  Un mes por centros de costo (PyG-AAAA-MM-…), un mes de estado único (con su rango
-                  de fechas), o el Excel completo de la app (.xls / .xlsx)
-                </span>
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".xls,.xlsx"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  void addFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {summary ? (
+              <SummaryPanel summary={summary} onRemoveAdjustment={removeAdjustment} />
+            ) : (
+              <div className="p-5">
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    void addFiles(e.dataTransfer.files);
+                  }}
+                  className={cn(
+                    "flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors",
+                    dragOver
+                      ? "border-brand bg-brand-soft"
+                      : "border-border bg-canvas hover:border-faint",
+                  )}
+                >
+                  <Upload size={22} className="text-muted" />
+                  <span className="text-[13px] font-medium text-ink">
+                    Arrastra los archivos o haz clic para seleccionar
+                  </span>
+                  <span className="text-[11.5px] text-faint">
+                    Un mes por centros de costo (PyG-AAAA-MM-…), un mes de estado único (con su
+                    rango de fechas), o el Excel completo de la app (.xls / .xlsx)
+                  </span>
+                </button>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".xls,.xlsx"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    void addFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
 
-              {files.length > 0 && (
-                <ul className="mt-4 flex flex-col gap-1.5">
-                  {files.map((file, i) => (
-                    <li
-                      key={`${file.fileName}-${i}`}
-                      className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"
-                    >
-                      <FileSpreadsheet
-                        size={18}
-                        className={file.error ? "text-negative" : "text-brand"}
-                      />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-[12.5px] font-medium text-ink">
-                          {file.fileName}
-                        </span>
-                        <span
-                          className={cn("text-[11px]", file.error ? "text-negative" : "text-faint")}
-                        >
-                          {file.error ?? file.badge}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        aria-label="Quitar"
-                        onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                        className="ml-auto text-faint hover:text-negative"
+                {files.length > 0 && (
+                  <ul className="mt-4 flex flex-col gap-1.5">
+                    {files.map((file, i) => (
+                      <li
+                        key={`${file.fileName}-${i}`}
+                        className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2"
                       >
-                        <X size={15} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                        <FileSpreadsheet
+                          size={18}
+                          className={file.error ? "text-negative" : "text-brand"}
+                        />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate text-[12.5px] font-medium text-ink">
+                            {file.fileName}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[11px]",
+                              file.error ? "text-negative" : "text-faint",
+                            )}
+                          >
+                            {file.error ?? file.badge}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Quitar"
+                          onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                          className="ml-auto text-faint hover:text-negative"
+                        >
+                          <X size={15} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-              {mixedKindsError && <NoticeBanner className="mt-3">{mixedKindsError}</NoticeBanner>}
-              {!mixedKindsError && batchError && (
-                <NoticeBanner className="mt-3">{batchError}</NoticeBanner>
-              )}
-            </div>
-          )}
+                {mixedKindsError && <NoticeBanner className="mt-3">{mixedKindsError}</NoticeBanner>}
+                {!mixedKindsError && batchError && (
+                  <NoticeBanner className="mt-3">{batchError}</NoticeBanner>
+                )}
+              </div>
+            )}
+          </div>
 
-          <footer className="flex items-center justify-end gap-2.5 border-t border-border px-5 py-3.5">
+          <footer className="flex shrink-0 items-center justify-end gap-2.5 border-t border-border px-5 py-3.5">
             {summary ? (
               <button
                 type="button"
