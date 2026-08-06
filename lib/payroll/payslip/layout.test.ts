@@ -6,6 +6,7 @@ import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
 import type { PayrollEmployeeLine } from "../types";
 import { buildPayslipDocument } from "./document";
 import { PAGE_HEIGHT, PAGE_WIDTH, PAYSLIP_COLUMNS, layoutPayslip, wrapText } from "./layout";
+import { PAYSLIP_COLORS } from "./palette";
 import type { MeasureText, PayslipDocument } from "./types";
 
 /**
@@ -59,8 +60,8 @@ describe("el comprobante cabe en la hoja", () => {
     for (const box of boxes) {
       const width = measure(box.text, box.size, box.bold);
       const left = box.align === "right" ? box.x - width : box.x;
-      expect(left, box.text).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.left - 0.5);
-      expect(left + width, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.right + 0.5);
+      expect(left, box.text).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft - 0.5);
+      expect(left + width, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
     }
   });
 
@@ -102,16 +103,16 @@ describe("las columnas se respetan", () => {
 
   it("el importe más largo cabe en la columna de valores", () => {
     // `US$-1,171,420.00` es el peor caso realista: un líquido negativo de siete cifras.
-    const worst = "US$-1,171,420.00";
+    const worst = "-$1,171,420.00";
     const available = PAYSLIP_COLUMNS.right - PAYSLIP_COLUMNS.quantityEnd;
     expect(measure(worst, 9.5, true)).toBeLessThanOrEqual(available);
   });
 
   it("un nombre desmedido se recorta en vez de invadir la hoja", () => {
     const { boxes } = layoutPayslip(documentFor({ name: "X".repeat(300) }), measure);
-    const box = boxes.find((b) => b.text.startsWith("Empleado: "));
+    const box = boxes.find((b) => b.text.startsWith("XXXX"));
     expect(box!.x + measure(box!.text, box!.size, box!.bold)).toBeLessThanOrEqual(
-      PAYSLIP_COLUMNS.right + 0.5,
+      PAYSLIP_COLUMNS.pageRight + 0.5,
     );
   });
 });
@@ -121,7 +122,7 @@ describe("el texto largo se parte en líneas", () => {
     const declaration =
       "Declaro y acepto que los valores de remuneraciones, horas extras y descuentos son " +
       "correctos y que recibo del valor que consta en LIQUIDO A RECIBIR a mi entera satisfacción.";
-    const width = PAYSLIP_COLUMNS.right - PAYSLIP_COLUMNS.left;
+    const width = PAYSLIP_COLUMNS.pageRight - PAYSLIP_COLUMNS.pageLeft;
     const lines = wrapText(declaration, width, 7.5, false, measure);
 
     expect(lines.length).toBeGreaterThan(1);
@@ -129,5 +130,56 @@ describe("el texto largo se parte en líneas", () => {
       expect(measure(line, 7.5, false)).toBeLessThanOrEqual(width);
     }
     expect(lines.join(" ")).toBe(declaration);
+  });
+});
+
+describe("la capa visual", () => {
+  it("las bandas de sección llevan los colores del libro del contador", () => {
+    // Verde oliva para ingresos y celeste para costos: los rellenos que el contador ya usa en su
+    // hoja y que la tabla de Datos de PyG pinta en la raíz 4 y la 5. Un verde quiere decir
+    // «ingresos» en las tres superficies.
+    const { fills } = layoutPayslip(documentFor(), measure);
+    const colors = fills.map((f) => f.color);
+    expect(colors).toContain(PAYSLIP_COLORS.income);
+    expect(colors).toContain(PAYSLIP_COLORS.cost);
+  });
+
+  it("el líquido a recibir es la ÚNICA banda oscura", () => {
+    // Es el importe que el empleado declara haber recibido al firmar: no puede confundirse con los
+    // otros dos totales, y una segunda banda oscura le quitaría justamente eso.
+    const { fills } = layoutPayslip(documentFor(), measure);
+    expect(fills.filter((f) => f.color === PAYSLIP_COLORS.net)).toHaveLength(1);
+  });
+
+  it("sobre la banda oscura el texto va en blanco", () => {
+    const { fills, boxes } = layoutPayslip(documentFor(), measure);
+    const netBand = fills.find((f) => f.color === PAYSLIP_COLORS.net)!;
+    const over = boxes.filter((b) => b.y >= netBand.y && b.y <= netBand.y + netBand.height);
+    expect(over.length).toBe(2);
+    expect(over.every((b) => b.color === PAYSLIP_COLORS.white)).toBe(true);
+  });
+
+  it("la franja alterna cubre la mitad de las filas de concepto", () => {
+    // 26 filas: 13 impares en cada bloque contando desde cero → 6 + 6.
+    const { fills } = layoutPayslip(documentFor(), measure);
+    expect(fills.filter((f) => f.color === PAYSLIP_COLORS.zebra)).toHaveLength(12);
+  });
+
+  it("un importe en cero va en tinta débil y uno real en tinta plena", () => {
+    // Veintidós rayas a peso completo compiten con las cuatro cifras que sí dicen algo.
+    const { boxes } = layoutPayslip(documentFor(), measure);
+    const dash = boxes.find((b) => b.text === "-" && b.align === "right");
+    const amount = boxes.find((b) => b.text === "$487.21");
+    expect(dash?.color).toBe(PAYSLIP_COLORS.faint);
+    expect(amount?.color).toBe(PAYSLIP_COLORS.ink);
+  });
+
+  it("ningún relleno se sale de la hoja útil", () => {
+    const { fills } = layoutPayslip(documentFor(), measure);
+    for (const fill of fills) {
+      expect(fill.x).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft);
+      expect(fill.x + fill.width).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight);
+      expect(fill.y + fill.height).toBeLessThanOrEqual(PAGE_HEIGHT);
+    }
   });
 });

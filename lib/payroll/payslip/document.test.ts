@@ -64,18 +64,18 @@ describe("el comprobante del empleado 6 de marzo 2026", () => {
   });
 
   it("trae las cifras del archivo, al centavo", () => {
-    expect(row(doc.incomes, "SUELDO UNIFICADO")?.value).toBe("487.21");
-    expect(row(doc.incomes, "DECIMO IV SUELDO-MENSUAL")?.value).toBe("40.17");
-    expect(row(doc.incomes, "DECIMO III SUELDO-MENSUAL")?.value).toBe("40.60");
-    expect(row(doc.deductions, "APORTES AL IESS")?.value).toBe("46.04");
-    expect(row(doc.deductions, "ANTICIPO SUELDO")?.value).toBe("200.00");
+    expect(row(doc.incomes, "SUELDO UNIFICADO")?.value).toBe("$487.21");
+    expect(row(doc.incomes, "DECIMO IV SUELDO-MENSUAL")?.value).toBe("$40.17");
+    expect(row(doc.incomes, "DECIMO III SUELDO-MENSUAL")?.value).toBe("$40.60");
+    expect(row(doc.deductions, "APORTES AL IESS")?.value).toBe("$46.04");
+    expect(row(doc.deductions, "ANTICIPO SUELDO")?.value).toBe("$200.00");
   });
 
-  it("cierra con los tres totales en US$", () => {
-    expect(doc.totalIncome).toBe("US$567.98");
-    expect(doc.totalDeductions).toBe("US$246.04");
+  it("cierra con los tres totales en $", () => {
+    expect(doc.totalIncome).toBe("$567.98");
+    expect(doc.totalDeductions).toBe("$246.04");
     // `AP36` guarda 321.94000000000005 — el motor no redondea sus totales y el comprobante sí.
-    expect(doc.netPay).toBe("US$321.94");
+    expect(doc.netPay).toBe("$321.94");
   });
 
   it("marca con (*) el fondo de reserva y el bono, y nada más", () => {
@@ -163,7 +163,7 @@ describe("las horas extras", () => {
     const extras = row(doc.incomes, "VALOR GANADO EXTRAS 50%");
     expect(extras?.quantity).toBe("5");
     expect(extras?.value).not.toBe("-");
-    expect(doc.totalIncome).toBe("US$567.98");
+    expect(doc.totalIncome).toBe("$567.98");
   });
 
   it("sin horas, la cantidad sale con raya", () => {

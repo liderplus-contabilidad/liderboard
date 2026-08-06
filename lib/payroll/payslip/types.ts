@@ -63,6 +63,8 @@ export interface PayslipBox {
   size: number;
   bold: boolean;
   align: PayslipAlign;
+  /** Hex de `palette.ts`. */
+  color: string;
 }
 
 /** Una línea horizontal del comprobante (la separación de un bloque, la raya de la firma). */
@@ -70,11 +72,24 @@ export interface PayslipRule {
   x1: number;
   x2: number;
   y: number;
+  thickness: number;
+  color: string;
+}
+
+/** Un rectángulo de fondo: la banda de una sección, el panel de identidad, la franja alterna de
+ *  una fila. Se dibujan TODOS antes que el texto, así que ninguno puede taparlo. */
+export interface PayslipFill {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
 }
 
 export interface PayslipPage {
-  boxes: readonly PayslipBox[];
+  fills: readonly PayslipFill[];
   rules: readonly PayslipRule[];
+  boxes: readonly PayslipBox[];
 }
 
 /** Mide un texto en puntos. Se inyecta para que la capa de geometría no importe `pdf-lib`:
