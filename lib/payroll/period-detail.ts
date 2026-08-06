@@ -26,6 +26,23 @@ export function employeeReconciliationStatus(
   return sameToTheCentavo(figures.paid, figures.net) ? "conciliado" : "diferencia";
 }
 
+/**
+ * Cómo se rinde cada estado de conciliación: el tono del `Badge` y su rótulo.
+ *
+ * Vive junto a `employeeReconciliationStatus` y no en un componente porque lo leen DOS pantallas
+ * —la fila de la nómina y la cabecera del detalle— y un rótulo que discrepe entre ellas haría
+ * dudar de la cifra, no del rótulo. Las variantes son nombres de token, no React, así que la capa
+ * pura puede nombrarlas sin arrastrar la de presentación.
+ */
+export const RECONCILIATION_BADGE: Record<
+  EmployeeReconciliationStatus,
+  { variant: "positive" | "warning" | "outline"; label: string }
+> = {
+  conciliado: { variant: "positive", label: "Conciliado" },
+  diferencia: { variant: "warning", label: "Con diferencia" },
+  "sin-conciliar": { variant: "outline", label: "Sin conciliar" },
+};
+
 export interface PayrollReconciliationCounts {
   reconciled: number;
   withDifference: number;

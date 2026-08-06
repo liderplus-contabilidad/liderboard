@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { beforeEach, describe, expect, it } from "vitest";
+import { emptyCapture } from "./employee-input";
 import type { PayrollEmployeeLine } from "./types";
 import {
   createClient,
@@ -18,6 +19,7 @@ import {
   listPeriods,
   periodFinancials,
   renameClient,
+  updateEmployee,
   rosterCounts,
   setActiveClient,
 } from "./db";
@@ -41,6 +43,8 @@ function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmpl
     idCard: "0102030405",
     hireDate: "2024-03-01",
     sectorCode: "S001",
+    hasReserveFund: false,
+    accumulatesReserveFund: false,
     days: 12,
     ...overrides,
   };
@@ -458,5 +462,59 @@ describe("importRoster", () => {
     await importRoster(period.id, []);
 
     expect(await listEmployees(period.id)).toEqual([]);
+  });
+});
+
+describe("updateEmployee", () => {
+  it("guarda la captura del mes y la deja legible tal cual", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    const [stored] = await listEmployees(period.id);
+
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5, paid: 457.69 };
+    await updateEmployee(stored.id, { capture });
+
+    const [reloaded] = await listEmployees(period.id);
+    expect(reloaded.capture).toEqual(capture);
+  });
+
+  it("guarda los campos de ficha que la pantalla edita", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    const [stored] = await listEmployees(period.id);
+
+    await updateEmployee(stored.id, { days: 15, baseSalary: 500 });
+
+    const [reloaded] = await listEmployees(period.id);
+    expect(reloaded.days).toBe(15);
+    expect(reloaded.baseSalary).toBe(500);
+  });
+
+  it("no toca lo que no se le pasa", async () => {
+    // Un parche parcial no puede borrar la ficha por omisión: la pantalla escribe un campo a la
+    // vez, y `days` no debería llevarse por delante el nombre ni la captura.
+    const period = await createPeriod(clientId, 2026, 2);
+    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+    const [stored] = await listEmployees(period.id);
+    await updateEmployee(stored.id, { capture: { ...emptyCapture(), bonus: 40 } });
+
+    await updateEmployee(stored.id, { days: 20 });
+
+    const [reloaded] = await listEmployees(period.id);
+    expect(reloaded.days).toBe(20);
+    expect(reloaded.name).toBe(stored.name);
+    expect(reloaded.capture?.bonus).toBe(40);
+    expect(reloaded.figures).toEqual(stored.figures);
+  });
+
+  it("un empleado que no existe no crea uno nuevo", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    await importRoster(period.id, [employeeLine({ figures: FIGURES })]);
+
+    await updateEmployee("no-existe", { days: 99 });
+
+    const lines = await listEmployees(period.id);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].days).not.toBe(99);
   });
 });

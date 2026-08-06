@@ -252,6 +252,33 @@ export async function listEmployees(periodId: string): Promise<PayrollEmployeeLi
  * Lo que se pierde al reemplazar es la ficha copiada del mes anterior, y eso es justo lo que se
  * quiere: el archivo trae su propia ficha y es la del contador.
  */
+/**
+ * Lo que la pantalla de detalle puede reescribir de un empleado: los dos campos de ficha que se
+ * corrigen al capturar el mes, y la captura entera.
+ *
+ * El nombre, el cargo, la cédula y el código sectorial NO están: son identidad, se corrigen en la
+ * ficha y no en el rol de un mes. `figures` tampoco — es el testimonio del archivo y reescribirlo
+ * borraría aquello contra lo que `compareAgainstFile` contrasta.
+ */
+export type PayrollEmployeePatch = Partial<
+  Pick<PayrollEmployeeLine, "days" | "baseSalary" | "capture">
+>;
+
+/**
+ * Escribe un parche PARCIAL sobre un empleado. Dexie's `update` fusiona en vez de reemplazar, así
+ * que corregir `days` no se lleva por delante ni el nombre ni lo capturado — que importa porque
+ * esta pantalla escribe un campo cada vez, según se va saliendo de cada input.
+ *
+ * Un `id` que no existe no crea nada: `update` devuelve 0 y se acabó. Es la respuesta correcta a
+ * un empleado borrado en otra pestaña mientras esta lo tenía abierto.
+ */
+export async function updateEmployee(
+  employeeId: string,
+  patch: PayrollEmployeePatch,
+): Promise<void> {
+  await db.employees.update(employeeId, patch);
+}
+
 export async function importRoster(
   periodId: string,
   lines: readonly ParsedPayrollEmployeeLine[],

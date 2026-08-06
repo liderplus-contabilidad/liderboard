@@ -9,10 +9,18 @@
  * The rótulos live in TWO rows (row 2 rótula `M`–`BH`, row 3 rótula `A`–`L`), so — unlike those
  * two modules, whose header lives on one row — this module doesn't return a single "header row";
  * `findLabel` scans the whole sheet for each label independently and takes the FIRST match,
- * top-to-bottom then left-to-right. Two labels repeat further down (`LIQUIDO A RECIBIR` again at
- * `BH` after `AP`, `PAGADO` again at `CC` after `BZ`, `COSTO TOTAL` again inside the asientos
- * block after `AY`): the report always writes its real header first, so "first match" tells them
- * apart without a coordinate, the same trick `findMicroplusHeader`'s first-match assignment uses.
+ * top-to-bottom then left-to-right. Varios rótulos se repiten más abajo (`LIQUIDO A RECIBIR` en
+ * `BH` tras `AP`, `PAGADO` en `CC` tras `BZ`, `COSTO TOTAL` dentro del bloque de asientos tras
+ * `AY`, y ese mismo bloque REPITE como descripción `PRESTAMOS EMPRESARIALES`, `ALMUERZOS` y
+ * `CONTRIBUCION SOLIDARIA`, que son tres rótulos de egreso): the report always writes its real
+ * header first, so "first match" tells them apart without a coordinate, the same trick
+ * `findMicroplusHeader`'s first-match assignment uses.
+ *
+ * La otra trampa es al revés y es de la fila 2: sobre las columnas de horas extras hay dos
+ * rótulos AGRUPADORES (`" No. HORAS EXTRAS"` sobre `G`–`I`, `"VALOR DE HORAS EXTRAS"` sobre
+ * `J`–`L`) que están por ENCIMA de los rótulos reales de la fila 3. El primero empieza igual que
+ * el `"No. "` que nombra el ordinal, así que la comparación tiene que ser por la etiqueta ENTERA
+ * —nunca por prefijo—, que es justo lo que `findLabel` hace.
  *
  * Split from `rol-general.ts` so the delicate half — label location, area attribution, and the
  * employee/area/skip row classification — is testable over bare grids, with no workbook fixtures
@@ -68,7 +76,12 @@ export function excelSerialToISODate(cell: Cell): string | null {
 
 /** Every column this parser reads, by its own key. `ordinalCol` (`No.`) is never stored on the
  * ficha — it exists purely so an area row (name only) can be told apart from an employee row
- * (ordinal AND name). */
+ * (ordinal AND name).
+ *
+ * Qué CAMPO del motor lleva cada columna está declarado una sola vez en `lib/payroll/concepts.ts`
+ * y no se repite aquí: lo que este archivo añade es lo único que aquel no puede tener, el RÓTULO
+ * con el que el libro escribe esa columna —«Anticipo de sueldo» en la pantalla es `ANTICIPO
+ * SUELDO` en la hoja, y el parser localiza por lo segundo. */
 type ColumnKey =
   | "ordinalCol"
   | "employeeCol"
@@ -79,6 +92,35 @@ type ColumnKey =
   | "idCardCol"
   | "hireDateCol"
   | "sectorCodeCol"
+  | "hasReserveFundCol"
+  | "accumulatesReserveFundCol"
+  | "overtimeHours50Col"
+  | "overtimeHours100Col"
+  | "overtimeHours25Col"
+  | "overtimePay50Col"
+  | "overtimePay100Col"
+  | "overtimePay25Col"
+  | "overtimeTotalCol"
+  | "vacationPayCol"
+  | "privateInsuranceCol"
+  | "allowancesCol"
+  | "fixedCommissionCol"
+  | "variableCommissionCol"
+  | "bonusCol"
+  | "iessLoansCol"
+  | "unpaidLeaveCol"
+  | "salaryAdvanceCol"
+  | "companyLoansCol"
+  | "incomeTaxCol"
+  | "mealsCol"
+  | "finesCol"
+  | "inHouseConsumptionCol"
+  | "solidarityContributionCol"
+  | "otherDeductionsCol"
+  | "partTimeDeductionCol"
+  | "medicalLeaveDeductionCol"
+  | "thirteenthProvisionCol"
+  | "fourteenthProvisionCol"
   | "grossCol"
   | "deductionsCol"
   | "netCol"
@@ -102,21 +144,90 @@ interface LabelSpec {
   display: string;
 }
 
+/** El orden es el del libro (`A` → `CA`), que es el mismo del comprobante `INDIVIDUAL` y el de
+ * `concepts.ts`: así el aviso agrupado de columnas ausentes las nombra en el orden en que quien
+ * abre el Excel las va a buscar. El comentario de cada entrada es su LETRA en la hoja. */
 const LABEL_SPECS: readonly LabelSpec[] = [
-  { key: "ordinalCol", label: "no.", display: "No." },
-  { key: "employeeCol", label: "empleado", display: "EMPLEADO" },
-  { key: "roleCol", label: "cargo", display: "CARGO" },
-  { key: "baseSalaryCol", label: "sueldo base", display: "SUELDO BASE" },
-  { key: "daysCol", label: "dias", display: "DIAS" },
-  { key: "contractTypeCol", label: "tc", display: "TC" },
-  { key: "idCardCol", label: "cedula", display: "CÉDULA" },
-  { key: "hireDateCol", label: "fecha ingreso", display: "FECHA INGRESO" },
-  { key: "sectorCodeCol", label: "codigo sectorial", display: "CODIGO SECTORIAL" },
-  { key: "grossCol", label: "total ingreso", display: "TOTAL INGRESO" },
-  { key: "deductionsCol", label: "total egresos", display: "TOTAL EGRESOS" },
-  { key: "netCol", label: "liquido a recibir", display: "LIQUIDO A RECIBIR" },
-  { key: "costCol", label: "costo total", display: "COSTO TOTAL" },
-  { key: "paidCol", label: "pagado", display: "PAGADO" },
+  { key: "ordinalCol", label: "no.", display: "No." }, // A
+  { key: "employeeCol", label: "empleado", display: "EMPLEADO" }, // B
+  { key: "roleCol", label: "cargo", display: "CARGO" }, // C
+  { key: "baseSalaryCol", label: "sueldo base", display: "SUELDO BASE" }, // D
+  { key: "daysCol", label: "dias", display: "DIAS" }, // E
+  // G, H, I — las CANTIDADES de horas. El libro rotula la tercera clase «15 %» aquí y «25 %» en
+  // su valor (`L`): se copia tal cual, porque lo que se busca es el texto de la hoja, no el que
+  // debería decir. Es la pregunta abierta §11.2, y arreglarla aquí rompería la localización.
+  { key: "overtimeHours50Col", label: "horas extras 50%", display: "HORAS EXTRAS 50%" },
+  { key: "overtimeHours100Col", label: "horas extras 100%", display: "HORAS EXTRAS 100%" },
+  { key: "overtimeHours25Col", label: "horas extras 15%", display: "HORAS EXTRAS 15%" },
+  // J, K, L — su VALOR. No son campos de la captura (el motor los deriva), pero se leen porque
+  // son el término contra el que `M` se compara para recuperar el importe aprobado (§6), y
+  // recalcularlos aquí no serviría: en el archivo real una fila usa 0,15 donde las demás usan
+  // 0,25, así que un `J+K+L` derivado no coincidiría con el `M` que el libro guardó.
+  { key: "overtimePay50Col", label: "valor ganado extras 50%", display: "VALOR GANADO EXTRAS 50%" },
+  {
+    key: "overtimePay100Col",
+    label: "valor ganado extras 100%",
+    display: "VALOR GANADO EXTRAS 100%",
+  },
+  { key: "overtimePay25Col", label: "valor ganado extras 25%", display: "VALOR GANADO EXTRAS 25%" },
+  { key: "overtimeTotalCol", label: "total horas extras", display: "TOTAL HORAS EXTRAS" }, // M
+  { key: "vacationPayCol", label: "vacaciones - mensual", display: "VACACIONES - MENSUAL" }, // P
+  { key: "privateInsuranceCol", label: "seguro privado", display: "SEGURO PRIVADO" }, // Q
+  { key: "allowancesCol", label: "viaticos/vivienda", display: "VIATICOS/VIVIENDA" }, // R
+  {
+    key: "fixedCommissionCol",
+    label: "comision fija por vtas.",
+    display: "COMISION FIJA POR VTAS.",
+  }, // S
+  { key: "variableCommissionCol", label: "comision variable", display: "COMISION VARIABLE" }, // T
+  { key: "bonusCol", label: "bono cumplimiento", display: "BONO CUMPLIMIENTO" }, // V
+  { key: "grossCol", label: "total ingreso", display: "TOTAL INGRESO" }, // W
+  {
+    key: "iessLoansCol", // Y
+    label: "prestamos quirografarios e hipotecarios",
+    display: "PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS",
+  },
+  { key: "unpaidLeaveCol", label: "licencia sin sueldo", display: "LICENCIA SIN SUELDO" }, // Z
+  { key: "salaryAdvanceCol", label: "anticipo sueldo", display: "ANTICIPO SUELDO" }, // AA
+  { key: "companyLoansCol", label: "prestamos empresariales", display: "PRESTAMOS EMPRESARIALES" }, // AB
+  { key: "incomeTaxCol", label: "impuesto renta", display: "IMPUESTO RENTA" }, // AC
+  { key: "mealsCol", label: "almuerzos", display: "ALMUERZOS" }, // AD
+  { key: "finesCol", label: "multas", display: "MULTAS" }, // AE
+  {
+    key: "inHouseConsumptionCol", // AF
+    label: "consumo locales empleado",
+    display: "CONSUMO LOCALES EMPLEADO",
+  },
+  {
+    key: "solidarityContributionCol", // AG — el libro lo parte en dos líneas; `compactLabel` lo une
+    label: "contribucion solidaria",
+    display: "CONTRIBUCION SOLIDARIA",
+  },
+  { key: "otherDeductionsCol", label: "otros", display: "OTROS" }, // AH — con un espacio sobrante
+  // AI — «PACIAL» es la errata del libro, y se busca con ella: corregirla aquí dejaría de
+  // encontrar la columna en todos los archivos que la firma ya tiene.
+  {
+    key: "partTimeDeductionCol",
+    label: "descuento tiempo pacial",
+    display: "DESCUENTO TIEMPO PACIAL",
+  },
+  {
+    key: "medicalLeaveDeductionCol", // AN
+    label: "descuento permiso medico",
+    display: "Descuento PERMISO MEDICO",
+  },
+  { key: "deductionsCol", label: "total egresos", display: "TOTAL EGRESOS" }, // AO
+  { key: "netCol", label: "liquido a recibir", display: "LIQUIDO A RECIBIR" }, // AP
+  { key: "thirteenthProvisionCol", label: "xiii", display: "XIII" }, // AS
+  { key: "fourteenthProvisionCol", label: "xiv", display: "XIV" }, // AT
+  { key: "costCol", label: "costo total", display: "COSTO TOTAL" }, // AY
+  { key: "accumulatesReserveFundCol", label: "ac fr", display: "AC FR" }, // AZ
+  { key: "hasReserveFundCol", label: "fr", display: "FR" }, // BA
+  { key: "contractTypeCol", label: "tc", display: "TC" }, // BB
+  { key: "hireDateCol", label: "fecha ingreso", display: "FECHA INGRESO" }, // BC
+  { key: "idCardCol", label: "cedula", display: "CÉDULA" }, // BD
+  { key: "sectorCodeCol", label: "codigo sectorial", display: "CODIGO SECTORIAL" }, // BF
+  { key: "paidCol", label: "pagado", display: "PAGADO" }, // BZ
 ];
 
 const SUMAN_LABEL = "suman";
@@ -173,7 +284,12 @@ function valueAt(row: readonly Cell[], col: number | null): Cell {
 
 /** One employee row as the grid holds it — raw values only. `contractTypeRaw` isn't yet checked
  * against `"CT" | "TP"` and `hireDateRaw` isn't yet converted from its Excel serial: both are
- * domain decisions (what counts as valid, what "unparseable" means) that `rol-general.ts` owns. */
+ * domain decisions (what counts as valid, what "unparseable" means) that `rol-general.ts` owns.
+ *
+ * Todo lo que termina en `Raw` sigue esa misma frontera: `hasReserveFundRaw`/
+ * `accumulatesReserveFundRaw` traen el texto de la celda sin decidir qué cuenta como «sí», y
+ * `thirteenthProvisionRaw`/`fourteenthProvisionRaw` traen el importe de `AS`/`AT` sin decidir qué
+ * cuenta como «encendida». Aquí solo se lee lo que hay. */
 export interface RolGeneralEmployeeRow {
   area: string;
   name: string;
@@ -184,6 +300,45 @@ export interface RolGeneralEmployeeRow {
   idCard: string;
   hireDateRaw: Cell;
   sectorCode: string;
+  hasReserveFundRaw: string;
+  accumulatesReserveFundRaw: string;
+  /** `G`, `H`, `I` — cantidades de horas. */
+  overtimeHours50: number;
+  overtimeHours100: number;
+  overtimeHours25: number;
+  /** `J`, `K`, `L` — su valor, TAL COMO EL LIBRO lo trae. No viajan a la captura (el motor los
+   * deriva): existen para que `rol-general.ts` pueda comparar `M` contra `J+K+L` y recuperar
+   * cuánto se reconoció. */
+  overtimePay50: number;
+  overtimePay100: number;
+  overtimePay25: number;
+  /** `M` — el total reconocido. `null` solo cuando el libro no declara la columna, misma
+   * convención que `paid`: sin ella no se puede afirmar que no se reconociera ninguna hora. */
+  overtimeTotal: number | null;
+  /** `P`…`T`, `V` — los ingresos capturados. */
+  vacationPay: number;
+  privateInsurance: number;
+  allowances: number;
+  fixedCommission: number;
+  variableCommission: number;
+  bonus: number;
+  /** `Y`…`AN` — los doce egresos con rótulo. `X` (aporte IESS) no está: lo deriva el motor, y
+   * `AJ`–`AM` tampoco, porque sin rótulo no hay forma de localizarlas (§11.4). */
+  iessLoans: number;
+  unpaidLeave: number;
+  salaryAdvance: number;
+  companyLoans: number;
+  incomeTax: number;
+  meals: number;
+  fines: number;
+  inHouseConsumption: number;
+  solidarityContribution: number;
+  otherDeductions: number;
+  partTimeDeduction: number;
+  medicalLeaveDeduction: number;
+  /** `AS`, `AT` — el importe provisionado, del que se deduce si el mes provisiona los décimos. */
+  thirteenthProvisionRaw: number;
+  fourteenthProvisionRaw: number;
   gross: number;
   deductions: number;
   net: number;
@@ -244,21 +399,56 @@ export function readEmployeeRows(
     if (currentArea === null) {
       noAreaCount++;
     }
+    // Una columna que el libro no declara vale `0` como cualquier celda vacía: son cuarenta y
+    // tantas y escribir `?? null` en cada una convertiría «este concepto no se usó» en un caso
+    // aparte que ningún consumidor sabría tratar. Las dos excepciones —`PAGADO` y `M`— tienen su
+    // propio motivo escrito en el tipo: de las dos, la ausencia sí dice algo distinto del cero.
+    const num = (key: ColumnKey): number => toNumber(valueAt(row, columns[key]));
+    const text = (key: ColumnKey): string => cellText(valueAt(row, columns[key]));
     rows.push({
       area: currentArea ?? "",
       name,
-      role: cellText(valueAt(row, columns.roleCol)),
-      baseSalary: toNumber(valueAt(row, columns.baseSalaryCol)),
-      days: toNumber(valueAt(row, columns.daysCol)),
-      contractTypeRaw: cellText(valueAt(row, columns.contractTypeCol)),
-      idCard: cellText(valueAt(row, columns.idCardCol)),
+      role: text("roleCol"),
+      baseSalary: num("baseSalaryCol"),
+      days: num("daysCol"),
+      contractTypeRaw: text("contractTypeCol"),
+      idCard: text("idCardCol"),
       hireDateRaw: valueAt(row, columns.hireDateCol),
-      sectorCode: cellText(valueAt(row, columns.sectorCodeCol)),
-      gross: toNumber(valueAt(row, columns.grossCol)),
-      deductions: toNumber(valueAt(row, columns.deductionsCol)),
-      net: toNumber(valueAt(row, columns.netCol)),
-      cost: toNumber(valueAt(row, columns.costCol)),
-      paid: columns.paidCol === null ? null : toNumber(valueAt(row, columns.paidCol)),
+      sectorCode: text("sectorCodeCol"),
+      hasReserveFundRaw: text("hasReserveFundCol"),
+      accumulatesReserveFundRaw: text("accumulatesReserveFundCol"),
+      overtimeHours50: num("overtimeHours50Col"),
+      overtimeHours100: num("overtimeHours100Col"),
+      overtimeHours25: num("overtimeHours25Col"),
+      overtimePay50: num("overtimePay50Col"),
+      overtimePay100: num("overtimePay100Col"),
+      overtimePay25: num("overtimePay25Col"),
+      overtimeTotal: columns.overtimeTotalCol === null ? null : num("overtimeTotalCol"),
+      vacationPay: num("vacationPayCol"),
+      privateInsurance: num("privateInsuranceCol"),
+      allowances: num("allowancesCol"),
+      fixedCommission: num("fixedCommissionCol"),
+      variableCommission: num("variableCommissionCol"),
+      bonus: num("bonusCol"),
+      iessLoans: num("iessLoansCol"),
+      unpaidLeave: num("unpaidLeaveCol"),
+      salaryAdvance: num("salaryAdvanceCol"),
+      companyLoans: num("companyLoansCol"),
+      incomeTax: num("incomeTaxCol"),
+      meals: num("mealsCol"),
+      fines: num("finesCol"),
+      inHouseConsumption: num("inHouseConsumptionCol"),
+      solidarityContribution: num("solidarityContributionCol"),
+      otherDeductions: num("otherDeductionsCol"),
+      partTimeDeduction: num("partTimeDeductionCol"),
+      medicalLeaveDeduction: num("medicalLeaveDeductionCol"),
+      thirteenthProvisionRaw: num("thirteenthProvisionCol"),
+      fourteenthProvisionRaw: num("fourteenthProvisionCol"),
+      gross: num("grossCol"),
+      deductions: num("deductionsCol"),
+      net: num("netCol"),
+      cost: num("costCol"),
+      paid: columns.paidCol === null ? null : num("paidCol"),
     });
   }
 

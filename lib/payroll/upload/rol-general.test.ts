@@ -6,9 +6,13 @@ import {
   ROL_GENERAL_BAD_CONTRACT_TYPE_AOA,
   ROL_GENERAL_BAD_HIRE_DATE_AOA,
   ROL_GENERAL_BAD_PERIOD_AOA,
+  ROL_GENERAL_NO_ANTICIPO_AOA,
   ROL_GENERAL_NO_AREA_AOA,
   ROL_GENERAL_NO_EMPLOYEES_AOA,
   ROL_GENERAL_NO_PAGADO_AOA,
+  ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA,
+  ROL_GENERAL_ODD_RESERVE_FUND_AOA,
+  ROL_GENERAL_OVERTIME_FLOAT_NOISE_AOA,
 } from "./rol-general.fixtures";
 import { parseRolGeneral } from "./rol-general";
 
@@ -82,6 +86,145 @@ describe("parseRolGeneral — archivo bien formado", () => {
 
   it("sin avisos cuando el archivo no tiene nada raro que señalar", () => {
     expect(parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).warnings).toEqual([]);
+  });
+});
+
+describe("parseRolGeneral — la captura del mes", () => {
+  it("cada concepto capturado sale de su propia columna del libro", () => {
+    const [primero] = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
+    expect(primero?.capture).toEqual({
+      overtimeHours50: 5.5,
+      overtimeHours100: 2.5,
+      overtimeHours25: 1.5,
+      approvedOvertime: 0,
+      vacationPay: 11,
+      privateInsurance: 12,
+      allowances: 13,
+      fixedCommission: 14,
+      variableCommission: 15,
+      bonus: 16,
+      deductions: {
+        iessLoans: 41,
+        unpaidLeave: 42,
+        salaryAdvance: 43,
+        companyLoans: 44,
+        incomeTax: 45,
+        meals: 46,
+        fines: 47,
+        inHouseConsumption: 48,
+        solidarityContribution: 49,
+        otherDeductions: 51,
+        partTimeDeduction: 52,
+        medicalLeaveDeduction: 53,
+      },
+      provisionsThirteenth: false,
+      provisionsFourteenth: false,
+      // `BZ` viaja también aquí, no solo a `figures`: es un valor tecleado y la pantalla lo deja
+      // corregir sin tocar lo que el archivo declaró.
+      paid: 550, // `BZ` del fixture de esta prueba
+    });
+  });
+
+  it("los tres empleados traen captura: el archivo declara el mes entero, no solo sus totales", () => {
+    const result = parseRolGeneral(bufferOf(ROL_GENERAL_AOA));
+    expect(result.lines.every((l) => l.capture !== undefined)).toBe(true);
+  });
+});
+
+describe("parseRolGeneral — approvedOvertime se DEDUCE de los valores, no se transcribe", () => {
+  it("M = J+K+L ⇒ null: no hubo recorte y las horas entran enteras", () => {
+    const vega = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "VEGA TORRES MARIA JOSE",
+    );
+    expect(vega?.capture?.overtimeHours25).toBe(140);
+    expect(vega?.capture?.approvedOvertime).toBeNull();
+  });
+
+  it("M = 0 con horas valoradas ⇒ 0: el `*0` que el contador escribe a mano", () => {
+    const morales = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "MORALES PEREZ ANA LUCIA",
+    );
+    expect(morales?.capture?.approvedOvertime).toBe(0);
+  });
+
+  it("M parcial ⇒ ese importe exacto, que es lo que un booleano no podría decir", () => {
+    const sandoval = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "SANDOVAL RUIZ PEDRO JOSE",
+    );
+    expect(sandoval?.capture?.approvedOvertime).toBe(50);
+  });
+
+  it("el ruido de coma flotante por debajo del centavo no se lee como recorte", () => {
+    // 16,75 + 79,41 + 0,10 da 96,25999999999999 y `M` guarda 96,26: comparados con `===` esto
+    // inventaría un recorte que el libro no hizo.
+    const morales = parseRolGeneral(bufferOf(ROL_GENERAL_OVERTIME_FLOAT_NOISE_AOA)).lines.find(
+      (l) => l.name === "MORALES PEREZ ANA LUCIA",
+    );
+    expect(morales?.capture?.approvedOvertime).toBeNull();
+  });
+
+  it("sin columna M no hay recorte que deducir: null, nunca 0", () => {
+    const result = parseRolGeneral(bufferOf(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA));
+    expect(result.lines.every((l) => l.capture?.approvedOvertime === null)).toBe(true);
+    expect(result.warnings).toContain("No se encontraron las columnas: TOTAL HORAS EXTRAS.");
+  });
+});
+
+describe("parseRolGeneral — las provisiones de décimos se deducen de AS y AT", () => {
+  it("AS y AT en cero dejan las dos apagadas, como en todo el archivo real", () => {
+    const morales = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "MORALES PEREZ ANA LUCIA",
+    );
+    expect(morales?.capture?.provisionsThirteenth).toBe(false);
+    expect(morales?.capture?.provisionsFourteenth).toBe(false);
+  });
+
+  it("cada una se deduce de SU columna: AS con valor no enciende la de AT", () => {
+    const lines = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
+    const vega = lines.find((l) => l.name === "VEGA TORRES MARIA JOSE");
+    expect(vega?.capture?.provisionsThirteenth).toBe(true);
+    expect(vega?.capture?.provisionsFourteenth).toBe(false);
+    const sandoval = lines.find((l) => l.name === "SANDOVAL RUIZ PEDRO JOSE");
+    expect(sandoval?.capture?.provisionsThirteenth).toBe(false);
+    expect(sandoval?.capture?.provisionsFourteenth).toBe(true);
+  });
+});
+
+describe("parseRolGeneral — FR y AC FR, las dos banderas del fondo de reserva", () => {
+  it('"S" enciende y "N" apaga, cada una desde su columna', () => {
+    const lines = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
+    const morales = lines.find((l) => l.name === "MORALES PEREZ ANA LUCIA");
+    expect(morales?.hasReserveFund).toBe(false);
+    expect(morales?.accumulatesReserveFund).toBe(true);
+    const vega = lines.find((l) => l.name === "VEGA TORRES MARIA JOSE");
+    expect(vega?.hasReserveFund).toBe(true);
+    expect(vega?.accumulatesReserveFund).toBe(false);
+  });
+
+  it("ignora mayúsculas, como el `=` de Excel", () => {
+    const sandoval = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "SANDOVAL RUIZ PEDRO JOSE",
+    );
+    expect(sandoval?.hasReserveFund).toBe(true);
+    expect(sandoval?.accumulatesReserveFund).toBe(true); // la celda trae "s"
+  });
+
+  it('vacío y basura apagan, sin avisar: el libro compara `="S"` y lo demás cae en el else', () => {
+    const result = parseRolGeneral(bufferOf(ROL_GENERAL_ODD_RESERVE_FUND_AOA));
+    const sandoval = result.lines.find((l) => l.name === "SANDOVAL RUIZ PEDRO JOSE");
+    expect(sandoval?.hasReserveFund).toBe(false); // celda vacía
+    expect(sandoval?.accumulatesReserveFund).toBe(false); // "SI" no es "S"
+    expect(result.warnings).toEqual([]);
+  });
+});
+
+describe("parseRolGeneral — una columna de concepto ausente no rompe la carga", () => {
+  it("los 3 empleados se leen igual, ese concepto queda en cero y el aviso agrupado la nombra", () => {
+    const result = parseRolGeneral(bufferOf(ROL_GENERAL_NO_ANTICIPO_AOA));
+    expect(result.lines).toHaveLength(3);
+    expect(result.lines[0]?.capture?.deductions.salaryAdvance).toBe(0);
+    expect(result.lines[0]?.capture?.deductions.companyLoans).toBe(44);
+    expect(result.warnings).toEqual(["No se encontraron las columnas: ANTICIPO SUELDO."]);
   });
 });
 

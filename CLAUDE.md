@@ -599,25 +599,33 @@ otra. `sameToTheCentavo` (`lib/payroll/amounts.ts`) es la única definición de 
 módulo, porque el rol llega con ruido de coma flotante (`457.69000000000005`) — con `===` cuatro de
 cinco empleados conciliados salían «con diferencia».
 
-**El asiento contable** es UNO solo y consolidado del rol entero, no uno por área. La hoja
-`ASIENTOS` del rol de muestra trae cinco bloques rotulados por área, pero solo el último es el
-asiento vivo: todas sus fórmulas leen `GENERAL!39`, la fila `SUMAN` (`F39 = F13+F23+F26+F32+F38`);
-los otros cuatro son el molde por área que quedó pegado de la plantilla, y dos están cruzados — el
-bloque rotulado «RESTAURANTE» lee en realidad la fila 32, que es COCINA. Por eso el rótulo del
-Excel no llega a la pantalla: el bloque vivo se llama «ADMINISTRACION DEL PERSONAL» y suma el rol
-entero; copiarlo haría creer que la tabla muestra solo Administración. El catálogo
-(`lib/payroll/journal.ts`) declara las 24 cuentas una sola vez; su clave es el `id`, no el `code`
-— `214001` aparece dos veces (aporte IESS personal 9.45 % y patronal 12.15 %) y dos cuentas no
-traen código —, y los nombres van VERBATIM con las erratas del contador («Anticpo Empleados»,
-«Vacaciones Pagar») porque son los rótulos con los que él coteja pantalla contra hoja.
-`sourceColumns` anota de qué columnas de `GENERAL!39` sale cada importe; nadie las lee todavía, es
-el mapa dejado para cuando se cablee. El catálogo es la constante y los importes el argumento —
-`buildJournalEntry(amounts)` —; hoy el mapa lo produce `journal-mock.ts`, un archivo que existe
-para borrarse, y mañana lo producirá el período; la construcción vive en
-`period-detail-view.tsx`, que es la costura. **Bug conocido del Excel, sin corregir**: `214002
-Prestamos IESS por Pagar` lee `AB39` («PRESTAMOS EMPRESARIALES», 0) cuando el préstamo IESS real
-está en `Y39` («PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS», 64.25) — de ahí el descuadre de 64.25 de
-la hoja del contador; la muestra usa la columna correcta.
+**El asiento contable** es UNO solo y consolidado del rol entero, no uno por área — y **el libro del
+contador lo escribe DOS VECES**, lo cual solo se ve siguiendo fórmulas, nunca rótulos. La hoja
+`ASIENTOS` trae cinco bloques rotulados por área: cuatro leen subtotales de área (dos con los
+rótulos cruzados entre sí — «RESTAURANTE» lee la fila 32, que es COCINA) y el quinto sí cubre el rol
+entero, porque lee `GENERAL!39`, la fila `SUMAN` (`F39 = F13+F23+F26+F32+F38`). Pero **ese bloque
+descuadra por 64.25 y no es el que manda**: `GENERAL!43-71` lleva la versión que el contador
+corrigió sobre el mismo molde y **cuadra sola** (`C71 = D71 = 3,889.06`, con su celda de control
+`C73 = 0`). La regla en una línea: `ASIENTOS` descuadra, `GENERAL!43-71` cuadra, manda la que
+cuadra. Lo que las separa: los aportes IESS fundidos en **una** cuenta `2.1.7.1.9` (`X+AU+Y+AW`),
+con las cuatro que reemplaza anuladas a `*0` justo encima; los **décimos al derecho** (`621004` ←
+`AS`+`O`, `621005` ← `AT`+`N`, que `ASIENTOS` cruza); cada cuenta leyendo la columna que su rótulo
+dice (`Viaticos` ← `R`, no `V`, que pasa a su propia `Bono ND`); y destino para `Z`, `AI` y `AN`
+(licencia sin sueldo, tiempo parcial, permiso médico), que en `ASIENTOS` no acreditan a nadie y
+descuadrarían el asiento con el primer empleado a tiempo parcial. El rótulo del Excel
+(«ADMINISTRACION DEL PERSONAL», que ambas versiones arrastran del molde) **no** llega a la
+pantalla: suma el rol entero y copiarlo haría creer que la tabla muestra solo Administración. El
+catálogo (`lib/payroll/journal.ts`) declara las 24 cuentas una sola vez; **su clave es el `id`, no
+el `code`** — `621001` aparece dos veces (el gasto en el debe, las licencias en el haber) y dos
+cuentas no traen código —, y los nombres van VERBATIM con las erratas del contador («Anticpo
+Empleados», «Vacaciones Pagar», el código truncado `6` de `Bono ND`) porque son los rótulos con los
+que él coteja pantalla contra hoja; la única excepción es la cuenta de licencias, a la que la hoja
+no da nombre porque comparte fila con el débito de `621001`. `sourceColumns` anota de qué columnas
+de `GENERAL!39` sale cada importe; nadie las lee todavía, es el mapa dejado para cuando se cablee.
+El catálogo es la constante y los importes el argumento — `buildJournalEntry(amounts)`, con
+`JournalAmounts` tipado contra los `id` del catálogo para que un `id` mal escrito no compile —; hoy
+el mapa lo produce `journal-mock.ts`, un archivo que existe para borrarse, y mañana lo producirá el
+período; la construcción vive en `period-detail-view.tsx`, que es la costura.
 
 ## Design system
 

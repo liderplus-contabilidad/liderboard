@@ -11,11 +11,11 @@
  * IESS para cuadrar (la de `ASIENTOS` leía la columna equivocada), esta muestra cuadra SIN
  * corregir nada: Debe = Haber = 3889.06.
  *
- * Las 24 claves de `JOURNAL_ACCOUNTS` están presentes; las que no aparecen en el rol de marzo
- * quedan en `0` porque ese empleado no tuvo movimiento en esa columna (horas extras, comisiones,
- * fondo de reserva, viáticos, bono ND, licencias/permisos/tiempo parcial, décimos y vacaciones por
- * pagar aparte de los ya listados, préstamos empresariales, impuesto a la renta, consumo en
- * locales, contribución solidaria y otros descuentos).
+ * Las 24 claves de `JOURNAL_ACCOUNTS` están presentes, y eso es deliberado: un `0` explícito dice
+ * «esa columna del rol no tuvo movimiento en marzo», que es distinto de una clave ausente — la
+ * ausencia significa «no se sabe» y la pantalla la rinde en raya. En marzo se mueven 9 cuentas y 15
+ * quedan en cero; cuáles son se lee del objeto de abajo, no de una lista aquí arriba que habría que
+ * mantener sincronizada con él.
  */
 import type { JournalAmounts } from "./journal";
 

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { Cell } from "@/lib/excel/workbook";
 import {
   ROL_GENERAL_AOA,
+  ROL_GENERAL_NO_ANTICIPO_AOA,
   ROL_GENERAL_NO_AREA_AOA,
   ROL_GENERAL_NO_EMPLOYEES_AOA,
   ROL_GENERAL_NO_PAGADO_AOA,
+  ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA,
 } from "./rol-general.fixtures";
 import {
   excelSerialToISODate,
@@ -15,11 +17,64 @@ import {
 } from "./rol-general-grid";
 
 describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
-  it("encuentra las 14 columnas del rol bien formado", () => {
+  it("encuentra todas las columnas del rol bien formado", () => {
     const columns = locateColumns(ROL_GENERAL_AOA);
     expect(missingColumnLabels(columns)).toEqual([]);
     expect(columns.headerRow).not.toBeNull();
     expect(columns.sumanRow).not.toBeNull();
+  });
+
+  it("ningún rótulo colisiona con otro: dos columnas nunca caen en el mismo índice", () => {
+    // El test que caza una atribución cruzada de raíz. Dos rótulos que `compactLabel` normalice
+    // igual (o uno que sea, literalmente, el texto de otra celda anterior) devolverían el MISMO
+    // índice para dos conceptos distintos, y todas las cifras seguirían sumando igual.
+    const { headerRow: _headerRow, sumanRow: _sumanRow, ...cols } = locateColumns(ROL_GENERAL_AOA);
+    const found = Object.values(cols).filter((col): col is number => col !== null);
+    expect(new Set(found).size).toBe(found.length);
+  });
+
+  it('el agrupador " No. HORAS EXTRAS" de la fila 2 no le roba la columna al "No." de la fila 3', () => {
+    // El agrupador va por ENCIMA del rótulo del ordinal y empieza con las mismas dos letras: si
+    // la comparación no fuera por la etiqueta ENTERA, el ordinal saldría de la columna de horas
+    // y ninguna fila de empleado se distinguiría de un encabezado de área.
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    expect(columns.ordinalCol).not.toBe(columns.overtimeHours50Col);
+    expect(columns.ordinalCol).toBeLessThan(columns.overtimeHours50Col ?? Infinity);
+  });
+
+  it("los rótulos que el bloque de asientos repite más abajo no desplazan a los de la cabecera", () => {
+    // PRESTAMOS EMPRESARIALES, ALMUERZOS y CONTRIBUCION SOLIDARIA vuelven a aparecer como
+    // descripciones de asiento, igual que LIQUIDO A RECIBIR y PAGADO: la primera coincidencia
+    // (la cabecera, que va arriba) es la que vale.
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    const headerRow = columns.headerRow ?? 0;
+    for (const col of [
+      columns.companyLoansCol,
+      columns.mealsCol,
+      columns.solidarityContributionCol,
+    ]) {
+      expect(col).not.toBeNull();
+    }
+    // Y siguen siendo columnas del cuerpo, no de la columna B donde los ecos viven.
+    expect(columns.companyLoansCol).not.toBe(columns.employeeCol);
+    expect(columns.mealsCol).not.toBe(columns.employeeCol);
+    expect(columns.solidarityContributionCol).not.toBe(columns.employeeCol);
+    expect(headerRow).toBeGreaterThan(0);
+  });
+
+  it("absorbe el espacio sobrante de «OTROS » y el salto de línea de «CONTRIBUCION\\nSOLIDARIA»", () => {
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    expect(columns.otherDeductionsCol).not.toBeNull();
+    expect(columns.solidarityContributionCol).not.toBeNull();
+  });
+
+  it("nombra la columna de concepto que falta, con el rótulo del libro", () => {
+    expect(missingColumnLabels(locateColumns(ROL_GENERAL_NO_ANTICIPO_AOA))).toEqual([
+      "ANTICIPO SUELDO",
+    ]);
+    expect(missingColumnLabels(locateColumns(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA))).toEqual([
+      "TOTAL HORAS EXTRAS",
+    ]);
   });
 
   it("no lee la fila 1 (índices de VLOOKUP desincronizados) como si fuera un rótulo", () => {
@@ -92,6 +147,63 @@ describe("readEmployeeRows — clasifica cada fila por lo que trae A (ordinal) y
     const columns = locateColumns(ROL_GENERAL_NO_EMPLOYEES_AOA);
     const { rows } = readEmployeeRows(ROL_GENERAL_NO_EMPLOYEES_AOA, columns);
     expect(rows).toEqual([]);
+  });
+
+  it("cada concepto sale de SU columna: un valor distinto por columna caza el cruce", () => {
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    const [primero] = readEmployeeRows(ROL_GENERAL_AOA, columns).rows;
+    expect(primero).toMatchObject({
+      // G, H, I — cantidades de horas
+      overtimeHours50: 5.5,
+      overtimeHours100: 2.5,
+      overtimeHours25: 1.5,
+      // J, K, L — su valor, y M el total reconocido
+      overtimePay50: 16.75,
+      overtimePay100: 9.5,
+      overtimePay25: 0.75,
+      overtimeTotal: 0,
+      // P…T, V — ingresos capturados
+      vacationPay: 11,
+      privateInsurance: 12,
+      allowances: 13,
+      fixedCommission: 14,
+      variableCommission: 15,
+      bonus: 16,
+      // Y…AN — egresos capturados
+      iessLoans: 41,
+      unpaidLeave: 42,
+      salaryAdvance: 43,
+      companyLoans: 44,
+      incomeTax: 45,
+      meals: 46,
+      fines: 47,
+      inHouseConsumption: 48,
+      solidarityContribution: 49,
+      otherDeductions: 51,
+      partTimeDeduction: 52,
+      medicalLeaveDeduction: 53,
+      // AS, AT — las provisiones de décimos, crudas
+      thirteenthProvisionRaw: 0,
+      fourteenthProvisionRaw: 0,
+      // BA, AZ — las dos banderas del fondo de reserva, sin interpretar todavía
+      hasReserveFundRaw: "N",
+      accumulatesReserveFundRaw: "S",
+    });
+  });
+
+  it("M ausente en el libro se traduce en null, no en cero — igual que PAGADO", () => {
+    // Cero significaría «no se reconoció ninguna hora extra», que es una afirmación que un libro
+    // sin esa columna no hace.
+    const columns = locateColumns(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA);
+    const { rows } = readEmployeeRows(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA, columns);
+    expect(rows.every((r) => r.overtimeTotal === null)).toBe(true);
+  });
+
+  it("una columna de concepto ausente deja ese concepto en cero y no toca a los demás", () => {
+    const columns = locateColumns(ROL_GENERAL_NO_ANTICIPO_AOA);
+    const [primero] = readEmployeeRows(ROL_GENERAL_NO_ANTICIPO_AOA, columns).rows;
+    expect(primero?.salaryAdvance).toBe(0);
+    expect(primero?.companyLoans).toBe(44);
   });
 
   it("sin columna EMPLEADO no hay dónde empezar a leer, y no produce empleados", () => {

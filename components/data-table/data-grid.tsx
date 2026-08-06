@@ -23,9 +23,29 @@ interface GridRowProps {
   children: ReactNode;
   /** Tints the row (subtotal / group rows). */
   muted?: boolean;
+  /**
+   * Makes the whole row clickable — mouse convenience only.
+   *
+   * It is NOT the row's accessible affordance and must never be the only way in: a `<tr>` takes
+   * no focus and announces nothing, so a row that navigates has to carry a real `<Link>` inside
+   * (on its title cell) for keyboard, screen readers and open-in-new-tab. This handler just
+   * widens the target for a pointer.
+   */
+  onClick?: () => void;
   className?: string;
 }
 
-export function GridRow({ children, muted, className }: GridRowProps) {
-  return <tr className={cn(muted && "bg-surface-muted", className)}>{children}</tr>;
+export function GridRow({ children, muted, onClick, className }: GridRowProps) {
+  return (
+    <tr
+      onClick={onClick}
+      className={cn(
+        muted && "bg-surface-muted",
+        onClick && "cursor-pointer transition-colors hover:bg-surface-muted",
+        className,
+      )}
+    >
+      {children}
+    </tr>
+  );
 }

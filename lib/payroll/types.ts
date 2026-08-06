@@ -9,6 +9,8 @@
  * step would produce, with no owner yet — `db.ts` is what stamps the `clientId` at the door.
  */
 
+import type { CapturedDeductions } from "./engine/types";
+
 /** El cliente de Rol de Pagos: un nombre elegido por el usuario. Misma forma que `NamedEntity`
  *  de `@/lib/workspaces`, así que las reglas genéricas de nombre (validación, orden, búsqueda)
  *  se aplican sin envoltorio propio — este módulo no tiene identidad que comparar, a diferencia
@@ -53,6 +55,51 @@ export type ParsedPayrollPeriod = Omit<PayrollPeriod, "clientId">;
  * y todo lo derivado (sueldo unificado, décimos, aporte IESS…) son del MES — se capturan o se
  * recalculan cada vez — y por eso no tienen campo aquí.
  */
+/**
+ * Lo que se CAPTURA del mes de un empleado, más allá de su ficha: todo lo que el motor
+ * (`lib/payroll/engine/`) necesita para derivar las 20 columnas del rol y que no es estable mes
+ * a mes. Los importes van en las unidades del libro; las cantidades de horas, en horas.
+ *
+ * Es lo que `copyRoster` NO arrastra al copiar la nómina del mes anterior: un anticipo o unas
+ * horas extras de marzo no son de abril.
+ */
+export interface PayrollMonthlyCapture {
+  /** `G`, `H`, `I` · cantidades de horas extras por clase. */
+  overtimeHours50: number;
+  overtimeHours100: number;
+  overtimeHours25: number;
+  /** `M` · el IMPORTE de horas extras que se reconoce, tecleado. `null` = todo lo trabajado,
+   *  `0` = nada (el `*0` del libro). Se decide por Gerencia y por acuerdos con cada empleado,
+   *  así que no se calcula ni tiene default — ver §6 y §11.1 del documento de fórmulas. */
+  approvedOvertime: number | null;
+  /** `P`…`T`, `V` · los otros pagos del mes, ya calculados fuera de la app. */
+  vacationPay: number;
+  privateInsurance: number;
+  allowances: number;
+  fixedCommission: number;
+  /** `T` · importe ya calculado. El 20 % que la firma nombra se aplica FUERA; aquí no se
+   *  recalcula nada. */
+  variableCommission: number;
+  bonus: number;
+  /** `Y`…`AN` · los doce egresos con nombre. El aporte al IESS (`X`) no está aquí: lo deriva
+   *  el motor. */
+  deductions: CapturedDeductions;
+  /** `AS`, `AT` · si el mes provisiona los décimos. Apagados en todo el archivo real, porque
+   *  ya se mensualizan en `N` y `O`. */
+  provisionsThirteenth: boolean;
+  provisionsFourteenth: boolean;
+  /**
+   * `BZ` · PAGADO. `null` mientras nadie lo declare — y eso NO es cero: sin él el empleado no
+   * está ni conciliado ni con diferencia.
+   *
+   * Está aquí y no solo en `figures` porque se TECLEA: sin Excel, quien arma el rol escribe lo
+   * que se transfirió. Cuando el mes vino de un archivo, `figures.paid` guarda lo que ESE archivo
+   * declaró y esto lo pisa si alguien lo corrige a mano — que es lo que se quiere, porque una
+   * corrección posterior sabe más que el archivo del que salió.
+   */
+  paid: number | null;
+}
+
 export interface PayrollEmployeeLine {
   id: string;
   periodId: string;
@@ -64,10 +111,22 @@ export interface PayrollEmployeeLine {
   idCard: string; // BD · cédula
   hireDate: string | null; // BC · fecha de ingreso, ISO
   sectorCode: string; // BF · código sectorial
+  /** `BA` · FR — ¿tiene derecho a fondo de reserva? Es de la ficha: cambia con la antigüedad,
+   *  no con el mes. */
+  hasReserveFund: boolean;
+  /** `AZ` · AC FR — ¿lo acumula en el IESS en vez de cobrarlo mensual? También de la ficha:
+   *  es una elección del empleado, no del mes. */
+  accumulatesReserveFund: boolean;
   /** E · días pagados del mes. Es del MES, no de la ficha, pero tiene un default natural: se
    *  copia como 30 y se corrige al capturar (ingreso a mitad de mes, salida, licencia). */
   days: number;
-  /** Las cifras del mes, si el período ya recibió su archivo. Ver `PayrollEmployeeFigures`. */
+  /** Lo capturado del mes. AUSENTE mientras el período no reciba su archivo — igual que
+   *  `figures`, y por la misma razón: no es cero, es «no hay». */
+  capture?: PayrollMonthlyCapture;
+  /** Las cifras del mes TAL COMO EL ARCHIVO las trae, sin recalcular. Conviven con `capture`
+   *  a propósito: `capture` es lo que el motor consume y `figures` es contra lo que se
+   *  contrasta, que es la única forma de notar si la app y el Excel del contador dejan de
+   *  decir lo mismo. Ver `PayrollEmployeeFigures`. */
   figures?: PayrollEmployeeFigures;
 }
 
