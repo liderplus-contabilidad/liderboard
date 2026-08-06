@@ -7,7 +7,7 @@ import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { formatAmount, pluralize } from "@/lib/format";
+import { formatCurrency, pluralize } from "@/lib/format";
 import { movingJournalLines, type JournalEntry } from "@/lib/payroll/journal";
 import { periodLongLabel } from "@/lib/payroll/periods";
 import { JournalEntryRow } from "./journal-entry-row";
@@ -17,9 +17,6 @@ interface JournalEntryCardProps {
   /** El período que la tarjeta rotula. */
   year: number;
   monthIndex: number;
-  /** Los importes vienen de datos de muestra y no del período. Mientras sea `true` la cabecera lo
-   *  declara. */
-  sample: boolean;
 }
 
 /**
@@ -27,7 +24,7 @@ interface JournalEntryCardProps {
  * cuentas y pie «SUMAN». «Ocultar ceros» solo decide qué filas se PINTAN — el pie y los totales de
  * la cabecera siempre leen `entry.debit`/`entry.credit`, nunca la suma de lo visible.
  */
-export function JournalEntryCard({ entry, year, monthIndex, sample }: JournalEntryCardProps) {
+export function JournalEntryCard({ entry, year, monthIndex }: JournalEntryCardProps) {
   const [hideZero, setHideZero] = useState(false);
 
   const visibleLines = useMemo(
@@ -61,12 +58,10 @@ export function JournalEntryCard({ entry, year, monthIndex, sample }: JournalEnt
             <span className="flex items-center gap-1.5">
               <Badge variant="warning">Descuadra</Badge>
               <span className="font-mono text-[11.5px] font-semibold tabular-nums text-warning">
-                {formatAmount(difference)}
+                {formatCurrency(difference, { cents: true })}
               </span>
             </span>
           )}
-
-          {sample && <Badge variant="warning">Datos de muestra</Badge>}
 
           {/* Vive en la cabecera de esta tarjeta y no en la barra: lo lee una sola tarjeta, igual
               que el «Ver por» de Ocupaciones y el «Base» de Análisis. */}
@@ -111,10 +106,14 @@ export function JournalEntryCard({ entry, year, monthIndex, sample }: JournalEnt
               <span className="font-semibold text-ink">SUMAN</span>
             </Cell>
             <Cell numeric>
-              <span className="font-mono font-semibold text-ink">{formatAmount(entry.debit)}</span>
+              <span className="font-mono font-semibold text-ink">
+                {formatCurrency(entry.debit, { cents: true })}
+              </span>
             </Cell>
             <Cell numeric>
-              <span className="font-mono font-semibold text-ink">{formatAmount(entry.credit)}</span>
+              <span className="font-mono font-semibold text-ink">
+                {formatCurrency(entry.credit, { cents: true })}
+              </span>
             </Cell>
           </GridRow>
         </tfoot>
@@ -134,7 +133,7 @@ function TotalFigure({ label, value }: { label: string; value: number }) {
     <div className="text-right">
       <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">{label}</p>
       <p className="font-mono text-[13px] font-semibold tabular-nums text-ink">
-        {formatAmount(value)}
+        {formatCurrency(value, { cents: true })}
       </p>
     </div>
   );

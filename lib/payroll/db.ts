@@ -346,6 +346,42 @@ export async function rosterCounts(
 }
 
 /**
+ * La nómina de VARIOS períodos a la vez, agrupada por `periodId` — una sola consulta detrás de
+ * Sueldos por Áreas, que lee todos los períodos visibles en vez de uno por fila. Mismo patrón
+ * batcheado que `rosterCounts` y `periodFinancials`.
+ *
+ * Devuelve las FICHAS y no un total porque quien llama las agrupa por área y por empleado y deriva
+ * el costo con el motor; agregarlas aquí obligaría a esta función a conocer las marcas de la barra,
+ * que es justo lo que la mantendría acoplada a una pantalla.
+ *
+ * Un período pedido que no tiene nómina aparece con una lista vacía: es «registrado y sin
+ * empleados», que no es lo mismo que un período que no existe — y esa distinción es la que deja al
+ * grid dibujar su columna en blanco en vez de omitirla.
+ *
+ * Cada `periodId` debe pertenecer a un cliente ya resuelto por quien llama: nunca una lectura sin
+ * acotar, que es lo que separa la nómina de dos empresas.
+ */
+export async function employeesForPeriods(
+  periodIds: readonly string[],
+): Promise<Map<string, PayrollEmployeeLine[]>> {
+  const result = new Map<string, PayrollEmployeeLine[]>();
+  if (periodIds.length === 0) {
+    return result;
+  }
+  for (const periodId of periodIds) {
+    result.set(periodId, []);
+  }
+  const lines = await db.employees
+    .where("periodId")
+    .anyOf(periodIds as string[])
+    .toArray();
+  for (const line of lines) {
+    result.get(line.periodId)?.push(line);
+  }
+  return result;
+}
+
+/**
  * Los cuatro totales (`gross`/`deductions`/`net`/`cost`) de VARIOS períodos a la vez, en una sola
  * consulta — el mismo precedente batcheado que `rosterCounts`. La derivación es de
  * `computePeriodFinancials` (`lib/payroll/period-detail.ts`, puro y testeado) sobre el rol que el

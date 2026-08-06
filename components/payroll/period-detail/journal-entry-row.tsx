@@ -2,11 +2,24 @@ import { memo } from "react";
 import { GridRow } from "@/components/data-table/data-grid";
 import { Cell } from "@/components/data-table/grid-cells";
 import { cn } from "@/lib/cn";
-import { formatAmount } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import type { JournalLine } from "@/lib/payroll/journal";
 
 interface JournalEntryRowProps {
   line: JournalLine;
+}
+
+/**
+ * El importe de una fila: con `$` y centavos, la misma moneda que el resto de la app —el contador
+ * coteja esta tabla contra su hoja y contra las otras pantallas, y dos dialectos del dólar se leen
+ * como dos clases de cifra.
+ *
+ * `formatCurrencyOrDash` NO sirve aquí: pinta el cero como ausencia, y en el asiento un `0` dice
+ * «esa columna no se movió» mientras que `null` dice «no se sabe» — la distinción que sostiene el
+ * interruptor «Ocultar ceros», que esconde los primeros y conserva los segundos.
+ */
+function amount(value: number | null): string {
+  return value === null ? "—" : formatCurrency(value, { cents: true });
 }
 
 /**
@@ -30,10 +43,10 @@ function JournalEntryRowComponent({ line }: JournalEntryRowProps) {
         </span>
       </Cell>
       <Cell numeric tone={tone} className="font-mono">
-        {line.side === "debe" ? (line.amount === null ? "—" : formatAmount(line.amount)) : null}
+        {line.side === "debe" ? amount(line.amount) : null}
       </Cell>
       <Cell numeric tone={tone} className="font-mono">
-        {line.side === "haber" ? (line.amount === null ? "—" : formatAmount(line.amount)) : null}
+        {line.side === "haber" ? amount(line.amount) : null}
       </Cell>
     </GridRow>
   );

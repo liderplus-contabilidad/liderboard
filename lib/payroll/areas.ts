@@ -27,8 +27,13 @@ export const STANDARD_PAYROLL_AREAS: readonly string[] = [
 ];
 
 /** La clave con la que se decide si dos áreas son la misma: sin espacios de sobra y sin distinguir
- *  mayúsculas, para que « cocina » no abra un segundo bloque junto a «COCINA». */
-function key(area: string): string {
+ *  mayúsculas, para que « cocina » no abra un segundo bloque junto a «COCINA».
+ *
+ *  Se exporta porque hay un SEGUNDO consumidor —el grid de Sueldos por Áreas, que cruza el área
+ *  marcada en la barra con la que declara cada ficha— y una segunda definición de «misma área»
+ *  podría separarse de esta: bastaría con que una recortara los espacios y la otra no para que un
+ *  área quedara fuera de su propia fila sin que nada lo delate. */
+export function areaKey(area: string): string {
   return area.trim().toUpperCase();
 }
 
@@ -38,17 +43,17 @@ function key(area: string): string {
  * que aparecen en la nómina haría que la lista se reordenara sola al cargar otro mes.
  */
 export function areaOptions(lines: readonly { area: string }[]): string[] {
-  const seen = new Set(STANDARD_PAYROLL_AREAS.map(key));
+  const seen = new Set(STANDARD_PAYROLL_AREAS.map(areaKey));
   const extra = new Map<string, string>();
 
   for (const line of lines) {
     const trimmed = line.area.trim();
-    if (trimmed === "" || seen.has(key(trimmed))) {
+    if (trimmed === "" || seen.has(areaKey(trimmed))) {
       continue;
     }
     // La primera grafía que aparece es la que se ofrece; las siguientes son la misma área.
-    if (!extra.has(key(trimmed))) {
-      extra.set(key(trimmed), trimmed);
+    if (!extra.has(areaKey(trimmed))) {
+      extra.set(areaKey(trimmed), trimmed);
     }
   }
 

@@ -1,10 +1,11 @@
 /**
  * El ASIENTO CONTABLE del período: el catálogo fijo de cuentas que el rol de pagos genera cada
- * mes (sacado tal cual de las filas `GENERAL!43-71` del Excel del contador — la versión que
- * CUADRA, no la de la hoja `ASIENTOS`) y las derivaciones puras sobre él. Los importes de cada
- * cuenta llegan por parámetro, desde `GENERAL!39`, a través de las fórmulas que cada fila del
- * asiento suma; este archivo no sabe todavía cómo se llega ahí — esa conexión con las cifras
- * reales del período es de otra ronda.
+ * mes (sacado de las filas `GENERAL!43-71` del Excel del contador — la versión que CUADRA, no la de
+ * la hoja `ASIENTOS`) y las derivaciones puras sobre él. Los importes llegan por parámetro; quien
+ * los produce es `journal-amounts.ts`, sumando la nómina entera del período a través del motor.
+ *
+ * Son **25** cuentas: las 24 del libro y una que añade esta app (`seguro-privado`), sin la cual el
+ * asiento descuadra por el importe de `Q` — el porqué, con el álgebra, está en su propia entrada.
  *
  * Por qué la clave de una cuenta es `id` y no `code`: `621001` aparece DOS VECES en el catálogo
  * (el gasto de sueldos en el `debe`, `GENERAL!C44`, y en el `haber` las licencias/permisos/tiempo
@@ -14,10 +15,13 @@
  * significa «el plan del contador no le asignó código» — no «falta por poner», y no debe
  * rellenarse con uno inventado.
  *
- * `sourceColumns` documenta qué columnas de `GENERAL!39` suma el Excel del contador para llegar al
- * importe de esa cuenta. Nadie las lee todavía: es el mapa dejado por escrito mientras el archivo
- * estaba delante, para cuando el asiento se alimente de las cifras reales del período. Van como
- * dato y no como función porque el tipo de esos totales aún no existe y no debe inventarse aquí.
+ * `sourceColumns` declara qué columnas del rol componen cada cuenta, y **es lo que el asiento
+ * ejecuta**: `journal-amounts.ts` lo RECORRE para sumar. No es documentación al lado del código
+ * —eso fue mientras la conexión no existía—, y esa es la razón de que siga siendo un dato del
+ * catálogo: una segunda lista de sumas escrita a mano por cuenta podría separarse de esta anotación
+ * sin que nada lo delate, y entonces el catálogo diría una cosa mientras el asiento hace otra.
+ * Recorriéndola, la única forma de equivocarse es equivocarse aquí, que es lo que el contador puede
+ * revisar contra su hoja.
  */
 import { sameToTheCentavo } from "./amounts";
 
@@ -118,6 +122,30 @@ export const JOURNAL_ACCOUNTS = [
     name: "Bono ND",
     side: "debe",
     sourceColumns: ["V"],
+  },
+  {
+    id: "seguro-privado",
+    code: null,
+    name: "Seguro Privado",
+    side: "debe",
+    // ⚠ La ÚNICA cuenta del catálogo que NO sale de `GENERAL!43-71`. La añade esta app, y existe
+    // porque sin ella el asiento DESCUADRA por el importe del seguro privado:
+    //
+    //   Debe  = F+M+S+T+AS+O+AT+N+AV+P+AU+AW+U+R+V  = (W − Q) + AS+AT+AV+AU+AW
+    //   Haber = (Z+AN+AI)+AP+AS+AT+AV+AA+AE+AD
+    //         + (X+AU+Y+AW)+AB+AC+AF+AG+AH           =  W      + AS+AT+AV+AU+AW
+    //
+    // `Q` entra en `W` (el ingreso), le llega al empleado por el haber dentro de `AP` (el líquido),
+    // y ninguna de las 24 cuentas del libro la recoge por el debe: Haber − Debe = Q. En el archivo
+    // real de marzo `Q` vale cero, y por eso el descuadre no se ve ahí.
+    //
+    // Va al DEBE porque es lo que la columna significa —la empresa paga un seguro como beneficio:
+    // es un GASTO que llega al líquido del empleado— y porque es donde el álgebra dice que falta.
+    // Sin código, el mismo trato que `Viaticos`: el plan del contador tampoco le asignó uno.
+    //
+    // **Pendiente de confirmar con la firma.** Si prefieren otro destino para `Q`, se cambia esta
+    // entrada y su fila del mapa de `journal-amounts.ts`; nada más depende de ella.
+    sourceColumns: ["Q"],
   },
   // --- Haber: 14 cuentas por pagar/retener (GENERAL!44,54-60,63,66-70) ---
   {

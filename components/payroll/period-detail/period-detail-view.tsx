@@ -9,7 +9,7 @@ import { listEmployees } from "@/lib/payroll/db";
 import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
-import { JOURNAL_MOCK_AMOUNTS } from "@/lib/payroll/journal-mock";
+import { journalAmountsFor } from "@/lib/payroll/journal-amounts";
 import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
 import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
 import {
@@ -87,13 +87,15 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     () => rows.filter((row) => matchesEmployeeSearch(row.line, search)),
     [rows, search],
   );
-  // La costura con las cifras reales: cuando el asiento se alimente del período abierto, el
-  // único cambio es el argumento de `buildJournalEntry` — ni la tarjeta ni la fila se enteran.
-  // OJO al hacer esa costura: si el argumento pasa a derivarse de `lines`, este array de
-  // dependencias tiene que dejar de estar vacío, o el asiento queda congelado en el primer
-  // render. `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-
-  // deps` no está para atraparlo.
-  const journalEntry = useMemo(() => buildJournalEntry(JOURNAL_MOCK_AMOUNTS), []);
+  // El asiento sale de la nómina del período, sumada por `journal-amounts.ts` a través del motor.
+  // `lines` en las dependencias no es ceremonia: con el array vacío que tenía el mock, el asiento
+  // quedaría congelado en el primer render y no se movería al corregir un anticipo.
+  // `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-deps` no
+  // está para atraparlo.
+  const journalEntry = useMemo(
+    () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS)),
+    [lines],
+  );
 
   /**
    * Los comprobantes de la nómina entera, uno por página y en el orden en que se lee la tabla.
@@ -208,7 +210,6 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
             entry={journalEntry}
             year={period.year}
             monthIndex={period.monthIndex}
-            sample
           />
         )}
       </div>

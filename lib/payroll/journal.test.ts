@@ -1,10 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { buildJournalEntry, JOURNAL_ACCOUNTS, movingJournalLines } from "./journal";
-import { JOURNAL_MOCK_AMOUNTS } from "./journal-mock";
+import {
+  buildJournalEntry,
+  JOURNAL_ACCOUNTS,
+  movingJournalLines,
+  type JournalAmounts,
+} from "./journal";
 
-// El orden exacto del catálogo especificado en
-// openspec/changes/payroll-journal-entry/specs/payroll-journal-entry/spec.md: 10 cuentas `debe`
-// primero, luego 14 `haber`.
+/**
+ * El asiento de MARZO 2026 tal como lo escribe `GENERAL!43-71` del archivo del contador.
+ *
+ * Vivía en `lib/payroll/journal-mock.ts`, que alimentaba la pantalla mientras la conexión con las
+ * cifras del período no existía; ese archivo se borró al cablearla. Las cifras se quedan AQUÍ
+ * porque siguen sirviendo para lo que de verdad valen: son la única evidencia externa de que el
+ * catálogo suma bien, tomada de una hoja que cuadra sola (`C71 = D71 = 3,889.06`, con su celda de
+ * control `C73 = 0`). Como fixture de test no pueden llegar a ninguna pantalla.
+ *
+ * `seguro-privado` va en cero: la columna `Q` no se movió ese mes, que es exactamente la razón por
+ * la que el descuadre que esa cuenta corrige no se veía aquí.
+ */
+const MARCH_2026: JournalAmounts = {
+  "sueldos-administracion": 2918.58,
+  "horas-extras-administracion": 0,
+  "comisiones-administracion": 0,
+  "decimo-tercer-sueldo-administracion": 243.21,
+  "decimo-cuarto-sueldo-administracion": 241.02,
+  "vacaciones-administracion": 131.63,
+  "aporte-patronal-iess-administracion": 354.62,
+  "fondo-reserva-iess-administracion": 0,
+  viaticos: 0,
+  "bono-nd": 0,
+  "seguro-privado": 0,
+  "licencias-permisos-tiempo-parcial": 0,
+  "sueldos-por-pagar": 2862.76,
+  "decimo-tercer-sueldo-por-pagar": 0,
+  "decimo-cuarto-sueldo-por-pagar": 0,
+  "vacaciones-por-pagar": 131.63,
+  "anticipo-empleados": 200,
+  "multas-empleados": 0,
+  almuerzos: 0,
+  "aportes-iess-por-pagar": 694.67,
+  "prestamos-empresariales": 0,
+  "impuesto-renta-empleados": 0,
+  "consumo-locales-empleados": 0,
+  "contribucion-solidaria": 0,
+  "otros-descuentos": 0,
+};
+
+// El orden exacto del catálogo: 11 cuentas `debe` primero, luego 14 `haber`.
 const EXPECTED_ORDER = [
   "sueldos-administracion",
   "horas-extras-administracion",
@@ -16,6 +58,7 @@ const EXPECTED_ORDER = [
   "fondo-reserva-iess-administracion",
   "viaticos",
   "bono-nd",
+  "seguro-privado",
   "licencias-permisos-tiempo-parcial",
   "sueldos-por-pagar",
   "decimo-tercer-sueldo-por-pagar",
@@ -33,13 +76,13 @@ const EXPECTED_ORDER = [
 ];
 
 describe("JOURNAL_ACCOUNTS", () => {
-  it("tiene 24 cuentas: 10 debe y 14 haber, en el orden del catálogo", () => {
+  it("tiene 25 cuentas: 11 debe y 14 haber, en el orden del catálogo", () => {
     expect(JOURNAL_ACCOUNTS.map((account) => account.id)).toEqual(EXPECTED_ORDER);
-    expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "debe")).toHaveLength(10);
+    expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "debe")).toHaveLength(11);
     expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "haber")).toHaveLength(14);
   });
 
-  it("no repite ningún id entre las 24 cuentas", () => {
+  it("no repite ningún id entre las 25 cuentas", () => {
     const ids = JOURNAL_ACCOUNTS.map((account) => account.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -53,34 +96,39 @@ describe("JOURNAL_ACCOUNTS", () => {
     expect(sueldos621001[0].id).not.toBe(sueldos621001[1].id);
   });
 
-  it("Viaticos e Impuesto a la Renta Empleados no tienen código de cuenta", () => {
-    const viaticos = JOURNAL_ACCOUNTS.find((account) => account.id === "viaticos");
-    const incomeTax = JOURNAL_ACCOUNTS.find((account) => account.id === "impuesto-renta-empleados");
-    expect(viaticos?.code).toBeNull();
-    expect(incomeTax?.code).toBeNull();
+  it("Viaticos, Seguro Privado e Impuesto a la Renta no tienen código de cuenta", () => {
+    const sinCodigo = JOURNAL_ACCOUNTS.filter((account) => account.code === null).map((a) => a.id);
+    expect(sinCodigo).toEqual(["viaticos", "seguro-privado", "impuesto-renta-empleados"]);
   });
 
-  it("las 24 cuentas declaran al menos una columna fuente", () => {
+  it("«Seguro Privado» es la cuenta añadida, en el debe y leyendo Q", () => {
+    // La ÚNICA que no sale de `GENERAL!43-71`. Sin ella el asiento descuadra por el importe del
+    // seguro privado — ver `journal-amounts.test.ts`, que lo prueba sobre el motor.
+    const cuenta = JOURNAL_ACCOUNTS.find((account) => account.id === "seguro-privado");
+    expect(cuenta?.side).toBe("debe");
+    expect(cuenta?.sourceColumns).toEqual(["Q"]);
+  });
+
+  it("las 25 cuentas declaran al menos una columna fuente", () => {
     for (const account of JOURNAL_ACCOUNTS) {
       expect(account.sourceColumns.length).toBeGreaterThan(0);
     }
   });
 });
 
-describe("JOURNAL_MOCK_AMOUNTS", () => {
-  it("sus claves son exactamente el conjunto de id del catálogo", () => {
-    // Con Partial<Record<JournalAccountId, number>> el tipo ya impide una clave ajena al
-    // catálogo; lo que este test cubre es lo que el tipo no puede: que no falte ninguna de las
-    // 24 y que no sobre ninguna que el catálogo ya no tenga.
-    const mockKeys = new Set(Object.keys(JOURNAL_MOCK_AMOUNTS));
-    const catalogIds = new Set(JOURNAL_ACCOUNTS.map((account) => account.id));
-    expect(mockKeys).toEqual(catalogIds);
+describe("el asiento de MARZO 2026 del archivo real", () => {
+  it("cubre exactamente los id del catálogo", () => {
+    // Con Partial<Record<JournalAccountId, number>> el tipo ya impide una clave ajena al catálogo;
+    // lo que este test cubre es lo que el tipo no puede: que no falte ninguna.
+    expect(new Set(Object.keys(MARCH_2026))).toEqual(
+      new Set(JOURNAL_ACCOUNTS.map((account) => account.id)),
+    );
   });
 });
 
 describe("buildJournalEntry", () => {
-  it("con la muestra de marzo 2026, debe y haber cuadran en 3889.06", () => {
-    const entry = buildJournalEntry(JOURNAL_MOCK_AMOUNTS);
+  it("con marzo 2026, debe y haber cuadran en 3889.06", () => {
+    const entry = buildJournalEntry(MARCH_2026);
     expect(entry.debit).toBeCloseTo(3889.06, 2);
     expect(entry.credit).toBeCloseTo(3889.06, 2);
     expect(entry.balanced).toBe(true);
@@ -109,9 +157,9 @@ describe("buildJournalEntry", () => {
     expect(entry.balanced).toBe(false);
   });
 
-  it("sin importes, las 24 filas quedan en null y los totales en 0", () => {
+  it("sin importes, las 25 filas quedan en null y los totales en 0", () => {
     const entry = buildJournalEntry({});
-    expect(entry.lines).toHaveLength(24);
+    expect(entry.lines).toHaveLength(25);
     expect(entry.lines.every((line) => line.amount === null)).toBe(true);
     expect(entry.debit).toBe(0);
     expect(entry.credit).toBe(0);
@@ -119,11 +167,11 @@ describe("buildJournalEntry", () => {
 });
 
 describe("movingJournalLines", () => {
-  it("sobre la muestra de marzo 2026 deja 9 filas y esconde 15", () => {
-    const entry = buildJournalEntry(JOURNAL_MOCK_AMOUNTS);
+  it("sobre marzo 2026 deja 9 filas con movimiento", () => {
+    const entry = buildJournalEntry(MARCH_2026);
     const moving = movingJournalLines(entry);
     expect(moving).toHaveLength(9);
-    expect(entry.lines).toHaveLength(24);
+    expect(entry.lines).toHaveLength(25);
   });
 
   it("no esconde una fila con amount null — no se sabe cuánto vale, no es cero", () => {
@@ -137,7 +185,7 @@ describe("movingJournalLines", () => {
   it("no altera debit ni credit del entry — solo filtra lines", () => {
     // La propiedad de la que depende que encender el interruptor «ocultar en cero» no mueva el
     // total mostrado arriba: movingJournalLines nunca toca los campos numéricos del entry.
-    const entry = buildJournalEntry(JOURNAL_MOCK_AMOUNTS);
+    const entry = buildJournalEntry(MARCH_2026);
     const debitBefore = entry.debit;
     const creditBefore = entry.credit;
     movingJournalLines(entry);

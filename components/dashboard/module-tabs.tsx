@@ -15,7 +15,7 @@ import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
 /**
  * The panels are the ONLY thing here that is code-split, and it is this registry that makes it
  * worth doing: importing them statically put ECharts (~700 KB) in the shared client chunk of
- * EVERY route — including `/salaries` and `/sales`, which render `ComingSoon` and draw nothing.
+ * EVERY route — including `/sales`, which renders `ComingSoon` and draws nothing.
  * Each panel now arrives when its tab is first opened.
  *
  * `ssr: false` because every panel reads the workspace from IndexedDB: on the server they can

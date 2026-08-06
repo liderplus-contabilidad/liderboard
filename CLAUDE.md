@@ -89,7 +89,21 @@ ordered `MODULES` array (`{ slug, label, title, icon, tabs }`) plus `DEFAULT_MOD
 and `findModuleBySlug()`. Both the sidebar nav and the header breadcrumb/title derive
 from it — there is no duplicated module list. **To add a module:** add an entry to
 `MODULES` and create the matching `app/(dashboard)/<slug>/page.tsx`. Route slugs are
-English; the Spanish name goes in `label`/`title`.
+English; the Spanish name goes in `label`/`title`. A module may declare `children`
+(`DashboardSubmodule`) — pages that hang off it at `/<padre>/<hijo>`, rendered indented under it
+and **visibles por defecto**, porque un subitem que solo aparece al entrar en su padre no se puede
+descubrir. Plegarlos es del usuario, con un chevron en el padre: el sidebar guarda lo PLEGADO (no lo
+desplegado), así que un módulo nuevo con hijos nace visible sin sembrar nada. Dos casos ignoran ese
+pliegue por el mismo motivo —un hijo escondido sin control a la vista es inalcanzable—: la barra
+colapsada, donde no hay dónde poner el chevron, y el padre de la página ABIERTA, que se borraría del
+menú justo cuando estás en ella. The nesting is ONE level: this nav is a list, not a tree, and a second level has
+nowhere to render in the 72 px collapsed rail (where a child keeps its icon and `title` and drops
+the indent). The header's breadcrumb grows a third level ONLY when the second segment matches a
+declared child (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that
+check its identifier would land in the breadcrumb and the `<h1>`. The entity selector still
+resolves off the PARENT, so a subitem keeps its module's control without declaring it. **A module
+with no real page does not get an entry**: an item that leads to a permanent «próximamente»
+teaches the user not to press it, and eventually not to read the one beside it either.
 
 **Components.** Reusable primitives live in `components/ui/` — prefer them over ad-hoc
 markup. Module-specific compositions live in `components/<module>/` (`components/profit-loss/`,
@@ -640,12 +654,33 @@ el `code`** — `621001` aparece dos veces (el gasto en el debe, las licencias e
 cuentas no traen código —, y los nombres van VERBATIM con las erratas del contador («Anticpo
 Empleados», «Vacaciones Pagar», el código truncado `6` de `Bono ND`) porque son los rótulos con los
 que él coteja pantalla contra hoja; la única excepción es la cuenta de licencias, a la que la hoja
-no da nombre porque comparte fila con el débito de `621001`. `sourceColumns` anota de qué columnas
-de `GENERAL!39` sale cada importe; nadie las lee todavía, es el mapa dejado para cuando se cablee.
-El catálogo es la constante y los importes el argumento — `buildJournalEntry(amounts)`, con
-`JournalAmounts` tipado contra los `id` del catálogo para que un `id` mal escrito no compile —; hoy
-el mapa lo produce `journal-mock.ts`, un archivo que existe para borrarse, y mañana lo producirá el
-período; la construcción vive en `period-detail-view.tsx`, que es la costura.
+no da nombre porque comparte fila con el débito de `621001`. El catálogo es la constante y los
+importes el argumento — `buildJournalEntry(amounts)`, con `JournalAmounts` tipado contra los `id`
+del catálogo para que un `id` mal escrito no compile —, y la construcción vive en
+`period-detail-view.tsx`, que es la costura.
+
+**`sourceColumns` NO es documentación: es lo que el asiento ejecuta.** Cada cuenta anota de qué
+columnas del rol sale su importe, y `journal-amounts.ts` RECORRE esa anotación para sumar la nómina
+entera a través del motor — en vez de 25 sumas escritas a mano, que serían una segunda definición de
+«de dónde sale este importe» capaz de separarse de la anotación sin que nada lo delate; y lo que el
+contador revisa contra su hoja es la anotación. Su mapa habla el vocabulario del MOTOR
+(`PayrollEmployeeComputation` + `PayrollEmployeeInput`) y no el del almacenamiento, aunque compartan
+campos: eso es lo que deja pasar `GOLDEN_MARCH_2026` —seis entradas transcritas del `.xls`— por la
+MISMA suma que la pantalla y cotejar el asiento contra `GENERAL!43-71`, que es la única evidencia
+externa de que la costura acierta (3.889,06 en ambos lados y las nueve cuentas con movimiento al
+centavo). `RolColumn` se deriva del propio catálogo, así que una columna sin destino **no compila**:
+el fallo contrario es invisible —daría cero, el interruptor de ocultar ceros escondería la cuenta y
+el asiento descuadraría sin causa a la vista—.
+
+**Son 25 cuentas, no 24, y la 25.ª no sale del libro.** «Seguro Privado» (debe, sin código como
+`Viaticos`) la añade esta app porque sin ella el asiento DESCUADRA por el importe de `Q`: esa
+columna suma al ingreso y le llega al empleado por el haber dentro de `AP`, y ninguna de las 24 la
+recoge por el debe —`Debe = (W − Q) + provisiones`, `Haber = W + provisiones`—. En el archivo real
+de marzo `Q` vale cero, y por eso el agujero no se veía. Es una desviación deliberada, anotada en su
+propia entrada y **pendiente de confirmar con la firma**; si prefieren otro destino, cambia esa
+entrada y su fila del mapa. Como consecuencia del álgebra, el DEBE del asiento equivale al costo
+total del período cuando `Q` es cero, que es lo que hace que cuadre con los KPIs y con Sueldos por
+Áreas.
 
 **El COMPROBANTE en PDF** (`lib/payroll/payslip/`, con `pdf-lib`) reproduce la hoja `INDIVIDUAL` del
 libro — el papel que el empleado firma. Tres capas y la que dibuja no decide nada: `document.ts`
@@ -696,6 +731,36 @@ cero va en `faint` para no competir con las pocas cifras que dicen algo, la fran
 clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de escribirse con `_`.
 `layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
 revés, una banda taparía su propio rótulo.
+
+**SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
+`EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL
+(`employerCost`, `AY`) por área y por empleado a lo largo de meses y años. **No es un módulo** —lo
+fue, vacío, y se borró— porque no tiene datos propios: lee los períodos y la nómina del cliente
+activo de Rol de Pagos, y como hermano se quedaba sin el selector de cliente que necesita para
+significar algo. Una sola cifra y ningún selector de métrica: es la que dice la hoja. **Las dos
+lecturas no son dos pantallas sino el resultado de marcar áreas** —ninguna o varias dan el
+consolidado por área, exactamente una da el detalle de sus empleados con el cargo debajo del
+nombre—, que es por cuarta vez la figura de `resolveActiveCenterId`; una pestaña «Consolidado / Por
+área» habría creado un segundo sitio donde elegir lo mismo. `lib/payroll/salaries/` es la capa pura:
+`identity.ts` (la cédula normalizada, con el nombre de respaldo cuando la ficha no la trae —sin ella
+«SANDOVAL» serían tres filas de un mes cada una, porque cada período guarda su propia ficha— y sin
+fundir nunca las dos evidencias), `filters.ts` (`areas`/`years`/`months`, las reglas de marcas de
+siempre), `grid.ts` y `chart.ts`. **Tres reglas viven en `grid.ts` porque pueden estar mal**: una
+columna existe solo si existe su PERÍODO (un mes que nadie registró no es un mes en cero); una celda
+vacía se escribe con RAYA y no es un `$0.00` (el hueco de quien no había ingresado frente al cero
+que una ficha presente afirma — la misma distinción que la cobertura de PyG); y el total suma **las
+filas presentes**, no el universo, para que la fila de cierre cuadre a ojo con lo que tiene encima,
+que es justo para lo que la pantalla existe. Un empleado que cambia de área suma cada mes bajo la
+que declara la ficha de ESE período, y en el detalle de un área sus meses en la otra quedan vacíos.
+El TOTAL va también como SERIE de la gráfica —aplasta la escala, y se acepta: es la barra naranja de
+su hoja y es lo que él busca—. `chart.ts` es un builder PROPIO, no el `barOption` de PyG, que está
+escrito sobre los tipos de su motor de analytics: el precedente es `lib/occupancy/charts/option.ts`.
+**El tope de series recorta la GRÁFICA y no la TABLA** (`ChartCard` recibe `option` y `table` por
+separado): dibuja el cierre más las de mayor costo acumulado —acumulado, para que mover una marca de
+mes no le cambie el elenco— y declara al pie cuántas dejó fuera, mientras la tabla las lista todas.
+`ChartTableRow` ganó por esto `sublabel` y `emphasis`, opcionales e inertes para quien no los pase.
+Las marcas son estado LOCAL de la vista y no del provider del layout: la regla es que un provider
+vive ahí porque la cabecera lee de su mismo estado, y de este módulo la cabecera solo lee el cliente.
 
 ## Design system
 

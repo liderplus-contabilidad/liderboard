@@ -13,6 +13,7 @@ import {
   deleteClient,
   deletePeriod,
   describeClientContents,
+  employeesForPeriods,
   importRoster,
   getActiveClientId,
   getClient,
@@ -320,6 +321,50 @@ describe("rosterCounts", () => {
 
   it("una lista vacía no consulta nada", async () => {
     expect(await rosterCounts([])).toEqual(new Map());
+  });
+});
+
+describe("employeesForPeriods", () => {
+  it("devuelve la nómina de cada período, en una sola consulta", async () => {
+    const p1 = await createPeriod(clientId, 2026, 2);
+    const p2 = await createPeriod(clientId, 2026, 3);
+    await db.employees.bulkAdd([
+      employeeLine({ periodId: p1.id, name: "Ana Torres", area: "COCINA" }),
+      employeeLine({ periodId: p1.id, name: "Luis Vera", area: "VENTAS" }),
+      employeeLine({ periodId: p2.id, name: "Ana Torres", area: "COCINA" }),
+    ]);
+
+    const lines = await employeesForPeriods([p1.id, p2.id]);
+
+    expect(
+      lines
+        .get(p1.id)
+        ?.map((line) => line.name)
+        .sort(),
+    ).toEqual(["Ana Torres", "Luis Vera"]);
+    expect(lines.get(p2.id)).toHaveLength(1);
+  });
+
+  it("un período registrado y sin nómina llega con una lista vacía, no ausente", async () => {
+    // «Registrado y sin empleados» no es lo mismo que «no existe»: el grid dibuja su columna en
+    // blanco en vez de omitirla.
+    const period = await createPeriod(clientId, 2026, 2);
+
+    expect((await employeesForPeriods([period.id])).get(period.id)).toEqual([]);
+  });
+
+  it("no devuelve nada de un período que no se pidió", async () => {
+    const pedido = await createPeriod(clientId, 2026, 2);
+    const otro = await createPeriod(clientId, 2026, 3);
+    await db.employees.add(employeeLine({ periodId: otro.id, name: "Luis Vera" }));
+
+    const lines = await employeesForPeriods([pedido.id]);
+
+    expect([...lines.keys()]).toEqual([pedido.id]);
+  });
+
+  it("una lista vacía no consulta nada", async () => {
+    expect(await employeesForPeriods([])).toEqual(new Map());
   });
 });
 

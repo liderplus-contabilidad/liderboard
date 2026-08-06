@@ -159,7 +159,13 @@ export function SpecCard({
   );
 }
 
-/** One row per series, one column per period. An uncovered period is blank, never `$0`. */
+/**
+ * One row per series, one column per period. An uncovered period is blank, never `$0`.
+ *
+ * Two optional fields shape a row: `sublabel` hangs under the name (the role beside an employee),
+ * and `emphasis` gives it the weight a TOTAL needs to stop reading as one more entity. A table
+ * whose rows declare neither renders exactly as it did before they existed.
+ */
 function TableTwin({ table }: { table: ChartTable }) {
   return (
     <div className="overflow-x-auto">
@@ -185,7 +191,10 @@ function TableTwin({ table }: { table: ChartTable }) {
               <th
                 scope="row"
                 aria-label={row.label}
-                className="sticky left-0 z-10 border-b border-border-faint bg-surface px-2 py-1.5 text-left font-medium text-ink"
+                className={cn(
+                  "sticky left-0 z-10 border-b border-border-faint bg-surface px-2 py-1.5 text-left text-ink",
+                  row.emphasis ? "font-bold" : "font-medium",
+                )}
               >
                 <span className="flex items-center gap-2">
                   <span
@@ -193,13 +202,23 @@ function TableTwin({ table }: { table: ChartTable }) {
                     className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
                     style={{ backgroundColor: row.color }}
                   />
-                  <span className="truncate">{row.label}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">{row.label}</span>
+                    {row.sublabel && (
+                      <span className="block truncate text-[11px] font-normal text-faint">
+                        {row.sublabel}
+                      </span>
+                    )}
+                  </span>
                 </span>
               </th>
               {row.values.map((value, index) => (
                 <td
                   key={table.columns[index] ?? index}
-                  className="border-b border-border-faint px-2 py-1.5 text-right tabular-nums text-ink-soft"
+                  className={cn(
+                    "border-b border-border-faint px-2 py-1.5 text-right tabular-nums",
+                    row.emphasis ? "font-bold text-ink" : "text-ink-soft",
+                  )}
                 >
                   {value ?? ""}
                 </td>

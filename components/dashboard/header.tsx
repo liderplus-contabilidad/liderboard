@@ -5,12 +5,19 @@ import { usePathname } from "next/navigation";
 import { OccupancyHotelActions } from "@/components/occupancy/occupancy-hotel-actions";
 import { PayrollClientActions } from "@/components/payroll/payroll-client-actions";
 import { PygClientActions } from "@/components/profit-loss/pyg-client-actions";
-import { DEFAULT_MODULE, findModuleBySlug } from "@/lib/modules";
+import { DEFAULT_MODULE, findModuleBySlug, findSubmoduleBySlug } from "@/lib/modules";
 
 export function DashboardHeader() {
   const pathname = usePathname();
-  const slug = pathname.split("/").filter(Boolean)[0];
+  const [slug, secondSegment] = pathname.split("/").filter(Boolean);
   const current = findModuleBySlug(slug) ?? DEFAULT_MODULE;
+  // El tercer nivel de la miga aparece SOLO ante un hijo declarado. Un segundo segmento que es un
+  // parámetro de ruta —`/payroll/<uuid>`, el detalle de un período— no lo produce: un identificador
+  // no dice nada a quien lee.
+  const submodule = findSubmoduleBySlug(current, secondSegment);
+  const title = submodule?.title ?? current.title;
+  // El selector de entidad lo resuelve el módulo PADRE, así que un subitem conserva el suyo sin
+  // declararlo.
   const isPyg = current.slug === "profit-loss";
   const isOccupancy = current.slug === "occupancy";
   const isPayroll = current.slug === "payroll";
@@ -22,8 +29,14 @@ export function DashboardHeader() {
           <span>Módulos</span>
           <ChevronRight size={13} className="shrink-0" />
           <span className="truncate text-muted">{current.title}</span>
+          {submodule && (
+            <>
+              <ChevronRight size={13} className="shrink-0" />
+              <span className="truncate text-muted">{submodule.title}</span>
+            </>
+          )}
         </div>
-        <h1 className="truncate text-xl font-bold tracking-tight text-brand">{current.title}</h1>
+        <h1 className="truncate text-xl font-bold tracking-tight text-brand">{title}</h1>
       </div>
 
       {/* Cada módulo monta su propio selector sobre el mismo bloque: PyG lista sus clientes,
