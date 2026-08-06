@@ -337,11 +337,38 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
 ];
 
 /**
+ * La CANTIDAD que un concepto de ingreso captura, si captura alguna.
+ *
+ * Solo las tres clases de hora extra: son los únicos conceptos del catálogo que derivan su VALOR
+ * (`J`, `K`, `L` los calcula el motor) y a la vez capturan su CANTIDAD (`G`, `H`, `I` las teclea
+ * quien arma el rol). Esa doble naturaleza es la que decide qué filas se ven y cuáles se pueden
+ * elegir, así que tiene un nombre en vez de repetirse como `"hoursField" in concept`.
+ */
+export function capturedHoursField(concept: IncomeConcept): OvertimeHoursField | null {
+  return concept.kind === "calculado" ? (concept.hoursField ?? null) : null;
+}
+
+/** Si algo de este concepto se TECLEA — y por tanto si puede añadirse, elegirse en un desplegable
+ *  y desaparecer cuando está vacío. Lo contrario es lo que la app deriva sola. */
+function isChoosable(concept: IncomeConcept | DeductionConcept): boolean {
+  return concept.kind === "capturado" || capturedHoursField(concept as IncomeConcept) !== null;
+}
+
+/**
  * QUÉ CONCEPTOS SE VEN — la regla que hace legible la tabla del rol.
  *
- * Un `calculado` está SIEMPRE: la app lo deriva sola y su fila es informativa aunque valga cero
- * (un fondo de reserva en raya dice que este empleado no lo cobra, y eso hay que poder leerlo).
- * Un `capturado`, en cambio, solo aparece si trae importe o si alguien lo añadió a mano.
+ * Un concepto se juzga por LO QUE SE TECLEA de él: aparece si eso no está en cero, o si alguien lo
+ * añadió a mano. Lo que la app deriva sola está SIEMPRE, porque su fila es informativa aunque
+ * valga cero (un fondo de reserva en raya dice que este empleado no lo cobra, y eso hay que poder
+ * leerlo).
+ *
+ * **Las horas extras se juzgan por las HORAS, no por su valor.** Son `calculado` —el motor deriva
+ * `J`, `K` y `L`—, pero lo que alguien escribe son las horas, y sin horas el valor es cero por
+ * construcción: la fila solo puede estar en raya. Meterlas en la rama de «derivado ⇒ siempre
+ * visible» ponía tres filas vacías en la tabla de todo empleado sin horas extras, que es
+ * exactamente lo que esta regla existe para evitar. Ojo con el caso que las mantiene vivas: unas
+ * horas recortadas por Gerencia (`approvedOvertime: 0`, el `*0` del libro) valen cero y SIGUEN
+ * viéndose, porque las horas se trabajaron y el comprobante del contador las imprime (§10).
  *
  * Sin esta regla la tabla listaría los 26 conceptos del libro, dieciocho de ellos en raya, y un
  * rol normal —sueldo, décimos y aporte— se leería como un formulario a medio llenar. El
@@ -354,12 +381,19 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
  * El orden es siempre el del catálogo —el del libro—, no el de adición: dos empleados del mismo
  * mes tienen que poder leerse en paralelo.
  */
-function isVisible(
-  concept: { kind: string; code: string },
-  amount: number,
-  added: ReadonlySet<string>,
-) {
-  return concept.kind === "calculado" || amount !== 0 || added.has(concept.code);
+function isVisible(code: string, typed: number | null, added: ReadonlySet<string>) {
+  // `null` = no hay nada tecleado que juzgar: la app lo deriva sola y la fila está siempre.
+  return typed === null || typed !== 0 || added.has(code);
+}
+
+/** Lo tecleado de un ingreso: su importe si se captura, sus horas si es una hora extra, y `null`
+ *  cuando la app lo deriva entero. */
+function typedIncome(concept: IncomeConcept, capture: PayrollMonthlyCapture): number | null {
+  if (concept.kind === "capturado") {
+    return capture[concept.field];
+  }
+  const hours = capturedHoursField(concept);
+  return hours === null ? null : capture[hours];
 }
 
 export function visibleIncomeConcepts(
@@ -367,7 +401,7 @@ export function visibleIncomeConcepts(
   added: ReadonlySet<string>,
 ): IncomeConcept[] {
   return INCOME_CONCEPTS.filter((concept) =>
-    isVisible(concept, concept.kind === "capturado" ? capture[concept.field] : 0, added),
+    isVisible(concept.code, typedIncome(concept, capture), added),
   );
 }
 
@@ -376,27 +410,38 @@ export function visibleDeductionConcepts(
   added: ReadonlySet<string>,
 ): DeductionConcept[] {
   return DEDUCTION_CONCEPTS.filter((concept) =>
-    isVisible(concept, concept.kind === "capturado" ? capture.deductions[concept.field] : 0, added),
+    isVisible(
+      concept.code,
+      concept.kind === "capturado" ? capture.deductions[concept.field] : null,
+      added,
+    ),
   );
 }
 
-/** Los que «Agregar ingreso» puede ofrecer: capturados que todavía no se ven. Un `calculado`
- *  nunca entra — no se añade lo que la app deriva sola. */
+/**
+ * Los que «Agregar ingreso» puede ofrecer: todo lo que se teclea y todavía no se ve. Lo que la app
+ * deriva sola nunca entra — no se añade un sueldo unificado.
+ *
+ * Las horas extras SÍ entran, y no es un detalle: son las únicas filas que pueden esconderse
+ * llevándose consigo el único sitio donde se teclean sus horas. Sin esta puerta, ocultarlas al
+ * estar vacías las volvería inalcanzables — sin fila no hay dónde escribir las horas, y sin horas
+ * la fila no vuelve.
+ */
 export function addableIncomeConcepts(
   capture: PayrollMonthlyCapture,
   added: ReadonlySet<string>,
 ): IncomeConcept[] {
   const visible = new Set(visibleIncomeConcepts(capture, added).map((c) => c.code));
-  return INCOME_CONCEPTS.filter((c) => c.kind === "capturado" && !visible.has(c.code));
+  return INCOME_CONCEPTS.filter((c) => isChoosable(c) && !visible.has(c.code));
 }
 
-/** El gemelo para egresos. */
+/** El gemelo para egresos. Aquí no hay conceptos con cantidad, así que es solo lo capturado. */
 export function addableDeductionConcepts(
   capture: PayrollMonthlyCapture,
   added: ReadonlySet<string>,
 ): DeductionConcept[] {
   const visible = new Set(visibleDeductionConcepts(capture, added).map((c) => c.code));
-  return DEDUCTION_CONCEPTS.filter((c) => c.kind === "capturado" && !visible.has(c.code));
+  return DEDUCTION_CONCEPTS.filter((c) => isChoosable(c) && !visible.has(c.code));
 }
 
 /**
@@ -422,8 +467,8 @@ export function swapOptionsFor<T extends IncomeConcept | DeductionConcept>(
     : visibleDeductionConcepts(capture, added);
   const taken = new Set(visible.map((c) => c.code));
 
-  const self = catalogue.find((c) => c.code === code && c.kind === "capturado");
-  const free = catalogue.filter((c) => c.kind === "capturado" && !taken.has(c.code));
+  const self = catalogue.find((c) => c.code === code && isChoosable(c));
+  const free = catalogue.filter((c) => isChoosable(c) && !taken.has(c.code));
   return self ? [self, ...free] : free;
 }
 

@@ -658,6 +658,24 @@ hasta `Valores` si no, que es el desbordamiento hacia celdas vacías que el Exce
 escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee la razón social de
 `GENERAL!B1` pero nadie la persiste todavía. Nada se guarda — el comprobante se arma en la descarga
 desde la ficha y el motor, la misma regla que el asiento y los totales del período.
+**Todo importe lleva el `$`** de `formatCurrency`, filas incluidas, aunque el libro las deje sin
+símbolo y solo ponga `US$` en sus tres totales: un solo dialecto del dólar entre la pantalla y el
+papel. Lo que sí se conserva es la raya del cero, y solo en las FILAS — un total en cero escribe
+`$0.00`, porque la raya de una fila dice «nada que declarar» y un total es una afirmación sobre el
+mes que tras una raya parecería un dato que falta.
+**La JERARQUÍA es del documento y los COLORES son del libro**, que es la única desviación deliberada
+de la fidelidad: cinco bloques con peso distinto —encabezado, panel de identidad, las dos secciones
+y la banda del líquido— en vez de la rejilla plana del Excel, porque un papel que se firma se lee de
+un vistazo. Las bandas de sección toman `--color-section-income` y `--color-section-cost`, los
+rellenos del propio contador que Datos ya usa en la raíz 4 y la 5, así que un verde dice «ingresos»
+en su Excel, en la pantalla y aquí; los hexes viven en `payslip/palette.ts`, espejo del `@theme` —
+la misma duplicación permitida que `lib/charts/palette.ts`, porque ni un canvas ni un PDF resuelven
+una variable CSS. `LIQUIDO A RECIBIR` es la ÚNICA banda oscura (`ink`, texto blanco) y NO usa
+`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. Un
+cero va en `faint` para no competir con las pocas cifras que dicen algo, la franja alterna es tan
+clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de escribirse con `_`.
+`layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
+revés, una banda taparía su propio rótulo.
 
 ## Design system
 

@@ -47,20 +47,49 @@ describe("el catálogo cubre el libro entero", () => {
 });
 
 describe("qué conceptos se ven", () => {
-  it("sin nada capturado se ven los calculados y NADA más", () => {
-    // Es la pantalla de un empleado recién copiado: su sueldo, sus horas extras en blanco, sus
-    // dos décimos, su fondo de reserva y su aporte al IESS. Listar los 26 conceptos con
-    // dieciocho rayas convertiría la tabla en un formulario en blanco.
+  it("sin nada capturado se ven los que SIEMPRE traen cifra y NADA más", () => {
+    // Es la pantalla de un empleado recién copiado: su sueldo, sus dos décimos, su fondo de
+    // reserva y su aporte al IESS. Listar los 26 conceptos con dieciocho rayas convertiría la
+    // tabla en un formulario en blanco.
     expect(codes(visibleIncomeConcepts(emptyCapture(), new Set()))).toEqual([
       "I-01",
-      "I-02",
-      "I-03",
-      "I-04",
       "I-05",
       "I-06",
       "I-07",
     ]);
     expect(codes(visibleDeductionConcepts(emptyCapture(), new Set()))).toEqual(["E-01"]);
+  });
+
+  // Las tres clases de hora extra son los únicos conceptos que derivan su VALOR y a la vez
+  // capturan su CANTIDAD. Se juzgan por las horas, que es lo que alguien teclea: sin horas, su
+  // valor es cero por construcción y la fila solo puede estar en raya.
+  it("una hora extra sin horas NO se ve, aunque su valor lo derive el motor", () => {
+    const visible = codes(visibleIncomeConcepts(emptyCapture(), new Set()));
+    expect(visible).not.toContain("I-02");
+    expect(visible).not.toContain("I-03");
+    expect(visible).not.toContain("I-04");
+  });
+
+  it("una hora extra con horas se ve, sin que nadie la añada", () => {
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
+    expect(codes(visibleIncomeConcepts(capture, new Set()))).toEqual([
+      "I-01",
+      "I-02",
+      "I-05",
+      "I-06",
+      "I-07",
+    ]);
+  });
+
+  // El recorte de Gerencia (`approvedOvertime: 0`, el `*0` del libro) deja el valor en cero pero
+  // las horas trabajadas siguen ahí, y el comprobante del contador SÍ las imprime (§10).
+  it("unas horas recortadas a cero por Gerencia siguen viéndose", () => {
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5, approvedOvertime: 0 };
+    expect(codes(visibleIncomeConcepts(capture, new Set()))).toContain("I-02");
+  });
+
+  it("una hora extra añadida a mano se ve aunque no tenga horas todavía", () => {
+    expect(codes(visibleIncomeConcepts(emptyCapture(), new Set(["I-03"])))).toContain("I-03");
   });
 
   it("un capturado con valor aparece solo, sin que nadie lo añada", () => {
@@ -82,18 +111,8 @@ describe("qué conceptos se ven", () => {
   });
 
   it("conserva SIEMPRE el orden del libro, se añada en el orden que se añada", () => {
-    const visible = visibleIncomeConcepts(emptyCapture(), new Set(["I-13", "I-08"]));
-    expect(codes(visible)).toEqual([
-      "I-01",
-      "I-02",
-      "I-03",
-      "I-04",
-      "I-05",
-      "I-06",
-      "I-07",
-      "I-08",
-      "I-13",
-    ]);
+    const visible = visibleIncomeConcepts(emptyCapture(), new Set(["I-13", "I-08", "I-02"]));
+    expect(codes(visible)).toEqual(["I-01", "I-02", "I-05", "I-06", "I-07", "I-08", "I-13"]);
   });
 
   it("un egreso capturado con valor aparece; el aporte al IESS está siempre", () => {
@@ -113,8 +132,13 @@ describe("qué conceptos se ven", () => {
 });
 
 describe("qué conceptos se pueden añadir", () => {
-  it("los capturados que todavía no se ven", () => {
+  it("todo lo que se teclea y todavía no se ve, en el orden del libro", () => {
+    // Las horas extras encabezan la lista porque son las primeras del catálogo — y de paso son lo
+    // que más se añade, que es lo que hace útil que «Agregar ingreso» empiece por ellas.
     expect(codes(addableIncomeConcepts(emptyCapture(), new Set()))).toEqual([
+      "I-02",
+      "I-03",
+      "I-04",
       "I-08",
       "I-09",
       "I-10",
@@ -131,9 +155,23 @@ describe("qué conceptos se pueden añadir", () => {
     expect(codes(addableIncomeConcepts(emptyCapture(), new Set(["I-13"])))).not.toContain("I-13");
   });
 
-  it("un calculado NUNCA se ofrece: no se añade lo que la app deriva sola", () => {
-    const addable = addableIncomeConcepts(emptyCapture(), new Set());
-    expect(addable.every((c) => c.kind === "capturado")).toBe(true);
+  it("una hora extra con horas deja de ofrecerse: ya está en la tabla", () => {
+    const capture = { ...emptyCapture(), overtimeHours100: 3 };
+    expect(codes(addableIncomeConcepts(capture, new Set()))).not.toContain("I-03");
+  });
+
+  // Ocultarlas sin poder traerlas de vuelta dejaría las horas extras inalcanzables: sin fila no
+  // hay dónde teclear las horas, y sin horas la fila no aparece.
+  it("las horas extras SÍ se ofrecen, aunque su valor lo derive el motor", () => {
+    expect(codes(addableIncomeConcepts(emptyCapture(), new Set()))).toContain("I-02");
+  });
+
+  it("lo que la app deriva SOLA nunca se ofrece: no se añade un sueldo unificado", () => {
+    const addable = codes(addableIncomeConcepts(emptyCapture(), new Set()));
+    expect(addable).not.toContain("I-01");
+    expect(addable).not.toContain("I-05");
+    expect(addable).not.toContain("I-06");
+    expect(addable).not.toContain("I-07");
   });
 
   it("con todos puestos no queda nada que añadir", () => {
@@ -149,7 +187,31 @@ describe("opciones del desplegable de una fila capturada", () => {
     const capture = { ...emptyCapture(), allowances: 120 };
     const options = swapOptionsFor("I-10", INCOME_CONCEPTS, capture, new Set());
     expect(options[0].code).toBe("I-10");
-    expect(codes(options)).toEqual(["I-10", "I-08", "I-09", "I-11", "I-12", "I-13"]);
+    expect(codes(options)).toEqual([
+      "I-10",
+      "I-02",
+      "I-03",
+      "I-04",
+      "I-08",
+      "I-09",
+      "I-11",
+      "I-12",
+      "I-13",
+    ]);
+  });
+
+  // Es lo que hace alcanzables las horas extras: se añade una fila y se elige ahí qué es.
+  it("una fila puede cambiarse a una hora extra", () => {
+    const options = swapOptionsFor("I-08", INCOME_CONCEPTS, emptyCapture(), new Set(["I-08"]));
+    expect(codes(options)).toContain("I-02");
+  });
+
+  it("una fila de horas extras se ofrece a sí misma y a sus hermanas", () => {
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
+    const options = swapOptionsFor("I-02", INCOME_CONCEPTS, capture, new Set());
+    expect(options[0].code).toBe("I-02");
+    expect(codes(options)).toContain("I-03");
+    expect(codes(options)).toContain("I-04");
   });
 
   it("no ofrece otro que ya esté puesto: dos filas no pueden ser el mismo concepto", () => {
@@ -158,13 +220,19 @@ describe("opciones del desplegable de una fila capturada", () => {
     expect(codes(options)).not.toContain("I-13");
   });
 
-  it("nunca ofrece un calculado", () => {
-    const options = swapOptionsFor("I-08", INCOME_CONCEPTS, emptyCapture(), new Set(["I-08"]));
-    expect(options.every((c) => c.kind === "capturado")).toBe(true);
+  it("nunca ofrece lo que la app deriva sola", () => {
+    const options = codes(
+      swapOptionsFor("I-08", INCOME_CONCEPTS, emptyCapture(), new Set(["I-08"])),
+    );
+    expect(options).not.toContain("I-01");
+    expect(options).not.toContain("I-06");
   });
 
   it("un código que no existe no rompe: devuelve solo los libres", () => {
     expect(codes(swapOptionsFor("I-99", INCOME_CONCEPTS, emptyCapture(), new Set()))).toEqual([
+      "I-02",
+      "I-03",
+      "I-04",
       "I-08",
       "I-09",
       "I-10",
@@ -172,6 +240,67 @@ describe("opciones del desplegable de una fila capturada", () => {
       "I-12",
       "I-13",
     ]);
+  });
+});
+
+describe("qué escribe un cambio de concepto", () => {
+  const concept = (code: string) => INCOME_CONCEPTS.find((c) => c.code === code)!;
+
+  it("entre dos filas capturadas se lleva el importe y vacía el origen", () => {
+    // Quien teclea 120 y luego se da cuenta de que era «Comisión fija» y no «Viáticos» espera
+    // corregir la fila, no perder lo escrito. Y el origen vuelve a cero, o contaría dos veces.
+    const capture = { ...emptyCapture(), allowances: 120 };
+    expect(incomeSwapPatch(concept("I-10"), concept("I-11"), capture)).toEqual({
+      allowances: 0,
+      fixedCommission: 120,
+    });
+  });
+
+  it("entre dos filas de horas extras se lleva las HORAS, no el importe", () => {
+    // Es lo que hace honesto el cambio en esta familia: 5,5 horas mal clasificadas al 50 % son
+    // 5,5 horas al 100 %, no 5,5 dólares.
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
+    expect(incomeSwapPatch(concept("I-02"), concept("I-03"), capture)).toEqual({
+      overtimeHours50: 0,
+      overtimeHours100: 5.5,
+    });
+  });
+
+  // Un importe y unas horas no son la misma unidad, así que cruzar de familia NO puede arrastrar
+  // la cifra: 200 dólares de anticipo no son 200 horas. En la práctica no se pierde nada, porque
+  // el desplegable solo ofrece conceptos LIBRES y una fila con cifra ya está puesta.
+  it("cruzando de familia solo vacía el origen, sin inventar una conversión", () => {
+    const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
+    expect(incomeSwapPatch(concept("I-02"), concept("I-10"), capture)).toEqual({
+      overtimeHours50: 0,
+    });
+  });
+
+  it("no cambia lo que la app deriva sola", () => {
+    expect(incomeSwapPatch(concept("I-01"), concept("I-10"), emptyCapture())).toBeNull();
+    expect(incomeSwapPatch(concept("I-10"), concept("I-06"), emptyCapture())).toBeNull();
+  });
+
+  it("los egresos mueven el importe dentro de su propio objeto", () => {
+    const capture = {
+      ...emptyCapture(),
+      deductions: { ...emptyCapture().deductions, fines: 30 },
+    };
+    const patch = deductionSwapPatch(
+      DEDUCTION_CONCEPTS.find((c) => c.code === "E-08")!,
+      DEDUCTION_CONCEPTS.find((c) => c.code === "E-04")!,
+      capture,
+    );
+    expect(patch?.deductions).toMatchObject({ fines: 0, salaryAdvance: 30 });
+  });
+
+  it("el aporte al IESS no se cambia por nada: lo deriva el motor", () => {
+    const patch = deductionSwapPatch(
+      DEDUCTION_CONCEPTS.find((c) => c.code === "E-01")!,
+      DEDUCTION_CONCEPTS.find((c) => c.code === "E-04")!,
+      emptyCapture(),
+    );
+    expect(patch).toBeNull();
   });
 });
 
