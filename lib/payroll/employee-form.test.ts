@@ -47,14 +47,8 @@ describe("validateEmployeeForm · un formulario correcto", () => {
     expect(validateEmployeeForm(form())).toEqual({});
   });
 
-  it("acepta la captura del mes entera vacía", () => {
-    const values = form({
-      overtimeHours50: null,
-      overtimeHours100: null,
-      overtimeHours25: null,
-      approvedOvertime: null,
-    });
-    expect(validateEmployeeForm(values)).toEqual({});
+  it("acepta los ajustes del mes enteros vacíos", () => {
+    expect(validateEmployeeForm(form({ approvedOvertime: null }))).toEqual({});
   });
 });
 
@@ -156,17 +150,7 @@ describe("validateEmployeeForm · la fecha de ingreso", () => {
   });
 });
 
-describe("validateEmployeeForm · la captura del mes", () => {
-  it("no admite horas negativas", () => {
-    expect(validateEmployeeForm(form({ overtimeHours50: -1 })).overtimeHours50).toBeTruthy();
-    expect(validateEmployeeForm(form({ overtimeHours100: -1 })).overtimeHours100).toBeTruthy();
-    expect(validateEmployeeForm(form({ overtimeHours25: -1 })).overtimeHours25).toBeTruthy();
-  });
-
-  it("admite medias horas: el rol real trae 5,5", () => {
-    expect(validateEmployeeForm(form({ overtimeHours50: 5.5 })).overtimeHours50).toBeUndefined();
-  });
-
+describe("validateEmployeeForm · los ajustes del mes", () => {
   // Los tres estados de `approvedOvertime` (§6): `null` todas, `0` ninguna, un número ese importe.
   it("admite los tres estados del importe aprobado", () => {
     expect(validateEmployeeForm(form({ approvedOvertime: null })).approvedOvertime).toBeUndefined();
@@ -243,13 +227,6 @@ describe("toEmployeeLine", () => {
     expect(toEmployeeLine(form()).capture).toBeUndefined();
   });
 
-  it("adjunta la captura en cuanto hay horas extras", () => {
-    const line = toEmployeeLine(form({ overtimeHours50: 5.5 }));
-    expect(line.capture?.overtimeHours50).toBe(5.5);
-    expect(line.capture?.overtimeHours100).toBe(0);
-    expect(line.capture?.approvedOvertime).toBeNull();
-  });
-
   // `0` en el importe aprobado es el `*0` del libro: apaga las horas extras. Es una decisión
   // tecleada y tiene que sobrevivir aunque no haya ninguna hora capturada todavía.
   it("adjunta la captura cuando se recortan las horas extras a cero", () => {
@@ -263,13 +240,16 @@ describe("toEmployeeLine", () => {
     });
   });
 
-  it("las horas en blanco se guardan como cero, no como nulo", () => {
-    const line = toEmployeeLine(form({ overtimeHours50: null, overtimeHours100: 2 }));
-    expect(line.capture?.overtimeHours50).toBe(0);
-    expect(line.capture?.overtimeHours100).toBe(2);
+  // El alta ya no captura las cantidades de horas —se teclean en la ficha, junto al importe que
+  // producen—, así que salen de aquí en CERO y no en nulo: nadie trabajó horas que no se declararon.
+  it("las horas extras nacen en cero, que es lo que valen sin declarar", () => {
+    const capture = toEmployeeLine(form({ approvedOvertime: 0 })).capture;
+    expect(capture?.overtimeHours50).toBe(0);
+    expect(capture?.overtimeHours100).toBe(0);
+    expect(capture?.overtimeHours25).toBe(0);
   });
 
   it("no declara un PAGADO que nadie tecleó: el alta nace sin conciliar", () => {
-    expect(toEmployeeLine(form({ overtimeHours50: 5.5 })).capture?.paid).toBeNull();
+    expect(toEmployeeLine(form({ approvedOvertime: 0 })).capture?.paid).toBeNull();
   });
 });

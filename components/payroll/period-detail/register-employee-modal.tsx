@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -60,7 +60,6 @@ interface RegisterEmployeeModalProps {
 export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmployeeModalProps) {
   const [values, setValues] = useState<EmployeeFormValues>(emptyEmployeeForm);
   const [submitted, setSubmitted] = useState(false);
-  const [showCapture, setShowCapture] = useState(false);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -214,104 +213,47 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
           </div>
 
           <div className="mt-4 overflow-hidden rounded-[9px] border border-border">
-            <button
-              type="button"
-              aria-expanded={showCapture}
-              onClick={() => setShowCapture((open) => !open)}
-              className="flex w-full items-center gap-2 bg-surface-muted px-3.5 py-2.5 text-left transition-colors hover:bg-surface-header"
-            >
-              {showCapture ? (
-                <ChevronDown size={14} className="text-faint" />
-              ) : (
-                <ChevronRight size={14} className="text-faint" />
-              )}
-              <span className="text-[12px] font-semibold text-ink">Captura del mes</span>
+            <div className="flex items-baseline gap-2 border-b border-border bg-surface-muted px-3.5 py-2.5">
+              <span className="text-[12px] font-semibold text-ink">Ajustes del mes</span>
               <span className="text-[11.5px] text-faint">opcional</span>
-            </button>
+            </div>
 
-            {showCapture && (
-              <div className="border-t border-border px-3.5 py-3.5">
-                <div className="grid grid-cols-3 gap-x-4 gap-y-3.5">
-                  <FormField label="Horas extras 50 %" error={shown.overtimeHours50}>
-                    <FieldBox invalid={Boolean(shown.overtimeHours50)}>
-                      <NumericInput
-                        ariaLabel="Horas extras al 50 %"
-                        format="plain"
-                        value={values.overtimeHours50}
-                        nullable
-                        align="left"
-                        placeholder="0"
-                        onCommit={(value) => set("overtimeHours50", value)}
-                      />
-                    </FieldBox>
-                  </FormField>
-                  <FormField label="Horas extras 100 %" error={shown.overtimeHours100}>
-                    <FieldBox invalid={Boolean(shown.overtimeHours100)}>
-                      <NumericInput
-                        ariaLabel="Horas extras al 100 %"
-                        format="plain"
-                        value={values.overtimeHours100}
-                        nullable
-                        align="left"
-                        placeholder="0"
-                        onCommit={(value) => set("overtimeHours100", value)}
-                      />
-                    </FieldBox>
-                  </FormField>
-                  <FormField label="Horas extras 25 %" error={shown.overtimeHours25}>
-                    <FieldBox invalid={Boolean(shown.overtimeHours25)}>
-                      <NumericInput
-                        ariaLabel="Horas extras al 25 %"
-                        format="plain"
-                        value={values.overtimeHours25}
-                        nullable
-                        align="left"
-                        placeholder="0"
-                        onCommit={(value) => set("overtimeHours25", value)}
-                      />
-                    </FieldBox>
-                  </FormField>
-                </div>
-
-                {/* El `*0` del libro, tecleable. Sin este control las horas extras capturadas
-                    SIEMPRE suman, y el rol deja de cuadrar con el del contador — que en marzo 2026
-                    apagó las de los cuatro empleados que tenían. */}
-                <FormField
-                  label="Importe aprobado de horas extras"
-                  error={shown.approvedOvertime}
-                  hint="En blanco se reconocen todas las trabajadas; 0 no reconoce ninguna. Lo aprueba Gerencia cada mes."
-                  className="mt-3.5 block max-w-[280px]"
-                >
-                  <FieldBox invalid={Boolean(shown.approvedOvertime)}>
-                    <NumericInput
-                      ariaLabel="Importe aprobado de horas extras"
-                      value={values.approvedOvertime}
-                      nullable
-                      align="left"
-                      placeholder="Todas"
-                      onCommit={(value) => set("approvedOvertime", value)}
-                    />
-                  </FieldBox>
-                </FormField>
-
-                <div className="mt-4 flex flex-col gap-2.5">
-                  <ProvisionToggle
-                    label="Provisiona décimo tercero"
-                    checked={values.provisionsThirteenth}
-                    onChange={(checked) => set("provisionsThirteenth", checked)}
+            <div className="px-3.5 py-3.5">
+              <FormField
+                label="Importe aprobado de horas extras"
+                error={shown.approvedOvertime}
+                hint="En blanco se reconocen todas las trabajadas; 0 no reconoce ninguna. Lo aprueba Gerencia cada mes."
+                className="block max-w-[280px]"
+              >
+                <FieldBox invalid={Boolean(shown.approvedOvertime)}>
+                  <NumericInput
+                    ariaLabel="Importe aprobado de horas extras"
+                    value={values.approvedOvertime}
+                    nullable
+                    align="left"
+                    placeholder="Todas"
+                    onCommit={(value) => set("approvedOvertime", value)}
                   />
-                  <ProvisionToggle
-                    label="Provisiona décimo cuarto"
-                    checked={values.provisionsFourteenth}
-                    onChange={(checked) => set("provisionsFourteenth", checked)}
-                  />
-                  <p className="text-[11px] leading-relaxed text-faint">
-                    Apagadas por defecto: los décimos ya se mensualizan en el rol, y provisionarlos
-                    otra vez los contaría dos veces.
-                  </p>
-                </div>
+                </FieldBox>
+              </FormField>
+
+              <div className="mt-4 flex flex-col gap-2.5">
+                <ProvisionToggle
+                  label="Provisiona décimo tercero"
+                  checked={values.provisionsThirteenth}
+                  onChange={(checked) => set("provisionsThirteenth", checked)}
+                />
+                <ProvisionToggle
+                  label="Provisiona décimo cuarto"
+                  checked={values.provisionsFourteenth}
+                  onChange={(checked) => set("provisionsFourteenth", checked)}
+                />
+                <p className="text-[11px] leading-relaxed text-faint">
+                  Apagadas por defecto: los décimos ya se mensualizan en el rol, y provisionarlos
+                  otra vez los contaría dos veces.
+                </p>
               </div>
-            )}
+            </div>
           </div>
 
           {failure && <p className="mt-3 text-[11.5px] text-negative">{failure}</p>}
@@ -319,7 +261,8 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
 
         <div className="flex items-center justify-between gap-4 border-t border-border px-5 py-4">
           <p className="text-[11.5px] leading-relaxed text-faint">
-            Los valores calculados (unificado, décimos, IESS) se generan solos.
+            Los valores calculados (unificado, décimos, IESS) se generan solos. Las horas extras y
+            los descuentos se capturan en la ficha del empleado.
           </p>
           <div className="flex shrink-0 items-center gap-2.5">
             <Button variant="secondary" size="sm" disabled={saving} onClick={onClose}>

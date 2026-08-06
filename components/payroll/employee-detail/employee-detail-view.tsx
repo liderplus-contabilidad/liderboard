@@ -25,6 +25,7 @@ import { ConceptTable } from "./concept-table";
 import { EmployeeDetailCard, EmployeeDetailSection } from "./employee-detail-card";
 import { EmployeeDetailHeader } from "./employee-detail-header";
 import { EmployeeIdentityCards } from "./employee-identity-cards";
+import { EmployeeMonthAdjustments, type ProvisionFlag } from "./employee-month-adjustments";
 import { EmployeePeriodFields } from "./employee-period-fields";
 import { EmployeeTotals } from "./employee-totals";
 
@@ -117,6 +118,16 @@ export function EmployeeDetailView({
 
   const handleHours = useCallback(
     (field: OvertimeHoursField, value: number) => patchCapture({ [field]: value }),
+    [patchCapture],
+  );
+
+  const handleApprovedOvertime = useCallback(
+    (value: number | null) => patchCapture({ approvedOvertime: value }),
+    [patchCapture],
+  );
+
+  const handleProvision = useCallback(
+    (flag: ProvisionFlag, checked: boolean) => patchCapture({ [flag]: checked }),
     [patchCapture],
   );
 
@@ -294,7 +305,15 @@ export function EmployeeDetailView({
                 </div>
               </EmployeeDetailSection>
 
-              <EmployeeDetailSection>
+              <EmployeeDetailSection className="flex flex-wrap items-start justify-between gap-5">
+                <EmployeeMonthAdjustments
+                  approvedOvertime={capture.approvedOvertime}
+                  provisionsThirteenth={capture.provisionsThirteenth}
+                  provisionsFourteenth={capture.provisionsFourteenth}
+                  computed={computed}
+                  onApprovedOvertimeChange={handleApprovedOvertime}
+                  onProvisionChange={handleProvision}
+                />
                 <EmployeeTotals computed={computed} />
               </EmployeeDetailSection>
             </>

@@ -1,16 +1,10 @@
 /**
- * Los SEIS empleados del rol de MARZO 2026, dados de alta **por el formulario** en vez de leídos
- * del archivo, y comparados al centavo contra lo que el Excel del contador calcula (§12).
+ * Prueba la integración del formulario con el motor de cálculo, verificando que los datos
+ * capturados manualmente y los calculados coincidan con las cifras esperadas (§12).
  *
- * `lib/payroll/engine/golden.test.ts` ya prueba el motor contra esas mismas cifras; lo que prueba
- * ESTE archivo es la COSTURA que el alta a mano añade — formulario → `toEmployeeLine` →
- * `toEngineInput` → motor —, que es justo donde un campo mal trasladado no se notaría: la pantalla
- * enseñaría un número plausible y solo el contador lo vería al cuadrar. Por eso recorre el mismo
- * camino que `EmployeeDetailView` (`computeEmployeePayroll(toEngineInput(line), …)`) y no el motor
- * a pelo.
- *
- * Dos empleados llevan además un descuento que el modal de alta no captura (se teclea después, en
- * la ficha): se aplica sobre la captura igual que lo hace esa pantalla.
+ * Este archivo evalúa la conversión formulario → `toEmployeeLine` → `toEngineInput` → motor,
+ * incluyendo horas extras y descuentos aplicados después. Casos como el de MORALES combinan
+ * ambas entradas.
  */
 import { describe, expect, it } from "vitest";
 import { emptyEmployeeForm, toEmployeeLine, type EmployeeFormValues } from "./employee-form";
@@ -18,12 +12,18 @@ import { emptyCapture, toEngineInput } from "./employee-input";
 import { computeEmployeePayroll } from "./engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
 import type { CapturedDeductions } from "./engine/types";
-import type { PayrollEmployeeLine } from "./types";
+import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "./types";
+
+type CapturedHours = Pick<
+  PayrollMonthlyCapture,
+  "overtimeHours50" | "overtimeHours100" | "overtimeHours25"
+>;
 
 interface GoldenCase {
   name: string;
   form: Partial<EmployeeFormValues>;
   /** Lo que se teclea DESPUÉS en la ficha; el alta no lo pide. */
+  hours?: Partial<CapturedHours>;
   deductions?: Partial<CapturedDeductions>;
   /** Ausente en los casos que no comparan los cinco totales sino una derivación suelta. */
   expected?: {
@@ -44,7 +44,8 @@ interface GoldenCase {
 const GOLDEN: GoldenCase[] = [
   {
     name: "MORALES MENA SILVIA JIMENA",
-    form: { baseSalary: 487.21, overtimeHours50: 5.5, approvedOvertime: 0 },
+    form: { baseSalary: 487.21, approvedOvertime: 0 },
+    hours: { overtimeHours50: 5.5 },
     deductions: { iessLoans: 64.25 },
     expected: {
       grossIncome: 567.98,
@@ -67,7 +68,8 @@ const GOLDEN: GoldenCase[] = [
   },
   {
     name: "SANDOVAL COLIMBA PEDRO MANUEL",
-    form: { baseSalary: 488.66, overtimeHours50: 26, approvedOvertime: 0 },
+    form: { baseSalary: 488.66, approvedOvertime: 0 },
+    hours: { overtimeHours50: 26 },
     expected: {
       grossIncome: 569.5500000000001,
       iessEmployee: 46.18,
@@ -78,7 +80,8 @@ const GOLDEN: GoldenCase[] = [
   },
   {
     name: "ACOSTA MARIA PASTORA",
-    form: { baseSalary: 486.25, overtimeHours50: 13, approvedOvertime: 0 },
+    form: { baseSalary: 486.25, approvedOvertime: 0 },
+    hours: { overtimeHours50: 13 },
     expected: {
       grossIncome: 566.9399999999999,
       iessEmployee: 45.95,
@@ -127,14 +130,19 @@ function registered(entry: GoldenCase): PayrollEmployeeLine {
     periodId: "period-1",
   };
 
-  if (!entry.deductions) {
+  if (!entry.hours && !entry.deductions) {
     return line;
   }
-  // Lo que hace la ficha al teclear un descuento: parte de la captura que haya, o de una vacía.
+  // Lo que hace la ficha al teclear unas horas o un descuento: parte de la captura que haya, o de
+  // una vacía, y escribe encima el campo tocado (`patchCapture`).
   const capture = line.capture ?? emptyCapture();
   return {
     ...line,
-    capture: { ...capture, deductions: { ...capture.deductions, ...entry.deductions } },
+    capture: {
+      ...capture,
+      ...entry.hours,
+      deductions: { ...capture.deductions, ...entry.deductions },
+    },
   };
 }
 
@@ -182,7 +190,8 @@ describe("bajar los días trabajados a 15", () => {
   // porque es el único sitio donde alguien teclea unos días distintos de 30.
   const base: GoldenCase = {
     name: "Media jornada",
-    form: { baseSalary: 487.21, overtimeHours50: 5.5, approvedOvertime: null },
+    form: { baseSalary: 487.21, approvedOvertime: null },
+    hours: { overtimeHours50: 5.5 },
   };
 
   it("parte el sueldo unificado a la mitad", () => {

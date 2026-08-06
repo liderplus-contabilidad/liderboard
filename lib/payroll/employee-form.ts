@@ -42,10 +42,6 @@ export interface EmployeeFormValues {
   hireDate: string;
   sectorCode: string;
 
-  // La captura del mes, toda opcional
-  overtimeHours50: number | null;
-  overtimeHours100: number | null;
-  overtimeHours25: number | null;
   /** `M` · el importe reconocido. `null` = todas las trabajadas, `0` = ninguna (el `*0` del
    *  libro), cualquier otro número = ese importe. Ver §6 y §11.1. */
   approvedOvertime: number | null;
@@ -85,9 +81,6 @@ export function emptyEmployeeForm(): EmployeeFormValues {
     reserveFund: "sin-derecho",
     hireDate: "",
     sectorCode: "",
-    overtimeHours50: null,
-    overtimeHours100: null,
-    overtimeHours25: null,
     approvedOvertime: null,
     provisionsThirteenth: false,
     provisionsFourteenth: false,
@@ -168,17 +161,9 @@ export function validateEmployeeForm(
     errors.hireDate = "La fecha de ingreso no es una fecha válida.";
   }
 
-  const hours: [keyof EmployeeFormValues, number | null, string][] = [
-    ["overtimeHours50", values.overtimeHours50, "Las horas al 50 %"],
-    ["overtimeHours100", values.overtimeHours100, "Las horas al 100 %"],
-    ["overtimeHours25", values.overtimeHours25, "Las horas al 25 %"],
-    ["approvedOvertime", values.approvedOvertime, "El importe aprobado"],
-  ];
-  for (const [field, value, label] of hours) {
-    const message = checkOptionalAmount(value, label);
-    if (message) {
-      errors[field] = message;
-    }
+  const approved = checkOptionalAmount(values.approvedOvertime, "El importe aprobado");
+  if (approved) {
+    errors.approvedOvertime = approved;
   }
 
   return errors;
@@ -187,12 +172,7 @@ export function validateEmployeeForm(
 /** Si la sección del mes trae algo que guardar. Ver `toEmployeeLine`. */
 function hasMonthlyCapture(values: EmployeeFormValues): boolean {
   return (
-    (values.overtimeHours50 ?? 0) > 0 ||
-    (values.overtimeHours100 ?? 0) > 0 ||
-    (values.overtimeHours25 ?? 0) > 0 ||
-    values.approvedOvertime !== null ||
-    values.provisionsThirteenth ||
-    values.provisionsFourteenth
+    values.approvedOvertime !== null || values.provisionsThirteenth || values.provisionsFourteenth
   );
 }
 
@@ -202,9 +182,10 @@ function hasMonthlyCapture(values: EmployeeFormValues): boolean {
  *
  * **`capture` queda AUSENTE cuando nadie tocó la sección del mes**, que es la misma regla que
  * `copyRoster` — no es lo mismo «este mes no trae nada» que «este mes trae ceros», y un empleado
- * recién dado de alta tiene que leerse igual que uno copiado del mes anterior. En cuanto hay una
- * hora extra, un recorte tecleado o una provisión encendida, la captura se adjunta ENTERA
- * (`emptyCapture()` como base), porque lo que el motor consume es una captura completa.
+ * recién dado de alta tiene que leerse igual que uno copiado del mes anterior. En cuanto hay un
+ * recorte tecleado o una provisión encendida, la captura se adjunta ENTERA (`emptyCapture()` como
+ * base), porque lo que el motor consume es una captura completa — y con ella van las horas extras
+ * en cero, que es lo que valen mientras nadie las teclee en la ficha.
  *
  * Sin captura no hay `PAGADO` declarado, así que el empleado nace «sin conciliar» — que es
  * exactamente lo que es. En cuanto alguien teclee lo transferido, concilia contra el rol que el
@@ -232,10 +213,6 @@ export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmploye
     ...line,
     capture: {
       ...emptyCapture(),
-      // Una cantidad de horas en blanco SÍ es cero: nadie trabajó horas que no se declararon.
-      overtimeHours50: values.overtimeHours50 ?? 0,
-      overtimeHours100: values.overtimeHours100 ?? 0,
-      overtimeHours25: values.overtimeHours25 ?? 0,
       approvedOvertime: values.approvedOvertime,
       provisionsThirteenth: values.provisionsThirteenth,
       provisionsFourteenth: values.provisionsFourteenth,
