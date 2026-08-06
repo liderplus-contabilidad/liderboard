@@ -13,6 +13,8 @@ import {
   INCOME_CONCEPTS,
   addableDeductionConcepts,
   addableIncomeConcepts,
+  deductionSwapPatch,
+  incomeSwapPatch,
   swapOptionsFor,
   visibleDeductionConcepts,
   visibleIncomeConcepts,
@@ -110,9 +112,42 @@ describe("qué conceptos se ven", () => {
     expect(codes(visible)).toContain("I-11");
   });
 
-  it("conserva SIEMPRE el orden del libro, se añada en el orden que se añada", () => {
+  // Lo que se ve por su propia cifra guarda el orden del LIBRO —es lo que deja leer dos empleados
+  // del mismo mes en paralelo—; lo que alguien acaba de añadir va AL FINAL y en el orden en que lo
+  // añadió, que es donde está el botón que lo creó. Colarlo en su sitio del catálogo hace aparecer
+  // la fila nueva lejos de donde se pulsó, a veces fuera de la vista.
+  it("lo que trae cifra va en orden del libro; lo añadido, al final y en orden de adición", () => {
     const visible = visibleIncomeConcepts(emptyCapture(), new Set(["I-13", "I-08", "I-02"]));
-    expect(codes(visible)).toEqual(["I-01", "I-02", "I-05", "I-06", "I-07", "I-08", "I-13"]);
+    expect(codes(visible)).toEqual(["I-01", "I-05", "I-06", "I-07", "I-13", "I-08", "I-02"]);
+  });
+
+  it("un capturado con cifra sigue en su sitio del libro aunque otro se añada después", () => {
+    const capture = { ...emptyCapture(), allowances: 120 };
+    expect(codes(visibleIncomeConcepts(capture, new Set(["I-08"])))).toEqual([
+      "I-01",
+      "I-05",
+      "I-06",
+      "I-07",
+      "I-10",
+      "I-08",
+    ]);
+  });
+
+  // `added` solo vive mientras la pantalla está abierta, así que esto no reordena nada guardado:
+  // al recargar, una fila con cifra vuelve a su sitio del libro por sí sola.
+  it("una fila añadida Y con cifra se queda donde se añadió mientras dure la sesión", () => {
+    const capture = { ...emptyCapture(), bonus: 50 };
+    expect(codes(visibleIncomeConcepts(capture, new Set(["I-13"])))).toEqual([
+      "I-01",
+      "I-05",
+      "I-06",
+      "I-07",
+      "I-13",
+    ]);
+  });
+
+  it("un código de otra tabla no se cuela: los egresos ignoran lo añadido en ingresos", () => {
+    expect(codes(visibleDeductionConcepts(emptyCapture(), new Set(["I-08"])))).toEqual(["E-01"]);
   });
 
   it("un egreso capturado con valor aparece; el aporte al IESS está siempre", () => {

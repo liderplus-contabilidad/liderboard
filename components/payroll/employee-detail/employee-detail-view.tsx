@@ -6,6 +6,8 @@ import { monthBounds, formatDayMonthYear } from "@/lib/date";
 import {
   DEDUCTION_CONCEPTS,
   INCOME_CONCEPTS,
+  deductionSwapPatch,
+  incomeSwapPatch,
   type DeductionConcept,
   type IncomeConcept,
   type OvertimeHoursField,
@@ -125,41 +127,32 @@ export function EmployeeDetailView({
   );
 
   /**
-   * Cambia una fila capturada por otro concepto, LLEVÁNDOSE su importe.
-   *
-   * Mover el valor y no solo la etiqueta es lo que hace honesto el cambio: quien teclea 200 y
-   * luego se da cuenta de que era «Anticipo» y no «Multas» espera corregir la fila, no perder lo
-   * escrito. Y el campo de origen vuelve a cero, porque si no el importe contaría dos veces.
+   * Cambia una fila por otro concepto, llevándose lo que se tecleó en ella cuando las dos hablan
+   * la misma unidad. QUÉ se escribe lo decide `incomeSwapPatch`/`deductionSwapPatch`, en la capa
+   * pura y con tests: aquí solo queda recordar que la fila nueva está puesta, para que no
+   * desaparezca en el instante en que nace valiendo cero.
    */
   const swapConcept = useCallback(
-    (from: string, to: string, catalogue: readonly (IncomeConcept | DeductionConcept)[]) => {
-      const origin = catalogue.find((c) => c.code === from);
-      const target = catalogue.find((c) => c.code === to);
-      if (!origin || !target || origin.kind !== "capturado" || target.kind !== "capturado") {
+    (
+      from: string,
+      to: string,
+      patchFor: (base: PayrollMonthlyCapture) => Partial<PayrollMonthlyCapture> | null,
+    ) => {
+      const patch = patchFor(line?.capture ?? emptyCapture());
+      if (!patch) {
         return;
       }
-      const base = line?.capture ?? emptyCapture();
-      const isDeduction = from.startsWith("E-");
-      const value = isDeduction
-        ? base.deductions[origin.field as keyof typeof base.deductions]
-        : (base[origin.field as keyof PayrollMonthlyCapture] as number);
-
-      patchCapture(
-        isDeduction
-          ? {
-              deductions: {
-                ...base.deductions,
-                [origin.field]: 0,
-                [target.field]: value,
-              },
-            }
-          : { [origin.field]: 0, [target.field]: value },
-      );
+      patchCapture(patch);
       setAdded((current) => {
-        const next = new Set(current);
-        next.delete(from);
-        next.add(to);
-        return next;
+        // El concepto nuevo ocupa el SITIO del viejo, no el final de la cola: cambiar lo que una
+        // fila es no debería moverla de sitio bajo el cursor.
+        const codes = [...current];
+        const at = codes.indexOf(from);
+        if (at === -1) {
+          return new Set([...codes, to]);
+        }
+        codes[at] = to;
+        return new Set(codes);
       });
     },
     [line?.capture, patchCapture],
@@ -199,11 +192,23 @@ export function EmployeeDetailView({
   }, [activeClient?.name, capture, computed, index, line, period]);
 
   const swapIncome = useCallback(
-    (from: string, to: string) => swapConcept(from, to, INCOME_CONCEPTS),
+    (from: string, to: string) => {
+      const origin = INCOME_CONCEPTS.find((c) => c.code === from);
+      const target = INCOME_CONCEPTS.find((c) => c.code === to);
+      if (origin && target) {
+        swapConcept(from, to, (base) => incomeSwapPatch(origin, target, base));
+      }
+    },
     [swapConcept],
   );
   const swapDeduction = useCallback(
-    (from: string, to: string) => swapConcept(from, to, DEDUCTION_CONCEPTS),
+    (from: string, to: string) => {
+      const origin = DEDUCTION_CONCEPTS.find((c) => c.code === from);
+      const target = DEDUCTION_CONCEPTS.find((c) => c.code === to);
+      if (origin && target) {
+        swapConcept(from, to, (base) => deductionSwapPatch(origin, target, base));
+      }
+    },
     [swapConcept],
   );
 

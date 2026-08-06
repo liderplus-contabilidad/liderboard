@@ -378,12 +378,38 @@ function isChoosable(concept: IncomeConcept | DeductionConcept): boolean {
  * falta aparte del importe porque un concepto recién añadido vale cero todavía: sin recordarlo,
  * la fila desaparecería en el instante en que se creó.
  *
- * El orden es siempre el del catálogo —el del libro—, no el de adición: dos empleados del mismo
- * mes tienen que poder leerse en paralelo.
+ * EL ORDEN son dos tramos. Lo que se ve por su propia cifra va en el orden del CATÁLOGO —el del
+ * libro y el del comprobante impreso—, que es lo que deja leer dos empleados del mismo mes en
+ * paralelo. Lo que alguien acaba de AÑADIR va al final, en el orden en que lo añadió, porque el
+ * botón que lo crea está al pie de la tabla: colar la fila nueva en su sitio del catálogo la hace
+ * aparecer lejos de donde se pulsó, a veces fuera de la vista. No hay contradicción entre las dos
+ * mitades porque `added` solo vive mientras la pantalla está abierta — al recargar, una fila con
+ * cifra vuelve sola a su sitio del libro, así que nada de lo GUARDADO se reordena.
  */
-function isVisible(code: string, typed: number | null, added: ReadonlySet<string>) {
-  // `null` = no hay nada tecleado que juzgar: la app lo deriva sola y la fila está siempre.
-  return typed === null || typed !== 0 || added.has(code);
+
+/**
+ * Los dos tramos del orden. `typedOf` devuelve lo tecleado de cada concepto, o `null` cuando la
+ * app lo deriva entero (y entonces la fila está siempre).
+ */
+function orderedVisible<T extends { code: string }>(
+  catalogue: readonly T[],
+  typedOf: (concept: T) => number | null,
+  added: ReadonlySet<string>,
+): T[] {
+  const byCode = new Map(catalogue.map((concept) => [concept.code, concept]));
+  const own = catalogue.filter((concept) => {
+    if (added.has(concept.code)) {
+      return false; // va en el segundo tramo, para no salir dos veces
+    }
+    const typed = typedOf(concept);
+    return typed === null || typed !== 0;
+  });
+  // Un `Set` conserva el orden de inserción, que aquí ES el orden de adición. Los códigos de la
+  // otra tabla —ingresos y egresos comparten un solo `added`— no están en este catálogo y caen.
+  const appended = [...added]
+    .map((code) => byCode.get(code))
+    .filter((concept): concept is T => concept !== undefined);
+  return [...own, ...appended];
 }
 
 /** Lo tecleado de un ingreso: su importe si se captura, sus horas si es una hora extra, y `null`
@@ -400,21 +426,17 @@ export function visibleIncomeConcepts(
   capture: PayrollMonthlyCapture,
   added: ReadonlySet<string>,
 ): IncomeConcept[] {
-  return INCOME_CONCEPTS.filter((concept) =>
-    isVisible(concept.code, typedIncome(concept, capture), added),
-  );
+  return orderedVisible(INCOME_CONCEPTS, (concept) => typedIncome(concept, capture), added);
 }
 
 export function visibleDeductionConcepts(
   capture: PayrollMonthlyCapture,
   added: ReadonlySet<string>,
 ): DeductionConcept[] {
-  return DEDUCTION_CONCEPTS.filter((concept) =>
-    isVisible(
-      concept.code,
-      concept.kind === "capturado" ? capture.deductions[concept.field] : null,
-      added,
-    ),
+  return orderedVisible(
+    DEDUCTION_CONCEPTS,
+    (concept) => (concept.kind === "capturado" ? capture.deductions[concept.field] : null),
+    added,
   );
 }
 
@@ -470,6 +492,64 @@ export function swapOptionsFor<T extends IncomeConcept | DeductionConcept>(
   const self = catalogue.find((c) => c.code === code && isChoosable(c));
   const free = catalogue.filter((c) => isChoosable(c) && !taken.has(c.code));
   return self ? [self, ...free] : free;
+}
+
+/**
+ * Lo que hay que escribir en la captura para que una fila de INGRESO cambie de concepto, o `null`
+ * si el cambio no procede (alguno de los dos lo deriva la app sola).
+ *
+ * El origen SIEMPRE se vacía —si no, la cifra contaría dos veces— y lo tecleado se lleva a la
+ * fila nueva **solo cuando las dos hablan la misma unidad**:
+ *
+ *   - dos filas capturadas mueven el IMPORTE: quien teclea 120 y se da cuenta de que era «Comisión
+ *     fija» y no «Viáticos» espera corregir la fila, no volver a escribirla;
+ *   - dos filas de horas extras mueven las HORAS, que es lo tecleado ahí: 5,5 horas mal
+ *     clasificadas al 50 % son 5,5 horas al 100 %;
+ *   - cruzando de familia no se lleva NADA, porque 200 dólares de anticipo no son 200 horas y
+ *     cualquier conversión sería inventada. En la práctica no se pierde nada: el desplegable solo
+ *     ofrece conceptos LIBRES, y una fila con cifra ya está puesta.
+ */
+export function incomeSwapPatch(
+  origin: IncomeConcept,
+  target: IncomeConcept,
+  capture: PayrollMonthlyCapture,
+): Partial<PayrollMonthlyCapture> | null {
+  if (!isChoosable(origin) || !isChoosable(target)) {
+    return null;
+  }
+  const originHours = capturedHoursField(origin);
+  const targetHours = capturedHoursField(target);
+
+  if (originHours !== null) {
+    return targetHours !== null
+      ? { [originHours]: 0, [targetHours]: capture[originHours] }
+      : { [originHours]: 0 };
+  }
+  const originField = (origin as Extract<IncomeConcept, { kind: "capturado" }>).field;
+  if (targetHours !== null) {
+    return { [originField]: 0 };
+  }
+  const targetField = (target as Extract<IncomeConcept, { kind: "capturado" }>).field;
+  return { [originField]: 0, [targetField]: capture[originField] };
+}
+
+/** El gemelo para EGRESOS, que no tienen cantidad: siempre mueve el importe, dentro del objeto
+ *  anidado `deductions`. `null` cuando alguno de los dos es el aporte al IESS, que deriva el motor. */
+export function deductionSwapPatch(
+  origin: DeductionConcept,
+  target: DeductionConcept,
+  capture: PayrollMonthlyCapture,
+): Partial<PayrollMonthlyCapture> | null {
+  if (origin.kind !== "capturado" || target.kind !== "capturado") {
+    return null;
+  }
+  return {
+    deductions: {
+      ...capture.deductions,
+      [origin.field]: 0,
+      [target.field]: capture.deductions[origin.field],
+    },
+  };
 }
 
 /** El importe de un concepto de ingreso, venga del motor o de la captura. */

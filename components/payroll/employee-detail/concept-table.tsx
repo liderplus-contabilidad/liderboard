@@ -13,6 +13,7 @@ import {
   INCOME_CONCEPTS,
   addableDeductionConcepts,
   addableIncomeConcepts,
+  capturedHoursField,
   swapOptionsFor,
   visibleDeductionConcepts,
   visibleIncomeConcepts,
@@ -115,7 +116,7 @@ function IncomeTable({
 
   const handleHours = useCallback(
     (index: number, value: number) => {
-      const field = hoursFieldOf(concepts[index]);
+      const field = capturedHoursField(concepts[index]);
       if (field) {
         onHoursChange(field, value);
       }
@@ -135,7 +136,7 @@ function IncomeTable({
       footnote={<OvertimeFootnote computed={computed} capture={capture} />}
     >
       {concepts.map((concept, index) => {
-        const hoursField = hoursFieldOf(concept);
+        const hoursField = capturedHoursField(concept);
 
         return (
           <ConceptRow
@@ -145,7 +146,10 @@ function IncomeTable({
             tone="ingreso"
             label={concept.label}
             options={
-              concept.kind === "capturado"
+              // Las horas extras llevan desplegable IGUAL que un capturado: son elegibles (su
+              // cantidad se teclea), y sin él una fila añadida desde «Agregar ingreso» quedaría
+              // clavada en el concepto con el que nació.
+              concept.kind === "capturado" || hoursField
                 ? swapOptionsFor(concept.code, INCOME_CONCEPTS, capture, added)
                 : undefined
             }
@@ -215,11 +219,6 @@ function DeductionTable({
       ))}
     </ConceptSection>
   );
-}
-
-/** Las tres clases de hora extra declaran de qué cantidad sale su valor; el resto de ingresos, no. */
-function hoursFieldOf(concept: IncomeConcept): OvertimeHoursField | null {
-  return concept.kind === "calculado" ? (concept.hoursField ?? null) : null;
 }
 
 /** Estable por definición: la tabla de egresos no tiene columna de cantidad que despachar. */
