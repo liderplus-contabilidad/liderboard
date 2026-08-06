@@ -1,20 +1,20 @@
 "use client";
 
 import { UserPlus } from "lucide-react";
+import { useState } from "react";
 import { DataGrid } from "@/components/data-table/data-grid";
 import { HeadCell } from "@/components/data-table/grid-cells";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchInput } from "@/components/ui/search-input";
 import { pluralize } from "@/lib/format";
-import type { PayrollEmployeeLine } from "@/lib/payroll/types";
+import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 import { EmployeeRow } from "./employee-row";
-
-/** Capturar un empleado a mano no está en esta ronda: el botón se apaga con el motivo en su
- *  propio tooltip — misma convención que ya usan los iconos de `PayrollPeriodRow`. */
-const REGISTER_DISABLED_REASON = "Registrar un empleado a mano no está disponible todavía";
+import { RegisterEmployeeModal } from "./register-employee-modal";
 
 interface EmployeeTableProps {
+  /** El período al que va a parar un alta — también es lo que el modal nombra en su subtítulo. */
+  period: PayrollPeriod;
   /** La nómina completa del período, SIN filtrar — decide entre el vacío «no tiene empleados» y
    *  el de «ningún empleado coincide con lo que buscas». */
   lines: readonly PayrollEmployeeLine[];
@@ -24,7 +24,15 @@ interface EmployeeTableProps {
   onSearchChange: (value: string) => void;
 }
 
-export function EmployeeTable({ lines, visibleLines, search, onSearchChange }: EmployeeTableProps) {
+export function EmployeeTable({
+  period,
+  lines,
+  visibleLines,
+  search,
+  onSearchChange,
+}: EmployeeTableProps) {
+  const [registering, setRegistering] = useState(false);
+
   return (
     <div className="overflow-hidden rounded-[13px] border border-border bg-surface">
       <div className="flex flex-wrap items-center gap-2.5 border-b border-border bg-surface-header px-[18px] py-3">
@@ -42,8 +50,7 @@ export function EmployeeTable({ lines, visibleLines, search, onSearchChange }: E
           variant="secondary"
           size="sm"
           icon={<UserPlus size={14} />}
-          disabled
-          title={REGISTER_DISABLED_REASON}
+          onClick={() => setRegistering(true)}
         >
           Registrar empleado
         </Button>
@@ -80,6 +87,14 @@ export function EmployeeTable({ lines, visibleLines, search, onSearchChange }: E
             ))}
           </tbody>
         </DataGrid>
+      )}
+
+      {registering && (
+        <RegisterEmployeeModal
+          period={period}
+          lines={lines}
+          onClose={() => setRegistering(false)}
+        />
       )}
     </div>
   );

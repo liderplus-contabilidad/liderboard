@@ -1,18 +1,20 @@
 import { formatCurrency, formatPercent } from "@/lib/format";
-import {
-  PAYROLL_EMPLOYER_IESS_RATE,
-  PAYROLL_PERSONAL_IESS_RATE,
-  PAYROLL_RESERVE_FUND_RATE,
-  PAYROLL_SBU,
-} from "@/lib/payroll/constants";
+import { DEFAULT_PAYROLL_PARAMETERS as PARAMS } from "@/lib/payroll/engine/parameters";
 
-/** Ver `lib/payroll/constants.ts`: son la lectura literal de las fórmulas del Excel del contador,
- *  no una convención de la app — de ahí que la tira sea de solo lectura. */
+/**
+ * Los cuatro parámetros de §3, leídos de la MISMA tabla con la que el motor calcula. Que la tira
+ * los lea de ahí y no de una constante propia es lo que impide que la pantalla enseñe un SBU y el
+ * motor use otro: había dos declaraciones de estas cifras y se habrían separado el enero en que el
+ * SBU suba por decreto.
+ *
+ * De solo lectura porque son de LEY, no una preferencia de la app. El día en que cada período
+ * guarde los suyos, esta tira leerá los del período y esta línea será lo único que cambie.
+ */
 const PARAMETERS: readonly { label: string; value: string }[] = [
-  { label: "SBU", value: formatCurrency(PAYROLL_SBU, { cents: true }) },
-  { label: "Aporte personal IESS", value: formatPercent(PAYROLL_PERSONAL_IESS_RATE * 100, 2) },
-  { label: "Aporte patronal", value: formatPercent(PAYROLL_EMPLOYER_IESS_RATE * 100, 2) },
-  { label: "Fondo de reserva", value: formatPercent(PAYROLL_RESERVE_FUND_RATE * 100, 2) },
+  { label: "SBU", value: formatCurrency(PARAMS.unifiedBasicSalary, { cents: true }) },
+  { label: "Aporte personal IESS", value: formatPercent(PARAMS.iessEmployeeRate * 100, 2) },
+  { label: "Aporte patronal", value: formatPercent(PARAMS.iessEmployerRate * 100, 2) },
+  { label: "Fondo de reserva", value: formatPercent(PARAMS.reserveFundRate * 100, 2) },
 ];
 
 /** «Parámetros del período»: los cuatro valores fijos bajo los que se leen las cifras de la

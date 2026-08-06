@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { emptyCapture } from "./employee-input";
 import type { PayrollEmployeeLine } from "./types";
 import {
+  addEmployee,
   createClient,
   createPeriod,
   db,
@@ -516,5 +517,61 @@ describe("updateEmployee", () => {
     const lines = await listEmployees(period.id);
     expect(lines).toHaveLength(1);
     expect(lines[0].days).not.toBe(99);
+  });
+});
+
+describe("addEmployee", () => {
+  it("agrega un empleado y le estampa el dueño en la puerta", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+
+    const added = await addEmployee(period.id, employeeLine({ name: "Silvia Morales" }));
+
+    expect(added.periodId).toBe(period.id);
+    expect(added.id).toBeTruthy();
+    const stored = await listEmployees(period.id);
+    expect(stored.map((line) => line.name)).toEqual(["Silvia Morales"]);
+  });
+
+  // Al revés que `importRoster`, que reemplaza el mes entero: un alta es una fila más.
+  it("no reemplaza la nómina que el período ya tiene", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    await importRoster(period.id, [employeeLine({ name: "Pedro Sandoval" })]);
+
+    await addEmployee(period.id, employeeLine({ name: "Silvia Morales" }));
+
+    expect((await listEmployees(period.id)).map((line) => line.name).sort()).toEqual([
+      "Pedro Sandoval",
+      "Silvia Morales",
+    ]);
+  });
+
+  it("dos altas seguidas son dos empleados, con ids distintos", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+
+    const first = await addEmployee(period.id, employeeLine({ name: "Silvia Morales" }));
+    const second = await addEmployee(period.id, employeeLine({ name: "Pedro Sandoval" }));
+
+    expect(first.id).not.toBe(second.id);
+    expect(await listEmployees(period.id)).toHaveLength(2);
+  });
+
+  it("no toca la nómina de otro período", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    const abril = await createPeriod(clientId, 2026, 3);
+    await importRoster(abril.id, [employeeLine({ name: "Nómina de abril" })]);
+
+    await addEmployee(marzo.id, employeeLine({ name: "Alta de marzo" }));
+
+    expect((await listEmployees(abril.id)).map((line) => line.name)).toEqual(["Nómina de abril"]);
+  });
+
+  // La misma distinción que `copyRoster`: sin captura no es con la captura en ceros.
+  it("un alta sin captura se guarda sin captura, no con una vacía", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+
+    const added = await addEmployee(period.id, employeeLine());
+
+    expect(added.capture).toBeUndefined();
+    expect((await listEmployees(period.id))[0].capture).toBeUndefined();
   });
 });

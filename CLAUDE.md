@@ -627,6 +627,38 @@ El catálogo es la constante y los importes el argumento — `buildJournalEntry(
 el mapa lo produce `journal-mock.ts`, un archivo que existe para borrarse, y mañana lo producirá el
 período; la construcción vive en `period-detail-view.tsx`, que es la costura.
 
+**El COMPROBANTE en PDF** (`lib/payroll/payslip/`, con `pdf-lib`) reproduce la hoja `INDIVIDUAL` del
+libro — el papel que el empleado firma. Tres capas y la que dibuja no decide nada: `document.ts`
+(puro) baja el comprobante a TEXTO, con los importes ya formateados, que es lo que permite cotejarlo
+contra el Excel comparando cadenas en vez de números contra otro cálculo; `layout.ts` (puro, con un
+`measure` inyectado para no arrastrar `pdf-lib`) lo coloca en cajas y por eso se puede afirmar sin
+generar un PDF que ninguna se sale de la hoja; `render.ts` las recorre y dibuja. Tipografía
+**Helvetica**, una de las base-14 del formato: cero bytes embebidos y dígitos de ancho fijo, además
+de métricamente compatible con la Arial del libro. Se importa en dinámico, como `exceljs`.
+Tres reglas son al revés que en la PANTALLA de detalle, y a propósito: **se imprimen las 26 filas
+siempre** con `-` donde no hay importe (`visibleIncomeConcepts` esconde los capturados en cero
+porque una tabla no puede parecer un formulario a medio llenar; el papel ES un formulario de
+posición fija, y quien lo revisa busca el anticipo en la cuarta fila de egresos); **el orden es el de
+COLUMNAS del libro**, así que el fondo de reserva sale duodécimo y no séptimo — y eso no obliga a una
+segunda lista, se ordena por el campo `column` que `concepts.ts` ya trae; y **no salen las cuatro
+filas de egreso sin rótulo** (`AJ`–`AM`), que el catálogo excluye desde antes. Los rótulos son
+`payslipLabel`, campo OBLIGATORIO del catálogo y no un mapa aparte —un mapa se queda corto al añadir
+un concepto y ningún test de cifras lo delata—, verbatim con las erratas del contador
+(`DESCUENTO TIEMPO PACIAL`). El `(*)` de la columna `Cantidad` marca los dos ingresos que
+`bases.ts` dice que «no son base de nada, solo llegan al total», y `concepts.test.ts` lo vuelve
+ejecutable: sumar 1 a un marcado no puede mover NINGUNA de las cinco bases —se prueban las cinco y no
+solo la aportable, porque los dos décimos tampoco la mueven y sí llevan provisión, así que con una
+sola el test los marcaría por error—. **Una copia por hoja**, no las dos que el Excel imprime lado a
+lado: allí la derecha no tiene identidad propia (`M5 = +D5`) y es papel carbón resuelto con columnas,
+que en un PDF lo resuelve el diálogo de impresión. Se conservan las PROPORCIONES de las tres columnas
+(163 : 84 : 108) estiradas al ancho de la A4 y **no el tamaño**: el bloque real son 355 px —`H` e `I`
+del `Print_Area` son el canal entre copias y no llevan nada—, o sea 266 pt, donde el rótulo más largo
+pediría un cuerpo de 6 pt. Un rótulo se extiende hasta el inicio de `Cantidad` si su fila la usa y
+hasta `Valores` si no, que es el desbordamiento hacia celdas vacías que el Excel hace por su cuenta,
+escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee la razón social de
+`GENERAL!B1` pero nadie la persiste todavía. Nada se guarda — el comprobante se arma en la descarga
+desde la ficha y el motor, la misma regla que el asiento y los totales del período.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind

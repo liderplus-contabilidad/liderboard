@@ -4,12 +4,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { periodLongLabel } from "@/lib/payroll/periods";
 
-/** Ninguna de las dos existe todavía: quitar un empleado de la nómina y el generador de PDF son
- *  trabajo de otra ronda. Se apagan con su motivo en el tooltip, la misma convención que
- *  `PeriodHeader` — la píldora de `DisabledReasonPill` es para cuando lo que falta es el paso
- *  anterior de todo el módulo y hay que verlo sin apuntar; aquí lo que falta es una función. */
+/** Quitar un empleado de la nómina sigue siendo trabajo de otra ronda. Se apaga con su motivo en
+ *  el tooltip, la misma convención que `PeriodHeader` — la píldora de `DisabledReasonPill` es para
+ *  cuando lo que falta es el paso anterior de todo el módulo y hay que verlo sin apuntar; aquí lo
+ *  que falta es una función. */
 const DELETE_DISABLED_REASON = "Quitar un empleado de la nómina no está disponible todavía";
-const DOWNLOAD_DISABLED_REASON = "Todavía no genera el rol individual en PDF";
 
 /** El mismo alto y radio que el control de período del encabezado hermano: las flechas de esta
  *  pantalla y las de aquella son el mismo gesto y no pueden medir distinto. */
@@ -36,6 +35,10 @@ interface EmployeeDetailHeaderProps {
   position?: { index: number; total: number };
   prev: EmployeeNavTarget | null;
   next: EmployeeNavTarget | null;
+  /** Baja el comprobante de ESTE empleado, de una página. */
+  onDownloadPayslip: () => void;
+  /** Mientras `pdf-lib` se carga y el PDF se arma. */
+  downloading: boolean;
 }
 
 /**
@@ -55,6 +58,8 @@ export function EmployeeDetailHeader({
   position,
   prev,
   next,
+  onDownloadPayslip,
+  downloading,
 }: EmployeeDetailHeaderProps) {
   return (
     <div className="mb-5">
@@ -89,11 +94,15 @@ export function EmployeeDetailHeader({
               Eliminar empleado
             </Button>
           </span>
-          <span title={DOWNLOAD_DISABLED_REASON}>
-            <Button variant="secondary" size="toolbar" disabled icon={<FileText size={15} />}>
-              Descargar rol (PDF)
-            </Button>
-          </span>
+          <Button
+            variant="secondary"
+            size="toolbar"
+            disabled={downloading}
+            icon={<FileText size={15} />}
+            onClick={onDownloadPayslip}
+          >
+            {downloading ? "Generando…" : "Descargar rol (PDF)"}
+          </Button>
         </div>
       </div>
     </div>

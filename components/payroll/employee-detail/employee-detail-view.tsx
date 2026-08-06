@@ -14,6 +14,8 @@ import { listEmployees, updateEmployee } from "@/lib/payroll/db";
 import { computeEmployeePayroll } from "@/lib/payroll/engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { emptyCapture, toEngineInput } from "@/lib/payroll/employee-input";
+import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
+import { downloadPayslips, payslipFilename } from "@/lib/payroll/payslip/download";
 import { employeeReconciliationStatus } from "@/lib/payroll/period-detail";
 import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "@/lib/payroll/types";
 import { usePayrollData } from "../payroll-data-provider";
@@ -163,6 +165,39 @@ export function EmployeeDetailView({
     [line?.capture, patchCapture],
   );
 
+  /**
+   * El comprobante en PDF. Se arma EN EL MOMENTO desde la ficha, lo capturado y lo que acaba de
+   * derivar el motor — nada se persiste, por la misma razón que no se persiste ningún total del
+   * módulo: una copia guardada quedaría obsoleta al corregir los días trabajados y el papel diría
+   * una cosa y la pantalla otra.
+   */
+  const [downloading, setDownloading] = useState(false);
+  const downloadPayslip = useCallback(async () => {
+    if (!line || !computed || !period) {
+      return;
+    }
+    setDownloading(true);
+    try {
+      const document = buildPayslipDocument({
+        line,
+        computed,
+        capture,
+        year: period.year,
+        monthIndex: period.monthIndex,
+        clientName: activeClient?.name ?? "",
+        // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
+        // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
+        position: index + 1,
+      });
+      await downloadPayslips(
+        [document],
+        payslipFilename(period.year, period.monthIndex, line.name),
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }, [activeClient?.name, capture, computed, index, line, period]);
+
   const swapIncome = useCallback(
     (from: string, to: string) => swapConcept(from, to, INCOME_CONCEPTS),
     [swapConcept],
@@ -198,6 +233,8 @@ export function EmployeeDetailView({
         position={{ index: index + 1, total: lines.length }}
         prev={target(-1)}
         next={target(1)}
+        onDownloadPayslip={() => void downloadPayslip()}
+        downloading={downloading}
       />
 
       <div className="mt-4">

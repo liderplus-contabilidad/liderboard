@@ -19,9 +19,8 @@ import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
 import { periodLongLabel, rosterStatusLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
 
-/** Ninguna de las dos descargas existe todavía — el asiento contable y el generador de PDF son
- *  trabajo de otra ronda —, así que un solo motivo cubre las dos. */
-const DOWNLOADS_DISABLED_REASON = "Todavía no genera el asiento contable ni el rol en PDF";
+/** La descarga necesita una nómina: sin empleados no hay comprobante que emitir. */
+const EMPTY_ROSTER_REASON = "El período todavía no tiene empleados";
 
 /** La caja de una flecha y la del selector comparten alto y radio: las tres piezas forman un solo
  *  control de período, y una de otro tamaño lo partiría en dos. */
@@ -36,6 +35,11 @@ interface PeriodHeaderProps {
   employeeCount: number;
   financials: PayrollPeriodFinancials | undefined;
   onDelete: () => void;
+  /** Baja los comprobantes de toda la nómina, uno por página. */
+  onDownloadPayslips: () => void;
+  /** Mientras `pdf-lib` se carga y el PDF se arma. Con nóminas de treinta empleados eso son unas
+   *  décimas: sin el aviso, el botón parece no haber respondido y se pulsa otra vez. */
+  downloading: boolean;
 }
 
 /**
@@ -55,7 +59,10 @@ export function PeriodHeader({
   employeeCount,
   financials,
   onDelete,
+  onDownloadPayslips,
+  downloading,
 }: PeriodHeaderProps) {
+  const empty = employeeCount === 0;
   return (
     <div className="mb-5">
       <Link
@@ -87,11 +94,20 @@ export function PeriodHeader({
           </Button>
           {/* El motivo va en tooltip, no en píldora: la píldora es la convención de `ExcelActions`
               para el botón de CARGA, donde lo que falta es el paso anterior de todo el módulo y hay
-              que verlo sin apuntar. Aquí lo que falta es una función que aún no existe, y decirlo a
-              gritos junto al título le robaría el sitio al período. */}
-          <span title={DOWNLOADS_DISABLED_REASON}>
-            <Button variant="secondary" size="toolbar" disabled icon={<FileText size={15} />}>
-              Descargar roles (PDF)
+              que verlo sin apuntar. Aquí lo que falta es la nómina de este período, y decirlo a
+              gritos junto al título le robaría el sitio al período.
+              Va aquí y no dentro de `PayrollExcelActions` porque ese primitivo rinde «Cargar
+              Excel · Descargar Excel · ⓘ» y su forma se deriva de cuántas descargas de EXCEL
+              recibe: un PDF dentro lo obligaría a dejar de hablar de Excel en los tres módulos. */}
+          <span title={empty ? EMPTY_ROSTER_REASON : undefined}>
+            <Button
+              variant="secondary"
+              size="toolbar"
+              disabled={empty || downloading}
+              icon={<FileText size={15} />}
+              onClick={onDownloadPayslips}
+            >
+              {downloading ? "Generando…" : "Descargar roles (PDF)"}
             </Button>
           </span>
         </div>

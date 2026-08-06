@@ -8,8 +8,11 @@
  * o una columna mal atribuida en el parser son errores que ningún test de cifras detecta, porque
  * las cifras siguen sumando igual.
  *
- * El orden es el del libro y el del comprobante `INDIVIDUAL`, que son el mismo. La pantalla de
- * detalle lo recorre tal cual, así que la fila 3 de la tabla es la fila 3 del rol impreso.
+ * El orden de esta lista es el de PANTALLA: los `calculado` agrupados arriba, porque en la tabla
+ * son las filas grises que no se editan. **No es el del comprobante impreso**, que ordena por
+ * columna del libro y por eso pone `I-07 Fondo de reserva` (columna `U`) en duodécimo lugar,
+ * detrás de `COMISION VARIABLE`, y no en séptimo. Esa diferencia no obliga a declarar una segunda
+ * lista: `lib/payroll/payslip/` ordena por el campo `column`, que ya está aquí.
  *
  * `calculado` = lo deriva `lib/payroll/engine/`; `capturado` = lo teclea quien captura el mes.
  * En la pantalla los calculados van en gris y no se editan, que es lo que el diseño llama «los
@@ -52,12 +55,41 @@ interface ConceptBase {
   code: string;
   /** Columna de la hoja `GENERAL`. Es la trazabilidad al archivo del contador. */
   column: string;
-  /** Rótulo en español, el del comprobante del contador. */
+  /** Rótulo en español, el de la PANTALLA: minúsculas, tildes normalizadas. */
   label: string;
+  /**
+   * Rótulo VERBATIM del comprobante `INDIVIDUAL`, el que se imprime en el PDF — mayúsculas,
+   * puntuación y erratas del contador incluidas (`DESCUENTO TIEMPO PACIAL`,
+   * `COMISION FIJA POR VTAS.`). Son los rótulos contra los que él coteja papel y pantalla.
+   *
+   * Es OBLIGATORIO y vive aquí en vez de en un mapa `code → rótulo` aparte por la misma razón
+   * por la que existe este catálogo: un mapa suelto se queda corto cuando alguien añade un
+   * concepto, y ningún test de cifras lo delata porque las cifras siguen sumando igual. Como
+   * campo, el compilador rechaza el concepto incompleto.
+   *
+   * Dos se apartan del literal de la celda, a propósito:
+   * - `CONTRIBUCION SOLIDARIA` va sin el salto de línea que la celda trae dentro (`AG2`): una
+   *   fila de dos líneas rompería el paso fijo de las otras veinticinco.
+   * - La columna `Q` se imprime `SEGURO PRIVADO`. El libro se contradice —su copia izquierda lo
+   *   lee de la cabecera de esa columna y la derecha dice `GERENCIA DE TURNO` escrito a mano—, y
+   *   manda la cabecera, que es de donde sale el dato.
+   */
+  payslipLabel: string;
 }
 
-export type IncomeConcept = ConceptBase &
-  (
+export type IncomeConcept = ConceptBase & {
+  /**
+   * El `(*)` que el comprobante escribe en la columna `Cantidad`, y que su nota al pie explica:
+   * «No aporta IESS ni es Ingreso Gravado».
+   *
+   * Son exactamente los dos ingresos que `grossIncome` suma y que NINGUNA base toca — el fondo de
+   * reserva pagado y el bono—, según `lib/payroll/engine/bases.ts`. Se declara aquí en vez de
+   * derivarse en tiempo de ejecución para no meter una llamada al motor en la capa que solo tiene
+   * que producir un asterisco, y `concepts.test.ts` lo ata al motor con una afirmación ejecutable:
+   * sumar 1 al campo de un concepto marcado no puede mover `contributoryBase`.
+   */
+  notContributory?: true;
+} & (
     | {
         kind: "calculado";
         field: ComputedIncomeField;
@@ -80,6 +112,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-01",
     column: "F",
     label: "Sueldo unificado",
+    payslipLabel: "SUELDO UNIFICADO",
     kind: "calculado",
     field: "unifiedSalary",
   },
@@ -87,6 +120,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-02",
     column: "J",
     label: "Horas extras 50%",
+    payslipLabel: "VALOR GANADO EXTRAS 50%",
     kind: "calculado",
     field: "overtimePay50",
     hoursField: "overtimeHours50",
@@ -96,6 +130,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-03",
     column: "K",
     label: "Horas extras 100%",
+    payslipLabel: "VALOR GANADO EXTRAS 100%",
     kind: "calculado",
     field: "overtimePay100",
     hoursField: "overtimeHours100",
@@ -108,6 +143,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-04",
     column: "L",
     label: "Horas extras 25%",
+    payslipLabel: "VALOR GANADO EXTRAS 25%",
     kind: "calculado",
     field: "overtimePay25",
     hoursField: "overtimeHours25",
@@ -117,6 +153,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-05",
     column: "N",
     label: "Décimo cuarto mensualizado",
+    payslipLabel: "DECIMO IV SUELDO-MENSUAL",
     kind: "calculado",
     field: "fourteenthMonthly",
   },
@@ -124,6 +161,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-06",
     column: "O",
     label: "Décimo tercero mensualizado",
+    payslipLabel: "DECIMO III SUELDO-MENSUAL",
     kind: "calculado",
     field: "thirteenthMonthly",
   },
@@ -131,6 +169,8 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-07",
     column: "U",
     label: "Fondo de reserva",
+    payslipLabel: "FONDO DE RESERVA",
+    notContributory: true,
     kind: "calculado",
     field: "reserveFundPaid",
   },
@@ -138,6 +178,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-08",
     column: "P",
     label: "Vacaciones mensualizadas",
+    payslipLabel: "VACACIONES - MENSUAL",
     kind: "capturado",
     field: "vacationPay",
   },
@@ -145,6 +186,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-09",
     column: "Q",
     label: "Seguro privado",
+    payslipLabel: "SEGURO PRIVADO",
     kind: "capturado",
     field: "privateInsurance",
   },
@@ -152,6 +194,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-10",
     column: "R",
     label: "Viáticos / vivienda",
+    payslipLabel: "VIATICOS/VIVIENDA",
     kind: "capturado",
     field: "allowances",
   },
@@ -159,6 +202,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-11",
     column: "S",
     label: "Comisión fija por ventas",
+    payslipLabel: "COMISION FIJA POR VTAS.",
     kind: "capturado",
     field: "fixedCommission",
   },
@@ -166,19 +210,36 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     code: "I-12",
     column: "T",
     label: "Comisión variable",
+    payslipLabel: "COMISION VARIABLE",
     kind: "capturado",
     field: "variableCommission",
   },
-  { code: "I-13", column: "V", label: "Bono de cumplimiento", kind: "capturado", field: "bonus" },
+  {
+    code: "I-13",
+    column: "V",
+    label: "Bono de cumplimiento",
+    payslipLabel: "BONO CUMPLIMIENTO",
+    notContributory: true,
+    kind: "capturado",
+    field: "bonus",
+  },
 ];
 
 /** Los 13 egresos, en el orden del libro. El primero es el único derivado. */
 export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
-  { code: "E-01", column: "X", label: "Aportes al IESS", kind: "calculado", field: "iessEmployee" },
+  {
+    code: "E-01",
+    column: "X",
+    label: "Aportes al IESS",
+    payslipLabel: "APORTES AL IESS",
+    kind: "calculado",
+    field: "iessEmployee",
+  },
   {
     code: "E-02",
     column: "Y",
     label: "Préstamos quirografarios e hipotecarios",
+    payslipLabel: "PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS",
     kind: "capturado",
     field: "iessLoans",
   },
@@ -186,6 +247,7 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-03",
     column: "Z",
     label: "Licencia sin sueldo",
+    payslipLabel: "LICENCIA SIN SUELDO",
     kind: "capturado",
     field: "unpaidLeave",
   },
@@ -193,6 +255,7 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-04",
     column: "AA",
     label: "Anticipo de sueldo",
+    payslipLabel: "ANTICIPO SUELDO",
     kind: "capturado",
     field: "salaryAdvance",
   },
@@ -200,6 +263,7 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-05",
     column: "AB",
     label: "Préstamos empresariales",
+    payslipLabel: "PRESTAMOS EMPRESARIALES",
     kind: "capturado",
     field: "companyLoans",
   },
@@ -207,30 +271,58 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-06",
     column: "AC",
     label: "Impuesto a la renta",
+    payslipLabel: "IMPUESTO RENTA",
     kind: "capturado",
     field: "incomeTax",
   },
-  { code: "E-07", column: "AD", label: "Almuerzos", kind: "capturado", field: "meals" },
-  { code: "E-08", column: "AE", label: "Multas", kind: "capturado", field: "fines" },
+  {
+    code: "E-07",
+    column: "AD",
+    label: "Almuerzos",
+    payslipLabel: "ALMUERZOS",
+    kind: "capturado",
+    field: "meals",
+  },
+  {
+    code: "E-08",
+    column: "AE",
+    label: "Multas",
+    payslipLabel: "MULTAS",
+    kind: "capturado",
+    field: "fines",
+  },
   {
     code: "E-09",
     column: "AF",
     label: "Consumo en locales",
+    payslipLabel: "CONSUMO LOCALES EMPLEADO",
     kind: "capturado",
     field: "inHouseConsumption",
   },
   {
+    // La celda `AG2` trae un salto de línea dentro («CONTRIBUCION \nSOLIDARIA»). Se normaliza a
+    // una sola línea: una fila de dos rompería el paso fijo de las otras veinticinco.
     code: "E-10",
     column: "AG",
     label: "Contribución solidaria",
+    payslipLabel: "CONTRIBUCION SOLIDARIA",
     kind: "capturado",
     field: "solidarityContribution",
   },
-  { code: "E-11", column: "AH", label: "Otros", kind: "capturado", field: "otherDeductions" },
+  {
+    code: "E-11",
+    column: "AH",
+    label: "Otros",
+    payslipLabel: "OTROS",
+    kind: "capturado",
+    field: "otherDeductions",
+  },
   {
     code: "E-12",
     column: "AI",
     label: "Descuento tiempo parcial",
+    // «PACIAL», sic — así lo escribe el libro, y es el rótulo contra el que el contador coteja.
+    payslipLabel: "DESCUENTO TIEMPO PACIAL",
     kind: "capturado",
     field: "partTimeDeduction",
   },
@@ -238,6 +330,7 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-13",
     column: "AN",
     label: "Descuento permiso médico",
+    payslipLabel: "Descuento PERMISO MEDICO",
     kind: "capturado",
     field: "medicalLeaveDeduction",
   },

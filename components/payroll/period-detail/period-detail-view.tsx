@@ -6,8 +6,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { listEmployees } from "@/lib/payroll/db";
+import { emptyCapture, toEngineInput } from "@/lib/payroll/employee-input";
+import { computeEmployeePayroll } from "@/lib/payroll/engine/compute";
+import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
 import { JOURNAL_MOCK_AMOUNTS } from "@/lib/payroll/journal-mock";
+import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
+import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
 import {
   computePeriodFinancials,
   computeReconciliationCounts,
@@ -51,7 +56,7 @@ const TAB_ID_PREFIX = "payroll-period";
  */
 export function PeriodDetailView({ periodId }: { periodId: string }) {
   const router = useRouter();
-  const { activeClientId, periods, ready, deletePeriod } = usePayrollData();
+  const { activeClient, activeClientId, periods, ready, deletePeriod } = usePayrollData();
   const lines = useLiveQuery(() => listEmployees(periodId), [periodId]) ?? EMPTY_LINES;
 
   const [tab, setTab] = useState<DetailTab>("empleados");
@@ -76,6 +81,37 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   // render. `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-
   // deps` no está para atraparlo.
   const journalEntry = useMemo(() => buildJournalEntry(JOURNAL_MOCK_AMOUNTS), []);
+
+  /**
+   * Los comprobantes de la nómina entera, uno por página y en el orden en que se lee la tabla.
+   *
+   * Es el MISMO constructor que la pantalla de un empleado, llamado en bucle: no hay dos rutas de
+   * generación que puedan separarse, y el PDF del período no cuesta más que recorrer las líneas.
+   * Nada se persiste — cada cifra sale del motor en este instante.
+   */
+  const [downloading, setDownloading] = useState(false);
+  const downloadPayslipsForPeriod = useCallback(async () => {
+    if (!period || lines.length === 0) {
+      return;
+    }
+    setDownloading(true);
+    try {
+      const documents = lines.map((line, index) =>
+        buildPayslipDocument({
+          line,
+          computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+          capture: line.capture ?? emptyCapture(),
+          year: period.year,
+          monthIndex: period.monthIndex,
+          clientName: activeClient?.name ?? "",
+          position: index + 1,
+        }),
+      );
+      await downloadPayslips(documents, payslipBatchFilename(period.year, period.monthIndex));
+    } finally {
+      setDownloading(false);
+    }
+  }, [activeClient?.name, lines, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -112,6 +148,8 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           employeeCount={lines.length}
           financials={financials}
           onDelete={() => setDeleting(true)}
+          onDownloadPayslips={() => void downloadPayslipsForPeriod()}
+          downloading={downloading}
         />
 
         <PeriodKpiCard
@@ -145,6 +183,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           <>
             <PeriodParameters />
             <EmployeeTable
+              period={period}
               lines={lines}
               visibleLines={visibleLines}
               search={search}

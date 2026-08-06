@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  contributoryBase,
+  reserveFundAccrualBase,
+  thirteenthBase,
+  thirteenthProvisionBase,
+  vacationBase,
+} from "./engine/bases";
+import type { IncomeComponents } from "./engine/types";
+import type { IncomeConcept } from "./concepts";
+import {
   DEDUCTION_CONCEPTS,
   INCOME_CONCEPTS,
   addableDeductionConcepts,
@@ -163,5 +172,102 @@ describe("opciones del desplegable de una fila capturada", () => {
       "I-12",
       "I-13",
     ]);
+  });
+});
+
+describe("los rótulos del comprobante", () => {
+  it("los 26 conceptos declaran uno, y ninguno lleva salto de línea", () => {
+    for (const concept of [...INCOME_CONCEPTS, ...DEDUCTION_CONCEPTS]) {
+      expect(concept.payslipLabel.trim(), concept.code).not.toBe("");
+      // Una fila de dos líneas rompería el paso fijo de las otras veinticinco; `AG2` trae el
+      // salto dentro de la celda y aquí se normaliza.
+      expect(concept.payslipLabel, concept.code).not.toContain("\n");
+    }
+  });
+
+  it("van verbatim del libro, con sus erratas", () => {
+    const label = (code: string) =>
+      [...INCOME_CONCEPTS, ...DEDUCTION_CONCEPTS].find((c) => c.code === code)?.payslipLabel;
+
+    expect(label("I-01")).toBe("SUELDO UNIFICADO");
+    expect(label("I-10")).toBe("VIATICOS/VIVIENDA");
+    expect(label("E-12")).toBe("DESCUENTO TIEMPO PACIAL");
+    expect(label("E-13")).toBe("Descuento PERMISO MEDICO");
+    expect(label("E-10")).toBe("CONTRIBUCION SOLIDARIA");
+  });
+
+  it("la columna Q se imprime SEGURO PRIVADO, no GERENCIA DE TURNO", () => {
+    // El libro se contradice: su copia izquierda lee la cabecera de `Q` y la derecha lleva
+    // `GERENCIA DE TURNO` escrito a mano. Manda la cabecera, que es de donde sale el dato.
+    const concept = INCOME_CONCEPTS.find((c) => c.column === "Q");
+    expect(concept?.payslipLabel).toBe("SEGURO PRIVADO");
+  });
+});
+
+/**
+ * EL `(*)` DEL COMPROBANTE, ATADO AL MOTOR.
+ *
+ * La nota al pie dice «No aporta IESS ni es Ingreso Gravado», y `bases.ts` lo dice en código: el
+ * fondo de reserva pagado y el bono «no son base de nada, solo llegan al total». Esta afirmación
+ * lo vuelve ejecutable — sumar 1 al componente de un concepto marcado no puede mover NINGUNA de
+ * las cinco bases parciales, y uno sin marcar tiene que mover al menos una.
+ *
+ * Se prueban las cinco y no solo la aportable, que sería lo intuitivo: los dos décimos tampoco
+ * mueven la aportable (`F+M+P+Q+R+S+T` no los incluye) y sin embargo NO llevan asterisco, porque
+ * sí entran en la provisión. Con una sola base el test pasaría marcándolos por error.
+ */
+describe("el asterisco del comprobante", () => {
+  const ZERO: IncomeComponents = {
+    unifiedSalary: 0,
+    overtimeTotal: 0,
+    fourteenthMonthly: 0,
+    thirteenthMonthly: 0,
+    vacationPay: 0,
+    privateInsurance: 0,
+    allowances: 0,
+    fixedCommission: 0,
+    variableCommission: 0,
+    reserveFundPaid: 0,
+    bonus: 0,
+  };
+
+  const BASES = [
+    contributoryBase,
+    thirteenthBase,
+    reserveFundAccrualBase,
+    vacationBase,
+    thirteenthProvisionBase,
+  ];
+
+  /** Las tres clases de hora extra llegan a las bases por `M`, nunca por `J`/`K`/`L`. */
+  const componentOf = (concept: IncomeConcept): keyof IncomeComponents =>
+    concept.kind === "calculado" && concept.hoursField
+      ? "overtimeTotal"
+      : (concept.field as keyof IncomeComponents);
+
+  const movesSomeBase = (component: keyof IncomeComponents) => {
+    const bumped = { ...ZERO, [component]: 1 };
+    return BASES.some((base) => base(bumped) !== base(ZERO));
+  };
+
+  it("marca exactamente el fondo de reserva y el bono", () => {
+    const marked = INCOME_CONCEPTS.filter((c) => c.notContributory).map((c) => c.code);
+    expect(marked).toEqual(["I-07", "I-13"]);
+  });
+
+  it("un concepto marcado no es base de nada", () => {
+    for (const concept of INCOME_CONCEPTS.filter((c) => c.notContributory)) {
+      expect(movesSomeBase(componentOf(concept)), concept.code).toBe(false);
+    }
+  });
+
+  it("un concepto sin marcar mueve al menos una base", () => {
+    for (const concept of INCOME_CONCEPTS.filter((c) => !c.notContributory)) {
+      expect(movesSomeBase(componentOf(concept)), concept.code).toBe(true);
+    }
+  });
+
+  it("ningún egreso lleva la marca: es una columna de ingresos", () => {
+    expect(DEDUCTION_CONCEPTS.some((c) => "notContributory" in c)).toBe(false);
   });
 });

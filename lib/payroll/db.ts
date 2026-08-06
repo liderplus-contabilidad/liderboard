@@ -279,6 +279,30 @@ export async function updateEmployee(
   await db.employees.update(employeeId, patch);
 }
 
+/**
+ * Agrega UN empleado a la nómina de un período, sin tocar la que ya tiene — al revés que
+ * `importRoster`, que reemplaza el mes entero porque un archivo ES el mes entero. Un alta a mano
+ * es una fila más, y por eso no hay transacción: es una sola escritura.
+ *
+ * El dueño se estampa AQUÍ, en la puerta, igual que en `importRoster` y en la copia de nómina: a
+ * qué período pertenece un empleado lo decide el período que está abierto, nunca lo que traiga la
+ * ficha. Por eso el argumento es una `ParsedPayrollEmployeeLine`, sin `id` ni `periodId`.
+ *
+ * Devuelve la ficha ya estampada para que quien la llama pueda navegar a ella sin releer la tabla.
+ *
+ * Lo que NO hace es validar: qué es obligatorio y qué forma tiene una cédula es de
+ * `lib/payroll/employee-form.ts`, que corre donde se puede decir QUÉ campo está mal. El duplicado
+ * de cédula se comprueba allí por la misma razón — aquí solo se podría rechazar sin explicar.
+ */
+export async function addEmployee(
+  periodId: string,
+  line: ParsedPayrollEmployeeLine,
+): Promise<PayrollEmployeeLine> {
+  const stored: PayrollEmployeeLine = { ...line, id: crypto.randomUUID(), periodId };
+  await db.employees.add(stored);
+  return stored;
+}
+
 export async function importRoster(
   periodId: string,
   lines: readonly ParsedPayrollEmployeeLine[],
