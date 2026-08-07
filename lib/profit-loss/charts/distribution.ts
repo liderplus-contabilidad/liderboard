@@ -20,11 +20,23 @@
  * La línea del total NO es el techo del apilado y por eso existe: `4.1.4 Rebajas y/o Descuentos`
  * es una cuenta de ingreso con saldo negativo, que se apila hacia abajo, así que el total neto no
  * está en ningún borde de la pila. Con «Otros» plegado sigue siendo el total de verdad.
+ *
+ * Y como la pregunta que produce esta tarjeta es «qué PARTE de la cuenta es cada hija», el monto
+ * de la línea no la contesta solo: `distributionShares` reparte ese mismo total en porcentajes,
+ * una vez, y de ahí salen las dos lecturas —el número dentro del segmento y el tooltip—.
  */
 import { CHART_DISTRIBUTION_MAX, colorForDistributionSlot } from "@/lib/charts/palette";
-import type { AnalyticsSource, Series, SeriesKey, SeriesPoint } from "../analytics/types";
+import { toPctOfContainer } from "../analytics/structure";
+import {
+  seriesKeyId,
+  type AnalyticsSource,
+  type Series,
+  type SeriesKey,
+  type SeriesPoint,
+} from "../analytics/types";
 import { childrenOf, seriesTotal } from "./presets";
 import { DEFAULT_FOCUS_CODE } from "./selection";
+import type { MarkedShare } from "./share";
 
 /** El código de la serie sintética que recoge la cola. No colisiona: ninguna cuenta se llama así. */
 export const DISTRIBUTION_OTHERS_CODE = "otras-cuentas";
@@ -97,6 +109,39 @@ export function foldDistribution(
   const kept = ranked.slice(0, limit - 1);
   const folded = ranked.slice(limit - 1);
   return { series: [...kept, othersSeries(folded)], grouped: folded.length, idle };
+}
+
+/**
+ * Lo que cada segmento ocupa dentro del total que la línea dibuja encima.
+ *
+ * Es la misma figura que `markedShares` —el porcentaje sobre la cuenta que contiene, calculado una
+ * sola vez y leído después por la etiqueta y por el tooltip— con la base ya sabida: aquí no hay
+ * ancestro que buscar, porque la pila ES el desglose de esa cuenta. Y se pasa por
+ * `toPctOfContainer`, la única definición de «porcentaje sobre el contenedor» del módulo, en vez
+ * de dividir aquí: de ahí hereda las dos reglas que importan — un periodo sin cobertura y un total
+ * en `0` dan `null`, nunca `0 %`.
+ *
+ * «Otros» lleva el suyo como cualquier otra: es la suma de la cola y ocupa lo que ocupa. Los
+ * porcentajes NO suman 100 cuando una hija es negativa, y eso es correcto: es exactamente lo que
+ * dice que el neto no está en el borde de la pila.
+ */
+export function distributionShares(
+  series: readonly Series[],
+  total: Series,
+  parentLabel: string,
+): MarkedShare[] {
+  return series.map((entry) => {
+    const measured = toPctOfContainer({
+      ...entry,
+      container: { code: total.key.code, label: parentLabel, points: total.points },
+    });
+    return {
+      seriesId: seriesKeyId(entry.key),
+      label: entry.label,
+      baseLabel: parentLabel,
+      values: measured.points.map((point) => point.value),
+    };
+  });
 }
 
 /**

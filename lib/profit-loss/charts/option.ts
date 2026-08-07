@@ -86,6 +86,31 @@ function sharesFit(sharedCount: number, points: number, context: SeriesOptionCon
   );
 }
 
+/**
+ * Dentro de una PILA el porcentaje no se mide contra el presupuesto de `sharesFit`, y por eso no
+ * pasa por él: un apilado dibuja UNA columna por periodo, así que sus etiquetas se reparten en
+ * vertical —cada una dentro de su propio trozo— y no hay elenco que las apriete de lado. Lo que
+ * limita aquí es la ALTURA del segmento, que es su propio porcentaje: por debajo de este umbral el
+ * número es más alto que el trozo que lo contiene, así que se apaga en vez de desbordarlo. El
+ * tooltip lo sigue diciendo, que es donde no falta nunca.
+ */
+const MIN_STACK_LABEL_SHARE = 5;
+
+/** Los porcentajes que un segmento imprime dentro de sí, ya podados los que no caben. */
+function stackShares(
+  series: Series,
+  context: SeriesOptionContext,
+): readonly (number | null)[] | undefined {
+  const share = shareOf(series, context);
+  if (!share || context.labels === false) {
+    return undefined;
+  }
+  const legible = share.values.map((value) =>
+    value !== null && Math.abs(value) >= MIN_STACK_LABEL_SHARE ? value : null,
+  );
+  return legible.some((value) => value !== null) ? legible : undefined;
+}
+
 /** Cuántas de las series dibujadas caen dentro de otra marcada — el elenco del presupuesto. */
 function sharedCountOf(series: readonly Series[], context: SeriesOptionContext): number {
   return context.shares ? series.filter((entry) => shareOf(entry, context)).length : 0;
@@ -178,10 +203,16 @@ export function stackedOption(series: Series[], context: SeriesOptionContext): C
  * La línea no es decorativa ni redundante con el techo de la pila. Una hija de saldo negativo
  * —`4.1.4 Rebajas y/o Descuentos` lo es— se apila hacia ABAJO, así que el neto no está en ningún
  * borde; y con la cola plegada en «Otros» sigue siendo el total de verdad. Es además lo único que
- * imprime una cifra por columna: los segmentos de una pila no tienen dónde escribirla.
+ * imprime un MONTO por columna: dentro de un segmento no cabe más que una cifra corta.
  *
  * Y por eso mismo apila SIN las costuras de 2 px que separan todo relleno contiguo en esta app:
  * una columna que ya declara su total es una sola cifra repartida, no varias puestas en fila.
+ *
+ * Esa cifra repartida es también la razón de que cada segmento imprima su PORCENTAJE dentro del
+ * total (`distributionShares`, colgado del contexto como cualquier otro `shares`): el monto lo
+ * dice la línea, una vez por columna, y lo que la pila añade es qué parte de él es cada hija —
+ * leerlo restando montos a ojo es justo el trabajo que la tarjeta existe para ahorrar—. El
+ * tooltip lo repite segmento a segmento y nombrando la base, que es donde sí cabe la frase entera.
  */
 export function stackedTotalOption(
   series: Series[],
@@ -192,10 +223,14 @@ export function stackedTotalOption(
     ...chrome(series.length + 1),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("shadow", context.unit),
+    tooltip: axisTooltip("shadow", context.unit, context),
     series: [
       ...series.map((entry) => ({
-        ...barSeries(entry, series.length, context, { stacked: true, seamless: true }),
+        ...barSeries(entry, series.length, context, {
+          stacked: true,
+          seamless: true,
+          shares: stackShares(entry, context),
+        }),
         stack: STACK_ID,
       })),
       {
@@ -997,7 +1032,16 @@ function barSeries(
   series: Series,
   seriesCount: number,
   context: SeriesOptionContext,
-  options: { stacked?: boolean; seamless?: boolean; sharedCount?: number } = {},
+  options: {
+    stacked?: boolean;
+    seamless?: boolean;
+    sharedCount?: number;
+    /**
+     * Los porcentajes ya decididos por quien llama, saltándose `shareLabelFor`. Solo los pasa la
+     * pila con total, cuyo presupuesto es la altura de cada segmento y no el elenco del eje.
+     */
+    shares?: readonly (number | null)[];
+  } = {},
 ): ChartSeries {
   const stacked = options.stacked ?? false;
   // Contiguous fills — stacked segments, grouped bars — are separated by 2px of the surface.
@@ -1027,7 +1071,7 @@ function barSeries(
       labelsFit(seriesCount, series.points.length, context),
       context.unit,
       stacked ? "inside" : "top",
-      shareLabelFor(series, context, options.sharedCount ?? 0),
+      options.shares ?? shareLabelFor(series, context, options.sharedCount ?? 0),
     ),
     labelLayout: { hideOverlap: true },
   };

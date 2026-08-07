@@ -23,7 +23,12 @@ import { toPareto, toPieSlices, type AmountEntry, type ParetoResult } from "../a
 import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
-import { distributionColor, foldDistribution, resolveDistributionParent } from "./distribution";
+import {
+  distributionColor,
+  distributionShares,
+  foldDistribution,
+  resolveDistributionParent,
+} from "./distribution";
 import {
   entryTable,
   horizontalBarOption,
@@ -227,14 +232,19 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const parentTotal = parent
     ? (runQuery(presetQuery([parent.code], context, { periods: periodRefs })).series[0] ?? null)
     : null;
+  // El monto lo dice la línea, una vez por columna; lo que la pila añade es qué PARTE de él es
+  // cada hija, y ese reparto se calcula una sola vez para la etiqueta y el tooltip.
+  const shareOfParent =
+    parent && parentTotal ? distributionShares(distribution.series, parentTotal, parent.label) : [];
   const distributionContext = {
     colorOf: distributionColor(distribution.series),
     periods: children.periods,
+    shares: new Map(shareOfParent.map((share) => [share.seriesId, share])),
   };
   const distributionNote = parent
     ? [
         distribution.series.length > 0
-          ? `La línea es el total de ${parent.label}; las barras, sus cuentas hijas.`
+          ? `La línea es el total de ${parent.label}; las barras, sus cuentas hijas, con el porcentaje que cada una ocupa dentro de él.`
           : "",
         distribution.grouped > 0
           ? `«Otros» agrupa ${distribution.grouped} cuentas más pequeñas.`

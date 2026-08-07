@@ -14,6 +14,7 @@ import type { AnalyticsSource, Series } from "../analytics/types";
 import {
   DISTRIBUTION_OTHERS_CODE,
   distributionColor,
+  distributionShares,
   foldDistribution,
   resolveDistributionParent,
 } from "./distribution";
@@ -163,6 +164,62 @@ describe("qué hijas se dibujan", () => {
     const series = childSeries(CENTRO_VACIO_SOURCE, ["4.1.1", "4.1.4", "4.1.8"]);
 
     expect(foldDistribution(series).series).toEqual([]);
+  });
+});
+
+describe("qué parte del total es cada segmento", () => {
+  /** Un total a la medida de las hijas del caso, para poder leer los porcentajes a ojo. */
+  function fakeTotal(monthly: (number | null)[]): Series {
+    return {
+      ...fakeSeries("4.1", null),
+      label: "Ventas",
+      points: monthly.map((value, index) => ({
+        period: { year: 2026, frequency: "mensual" as const, index },
+        value,
+      })),
+    };
+  }
+
+  it("reparte el total de la línea, nombrando la cuenta que se distribuye", () => {
+    const shares = distributionShares(
+      [fakeSeries("a", 250), fakeSeries("b", 750)],
+      fakeTotal([1000, 1000, 1000]),
+      "Ventas",
+    );
+
+    expect(shares.map((share) => share.values[0])).toEqual([25, 75]);
+    expect(shares.every((share) => share.baseLabel === "Ventas")).toBe(true);
+    // El id es el de la serie hija: con él la reconocen la etiqueta y el tooltip.
+    expect(shares[0].seriesId).toBe("a|c|2026");
+  });
+
+  it("un periodo sin cobertura y un total en cero dan vacío, nunca 0 %", () => {
+    const [share] = distributionShares(
+      [
+        {
+          ...fakeSeries("a", 100),
+          points: [
+            { period: { year: 2026, frequency: "mensual", index: 0 }, value: 100 },
+            { period: { year: 2026, frequency: "mensual", index: 1 }, value: null },
+            { period: { year: 2026, frequency: "mensual", index: 2 }, value: 50 },
+          ],
+        },
+      ],
+      fakeTotal([200, 400, 0]),
+      "Ventas",
+    );
+
+    expect(share.values).toEqual([50, null, null]);
+  });
+
+  it("una hija negativa ocupa un porcentaje negativo: es la que saca el neto del borde", () => {
+    const shares = distributionShares(
+      [fakeSeries("4.1.1", 1200), fakeSeries("4.1.4", -200)],
+      fakeTotal([1000, 1000, 1000]),
+      "Ventas",
+    );
+
+    expect(shares.map((share) => share.values[0])).toEqual([120, -20]);
   });
 });
 
