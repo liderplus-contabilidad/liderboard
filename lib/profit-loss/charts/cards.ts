@@ -58,6 +58,7 @@ import {
   toSeriesQuery,
   type SelectionContext,
 } from "./selection";
+import { describeShares, markedShares } from "./share";
 import { buildWaterfall } from "./waterfall";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
@@ -185,9 +186,14 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const evolutionCodes = filters.codes.length > 0 ? filters.codes : defaultCodes;
   const evolutionFilters = { ...filters, codes: evolutionCodes };
   const evolution = runQuery(toSeriesQuery(evolutionFilters, context));
+  // Marcar una cuenta y otra que la contiene no es solo comparar dos barras: la pregunta que
+  // produce esa marca es qué parte de la primera es la segunda. El porcentaje se calcula UNA vez
+  // y de ahí salen las tres lecturas — la etiqueta de la barra, el tooltip y la nota al pie.
+  const shares = markedShares(evolution.series, sources);
   const evolutionContext = {
     colorOf: colorResolver(evolutionFilters, context),
     periods: evolution.periods,
+    shares: new Map(shares.map((share) => [share.seriesId, share])),
   };
 
   // Composición y ranking conservan su pregunta fija, pero intersecan su universo con las
@@ -253,6 +259,7 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
             : null,
         table: seriesTableFor("barras", evolution.series, evolutionContext),
         warnings: evolution.warnings,
+        ...withNote(describeShares(shares)),
         height: 300,
       },
       {

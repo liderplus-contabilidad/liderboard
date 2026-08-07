@@ -262,6 +262,34 @@ describe("lo que marcan los filtros", () => {
     expect(periodName).toBe("Ene, Mar");
   });
 
+  it("marcar una cuenta y otra que la contiene anota el porcentaje y dice cuál es la base", () => {
+    const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4", "4.1.1"] }));
+
+    expect(cards[0].note).toBe(
+      "El porcentaje de cada barra es lo que la cuenta ocupa dentro de la marcada que la contiene: Ventas Alojamiento y Servicios dentro de Ingresos.",
+    );
+    // La hija lo lleva; el padre, que no cae dentro de nada marcado, no.
+    expect(cards[0].option?.series[1].label?.rich).toBeDefined();
+    expect(cards[0].option?.series[0].label?.rich).toBeUndefined();
+  });
+
+  it("dos cuentas sin parentesco dejan la tarjeta exactamente como estaba", () => {
+    const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4", "5"] }));
+
+    expect(cards[0].note).toBeUndefined();
+    expect(cards[0].option?.series.every((series) => series.label?.rich === undefined)).toBe(true);
+  });
+
+  it("la tabla gemela sigue siendo montos: el porcentaje vive en la gráfica", () => {
+    const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4", "4.1.1"] }));
+
+    expect(cards[0].table.rows.map((row) => row.id)).toEqual([
+      "4|cultura-manor|2026",
+      "4.1.1|cultura-manor|2026",
+    ]);
+    expect(cards[0].table.rows[1].values[0]).toBe("$24,465");
+  });
+
   it("varios centros marcados cruzan cada cuenta con cada centro", () => {
     const { cards } = buildGraficosCards(
       DOS_CENTROS,

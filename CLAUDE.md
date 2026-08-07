@@ -646,6 +646,27 @@ contra Jun»). `periodRangeLabel` (`analytics/period.ts`) es la única forma de 
 periodos y distingue el rango continuo del que tiene huecos: Ene y Mar marcados son «Ene, Mar», y
 «Ene–Mar» afirmaría que febrero está sumado.
 
+**Marcar una cuenta y otra que la CONTIENE anota el porcentaje sobre la barra.** Marcar «4 Ingresos»
+y «4.1 Ventas» a la vez no es solo comparar dos barras: la pregunta que produce esa marca es qué
+parte de la primera es la segunda. `lib/profit-loss/charts/share.ts` (puro + testeado) la responde
+una vez y de ahí salen las TRES lecturas — la etiqueta de la barra, el tooltip y la nota al pie de la
+tarjeta «Comparación» —, en vez de tres cálculos que puedan separarse. La base es el **ancestro
+marcado más cercano** a cualquier profundidad, caminando `parentByCode` (la parentela del ÁRBOL, la
+misma que sigue `ancestorPath`): eso es lo que da lectura al salto de nivel (`4` y `4.1.01` sin la
+intermedia) y lo que acierta con dos familias marcadas a la vez, donde una base común no existe. La
+división NO se reescribe — se le cuelga a la serie ese ancestro como `container` y se pasa por
+`toPctOfContainer`, así hereda que un periodo sin cobertura y una base en `0` den `null` y nunca
+`0 %`. En la barra va **solo el número**, en una segunda línea más tenue bajo el monto (`rich`, la
+única razón por la que `ChartLabel` lo tiene): «28.4 % de Ingresos» no cabe en doce columnas, así que
+quién es la base lo dicen el tooltip —barra por barra— y una línea en castellano llano bajo la
+tarjeta (`describeShares`), que además es lo que desambigua cuando hay dos niveles de padre en la
+misma columna. El porcentaje tiene **presupuesto propio** y se mide contra las barras que lo llevan,
+no contra todas: padre e hija sobre doce meses son 24 marcas y ningún monto cabe, pero solo la hija
+lleva porcentaje, así que son 12 y sí caben — en el año completo se lee el % y ningún monto, y al
+acotar «Periodo» reaparece el monto encima. Nada de lo que se veía antes deja de verse, y dos cuentas
+sin parentesco dejan la gráfica exactamente igual. La tabla gemela sigue siendo montos y el informe
+imprimible lo hereda sin tocarlo, porque lee el mismo `buildGraficosCards`.
+
 **Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. **El
 MOTOR es la única fuente de toda cifra en pantalla** y el Excel sirve solo para SUBIR información:
 lo guardado es la ficha del empleado más lo que se CAPTURA del mes (`PayrollMonthlyCapture`), y las

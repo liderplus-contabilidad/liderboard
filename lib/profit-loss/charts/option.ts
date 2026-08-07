@@ -43,6 +43,7 @@ import {
 } from "../analytics/structure";
 import { seriesKeyId, type PeriodRef, type Series, type SeriesKey } from "../analytics/types";
 import type { ChartType } from "./selection";
+import type { MarkedShare } from "./share";
 import { RESULT_CODE, type WaterfallStep } from "./waterfall";
 
 /** What the Y values mean, which is all that changes between amounts, shares and indexes. */
@@ -69,6 +70,34 @@ function labelsFit(seriesCount: number, points: number, context: SeriesOptionCon
   );
 }
 
+/**
+ * El porcentaje sobre la cuenta que la contiene tiene PRESUPUESTO PROPIO, y se mide contra las
+ * barras que lo llevan y no contra todas. Un padre y una hija sobre doce meses son 24 marcas —
+ * ninguna etiqueta cabe—, pero solo la hija lleva porcentaje, así que son 12 y sí caben: en el
+ * año completo se lee el % de cada barra hija y ningún monto, y al acotar «Periodo» reaparece el
+ * monto encima. Nada de lo que se veía antes deja de verse; esto solo añade.
+ */
+function sharesFit(sharedCount: number, points: number, context: SeriesOptionContext): boolean {
+  return (
+    (context.labels ?? true) &&
+    sharedCount > 0 &&
+    sharedCount <= MAX_DIRECT_LABELS &&
+    sharedCount * points <= MAX_DIRECT_LABEL_MARKS
+  );
+}
+
+/** Cuántas de las series dibujadas caen dentro de otra marcada — el elenco del presupuesto. */
+function sharedCountOf(series: readonly Series[], context: SeriesOptionContext): number {
+  return context.shares ? series.filter((entry) => shareOf(entry, context)).length : 0;
+}
+
+function shareOf(series: Series, context: SeriesOptionContext): MarkedShare | undefined {
+  return context.shares?.get(seriesKeyId(series.key));
+}
+
+/** El fragmento de `rich` que pinta el porcentaje: una anotación bajo la cifra, no la cifra. */
+const SHARE_RICH_KEY = "share";
+
 /** Below two series there is nothing to tell apart, so the title carries the name. */
 const MIN_LEGEND_SERIES = 2;
 
@@ -86,6 +115,12 @@ export interface SeriesOptionContext {
    * bar on hover.
    */
   labels?: boolean;
+  /**
+   * Por `seriesKeyId`, el porcentaje que esa serie ocupa dentro de la cuenta marcada que la
+   * contiene (`markedShares`). Ausente — que es el caso de casi toda la app — la etiqueta y el
+   * tooltip salen exactamente como salían.
+   */
+  shares?: ReadonlyMap<string, MarkedShare>;
 }
 
 /** Charts whose axis is a set of accounts within one period. */
@@ -108,12 +143,13 @@ export function formatChartValue(value: number, unit: ChartUnit = "moneda"): str
 
 /** Vertical bars — one series is an evolution, several are a grouped comparison. */
 export function barOption(series: Series[], context: SeriesOptionContext): ChartOption {
+  const sharedCount = sharedCountOf(series, context);
   return {
     ...chrome(series.length),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("shadow", context.unit),
-    series: series.map((entry) => barSeries(entry, series.length, context)),
+    tooltip: axisTooltip("shadow", context.unit, context),
+    series: series.map((entry) => barSeries(entry, series.length, context, { sharedCount })),
   };
 }
 
@@ -137,6 +173,9 @@ export function stackedOption(series: Series[], context: SeriesOptionContext): C
  * parent's 8 children therefore draws three shares that correctly fall short of 100.
  */
 export function hundredPercentOption(series: Series[], context: SeriesOptionContext): ChartOption {
+  // Ningún `sharedCount` ni contexto en el tooltip a propósito: aquí los valores YA son el
+  // porcentaje sobre el contenedor, y anotar encima un segundo porcentaje del mismo contenedor
+  // sería escribir «28.4 % · 100 % de Ingresos» sobre cada barra.
   const shares = hundredPercentSeries(series);
   return {
     ...chrome(shares.length),
@@ -160,12 +199,13 @@ export function hundredPercentSeries(series: Series[]): Series[] {
 
 /** Lines — trends and, above all, índice base 100, where the shapes are what compare. */
 export function lineOption(series: Series[], context: SeriesOptionContext): ChartOption {
+  const sharedCount = sharedCountOf(series, context);
   return {
     ...chrome(series.length),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("cross", context.unit),
-    series: series.map((entry) => lineSeries(entry, series.length, context)),
+    tooltip: axisTooltip("cross", context.unit, context),
+    series: series.map((entry) => lineSeries(entry, series.length, context, sharedCount)),
   };
 }
 
@@ -841,8 +881,16 @@ function valueAxis(unit: ChartUnit = "moneda"): ChartAxis {
  * A tooltip that omits the series with no coverage instead of reporting `$0` for them, and
  * renders nothing at all when a period has no covered series. `axis` trigger also makes the
  * whole column sensitive, which is how the hit area ends up larger than the mark.
+ *
+ * Es el único sitio donde el porcentaje sale NOMBRANDO su base («28.4 % de Ingresos»): en la
+ * barra esa frase no cabe en doce columnas, y aquí sobra el ancho. Sale siempre que exista,
+ * también cuando el eje estaba demasiado apretado para imprimirlo encima de la barra.
  */
-function axisTooltip(pointer: "shadow" | "cross", unit: ChartUnit = "moneda"): ChartTooltip {
+function axisTooltip(
+  pointer: "shadow" | "cross",
+  unit: ChartUnit = "moneda",
+  context?: SeriesOptionContext,
+): ChartTooltip {
   return {
     trigger: "axis",
     axisPointer: { type: pointer, lineStyle: { color: CHART_LINES.axis, width: 1 } },
@@ -853,10 +901,15 @@ function axisTooltip(pointer: "shadow" | "cross", unit: ChartUnit = "moneda"): C
       if (covered.length === 0) {
         return "";
       }
-      const rows = covered.map(
-        (param) =>
-          `${param.marker ?? ""} ${param.seriesName ?? ""}: ${formatChartValue(param.value as number, unit)}`,
-      );
+      const rows = covered.map((param) => {
+        const share = param.seriesId ? context?.shares?.get(param.seriesId) : undefined;
+        const value = share?.values[param.dataIndex];
+        const suffix =
+          share && value !== null && value !== undefined
+            ? ` · ${formatPercent(value)} de ${share.baseLabel}`
+            : "";
+        return `${param.marker ?? ""} ${param.seriesName ?? ""}: ${formatChartValue(param.value as number, unit)}${suffix}`;
+      });
       return [covered[0].name, ...rows].join("<br/>");
     },
   };
@@ -866,7 +919,7 @@ function barSeries(
   series: Series,
   seriesCount: number,
   context: SeriesOptionContext,
-  options: { stacked?: boolean } = {},
+  options: { stacked?: boolean; sharedCount?: number } = {},
 ): ChartSeries {
   const stacked = options.stacked ?? false;
   // Contiguous fills — stacked segments, grouped bars — are separated by 2px of the surface.
@@ -889,6 +942,7 @@ function barSeries(
       labelsFit(seriesCount, series.points.length, context),
       context.unit,
       stacked ? "inside" : "top",
+      shareLabelFor(series, context, options.sharedCount ?? 0),
     ),
     labelLayout: { hideOverlap: true },
   };
@@ -898,6 +952,7 @@ function lineSeries(
   series: Series,
   seriesCount: number,
   context: SeriesOptionContext,
+  sharedCount = 0,
 ): ChartSeries {
   const color = context.colorOf(series.key);
   return {
@@ -911,28 +966,76 @@ function lineSeries(
     symbolSize: CHART_MARK.symbolSize,
     smooth: false,
     emphasis: { focus: "series" },
-    label: directLabel(labelsFit(seriesCount, series.points.length, context), context.unit, "top"),
+    label: directLabel(
+      labelsFit(seriesCount, series.points.length, context),
+      context.unit,
+      "top",
+      shareLabelFor(series, context, sharedCount),
+    ),
     labelLayout: { hideOverlap: true },
   };
+}
+
+/**
+ * Los porcentajes que esta serie imprimirá bajo su monto, o `undefined` si no lleva ninguno —
+ * porque no cae dentro de ninguna cuenta marcada, o porque su elenco no cabe en el eje.
+ */
+function shareLabelFor(
+  series: Series,
+  context: SeriesOptionContext,
+  sharedCount: number,
+): readonly (number | null)[] | undefined {
+  const share = shareOf(series, context);
+  return share && sharesFit(sharedCount, series.points.length, context) ? share.values : undefined;
 }
 
 /**
  * The direct label of a mark. `hideOverlap` in `labelLayout` is what drops one that does not
  * fit rather than drawing it clipped, and the empty string for a `null` keeps an uncovered
  * period from printing a value it does not have.
+ *
+ * `shares` añade una SEGUNDA línea con lo que la cuenta ocupa dentro de la marcada que la
+ * contiene. Las dos líneas son independientes: con el eje apretado el monto se apaga y el
+ * porcentaje sigue —es más corto y es la lectura que se pidió—, y una barra cuyo porcentaje no
+ * se puede calcular (base en cero, periodo sin cobertura) imprime su monto y nada debajo.
  */
 function directLabel(
   show: boolean,
   unit: ChartUnit = "moneda",
   position: ChartLabel["position"] = "top",
+  shares?: readonly (number | null)[],
 ): ChartLabel {
+  const inside = position === "inside";
   return {
-    show,
+    show: show || shares !== undefined,
     position,
     // Ink, never the series color — an inside label sits on a saturated fill, hence `onFill`.
-    color: position === "inside" ? CHART_INK.onFill : CHART_INK.strong,
+    color: inside ? CHART_INK.onFill : CHART_INK.strong,
     fontSize: 10.5,
-    formatter: (param) =>
-      param.value === null || param.value === undefined ? "" : formatChartValue(param.value, unit),
+    ...(shares
+      ? {
+          rich: {
+            // Más tenue que el monto: el porcentaje es una anotación sobre la barra, no la cifra
+            // de la barra. Sobre un relleno saturado gana `onFill`, que es el único que se lee.
+            [SHARE_RICH_KEY]: {
+              color: inside ? CHART_INK.onFill : CHART_INK.muted,
+              fontSize: 10,
+              lineHeight: 13,
+            },
+          },
+        }
+      : {}),
+    formatter: (param) => {
+      const amount =
+        show && param.value !== null && param.value !== undefined
+          ? formatChartValue(param.value, unit)
+          : "";
+      const share = shares?.[param.dataIndex];
+      if (share === null || share === undefined) {
+        return amount;
+      }
+      const pct = `{${SHARE_RICH_KEY}|${formatPercent(share)}}`;
+      return amount === "" ? pct : `${amount}\n${pct}`;
+    },
   };
 }

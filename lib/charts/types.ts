@@ -42,6 +42,13 @@ export interface ChartLabel extends ChartTextStyle {
   position?: "top" | "inside" | "right" | "left" | "outside" | "insideRight";
   distance?: number;
   formatter?: (param: ChartParam) => string;
+  /**
+   * Named styles a formatter can apply per fragment with `{nombre|texto}`. The ONE reason it is
+   * here: a label that carries two readings — the amount and, under it, the share of the account
+   * that contains it — has to give the second one a fainter ink, and a label's own `color` is a
+   * single value for the whole string.
+   */
+  rich?: Record<string, ChartTextStyle & { lineHeight?: number }>;
 }
 
 export interface ChartAxisLabel extends ChartTextStyle {
