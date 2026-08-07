@@ -49,16 +49,19 @@ export function GraficosView() {
         ))}
       </div>
 
-      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone — una tarjeta a lo
-          ancho, dos en retícula, y la cascada cerrando con la historia completa. */}
+      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone — las dos del eje
+          temporal a lo ancho, las dos del tramo en retícula, y la cascada cerrando con la
+          historia completa. La distribución va a lo ancho porque apila hasta seis cuentas sobre
+          doce columnas: a media pantalla la leyenda se come el gráfico. */}
       <SpecCard spec={cards[0]} />
+      <SpecCard spec={cards[1]} />
 
       <div className="grid grid-cols-2 gap-4">
-        <SpecCard spec={cards[1]} />
         <SpecCard spec={cards[2]} />
+        <SpecCard spec={cards[3]} />
       </div>
 
-      <SpecCard spec={cards[3]} />
+      <SpecCard spec={cards[4]} />
     </div>
   );
 }

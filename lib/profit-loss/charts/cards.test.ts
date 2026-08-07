@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHART_PALETTE } from "@/lib/charts/palette";
+import { CHART_COMPOSITION_PALETTE, CHART_PALETTE } from "@/lib/charts/palette";
 import {
   CENTRO_PRINCIPAL_SOURCE,
   CENTRO_VACIO_SOURCE,
@@ -63,11 +63,12 @@ function withFilters(overrides: Partial<PygFilters>): PygFilters {
 /* -------------------------------------------------------------- el contrato de la lista */
 
 describe("el contrato de la lista", () => {
-  it("Gráficos declara cuatro tarjetas, en el orden que la vista posiciona", () => {
+  it("Gráficos declara cinco tarjetas, en el orden que la vista posiciona", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     expect(cards.map((card) => card.id)).toEqual([
       "evolucion",
+      "distribucion",
       "composicion",
       "ranking",
       "cascada",
@@ -86,6 +87,7 @@ describe("el contrato de la lista", () => {
 
     expect(graficos.cards.map((card) => [card.title, card.height])).toEqual([
       ["Ingresos contra Costos y Gastos", 300],
+      ["Distribución de Ventas", 320],
       ["Composición de los ingresos", 280],
       ["Ranking de gastos", 280],
       ["Del ingreso a la utilidad", 340],
@@ -132,8 +134,8 @@ describe("el periodo del que hablan las tarjetas", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[1].subtitle).toBe("Ene–Jul");
-    for (const card of [...graficos.cards.slice(0, 3), analisis.cards[0], analisis.cards[2]]) {
+    expect(graficos.cards[2].subtitle).toBe("Ene–Jul");
+    for (const card of [...graficos.cards.slice(0, 4), analisis.cards[0], analisis.cards[2]]) {
       expect(card.subtitle).toContain("Ene–Jul");
     }
   });
@@ -218,9 +220,9 @@ describe("lo que marcan los filtros", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.1.1.1", "5.1.5"] }));
 
     // La composición queda con la única hoja de ingresos marcada…
-    expect(cards[1].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
+    expect(cards[2].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
     // …y el ranking con las cuatro que cuelgan de 5.1.5, sin el sueldo, que cuelga de 5.1.1.
-    expect(cards[2].table.rows.map((row) => row.id)).toEqual([
+    expect(cards[3].table.rows.map((row) => row.id)).toEqual([
       "5.1.5.12",
       "5.1.5.3",
       "5.1.5.7",
@@ -231,8 +233,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un gasto vacía la composición de ingresos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["5.1.5"] }));
 
-    expect(cards[1].option).toBeNull();
-    expect(cards[1].note).toBe(
+    expect(cards[2].option).toBeNull();
+    expect(cards[2].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos.",
     );
   });
@@ -240,8 +242,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un ingreso vacía el ranking de gastos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.2"] }));
 
-    expect(cards[2].option).toBeNull();
-    expect(cards[2].note).toBe(
+    expect(cards[3].option).toBeNull();
+    expect(cards[3].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos.",
     );
   });
@@ -315,7 +317,7 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
    */
   it("el ranking de gastos pinta la segunda barra con el segundo slot", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const rows = cards[2].table.rows;
+    const rows = cards[3].table.rows;
 
     expect(rows.map((row) => row.id)).toEqual([
       "5.1.1.1.1",
@@ -328,6 +330,28 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
     expect(rows[1].color).toBe(CHART_PALETTE[1]);
     // Lo que saldría si el color se hubiera resuelto en orden de archivo.
     expect(rows[1].color).not.toBe(CHART_PALETTE[4]);
+  });
+
+  /**
+   * La composición NO se pinta con las ranuras de identidad: tiene su propio set cálido, pedido
+   * por la firma. Lo que este test protege es que la tarta y su gemela en tabla lean el MISMO,
+   * porque el punto de color de cada fila es lo que ata una porción a su cuenta — y que el orden
+   * del reparto sea el que da el tono, que es lo único que ese set dice.
+   */
+  it("la composición toma su set propio y no las ranuras de identidad", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+    const composicion = cards.find((card) => card.id === "composicion");
+    const rows = composicion?.table.rows ?? [];
+
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[0].color).toBe(CHART_COMPOSITION_PALETTE[0]);
+    expect(rows[1].color).toBe(CHART_COMPOSITION_PALETTE[1]);
+    expect(rows[0].color).not.toBe(CHART_PALETTE[0]);
+
+    // El tono sale del LUGAR en el reparto, y el reparto viene de mayor a menor.
+    for (const [slot, row] of rows.entries()) {
+      expect(row.color).toBe(CHART_COMPOSITION_PALETTE[slot]);
+    }
   });
 
   it("gastos sobre ingresos hace lo mismo con sus porcentajes", () => {
@@ -416,14 +440,14 @@ describe("lo que cada tarjeta dice de sí misma", () => {
   it("la cascada nombra el rango que sumó, no el año del archivo", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
-    expect(cards[3].subtitle).toBe("Suma de Ene–Jul");
+    expect(cards[4].subtitle).toBe("Suma de Ene–Jul");
   });
 
   it("sin escalones la cascada lo declara en vez de dibujar barras en cero", () => {
     const { cards } = buildGraficosCards(VACIO, emptyFilters());
 
-    expect(cards[3].subtitle).toBe("Sin movimiento");
-    expect(cards[3].option).toBeNull();
+    expect(cards[4].subtitle).toBe("Sin movimiento");
+    expect(cards[4].option).toBeNull();
   });
 
   it("la variación advierte siempre que el color no es la única señal", () => {
@@ -436,6 +460,70 @@ describe("lo que cada tarjeta dice de sí misma", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     // Cinco gastos y el corte está en ocho: no hay nada que declarar fuera de la lista.
-    expect(cards[2].note).toBeUndefined();
+    expect(cards[3].note).toBeUndefined();
+  });
+});
+
+/* --------------------------------------------------------------------- la distribución */
+
+/**
+ * Lo que decide la capa pura —qué cuenta se reparte y qué hijas caben— ya está probado en
+ * `distribution.test.ts`. Lo que se prueba aquí es solo la costura: que la tarjeta nombre esa
+ * cuenta, que la línea del total sea una consulta propia y no el techo de la pila, y que sin
+ * nada que repartir lo diga en vez de dibujar.
+ */
+describe("la distribución de una cuenta", () => {
+  const distribucionOf = (filters: PygFilters) => buildGraficosCards(MANOR, filters).cards[1];
+
+  it("se titula por la cuenta que reparte y lista sus hijas de mayor a menor", () => {
+    const card = distribucionOf(emptyFilters());
+
+    // Sin marcas es Ingresos, que baja a `4.1` por tener hija única.
+    expect(card.title).toBe("Distribución de Ventas");
+    expect(card.table.rows.map((row) => row.label)).toEqual([
+      "Ventas Alojamiento y Servicios",
+      "Otros Servicios",
+      "Rebaja y/o Descuentos sobre Ventas",
+      "Ventas",
+    ]);
+  });
+
+  it("la última fila es el TOTAL de la cuenta, y no la suma de las barras dibujadas", () => {
+    const card = distribucionOf(emptyFilters());
+    const total = card.table.rows.at(-1);
+
+    // 24.465 + 1.271 − 507 = 25.229: la hija negativa se apila hacia abajo, así que el neto no
+    // está en ningún borde de la pila y la línea es la única que lo dice.
+    expect(total?.emphasis).toBe(true);
+    expect(total?.values[0]).toBe("$25,229");
+    expect(card.option?.series.at(-1)?.type).toBe("line");
+  });
+
+  it("una sola cuenta marcada es la que se reparte", () => {
+    expect(distribucionOf(withFilters({ codes: ["4.1.1"] })).title).toBe(
+      "Distribución de Ventas Alojamiento y Servicios",
+    );
+  });
+
+  it("una cuenta de movimiento marcada no tiene nada que repartir, y lo dice", () => {
+    const card = distribucionOf(withFilters({ codes: ["4.1.1.2"] }));
+
+    expect(card.option).toBeNull();
+    expect(card.table.rows).toEqual([]);
+    expect(card.note).toContain("Marca UNA cuenta con desglose");
+  });
+
+  it("declara las cuentas que dejó fuera por no moverse", () => {
+    // `4.1.1.6 Ventas Teléfono` está permanentemente en cero.
+    expect(distribucionOf(withFilters({ codes: ["4.1.1"] })).note).toContain(
+      "1 cuenta quedó fuera",
+    );
+  });
+
+  it("sin cobertura no dibuja nada", () => {
+    const card = buildGraficosCards(VACIO, emptyFilters()).cards[1];
+
+    expect(card.option).toBeNull();
+    expect(card.table.rows).toEqual([]);
   });
 });

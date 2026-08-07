@@ -15,6 +15,7 @@
  * would only open the door to a caller reading series from somewhere other than the context —
  * exactly the divergence this module exists to close.
  */
+import { CHART_COMPOSITION_MAX, colorForCompositionSlot } from "@/lib/charts/palette";
 import type { ChartCardSpec, ChartTable } from "@/lib/charts/types";
 import { periodLabel, periodRangeLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
@@ -22,6 +23,7 @@ import { toPareto, toPieSlices, type AmountEntry, type ParetoResult } from "../a
 import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
+import { distributionColor, foldDistribution, resolveDistributionParent } from "./distribution";
 import {
   entryTable,
   horizontalBarOption,
@@ -30,12 +32,15 @@ import {
   seriesOptionFor,
   seriesTableFor,
   signColorOf,
+  stackedTotalOption,
+  stackedTotalTable,
   variationBarOption,
   waterfallOption,
   waterfallTable,
 } from "./option";
 import {
   amountsOver,
+  childrenOf,
   compositionQuery,
   coveredPeriods,
   excludedNote,
@@ -100,6 +105,20 @@ function nameOf(periods: readonly PeriodRef[]): string {
 export function entryColor(codes: string[]): (code: string) => string {
   const resolve = codeColorResolver(codes);
   return (code) => resolve({ code, centerId: "", year: 0 });
+}
+
+/**
+ * El color de una porción de la tarta de composición por su LUGAR en el reparto, no por su código.
+ *
+ * `entryColor` no sirve aquí aunque la lista ya venga ordenada: lo que hace es repartir las ranuras
+ * de `CHART_PALETTE`, que es el set de IDENTIDAD, y esta tarta tiene el suyo. La firma lo pidió
+ * cálido —ver `CHART_COMPOSITION_PALETTE`, donde está medido por qué no son los tonos exactos de la
+ * referencia que trajeron—. La gemela en tabla lo consume TAMBIÉN, que es lo que mantiene el punto
+ * de color de cada fila igual al de su porción.
+ */
+export function compositionColor(codes: string[]): (code: string) => string {
+  const slotByCode = new Map(codes.map((code, index) => [code, index]));
+  return (code) => colorForCompositionSlot(slotByCode.get(code) ?? -1);
 }
 
 /** The change of each account against the previous period, signed. */
@@ -196,6 +215,38 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
     shares: new Map(shares.map((share) => [share.seriesId, share])),
   };
 
+  // Distribución: de qué está hecha una cuenta, periodo a periodo. La cuenta la resuelve la misma
+  // figura que el centro y el año — exactamente una marcada es esa, ninguna o varias es Ingresos —
+  // y sus hijas se consultan SIN tope, porque plegar la cola en «Otros» exige verlas todas antes.
+  const parent = resolveDistributionParent(source, filters.codes);
+  const childCodes = parent ? childrenOf(source, parent.code) : [];
+  const children = runQuery(compositionQuery(childCodes, context, { periods: periodRefs }));
+  const distribution = foldDistribution(children.series);
+  // El total viaja por su propia consulta y no re-sumando las barras: con «Otros» plegado o una
+  // hija negativa, el techo de la pila y el total de la cuenta no son el mismo número.
+  const parentTotal = parent
+    ? (runQuery(presetQuery([parent.code], context, { periods: periodRefs })).series[0] ?? null)
+    : null;
+  const distributionContext = {
+    colorOf: distributionColor(distribution.series),
+    periods: children.periods,
+  };
+  const distributionNote = parent
+    ? [
+        distribution.series.length > 0
+          ? `La línea es el total de ${parent.label}; las barras, sus cuentas hijas.`
+          : "",
+        distribution.grouped > 0
+          ? `«Otros» agrupa ${distribution.grouped} cuentas más pequeñas.`
+          : "",
+        distribution.idle > 0
+          ? `${distribution.idle} ${distribution.idle === 1 ? "cuenta quedó fuera" : "cuentas quedaron fuera"} por no tener movimiento en ${periodName.toLowerCase()}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "Marca UNA cuenta con desglose en «Cuenta contable» para ver de qué está hecha.";
+
   // Composición y ranking conservan su pregunta fija, pero intersecan su universo con las
   // cuentas marcadas — una cuenta de gasto marcada vacía la composición de ingresos a propósito.
   const revenueLeaves = leavesOf(source, REVENUE_ROOT);
@@ -203,8 +254,10 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const composition = runQuery(
     compositionQuery(compositionCodes, context, { periods: periodRefs }),
   );
-  const slices = toPieSlices(amountsOver(composition));
-  const sliceColor = entryColor(slices.slices.map((slice) => slice.code));
+  // El corte lo declara la escala, no un número suelto: así «Otros» cae siempre en la última
+  // ranura y ninguna porción se queda sin tono.
+  const slices = toPieSlices(amountsOver(composition), { maxSlices: CHART_COMPOSITION_MAX });
+  const sliceColor = compositionColor(slices.slices.map((slice) => slice.code));
   const compositionEmptyNote =
     revenueLeaves.length > 0 && compositionCodes.length === 0
       ? "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos."
@@ -261,6 +314,22 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
         warnings: evolution.warnings,
         ...withNote(describeShares(shares)),
         height: 300,
+      },
+      {
+        id: "distribucion",
+        title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
+        subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
+        option:
+          distribution.series.length > 0 && parentTotal
+            ? stackedTotalOption(distribution.series, parentTotal, distributionContext)
+            : null,
+        table:
+          distribution.series.length > 0 && parentTotal
+            ? stackedTotalTable(distribution.series, parentTotal, distributionContext)
+            : EMPTY_TABLE,
+        warnings: children.warnings,
+        ...withNote(distributionNote || undefined),
+        height: 320,
       },
       {
         id: "composicion",

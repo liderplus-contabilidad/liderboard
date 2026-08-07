@@ -153,6 +153,9 @@ export function barOption(series: Series[], context: SeriesOptionContext): Chart
   };
 }
 
+/** El nombre de la pila. Uno solo: todas las series se acumulan en la misma columna. */
+const STACK_ID = "total";
+
 /** Stacked bars — what a total is made of, period by period. */
 export function stackedOption(series: Series[], context: SeriesOptionContext): ChartOption {
   return {
@@ -162,8 +165,83 @@ export function stackedOption(series: Series[], context: SeriesOptionContext): C
     tooltip: axisTooltip("shadow", context.unit),
     series: series.map((entry) => ({
       ...barSeries(entry, series.length, context, { stacked: true }),
-      stack: "total",
+      stack: STACK_ID,
     })),
+  };
+}
+
+/**
+ * El apilado de una cuenta con la LÍNEA de su total encima — de qué está hecha, periodo a
+ * periodo. Un solo eje y una sola unidad, como el combo: la línea es una lectura de la misma
+ * entidad, así que toma un tono de tinta y no una ranura de la paleta, que es identidad.
+ *
+ * La línea no es decorativa ni redundante con el techo de la pila. Una hija de saldo negativo
+ * —`4.1.4 Rebajas y/o Descuentos` lo es— se apila hacia ABAJO, así que el neto no está en ningún
+ * borde; y con la cola plegada en «Otros» sigue siendo el total de verdad. Es además lo único que
+ * imprime una cifra por columna: los segmentos de una pila no tienen dónde escribirla.
+ *
+ * Y por eso mismo apila SIN las costuras de 2 px que separan todo relleno contiguo en esta app:
+ * una columna que ya declara su total es una sola cifra repartida, no varias puestas en fila.
+ */
+export function stackedTotalOption(
+  series: Series[],
+  total: Series,
+  context: SeriesOptionContext,
+): ChartOption {
+  return {
+    ...chrome(series.length + 1),
+    xAxis: periodAxis(context),
+    yAxis: valueAxis(context.unit),
+    tooltip: axisTooltip("shadow", context.unit),
+    series: [
+      ...series.map((entry) => ({
+        ...barSeries(entry, series.length, context, { stacked: true, seamless: true }),
+        stack: STACK_ID,
+      })),
+      {
+        id: `${seriesKeyId(total.key)}|total`,
+        type: "line",
+        name: total.label,
+        data: total.points.map((point) => point.value),
+        lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth, type: "solid" },
+        itemStyle: { color: CHART_INK.strong },
+        symbol: "circle",
+        symbolSize: CHART_MARK.symbolSize,
+        smooth: false,
+        // Se mide como UNA serie y no como la novena: es la única que lleva cifra, así que lo que
+        // decide si cabe es su propio recuento de marcas, no el de la pila que hay debajo.
+        label: directLabel(labelsFit(1, total.points.length, context), context.unit, "top"),
+        labelLayout: { hideOverlap: true },
+        z: 3,
+      },
+    ],
+  };
+}
+
+/**
+ * La tabla gemela del apilado: las hijas y, cerrando, el total en tinta y con peso. `emphasis` es
+ * lo que separa un total de lo que totaliza cuando ambos son filas de la misma tabla.
+ */
+export function stackedTotalTable(
+  series: Series[],
+  total: Series,
+  context: SeriesOptionContext,
+): ChartTable {
+  const table = seriesTable(series, context);
+  return {
+    columns: table.columns,
+    rows: [
+      ...table.rows,
+      {
+        id: `${seriesKeyId(total.key)}|total`,
+        label: total.label,
+        color: CHART_INK.strong,
+        emphasis: true,
+        values: total.points.map((point) =>
+          point.value === null ? null : formatChartValue(point.value, context.unit),
+        ),
+      },
+    ],
   };
 }
 
@@ -184,7 +262,7 @@ export function hundredPercentOption(series: Series[], context: SeriesOptionCont
     tooltip: axisTooltip("shadow", "porcentaje"),
     series: shares.map((entry) => ({
       ...barSeries(entry, shares.length, { ...context, unit: "porcentaje" }, { stacked: true }),
-      stack: "total",
+      stack: STACK_ID,
     })),
   };
 }
@@ -919,12 +997,19 @@ function barSeries(
   series: Series,
   seriesCount: number,
   context: SeriesOptionContext,
-  options: { stacked?: boolean; sharedCount?: number } = {},
+  options: { stacked?: boolean; seamless?: boolean; sharedCount?: number } = {},
 ): ChartSeries {
   const stacked = options.stacked ?? false;
   // Contiguous fills — stacked segments, grouped bars — are separated by 2px of the surface.
+  //
+  // `seamless` es la excepción, y solo la pide una pila que ya lleva un TOTAL encima: allí la
+  // columna es una sola cifra repartida, no varias puestas en fila, y esas costuras la parten en
+  // trozos sueltos. Lo que separa un segmento del siguiente pasa a ser el salto de color, que su
+  // escala ordenada ya garantiza.
   const separation =
-    stacked || seriesCount > 1 ? { borderColor: CHART_SURFACE, borderWidth: CHART_MARK.gap } : {};
+    (stacked && !options.seamless) || (!stacked && seriesCount > 1)
+      ? { borderColor: CHART_SURFACE, borderWidth: CHART_MARK.gap }
+      : {};
 
   return {
     id: seriesKeyId(series.key),

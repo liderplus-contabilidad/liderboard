@@ -177,6 +177,118 @@ export const CHART_HEAT_RAMP = ["#fde68a", "#fcd34d", "#f0b429", "#d98b0b", "#a1
 
 export const CHART_HEAT_EMPTY = "#f6f8fa";
 
+/**
+ * La pila de «Distribución», y NADA más. Cinco pasos azul marino → verde claro, monótonos en
+ * luminosidad, más el neutro para «Otros».
+ *
+ * Es una escala ORDENADA y no un set categórico, y esa es toda la diferencia con `CHART_PALETTE`.
+ * Allí ocho entidades se comparan entre sí y el color es lo único que las distingue, así que el
+ * orden de las ranuras existe para que ninguna se parezca a otra. Aquí los segmentos son PARTES
+ * DE UNA MISMA CIFRA, apiladas de mayor a menor en una sola columna: lo que el color tiene que
+ * decir es «esto es un reparto y este trozo pesa más que el de arriba», que es justo lo que ocho
+ * tonos de identidad —azul, rojo, verde, ámbar— borran, porque cada columna sale pareciendo cuatro
+ * asuntos distintos amontonados. El rango va de oscuro abajo a claro arriba porque el orden ya es
+ * ese, así que el tono y la posición dicen lo mismo y se refuerzan.
+ *
+ * **Son CINCO y no ocho, y eso está medido, no elegido.** El arco entero azul→verde mide unos 55
+ * ΔE; repartido en ocho pasos deja pares vecinos en ΔE 8, por debajo del piso de visión NORMAL, y
+ * en una pila los vecinos son exactamente lo que hay que distinguir. En cinco pasos el mismo arco
+ * da 16.6 y pasa. Por eso `foldDistribution` pliega la cola a partir del sexto — el mismo corte
+ * que `toPieSlices` ya aplica a la dona por la misma razón.
+ *
+ * Lo que dice el validador de este orden, para que nadie lo re-derive: piso de croma PASS,
+ * separación CVD PASS —peor par adyacente azul↔azul ΔE 14.2 deutan—, piso de visión normal PASS
+ * —peor par verde↔verde ΔE 16.6—. La banda de luminosidad NO se cumple y no debe cumplirse: es
+ * un requisito de los rellenos categóricos, y una rampa secuencial existe justamente para salirse
+ * de ella por los dos extremos (`CHART_HEAT_RAMP` hace lo mismo). El contraste del paso más claro
+ * queda bajo 3:1, con el mismo relieve de siempre: leyenda, tooltip y la gemela en tabla.
+ *
+ * El último tono es `CHART_NEUTRAL` a propósito: «Otros» no es un puesto de la escala sino lo que
+ * sobra, y un gris arriba del todo es lo que lo dice sin fingir que es una cuenta más.
+ */
+export const CHART_DISTRIBUTION_RAMP = [
+  "#1a237e",
+  "#1550e0",
+  "#2f93ff",
+  "#00a651",
+  "#45de88",
+  CHART_NEUTRAL,
+] as const;
+
+/** Cuántos segmentos dibuja una pila antes de plegar la cola: los pasos de su propia escala. */
+export const CHART_DISTRIBUTION_MAX = CHART_DISTRIBUTION_RAMP.length;
+
+/**
+ * El tono por el LUGAR en la pila, que es el rango de la cuenta. No pasa por `colorForEntity`
+ * porque aquí el color no sigue a la entidad: sigue a su tamaño, y ese es el encargo.
+ */
+export function colorForDistributionSlot(index: number): string {
+  return CHART_DISTRIBUTION_RAMP[index] ?? CHART_NEUTRAL;
+}
+
+/**
+ * La tarta de «Composición de los ingresos», y NADA más. Seis tonos cálidos por el TAMAÑO de la
+ * porción, pedidos por la firma sobre una tarta de referencia que trajeron.
+ *
+ * Que sea un set propio y no `CHART_PALETTE` no es capricho: allí el color sigue a la ENTIDAD para
+ * que filtrar una serie no repinte a las demás, y aquí no hay entidades que vayan y vengan —
+ * `toPieSlices` devuelve el reparto entero, siempre completo y siempre ordenado de mayor a menor,
+ * y el color ya seguía a ese orden. Es el mismo argumento de `CHART_DISTRIBUTION_RAMP`, con una
+ * diferencia que cambia la forma: una pila necesita una RAMPA porque sus vecinos se tocan y hay que
+ * leer «este trozo pesa más», mientras que una tarta reparte el círculo y lo que necesita es que
+ * seis porciones se distingan. Por eso esto son hues y no pasos de una escala.
+ *
+ * **Los tonos de la referencia NO son estos, y la razón está medida.** Aquellos —`#ff0000`,
+ * `#ff5600`, `#ff8500`, `#99aa27`, `#00836f`— reprueban dos veces, y la que importa no es la de
+ * daltonismo: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL, o sea que la porción del 30 % y la
+ * del 20 % son casi el mismo rojo para cualquiera (`#99aa27`↔`#ff8500` dan además ΔE 3.9 protan).
+ * En la referencia eso no se nota porque cada porción lleva su «20%» impreso DENTRO: el número es
+ * lo que desambigua, no el color. Aquí los rótulos van fuera con línea guía y hay leyenda al lado,
+ * así que ese relieve no existe y dos rojos casi iguales sí se confunden. Se conserva entonces el
+ * CARÁCTER —el rojo, el naranja y el teal, que son tres de sus cinco tonos y los que dan el aire—
+ * y se ensancha el arco: rojo, naranja y ámbar viven en unos 60° de tono, y tres de ellos no llegan
+ * al piso de visión normal sin separarse en luminosidad, lo que saca al ámbar de la banda por
+ * arriba. El verde oliva pasa a verde, y el quinto y el sexto —azul y magenta— los pone el arco,
+ * no la referencia, que solo traía cinco porciones.
+ *
+ * Ninguno de los seis es una ranura de `CHART_PALETTE`, la misma regla que cumple la rampa de
+ * distribución: son dos trabajos distintos y compartir un hex invitaría a leer un parentesco entre
+ * una porción de esta tarta y una serie de la tarjeta de al lado. El azul se desplazó a `#0f5bb5`
+ * justamente por eso, porque `#1466c8` es la primera ranura de identidad.
+ *
+ * Lo que dice el validador de este orden, para que nadie lo re-derive: banda de luminosidad PASS
+ * (los seis dentro de L 0.43–0.77), piso de croma PASS, separación CVD PASS —peor par adyacente
+ * magenta↔azul ΔE 15.0 protan, tritan 11.5— y piso de visión normal PASS —peor par verde↔teal
+ * ΔE 16.2—. El contraste del naranja (2.3) y el verde (2.92) queda bajo 3:1, con el relieve de
+ * siempre: leyenda, tooltip y la gemela en tabla.
+ *
+ * El orden es el del reparto y no se re-ordena: la comprobación de CVD es sobre pares ADYACENTES,
+ * así que mover un tono de sitio invalida la medición de arriba.
+ */
+export const CHART_COMPOSITION_PALETTE = [
+  "#e02b2b",
+  "#ff8a00",
+  "#00836f",
+  "#6fa428",
+  "#0f5bb5",
+  "#c2185b",
+] as const;
+
+/**
+ * Cuántas porciones dibuja la tarta antes de plegar la cola en «Otros»: los tonos de su propia
+ * escala. `toPieSlices` recibe este número en vez de llevar un 6 suelto, que es lo que garantiza
+ * que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin color.
+ */
+export const CHART_COMPOSITION_MAX = CHART_COMPOSITION_PALETTE.length;
+
+/**
+ * El tono por el LUGAR en el reparto, que es el tamaño de la porción. No pasa por `colorForEntity`
+ * por lo dicho arriba: aquí el color no distingue entidades, ordena un reparto.
+ */
+export function colorForCompositionSlot(index: number): string {
+  return CHART_COMPOSITION_PALETTE[index] ?? CHART_NEUTRAL;
+}
+
 /** The scale is handed in, not derived per grid: two grids must mean the same by the same tone. */
 function rampStep(ramp: readonly string[], value: number | null, min: number, max: number): string {
   if (value === null || !Number.isFinite(value)) {
