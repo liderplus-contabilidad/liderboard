@@ -3,6 +3,7 @@ import {
   CONSOLIDATED_CLIENT_ID,
   canConsolidate,
   consolidateClients,
+  consolidatedCenterId,
   selectContributions,
   type ClientContribution,
 } from "./consolidate";
@@ -457,6 +458,183 @@ describe("consolidateClients", () => {
     expect(valueOf(accounts, "4", 0)).toBe(800);
     expect(valueOf(accounts, "4.1.0", 0)).toBe(500);
     expect(accounts.find((a) => a.code === "4.1.0")?.name).toBe("Sin desglosar");
+  });
+
+  describe("centros de costo cruzados", () => {
+    /** Un estado con una sola cuenta con movimiento, para que la suma se lea de un vistazo. */
+    const accountsOf = (value: number) => [
+      { code: "4", name: "INGRESOS", values: months(value) },
+      { code: "4.1", name: "Ventas", values: months(value) },
+    ];
+
+    /** Un cliente por centros: un dataset por centro y año, en el orden en que se listan. */
+    function centersClient(
+      name: string,
+      centers: { id: string; label: string; value: number }[],
+      coverage: Record<number, number[]> = { 2026: [0] },
+      years = [2026],
+    ): ClientContribution {
+      return client(
+        name,
+        years.flatMap((year) =>
+          centers.map((center, index) =>
+            dataset(
+              `${name}-${center.id}-${year}`,
+              name.toLowerCase(),
+              year,
+              accountsOf(center.value),
+              {
+                role: "center",
+                centerId: center.id,
+                costCenterName: center.label,
+                order: index,
+              },
+            ),
+          ),
+        ),
+        coverage,
+      );
+    }
+
+    /** Un cliente de estado único: no tiene centros que cruzar. */
+    const singleClient = (name: string, value: number) =>
+      client(name, [dataset(name, name.toLowerCase(), 2026, accountsOf(value))], { 2026: [0] });
+
+    const dingoo = centersClient("Dingoo", [
+      { id: "restaurante", label: "RESTAURANTE", value: 10 },
+      { id: "hotel", label: "HOTEL", value: 5 },
+    ]);
+    const manor = centersClient("Manor", [{ id: "restaurante", label: "Restaurante", value: 3 }]);
+
+    it("lista un centro por (cliente · centro), diciendo de quién es cada uno", () => {
+      const result = consolidateClients([dingoo, manor]);
+
+      // El mismo `restaurante` en dos empresas son DOS entradas, no una fundida por nombre.
+      expect(result.centerDatasets.map((d) => d.centerId)).toEqual([
+        consolidatedCenterId("dingoo", "restaurante"),
+        consolidatedCenterId("dingoo", "hotel"),
+        consolidatedCenterId("manor", "restaurante"),
+      ]);
+      // Las dos mitades del rótulo viajan separadas: el desplegable agrupa por cliente y pone el
+      // centro debajo; el chip y la leyenda las juntan.
+      expect(result.centerDatasets.map((d) => d.costCenterName)).toEqual([
+        "RESTAURANTE",
+        "HOTEL",
+        "Restaurante",
+      ]);
+      expect(result.centerDatasets.map((d) => d.companyName)).toEqual([
+        "Dingoo",
+        "Dingoo",
+        "Manor",
+      ]);
+      // Y el total sigue siendo todo: sin marcas no se acota nada.
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(18);
+    });
+
+    it("marcar centros ACOTA la suma, y no quita nada de la lista", () => {
+      const result = consolidateClients(
+        [dingoo, manor],
+        [
+          consolidatedCenterId("dingoo", "restaurante"),
+          consolidatedCenterId("manor", "restaurante"),
+        ],
+      );
+
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(13);
+      expect(result.centerDatasets).toHaveLength(3);
+    });
+
+    it("marcar uno solo da ese centro", () => {
+      const result = consolidateClients([dingoo, manor], [consolidatedCenterId("dingoo", "hotel")]);
+
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(5);
+      expect(result.contributors).toEqual(["Dingoo"]);
+    });
+
+    it("una marca que este universo no tiene no vacía la pantalla", () => {
+      // Lo que queda en la barra al abrir el consolidado desde un cliente concreto: el id suelto
+      // de un centro, que aquí no existe. Sin el cruce contra el universo, la suma daría cero.
+      const result = consolidateClients([dingoo, manor], ["restaurante"]);
+
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(18);
+    });
+
+    it("filtrar por centros manda sobre «Cliente»: el de estado único queda fuera", () => {
+      const clients = [dingoo, singleClient("MicroPlus", 7)];
+
+      // Sin marcas entra todo lo que dejó «Cliente», los 7 de MicroPlus incluidos…
+      const todo = consolidateClients(clients);
+      expect(valueOf(todo.datasets[0].accounts, "4.1", 0)).toBe(22);
+      expect(todo.warnings).toEqual([]);
+
+      // …y marcando un centro, la suma es ESE centro y nada más. MicroPlus no tiene ninguno con el
+      // que entrar, y como tampoco aparece en la lista, su ausencia hay que decirla.
+      const marked = consolidateClients(clients, [consolidatedCenterId("dingoo", "restaurante")]);
+      expect(valueOf(marked.datasets[0].accounts, "4.1", 0)).toBe(10);
+      expect(marked.contributors).toEqual(["Dingoo"]);
+      expect(marked.centerDatasets.map((d) => d.companyName)).toEqual(["Dingoo", "Dingoo"]);
+      expect(marked.warnings).toContain(
+        "«MicroPlus» no tiene centros de costo: queda fuera mientras filtres por centro.",
+      );
+    });
+
+    it("el cliente que se queda fuera deja de contar para la cobertura", () => {
+      const adelantado = centersClient(
+        "Dingoo",
+        [{ id: "restaurante", label: "RESTAURANTE", value: 10 }],
+        { 2026: [0, 1] },
+      );
+      const atrasado = centersClient("Manor", [{ id: "hotel", label: "HOTEL", value: 3 }], {
+        2026: [0],
+      });
+
+      expect(consolidateClients([adelantado, atrasado]).warnings).toEqual([
+        "Feb 2026: 1 de 2 clientes con datos (falta Manor).",
+      ]);
+
+      // Con solo el centro del adelantado marcado, el otro no está: nombrarlo entre los ausentes
+      // hablaría de un cliente que el propio usuario apartó.
+      const acotado = consolidateClients(
+        [adelantado, atrasado],
+        [consolidatedCenterId("dingoo", "restaurante")],
+      );
+      expect(acotado.contributors).toEqual(["Dingoo"]);
+      expect(acotado.warnings).toEqual([]);
+    });
+
+    it("cada par conserva su ranura de color a través de los años", () => {
+      const result = consolidateClients([
+        centersClient(
+          "Dingoo",
+          [
+            { id: "restaurante", label: "RESTAURANTE", value: 10 },
+            { id: "hotel", label: "HOTEL", value: 5 },
+          ],
+          { 2025: [0], 2026: [0] },
+          [2025, 2026],
+        ),
+        manor,
+      ]);
+
+      // Cinco datasets (dos centros × dos años, más el de Manor) sobre TRES ranuras: un año más
+      // no gasta una nueva, así que un centro no cambia de color al cambiar de año.
+      expect(result.centerDatasets).toHaveLength(5);
+      expect(new Set(result.centerDatasets.map((d) => d.order)).size).toBe(3);
+      expect(new Set(result.centerDatasets.map((d) => d.centerColor)).size).toBe(3);
+
+      const restaurante = result.centerDatasets.filter(
+        (d) => d.centerId === consolidatedCenterId("dingoo", "restaurante"),
+      );
+      expect(restaurante.map((d) => d.year)).toEqual([2025, 2026]);
+      expect(new Set(restaurante.map((d) => `${d.order}·${d.centerColor}`)).size).toBe(1);
+    });
+
+    it("sin ningún cliente por centros no hay nada que cruzar", () => {
+      const result = consolidateClients([singleClient("A", 1), singleClient("B", 2)]);
+
+      expect(result.centerDatasets).toEqual([]);
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(3);
+    });
   });
 
   it("names the CLIENT, not the center, in a structural conflict", () => {

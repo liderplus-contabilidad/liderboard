@@ -10,7 +10,7 @@ import { OccupancyUploadModal } from "./occupancy-upload-modal";
  * `ExcelActions` rinde un botón plano; el día que exista una segunda opción, pasa a menú sola.
  */
 export function OccupancyExcelActions() {
-  const { dataset, isConsolidated, activeHotelId } = useOccupancyData();
+  const { dataset, isConsolidated, activeHotel, activeHotelId } = useOccupancyData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   // El consolidado es sintético: no se descarga porque no es un archivo de nadie.
@@ -34,12 +34,14 @@ export function OccupancyExcelActions() {
             import("@/lib/occupancy/export"),
             import("@/lib/download"),
           ]);
-          const blob = await exportMod.workbookToBlob(exportMod.buildOccupancyWorkbook(year));
+          const blob = await exportMod.workbookToBlob(
+            exportMod.buildOccupancyWorkbook(year, activeHotel?.logo),
+          );
           downloadBlob(blob, exportMod.occupancyExportFilename(year));
         },
       },
     ],
-    [year, isConsolidated],
+    [year, isConsolidated, activeHotel?.logo],
   );
 
   return (

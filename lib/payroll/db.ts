@@ -9,7 +9,7 @@
  * name — the same resolution already standing between those two modules.
  */
 import Dexie, { type Table } from "dexie";
-import { sortByName } from "@/lib/workspaces";
+import { sortByName, type EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll } from "./employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
 import { computePeriodFinancials, type PayrollPeriodFinancials } from "./period-detail";
@@ -75,8 +75,8 @@ export async function getClient(clientId: string): Promise<PayrollClient | undef
  * Creates an EMPTY cliente and opens it. The name is taken as given: validation and duplicate
  * checking are `useEntityNaming`'s job, run where the caller can say what is wrong.
  */
-export async function createClient(name: string): Promise<PayrollClient> {
-  const client: PayrollClient = { id: crypto.randomUUID(), name };
+export async function createClient(name: string, logo?: EntityLogo): Promise<PayrollClient> {
+  const client: PayrollClient = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
   await db.transaction("rw", db.clients, db.active, async () => {
     await db.clients.add(client);
     await db.active.put({ key: ACTIVE_KEY, clientId: client.id });
@@ -84,9 +84,17 @@ export async function createClient(name: string): Promise<PayrollClient> {
   return client;
 }
 
-/** Renaming touches the label and NOTHING else. */
-export async function renameClient(clientId: string, name: string): Promise<void> {
-  await db.clients.update(clientId, { name });
+/**
+ * Changes the cliente's LABEL — its name and its logo — and NOTHING else: no período and no nómina
+ * is touched. Both travel in one write because the dialog edits them together; `logo: null` removes
+ * it, and an `undefined` in a Dexie `update` deletes the property, which is what that means here.
+ */
+export async function updateClient(
+  clientId: string,
+  name: string,
+  logo: EntityLogo | null,
+): Promise<void> {
+  await db.clients.update(clientId, { name, logo: logo ?? undefined });
 }
 
 /**

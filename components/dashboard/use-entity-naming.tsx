@@ -6,7 +6,12 @@ import {
   DEFAULT_ENTITY_LABELS,
   type EntityLabels,
 } from "@/components/dashboard/active-client";
-import { findByName, normalizeEntityName, type NamedEntity } from "@/lib/workspaces";
+import {
+  findByName,
+  normalizeEntityName,
+  type EntityLogo,
+  type NamedEntity,
+} from "@/lib/workspaces";
 
 export interface EntityNaming {
   openCreate: () => void;
@@ -34,23 +39,29 @@ export function useEntityNaming({
 }: {
   entities: readonly NamedEntity[];
   labels?: EntityLabels;
-  onCreate: (name: string) => Promise<unknown>;
-  onRename: (id: string, name: string) => Promise<unknown>;
+  onCreate: (name: string, logo?: EntityLogo) => Promise<unknown>;
+  onRename: (id: string, name: string, logo: EntityLogo | null) => Promise<unknown>;
 }): EntityNaming {
   const [naming, setNaming] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
   const [name, setName] = useState("");
+  const [logo, setLogo] = useState<EntityLogo | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openCreate = useCallback(() => {
     setName("");
+    setLogo(null);
     setNameError(null);
     setNaming({ mode: "create" });
   }, []);
 
   const openRename = useCallback(
     (id: string) => {
-      setName(entities.find((entity) => entity.id === id)?.name ?? "");
+      const entity = entities.find((candidate) => candidate.id === id);
+      setName(entity?.name ?? "");
+      // El logo guardado se precarga, así que el diálogo abre mostrando lo que hay: si no, cada
+      // renombrado parecería estar quitándolo, y guardar lo quitaría de verdad.
+      setLogo(entity?.logo ?? null);
       setNameError(null);
       setNaming({ mode: "rename", id });
     },
@@ -74,21 +85,22 @@ export function useEntityNaming({
     setBusy(true);
     try {
       if (naming.mode === "create") {
-        await onCreate(check.name);
+        await onCreate(check.name, logo ?? undefined);
       } else if (naming.id) {
-        await onRename(naming.id, check.name);
+        await onRename(naming.id, check.name, logo);
       }
       setNaming(null);
     } finally {
       setBusy(false);
     }
-  }, [naming, name, entities, labels.subject, onCreate, onRename]);
+  }, [naming, name, logo, entities, labels.subject, onCreate, onRename]);
 
   const dialog = (
     <ClientNameDialog
       open={naming !== null}
       mode={naming?.mode ?? "create"}
       value={name}
+      logo={logo}
       error={nameError}
       busy={busy}
       labels={labels}
@@ -96,6 +108,7 @@ export function useEntityNaming({
         setName(next);
         setNameError(null);
       }}
+      onLogoChange={setLogo}
       onSubmit={() => void submit()}
       onCancel={() => setNaming(null)}
     />

@@ -24,6 +24,7 @@ function withoutZeros(hide: boolean, description: string): string {
 export function PygExcelActions() {
   const {
     activeClientId,
+    activeClient,
     isConsolidated,
     contributors,
     dataset,
@@ -133,6 +134,7 @@ export function PygExcelActions() {
               ...(sourceSystemId ? { sourceSystemId } : {}),
               hideEmpty: hideZeroRows,
               centers: withEdits,
+              ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
             });
             const blob = await exportMod.workbookToBlob(workbook);
             downloadBlob(blob, exportMod.multiCenterFilename(loadedYears));
@@ -166,6 +168,7 @@ export function PygExcelActions() {
               year: rawYear,
               month: latestLoadedMonth,
               centers: withEdits,
+              ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
             });
             const blob = await exportMod.workbookToBlob(workbook);
             downloadBlob(blob, exportMod.monthSliceFilename(rawYear, latestLoadedMonth));
@@ -208,6 +211,7 @@ export function PygExcelActions() {
             loadedMonthsByYear,
             sourceSystemId ?? undefined,
             hideZeroRows,
+            activeClient?.logo,
           );
           const blob = await exportMod.workbookToBlob(workbook);
           downloadBlob(blob, exportMod.pygExportFilename(dataset, loadedYears));
@@ -235,6 +239,7 @@ export function PygExcelActions() {
             month: latestLoadedMonth,
             dataset,
             edits: await datasetEdits(dataset.id),
+            ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
           });
           const blob = await exportMod.workbookToBlob(workbook);
           downloadBlob(blob, exportMod.monthSliceFilename(rawYear, latestLoadedMonth));
@@ -245,6 +250,7 @@ export function PygExcelActions() {
   }, [
     isConsolidated,
     contributors.length,
+    activeClient?.logo,
     dataset,
     datasets,
     mode,

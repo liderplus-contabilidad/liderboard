@@ -29,6 +29,8 @@ import {
   seriesTableFor,
   signColorOf,
   stackedOption,
+  stackedTotalOption,
+  stackedTotalTable,
   variationBarOption,
   waterfallOption,
   waterfallTable,
@@ -217,6 +219,37 @@ describe("un solo eje por gráfica", () => {
     expect(option.series.every((entry) => !("yAxisIndex" in entry))).toBe(true);
   });
 
+  it("shares the axis between the stack and its total line", () => {
+    const total = makeSeries([2100, 2250, 1900], { code: "4.1", label: "Ventas" });
+    const option = stackedTotalOption([series, makeSeries([1100, 1050, 1000])], total, CONTEXT);
+
+    expect(option.series.map((entry) => entry.type)).toEqual(["bar", "bar", "line"]);
+    expect(option.series.slice(0, 2).every((entry) => entry.stack === "total")).toBe(true);
+    expect(Array.isArray(option.yAxis)).toBe(false);
+    // La línea es una lectura de la misma entidad, no una segunda: tinta, nunca una ranura.
+    expect(option.series[2].lineStyle?.color).toBe(CHART_INK.strong);
+    expect(CHART_PALETTE).not.toContain(option.series[2].lineStyle?.color);
+  });
+
+  it("apila sin costuras cuando la columna ya lleva su total encima", () => {
+    const total = makeSeries([2100, 2250, 1900], { code: "4.1", label: "Ventas" });
+    const option = stackedTotalOption([series, makeSeries([1100, 1050, 1000])], total, CONTEXT);
+
+    // A ocho segmentos las costuras parten la barra en trozos sueltos; aquí separa el color.
+    expect(option.series[0].itemStyle?.borderWidth).toBeUndefined();
+    // Y la pila SIN total las conserva: allí no hay nada que declare la columna como una sola.
+    expect(stackedOption([series], CONTEXT).series[0].itemStyle?.borderWidth).toBe(CHART_MARK.gap);
+  });
+
+  it("la tabla gemela cierra con el total, separado por su peso y no por su sitio", () => {
+    const total = makeSeries([2100, 2250, 1900], { code: "4.1", label: "Ventas" });
+    const table = stackedTotalTable([series], total, CONTEXT);
+
+    expect(table.rows.map((row) => row.emphasis)).toEqual([undefined, true]);
+    expect(table.rows.at(-1)?.label).toBe("Ventas");
+    expect(table.rows.at(-1)?.color).toBe(CHART_INK.strong);
+  });
+
   it("paints the combo overlay in ink, not in a palette slot", () => {
     const option = comboOption(series, makeSeries([1000]), "Media móvil (3)", CONTEXT);
 
@@ -303,6 +336,90 @@ describe("marcas, leyenda y etiquetas", () => {
 
     expect(share.yAxis?.axisLabel?.formatter?.(20)).toBe("20.0 %");
     expect(index.yAxis?.axisLabel?.formatter?.(120)).toBe("120");
+  });
+});
+
+describe("el porcentaje dentro de la cuenta que la contiene", () => {
+  const PARENT_ID = `4|cultura-manor|2026`;
+  const CHILD_ID = `4.1|cultura-manor|2026`;
+
+  /** Padre e hija, con tantos periodos como pida el caso. */
+  function pair(points: number): Series[] {
+    const values = (amount: number) => Array.from({ length: points }, () => amount);
+    return [
+      makeSeries(values(25_229), { code: "4", label: "Ingresos" }),
+      makeSeries(values(7_161), { code: "4.1", label: "Ventas" }),
+    ];
+  }
+
+  function sharesOf(values: (number | null)[]) {
+    return new Map([
+      [CHILD_ID, { seriesId: CHILD_ID, label: "Ventas", baseLabel: "Ingresos", values }],
+    ]);
+  }
+
+  function labelOf(option: ChartOption, index: number, dataIndex = 0): string {
+    const label = option.series[index].label;
+    const value = (option.series[index].data[dataIndex] ?? null) as number | null;
+    return label?.show ? (label.formatter?.({ value, name: "Ene", dataIndex }) ?? "") : "";
+  }
+
+  it("pone el porcentaje bajo el monto de la hija y deja al padre con su monto", () => {
+    const option = barOption(pair(3), { ...CONTEXT, shares: sharesOf([28.4, 29.1, 27.8]) });
+
+    expect(labelOf(option, 0)).toBe("$25,229");
+    expect(labelOf(option, 1)).toBe("$7,161\n{share|28.4 %}");
+  });
+
+  it("apaga el monto pero conserva el porcentaje cuando el eje se aprieta", () => {
+    // Dos series sobre doce meses son 24 marcas y ningún monto cabe; el porcentaje lo lleva solo
+    // la hija, así que son 12 y sí caben. Es la lectura que se pidió, y sobrevive más densidad.
+    const option = barOption(pair(12), { ...CONTEXT, shares: sharesOf(Array(12).fill(28.4)) });
+
+    expect(option.series[0].label?.show).toBe(false);
+    expect(labelOf(option, 1)).toBe("{share|28.4 %}");
+  });
+
+  it("deja el monto solo cuando el porcentaje de ese periodo no se pudo calcular", () => {
+    const option = barOption(pair(3), { ...CONTEXT, shares: sharesOf([28.4, null, 27.8]) });
+
+    expect(labelOf(option, 1, 1)).toBe("$7,161");
+  });
+
+  it("escribe el porcentaje en tinta más tenue y nunca en el color de la serie", () => {
+    const option = barOption(pair(3), { ...CONTEXT, shares: sharesOf([28.4, 29.1, 27.8]) });
+    const rich = option.series[1].label?.rich?.share;
+
+    expect(rich?.color).toBe(CHART_INK.muted);
+    expect(rich?.color).not.toBe(option.series[1].itemStyle?.color);
+    expect(option.series[0].label?.rich).toBeUndefined();
+  });
+
+  it("nombra la base en el tooltip, donde sí hay sitio para decirlo", () => {
+    const option = barOption(pair(12), { ...CONTEXT, shares: sharesOf(Array(12).fill(28.4)) });
+    const rows = tooltipOf(option, [
+      { seriesId: PARENT_ID, value: 25_229 },
+      { seriesId: CHILD_ID, value: 7_161 },
+    ]);
+
+    expect(rows).toContain("Ingresos: $25,229<br/>");
+    expect(rows).toContain("Ventas: $7,161 · 28.4 % de Ingresos");
+  });
+
+  it("no cambia ni una etiqueta cuando no hay ningún porcentaje que anotar", () => {
+    const plain = barOption(pair(3), CONTEXT);
+
+    expect(labelOf(plain, 1)).toBe("$7,161");
+    expect(plain.series[1].label?.rich).toBeUndefined();
+    expect(tooltipOf(plain, [{ seriesId: CHILD_ID, value: 7_161 }])).not.toContain("%");
+  });
+
+  it("no anota un segundo porcentaje sobre unas barras que ya son porcentajes", () => {
+    const series = [makeSeries([20], { code: "4.1", container: [100] })];
+    const option = hundredPercentOption(series, { ...CONTEXT, shares: sharesOf([28.4]) });
+
+    expect(option.series[0].label?.rich).toBeUndefined();
+    expect(labelOf(option, 0)).toBe("20.0 %");
   });
 });
 

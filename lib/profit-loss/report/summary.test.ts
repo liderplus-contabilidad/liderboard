@@ -53,6 +53,19 @@ describe("la identidad del informe", () => {
     expect(cover.companyName).toBe("DARWIN & WOLF S.A.");
   });
 
+  it("lleva el logo del cliente a la portada, y sin él no inventa ninguno", () => {
+    const logo = {
+      dataUrl: "data:image/png;base64,SGk=",
+      mime: "image/png" as const,
+      width: 640,
+      height: 160,
+    };
+    expect(describePygReport(input({ logo })).logo).toEqual(logo);
+    // Igual que el nombre: el logo es la etiqueta del usuario y no sale de ningún archivo, así que
+    // un cliente sin logo deja la portada tal como estaba.
+    expect(describePygReport(input()).logo).toBeUndefined();
+  });
+
   it("nombra el sistema contable en vez de imprimir su id", () => {
     expect(describePygReport(input()).systemLabel).toBe("Mensual por centros de costo");
   });

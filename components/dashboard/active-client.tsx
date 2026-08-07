@@ -13,14 +13,17 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LogoPicker } from "@/components/ui/logo-picker";
 import { cn } from "@/lib/cn";
-import { matchesSearch } from "@/lib/workspaces";
+import { matchesSearch, type EntityLogo } from "@/lib/workspaces";
 
 export interface ActiveClientInfo {
   /** Empresa / client shown in bold. */
   name: string;
   /** Period label for the subline, e.g. "Ene–Dic 2026". */
   period?: string;
+  /** The logo, if this workspace has one. */
+  logo?: EntityLogo;
 }
 
 /** One row of the selector. `caption` is what the client IS — its system, mode and years. */
@@ -35,6 +38,35 @@ export interface ClientOption {
    * lectura derivada de todas ellas — renombrarlo o eliminarlo no querría decir nada.
    */
   readOnly?: boolean;
+  /** El logo del cliente, si subió uno. El consolidado, que no es una fila guardada, no tiene. */
+  logo?: EntityLogo;
+}
+
+/**
+ * El logo de un workspace dibujado a un tamaño dado. Devuelve `null` sin logo en vez de un marcador
+ * gris: la cabecera de quien no suba ninguno tiene que quedar exactamente como estaba, y un hueco
+ * vacío ahí solo añadiría ruido a un bloque que hoy está limpio.
+ *
+ * El `alt` va VACÍO a propósito. El nombre del cliente está escrito al lado en las dos superficies
+ * que lo usan, así que un texto alternativo lo repetiría en voz alta: el logo es decoración de una
+ * etiqueta que ya se lee.
+ */
+function EntityLogoMark({ logo, size }: { logo: EntityLogo | undefined; size: number }) {
+  if (!logo) {
+    return null;
+  }
+  return (
+    // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta.
+    // oxlint-disable-next-line next/no-img-element
+    <img
+      src={logo.dataUrl}
+      alt=""
+      width={logo.width}
+      height={logo.height}
+      style={{ width: size, height: size }}
+      className="shrink-0 rounded-[5px] object-contain"
+    />
+  );
 }
 
 /** Ancho del menú `⋯` de una fila. Se resta del borde derecho del botón para alinearlos. */
@@ -175,32 +207,44 @@ export function ActiveClient({
     [clients, query],
   );
 
+  /**
+   * Si ALGUNA fila tiene logo. La columna de miniaturas aparece entera o no aparece: reservarla
+   * cuando nadie ha subido ninguno sangraría toda la lista por un espacio que nunca se llena, y
+   * quitársela a las filas sin logo cuando otras sí lo tienen desalinearía los nombres.
+   */
+  const someHasLogo = useMemo(() => (clients ?? []).some((entry) => entry.logo), [clients]);
+
   const block = (
-    <div className="flex min-w-0 flex-col items-end gap-[3px]">
-      <span
-        className={cn(
-          "max-w-[360px] truncate text-[15px] font-bold tracking-[-0.2px]",
-          hasClient ? "text-brand" : "text-faint",
-        )}
-      >
-        {name}
-      </span>
-      <div className="flex items-center gap-[7px] text-[11.5px] font-medium text-faint">
-        {hasClient || !emptySubline ? (
-          <>
-            <span>{caption}</span>
-            <span className="text-faintest">·</span>
-            <span>{period}</span>
-          </>
-        ) : (
-          <span>{emptySubline}</span>
-        )}
+    <div className="flex min-w-0 items-center gap-2.5">
+      {/* A la IZQUIERDA del nombre, no encima: el bloque va alineado a la derecha contra el borde
+          de la cabecera, así que el logo es lo primero que se cruza al venir desde el contenido. */}
+      <EntityLogoMark logo={client?.logo} size={28} />
+      <div className="flex min-w-0 flex-col items-end gap-[3px]">
+        <span
+          className={cn(
+            "max-w-[360px] truncate text-[15px] font-bold tracking-[-0.2px]",
+            hasClient ? "text-brand" : "text-faint",
+          )}
+        >
+          {name}
+        </span>
+        <div className="flex items-center gap-[7px] text-[11.5px] font-medium text-faint">
+          {hasClient || !emptySubline ? (
+            <>
+              <span>{caption}</span>
+              <span className="text-faintest">·</span>
+              <span>{period}</span>
+            </>
+          ) : (
+            <span>{emptySubline}</span>
+          )}
+        </div>
       </div>
     </div>
   );
 
   if (!interactive) {
-    return <div className="ml-auto flex min-w-0 flex-col items-end gap-[3px]">{block}</div>;
+    return <div className="ml-auto flex min-w-0 items-center justify-end">{block}</div>;
   }
 
   return (
@@ -304,18 +348,27 @@ export function ActiveClient({
                         onSelect?.(entry.id);
                         close(false);
                       }}
-                      className="flex min-w-0 flex-1 flex-col items-start text-left"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <span className="max-w-full truncate text-[13px] font-semibold text-ink">
-                        {entry.name}
-                      </span>
-                      <span
-                        className={cn(
-                          "max-w-full truncate text-[11.5px]",
-                          entry.caption ? "text-faint" : "text-faintest",
-                        )}
-                      >
-                        {entry.caption ?? "Sin datos cargados"}
+                      {/* Un hueco del mismo ancho cuando no hay logo: con unas filas sangradas y
+                          otras no, la columna de nombres deja de poder leerse en vertical. */}
+                      {someHasLogo && (
+                        <span className="flex size-5 shrink-0 items-center justify-center">
+                          <EntityLogoMark logo={entry.logo} size={20} />
+                        </span>
+                      )}
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="max-w-full truncate text-[13px] font-semibold text-ink">
+                          {entry.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "max-w-full truncate text-[11.5px]",
+                            entry.caption ? "text-faint" : "text-faintest",
+                          )}
+                        >
+                          {entry.caption ?? "Sin datos cargados"}
+                        </span>
                       </span>
                     </button>
                     {!entry.readOnly && (
@@ -407,19 +460,26 @@ export function ActiveClient({
 }
 
 /**
- * The «Agregar cliente» / «Renombrar cliente» modal: ONE field, because creating a client asks for
- * no file — the data comes later, and saying so is what stops the reader looking for an upload
- * step that is not there.
+ * The «Agregar cliente» / «Editar cliente» modal: the user's LABEL for the workspace and nothing
+ * else — its name and its logo. Neither is data: the data comes later, and the note below says so,
+ * because what stops a reader hunting for an upload step here is being told there isn't one.
  *
- * Validation is the caller's: it owns the list, so only it can say which name is already taken.
+ * The logo sits next to the name for the same reason it does in `NamedEntity`: they are the two
+ * halves of the same thing, and neither is ever compared against a file.
+ *
+ * Validation of the NAME is the caller's: it owns the list, so only it can say which one is already
+ * taken. The logo validates itself inside `LogoPicker`, which needs no list to know a file is too
+ * heavy.
  */
 export function ClientNameDialog({
   open,
   mode,
   value,
+  logo,
   error,
   busy,
   onChange,
+  onLogoChange,
   onSubmit,
   onCancel,
   labels = DEFAULT_ENTITY_LABELS,
@@ -427,9 +487,11 @@ export function ClientNameDialog({
   open: boolean;
   mode: "create" | "rename";
   value: string;
+  logo: EntityLogo | null;
   error: string | null;
   busy?: boolean;
   onChange: (value: string) => void;
+  onLogoChange: (logo: EntityLogo | null) => void;
   onSubmit: () => void;
   onCancel: () => void;
   labels?: EntityLabels;
@@ -462,7 +524,7 @@ export function ClientNameDialog({
           </span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">
-              {creating ? `Agregar ${labels.subject}` : `Renombrar ${labels.subject}`}
+              {creating ? `Agregar ${labels.subject}` : `Editar ${labels.subject}`}
             </h2>
             <p className="mt-0.5 text-[12.5px] text-faint">
               {creating
@@ -490,6 +552,15 @@ export function ClientNameDialog({
             </span>
           )}
         </label>
+
+        <div className="mt-4">
+          <LogoPicker
+            value={logo}
+            onChange={onLogoChange}
+            disabled={busy}
+            hint={`Opcional. Acompaña al nombre del ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
+          />
+        </div>
 
         {creating && (
           <p className="mt-4 rounded-[9px] bg-surface-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-soft">

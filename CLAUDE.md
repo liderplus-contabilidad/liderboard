@@ -195,6 +195,34 @@ UNO es legítimo y da ese cliente: la regla de «hacen falta dos» decide si el 
 (`canConsolidate`), no qué puede mirar quien ya entró — vaciarlo al desmarcar el penúltimo sería un
 callejón sin salida.
 
+**Y los CENTROS DE COSTO se cruzan entre clientes en el mismo desplegable de siempre.** El
+consolidado devuelve, además del total, un dataset por cada par (cliente, centro)
+(`ConsolidatedWorkspace.centerDatasets`, `consolidatedCenterId` = `<clientId>::<centerId>`), y esos
+ids compuestos SON ids de vista: por eso el cruce no estrena ni un campo de `PygFilters` ni una
+segunda lista —`centerIds`, `sanitizeFilters`, los chips y `selection.ts` funcionan sin tocarse— y
+`center-filter.tsx` se rinde allí con el mismo control, **agrupado por cliente**: un encabezado con
+el nombre del cliente y debajo sus centros, donde repetirlo en cada fila sería ruido. **No se funden
+por nombre**: el `restaurante` de tres empresas son tres columnas, y las dos mitades del rótulo
+viajan SEPARADAS (`costCenterName` y `companyName` en la capa pura; `group`/`shortName` en la vista)
+porque el desplegable las lee partidas y todos los demás juntas — el `name` de la vista sigue siendo
+«Restaurante · Dingoo», así que un chip, una leyenda o el informe, donde no hay encabezado que
+desambigüe, dicen de quién es aunque ignoren los dos campos nuevos. Los agrupa
+`groupViews` por consecutivos, no por clave: el orden que da el proveedor es el que fija el color y
+la posición de cada centro en el resto de la app. Marcar ACOTA la suma —como «Cliente», no como dentro de un cliente, donde el Consolidado
+tiene que cuadrar contra `GENERAL` y no puede ser un subconjunto; aquí no hay ningún `GENERAL`
+contra el que cuadrar—, y por eso `buildConsolidatedViews` no pasa por `buildViews`, cuyo
+Consolidado es por construcción la suma de los centros que ve. **Con centros marcados la suma es
+EXACTAMENTE esos centros y el filtro manda sobre «Cliente»**: un cliente de estado único no tiene
+ninguno con el que entrar y queda fuera, con un aviso que lo dice, porque no aparece en esa lista y
+su ausencia no se vería en ningún otro sitio. Se probó al revés —entrar completo, gobernado por
+«Cliente»— y no sirve: los archivos de MicroPlus y Dingoo son de estado único, así que «los tres
+restaurantes del grupo» salía siendo casi la suma entera. Para volver a incluirlo se quitan las
+marcas de centro. Una marca huérfana
+(la de un cliente concreto, que sigue en la barra al abrir el consolidado) se cruza contra el
+universo y vale como «ninguna», la misma defensa de `selectContributions`: vaciar la pantalla sería
+peor que no acotar. Los años, en cambio, se leen del UNIVERSO y no de la suma acotada — marcar un
+centro que solo tiene 2026 no puede borrar 2025 de la lista desde la que se desmarca.
+
 PyG › Datos loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
 `PygDataProvider` — mounted in the dashboard layout — shares `clients`/`dataset`/`edits`/
@@ -618,6 +646,66 @@ contra Jun»). `periodRangeLabel` (`analytics/period.ts`) es la única forma de 
 periodos y distingue el rango continuo del que tiene huecos: Ene y Mar marcados son «Ene, Mar», y
 «Ene–Mar» afirmaría que febrero está sumado.
 
+**Marcar una cuenta y otra que la CONTIENE anota el porcentaje sobre la barra.** Marcar «4 Ingresos»
+y «4.1 Ventas» a la vez no es solo comparar dos barras: la pregunta que produce esa marca es qué
+parte de la primera es la segunda. `lib/profit-loss/charts/share.ts` (puro + testeado) la responde
+una vez y de ahí salen las TRES lecturas — la etiqueta de la barra, el tooltip y la nota al pie de la
+tarjeta «Comparación» —, en vez de tres cálculos que puedan separarse. La base es el **ancestro
+marcado más cercano** a cualquier profundidad, caminando `parentByCode` (la parentela del ÁRBOL, la
+misma que sigue `ancestorPath`): eso es lo que da lectura al salto de nivel (`4` y `4.1.01` sin la
+intermedia) y lo que acierta con dos familias marcadas a la vez, donde una base común no existe. La
+división NO se reescribe — se le cuelga a la serie ese ancestro como `container` y se pasa por
+`toPctOfContainer`, así hereda que un periodo sin cobertura y una base en `0` den `null` y nunca
+`0 %`. En la barra va **solo el número**, en una segunda línea más tenue bajo el monto (`rich`, la
+única razón por la que `ChartLabel` lo tiene): «28.4 % de Ingresos» no cabe en doce columnas, así que
+quién es la base lo dicen el tooltip —barra por barra— y una línea en castellano llano bajo la
+tarjeta (`describeShares`), que además es lo que desambigua cuando hay dos niveles de padre en la
+misma columna. El porcentaje tiene **presupuesto propio** y se mide contra las barras que lo llevan,
+no contra todas: padre e hija sobre doce meses son 24 marcas y ningún monto cabe, pero solo la hija
+lleva porcentaje, así que son 12 y sí caben — en el año completo se lee el % y ningún monto, y al
+acotar «Periodo» reaparece el monto encima. Nada de lo que se veía antes deja de verse, y dos cuentas
+sin parentesco dejan la gráfica exactamente igual. La tabla gemela sigue siendo montos y el informe
+imprimible lo hereda sin tocarlo, porque lee el mismo `buildGraficosCards`.
+
+**«Distribución» es la tercera lectura de la composición y no repite a las otras dos**: la dona dice
+de qué se compone el TRAMO entero y el ranking cuáles son las más grandes, pero solo un apilado por
+periodo dice si una hija está ganando peso mes a mes. `lib/profit-loss/charts/distribution.ts` (puro y
+testeado) toma las dos decisiones que pueden estar mal. **Qué cuenta se reparte** es por quinta vez la
+figura de `resolveActiveCenterId` —exactamente una marcada es esa cuenta, ninguna o varias es
+Ingresos—, y luego DESCIENDE mientras haya una sola hija: un plan real encadena `4 → 4.1` y `5 → 5.1`,
+así que repartir la raíz sería una pila de un solo segmento, que no es una pila. Una cuenta de
+movimiento marcada no tiene nada que repartir y la tarjeta lo dice en vez de dibujar. **Qué hijas se
+dibujan**: las paradas se van y se cuentan (un estado declara cada cuenta de su plan tenga o no
+movimiento, y diez leyendas en cero entierran a la que importa), y pasadas las CINCO de su escala la
+cola se pliega en «Otros» ordenando ANTES de cortar, como el ranking y con el mismo corte que la dona.
+**La línea del total NO es el techo de la pila**, y por eso existe: `4.1.4 Rebajas y/o Descuentos` es
+un ingreso de saldo negativo que se apila hacia ABAJO, así que el neto no está en ningún borde; con
+«Otros» plegado sigue siendo el total de verdad, y es además lo único que imprime una cifra por
+columna, porque los segmentos de una pila no tienen dónde escribirla. Viaja por su propia consulta
+—nunca re-sumando las barras— y toma un tono de TINTA y no un paso de la escala, la misma regla del
+combo: es una lectura de la misma entidad, no una segunda. Es también la ÚNICA pila de la app que se
+dibuja sin las costuras de 2 px de superficie que separan todo relleno contiguo (`barSeries`,
+`seamless`): una columna que ya declara su total es una sola cifra repartida y no varias puestas en
+fila, y esas costuras la parten en trozos sueltos —lo que separa un segmento del siguiente pasa a ser
+el salto de color, que la escala garantiza—. En la tabla gemela cierra con `emphasis`, y el informe
+imprimible la hereda sin tocarla porque lee el mismo `buildGraficosCards`.
+
+**Y es la excepción a «el color de una serie es identidad», por el motivo contrario a `CHART_SECTION`.**
+Allí el color dice de qué BLOQUE habla la serie; aquí no distingue entidades en absoluto: los segmentos
+son PARTES DE UNA MISMA CIFRA apiladas de mayor a menor, así que el color sigue al TAMAÑO
+(`distributionColor` reparte `CHART_DISTRIBUTION_RAMP` por el lugar en la pila, sin pasar por
+`colorForEntity`). Ocho tonos de identidad —azul, rojo, verde, ámbar— borran justo esa lectura: cada
+columna sale pareciendo cuatro asuntos amontonados en vez de un reparto. La escala va de azul marino a
+verde claro, monótona en luminosidad, de modo que el tono y la posición dicen lo mismo. **Son CINCO
+pasos y no ocho, y eso está MEDIDO**: el arco azul→verde mide unos 55 ΔE, y en ocho pasos deja pares
+vecinos en ΔE 8 —bajo el piso de visión normal, y en una pila los vecinos son exactamente lo que hay
+que distinguir—, mientras que en cinco da 16.6 y pasa. De ahí sale el corte de «Otros», que se lleva
+`CHART_NEUTRAL` porque no es un puesto de la escala sino lo que sobra. Medido con el validador de la
+skill `dataviz` y escrito en el archivo: croma PASS, CVD PASS (peor par azul↔azul ΔE 14.2 deutan),
+visión normal PASS (peor par verde↔verde ΔE 16.6). La banda de luminosidad NO se cumple y no debe
+cumplirse — es un requisito de los rellenos categóricos, y una rampa secuencial existe para salirse de
+ella por los dos extremos, igual que `CHART_HEAT_RAMP`.
+
 **Rol de Pagos.** Un período es cliente + año + mes; su nómina son `PayrollEmployeeLine[]`. **El
 MOTOR es la única fuente de toda cifra en pantalla** y el Excel sirve solo para SUBIR información:
 lo guardado es la ficha del empleado más lo que se CAPTURA del mes (`PayrollMonthlyCapture`), y las
@@ -827,13 +915,31 @@ UI are:
   son las RAÍCES del estado —«Ingresos contra Costos y Gastos», la apertura de la cascada— el color
   ya no distingue entidades sino que dice de qué BLOQUE habla la serie, y toma el tono que la tabla
   de Datos usa para ese mismo bloque: un verde quiere decir «ingresos» en las dos pantallas.
-  `codeColorResolver` lo aplica **solo si todos los códigos comparados son raíces**; «Composición de
-  los ingresos» compara `4.1.01` contra `4.1.02` y vuelve a las ranuras, porque pintarlas del mismo
-  verde las volvería indistinguibles. Son los tonos de `--color-section-*` un paso más hondos: allí
+  `codeColorResolver` lo aplica **solo si todos los códigos comparados son raíces**; una tarjeta que
+  compara `4.1.01` contra `4.1.02` sale de esa excepción, porque pintarlas del mismo verde las
+  volvería indistinguibles. Son los tonos de `--color-section-*` un paso más hondos: allí
   son fondos bajo texto oscuro, aquí rellenos que deben caer en la banda L 0.43–0.77. Usar los del
   Excel tal cual NO es opción y está medido: dan 1,3:1 contra el papel —barras invisibles— y ΔE 7,4
   entre el verde y el celeste, por debajo del piso de visión normal. Lo que se conserva es el TONO;
   la luminosidad es otro trabajo. Medido: CVD ΔE 18.1, visión normal ΔE 19.5.
+- **`CHART_COMPOSITION_PALETTE` es el set CÁLIDO de la tarta de «Composición de los ingresos»**, y
+  la tercera vez que un color deja de seguir a la entidad. Aquí no hay entidades que vayan y
+  vengan: `toPieSlices` devuelve el reparto ENTERO, siempre completo y ordenado de mayor a menor, y
+  el color ya seguía a ese orden — `colorForCompositionSlot` solo lo dice en voz alta. A diferencia
+  de `CHART_DISTRIBUTION_RAMP` son HUES y no una rampa, porque una pila necesita leerse como «este
+  trozo pesa más» mientras que una tarta solo necesita que seis porciones se distingan. Lo pidió la
+  firma sobre una tarta de referencia que trajeron, y **sus tonos exactos no se usaron, con la razón
+  medida**: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL —la porción del 30 % y la del 20 % son
+  casi el mismo rojo para cualquiera— y `#99aa27`↔`#ff8500` dan ΔE 3.9 protan. En la referencia eso
+  no se nota porque cada porción lleva su «20%» impreso DENTRO, y el número es lo que desambigua;
+  en esta tarjeta los rótulos van fuera con línea guía, así que ese relieve no existe. Se conserva
+  el CARÁCTER —el rojo, el naranja y el teal, tres de sus cinco— y se ensancha el arco, porque rojo,
+  naranja y ámbar viven en unos 60° de tono y no llegan al piso sin separarse en luminosidad, lo
+  que saca al ámbar de la banda por arriba. Ninguno de los seis es una ranura de `CHART_PALETTE`
+  (el azul se desplazó a `#0f5bb5` por eso), la misma regla que ya cumple la rampa de distribución.
+  `CHART_COMPOSITION_MAX` es además el corte que `toPieSlices` recibe, en vez de un 6 suelto, para
+  que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin tono. Medido: banda
+  PASS, croma PASS, CVD ΔE 15.0, visión normal ΔE 16.2.
 
 **Reusable side panel.** `components/ui/side-panel.tsx` is a right-anchored, non-modal drawer
 (no scrim, Escape/outside-click to close, focus in on open and back to the opener on close). It's

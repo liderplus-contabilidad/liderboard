@@ -22,7 +22,7 @@ import {
   listEmployees,
   listPeriods,
   periodFinancials,
-  renameClient,
+  updateClient,
   updateEmployee,
   rosterCounts,
   setActiveClient,
@@ -69,16 +69,39 @@ describe("clientes", () => {
     await createClient("Ambato Centro");
     expect((await listClients()).map((c) => c.name)).toEqual(["Ambato Centro", "Manor Galápagos"]);
 
-    await renameClient(clientId, "Alfa");
+    await updateClient(clientId, "Alfa", null);
     expect((await listClients()).map((c) => c.name)).toEqual(["Alfa", "Ambato Centro"]);
   });
 
   it("renaming touches the label and nothing else", async () => {
     await createPeriod(clientId, 2026, 2);
-    await renameClient(clientId, "Otro nombre");
+    await updateClient(clientId, "Otro nombre", null);
     const summaries = await listClientSummaries();
     expect(summaries[0].name).toBe("Otro nombre");
     expect(summaries[0].periodCount).toBe(1);
+  });
+
+  it("stores the logo, and removing it deletes the field rather than storing an empty one", async () => {
+    const logo = {
+      dataUrl: "data:image/png;base64,SGk=",
+      mime: "image/png" as const,
+      width: 8,
+      height: 4,
+    };
+    const withLogo = await createClient("Con logo", logo);
+    expect((await getClient(withLogo.id))?.logo).toEqual(logo);
+
+    // Lo que se comprueba aquí es el comportamiento de Dexie del que depende «Quitar»: un
+    // `undefined` en un `update` BORRA la propiedad. Si en su lugar la dejara puesta, las tres
+    // superficies dibujarían un logo vacío en vez de ninguno.
+    await updateClient(withLogo.id, "Con logo", null);
+    const cleared = await getClient(withLogo.id);
+    expect(cleared?.logo).toBeUndefined();
+    expect("logo" in (cleared ?? {})).toBe(false);
+  });
+
+  it("a cliente created with no logo stores no empty field either", async () => {
+    expect("logo" in ((await getClient(clientId)) ?? {})).toBe(false);
   });
 
   it("summarizes what each cliente holds, for the selector's subline", async () => {

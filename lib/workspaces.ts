@@ -12,6 +12,9 @@
  * Galápagos» what the file calls `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, so a name is
  * never compared against a file — only against other names.
  */
+import type { EntityLogo } from "@/lib/logos";
+
+export type { EntityLogo };
 
 /** Name cap. A header selector cannot render more, and nobody types that much on purpose. */
 export const MAX_ENTITY_NAME_LENGTH = 60;
@@ -53,10 +56,18 @@ export function normalizeEntityName(raw: string, subject?: string): EntityNameCh
   return { ok: true, name };
 }
 
-/** The minimum a named workspace is: an id and the user's label for it. */
+/**
+ * The minimum a named workspace is: an id, the user's label for it and — optionally — the logo they
+ * uploaded. The logo lives HERE, next to the name, because it is the other half of the same thing:
+ * what the user calls this workspace and what it looks like. Neither is compared against a file.
+ *
+ * It is an optional, NON-INDEXED field on purpose: adding it costs no Dexie migration in any of the
+ * three modules that keep a list of these.
+ */
 export interface NamedEntity {
   id: string;
   name: string;
+  logo?: EntityLogo;
 }
 
 /**

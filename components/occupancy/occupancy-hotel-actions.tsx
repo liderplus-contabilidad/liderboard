@@ -49,12 +49,12 @@ function describeHotel(hotel: HotelSummary): string | undefined {
  * `useEntityNaming`; lo único de aquí son las palabras, que hablan de hoteles y no de clientes.
  */
 function useHotelNaming() {
-  const { hotels, createHotel, renameHotel } = useOccupancyData();
+  const { hotels, createHotel, updateHotel } = useOccupancyData();
   return useEntityNaming({
     entities: hotels,
     labels: HOTEL_LABELS,
     onCreate: createHotel,
-    onRename: renameHotel,
+    onRename: updateHotel,
   });
 }
 
@@ -101,7 +101,12 @@ export function OccupancyHotelActions() {
     () =>
       hotels.map((hotel) => {
         const caption = describeHotel(hotel);
-        return { id: hotel.id, name: hotel.name, ...(caption ? { caption } : {}) };
+        return {
+          id: hotel.id,
+          name: hotel.name,
+          ...(caption ? { caption } : {}),
+          ...(hotel.logo ? { logo: hotel.logo } : {}),
+        };
       }),
     [hotels],
   );
@@ -132,7 +137,13 @@ export function OccupancyHotelActions() {
     <>
       <ActiveClient
         {...(activeHotel
-          ? { client: { name: activeHotel.name, ...(period ? { period } : {}) } }
+          ? {
+              client: {
+                name: activeHotel.name,
+                ...(period ? { period } : {}),
+                ...(activeHotel.logo ? { logo: activeHotel.logo } : {}),
+              },
+            }
           : {})}
         caption="Ocupación diaria"
         emptySubline="Ninguna ocupación cargada"

@@ -12,7 +12,10 @@
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import { writeLogoHeader } from "@/lib/excel-logo";
+import type { EntityLogo } from "@/lib/logos";
 import { formatCurrency } from "@/lib/format";
+import { sectionTone } from "./datos-sections";
 import type { DatosCell, DatosColumn, DatosGrid, DatosRow } from "./datos-types";
 import { applyEditsToLeafAccounts, mergeCenters, toDatosGrid } from "./derive";
 import { emptyAccountCodes, movingColumnPositions } from "./filter";
@@ -66,6 +69,8 @@ export function buildPygWorkbook(
   /** «Ocultar ceros» — omits the accounts and the months with no movement in ANY year of the
    * file. */
   hideEmpty = false,
+  /** El logo del cliente abierto, que encabeza cada hoja. */
+  logo?: EntityLogo,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
@@ -78,7 +83,7 @@ export function buildPygWorkbook(
     edits,
     loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
   }));
-  writeStatementSheets(wb, sheets, hideEmpty);
+  writeStatementSheets(wb, sheets, hideEmpty, logo);
   for (const sheet of sheets) {
     sheetRows.push({
       sheetName: sheet.name,
@@ -129,13 +134,16 @@ function writeStatementSheets(
   wb: ExcelJS.Workbook,
   sheets: readonly StatementSheet[],
   hideEmpty: boolean,
+  logo?: EntityLogo,
 ): void {
   const grids = sheets.map((sheet) =>
     toDatosGrid(sheet.dataset, sheet.edits, sheet.dataset.baseFrequency),
   );
   const omit = hideEmpty ? emptyAccountCodes(grids) : NO_OMISSIONS;
   const months = hideEmpty ? movingMonths(grids) : null;
-  sheets.forEach((sheet, index) => writeStatementSheet(wb, sheet, grids[index], omit, months));
+  sheets.forEach((sheet, index) =>
+    writeStatementSheet(wb, sheet, grids[index], omit, months, logo),
+  );
 }
 
 /**
@@ -176,8 +184,11 @@ function writeStatementSheet(
   grid: DatosGrid,
   omit: ReadonlySet<string>,
   months: readonly number[] | null,
+  logo?: EntityLogo,
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(name);
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza.
+  writeLogoHeader(wb, ws, logo);
   const isMonthly = dataset.baseFrequency !== "anual";
   // Which month columns this sheet writes, in order. `null` is every month — the shape the file
   // has always had, and the one it keeps whenever the switch is off.
@@ -343,6 +354,7 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
   for (let col = FIRST_VALUE_COL; col <= lastCol; col++) {
     r.getCell(col).numFmt = CURRENCY_FMT;
   }
+  paintSection(r, row, lastCol);
 
   if (row.isResult) {
     r.eachCell({ includeEmpty: true }, (cell) => {
@@ -363,6 +375,38 @@ function writeDataRow(ws: ExcelJS.Worksheet, row: DatosRow, ctx: EmitContext): v
       r.getCell(FIRST_VALUE_COL + offset).note = note;
     }
   });
+}
+
+/**
+ * Tints the row with the tone of the BLOCK it belongs to — the accountant's own fills, the ones
+ * the Datos table already paints on roots 4, 5 and 6.
+ *
+ * It asks `sectionTone`, the same rule the table and the printed report ask, rather than
+ * re-deciding here which root is which: a second classification would drift from the first the
+ * day a root changes meaning. What that rule says, the sheet obeys — nothing from level 3 inward,
+ * nothing on a result row (its own top border is what closes the block), and the `-hover` tones
+ * never travel, because a sheet does not light up when you pass over it.
+ *
+ * The fill spans the whole row, code through the last value column, since on screen the tone is on
+ * the `<tr>`. It takes just what the rule needs rather than a whole `DatosRow`, because the raw
+ * month grids — where a row is a code and a level and nothing else — paint through it too.
+ */
+function paintSection(
+  r: ExcelJS.Row,
+  row: { code: string; level: number; isResult?: boolean },
+  lastCol: number,
+): void {
+  const tone = sectionTone(row.code, row.level, row.isResult);
+  if (!tone) {
+    return;
+  }
+  for (let col = CODE_COL; col <= lastCol; col++) {
+    r.getCell(col).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: tone.argb },
+    };
+  }
 }
 
 /**
@@ -412,6 +456,8 @@ export interface MultiCenterInput {
    * file, never sheet by sheet, so every center keeps the same chart of accounts and the same
    * columns. */
   hideEmpty?: boolean;
+  /** El logo del cliente abierto, que encabeza cada hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -474,7 +520,7 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
 
   // The Consolidado sheet is part of the judgement, not an exception to it: an account nobody
   // moved sums to zero there too, so it never keeps a row alive on its own.
-  writeStatementSheets(wb, sheets, input.hideEmpty ?? false);
+  writeStatementSheets(wb, sheets, input.hideEmpty ?? false, input.logo);
 
   attachWorkbookMetadata(
     wb,
@@ -568,6 +614,8 @@ export interface MonthSliceExportInput {
   month: number;
   /** In selector order — "Sin centro de costo" is just the last entry. */
   centers: { name: string; dataset: PygDataset; edits: CellEdit[] }[];
+  /** El logo del cliente abierto, que encabeza la hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -580,6 +628,7 @@ export interface MonthSliceExportInput {
 export function buildMonthSliceWorkbook(input: MonthSliceExportInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
+  writeLogoHeader(wb, ws, input.logo);
 
   ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
   ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
@@ -606,33 +655,41 @@ export function buildMonthSliceWorkbook(input: MonthSliceExportInput): ExcelJS.W
   // gives code → value at `input.month`, in the account tree's pre-order (= file/numeric) order.
   const perCenter = input.centers.map(({ dataset, edits }) => {
     const grid = toDatosGrid(dataset, edits, "mensual");
-    const values = new Map<string, { name: string; value: number }>();
+    const values = new Map<string, { name: string; value: number; level: number }>();
     flattenGridValuesAtMonth(grid.rows, input.month, values);
     return values;
   });
 
   const order = [...(perCenter[0]?.keys() ?? [])];
   for (const code of order) {
-    const name = perCenter[0]?.get(code)?.name ?? code;
+    const entry = perCenter[0]?.get(code);
     const centerValues = perCenter.map((values) => values.get(code)?.value ?? 0);
     const general = centerValues.reduce((sum, value) => sum + value, 0);
-    const row = ws.addRow([code, name, general, ...centerValues]);
-    for (let col = FIRST_VALUE_COL; col <= FIRST_VALUE_COL + centerValues.length; col++) {
+    const row = ws.addRow([code, entry?.name ?? code, general, ...centerValues]);
+    const lastCol = FIRST_VALUE_COL + centerValues.length;
+    for (let col = FIRST_VALUE_COL; col <= lastCol; col++) {
       row.getCell(col).numFmt = CURRENCY_FMT;
     }
+    paintSection(row, { code, level: entry?.level ?? 1 }, lastCol);
   }
   return wb;
 }
 
-/** Every non-result row's value at `month`, keyed by code, tree order preserved. */
+/** Every non-result row's value at `month`, keyed by code, tree order preserved. The `level` rides
+ * along because the row's tone depends on it — these grids have no tree of their own to read it
+ * back from. */
 function flattenGridValuesAtMonth(
   rows: DatosRow[],
   month: number,
-  out: Map<string, { name: string; value: number }>,
+  out: Map<string, { name: string; value: number; level: number }>,
 ): void {
   for (const row of rows) {
     if (!row.isResult) {
-      out.set(row.code, { name: row.name, value: row.cells[month]?.value ?? 0 });
+      out.set(row.code, {
+        name: row.name,
+        value: row.cells[month]?.value ?? 0,
+        level: row.level,
+      });
     }
     if (row.children) {
       flattenGridValuesAtMonth(row.children, month, out);
@@ -647,6 +704,8 @@ export interface SingleMonthSliceInput {
   month: number;
   dataset: PygDataset;
   edits: CellEdit[];
+  /** El logo del cliente abierto, que encabeza la hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -660,6 +719,7 @@ export interface SingleMonthSliceInput {
 export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
+  writeLogoHeader(wb, ws, input.logo);
 
   ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
   ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
@@ -687,11 +747,12 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
   // The dataset's "mensual" grid already has rollups + edits applied — flattening it gives
   // code → value at `input.month`, in the account tree's pre-order (= file/numeric) order.
   const grid = toDatosGrid(input.dataset, input.edits, "mensual");
-  const values = new Map<string, { name: string; value: number }>();
+  const values = new Map<string, { name: string; value: number; level: number }>();
   flattenGridValuesAtMonth(grid.rows, input.month, values);
-  for (const [code, { name, value }] of values) {
+  for (const [code, { name, value, level }] of values) {
     const row = ws.addRow([code, name, value]);
     row.getCell(FIRST_VALUE_COL).numFmt = CURRENCY_FMT;
+    paintSection(row, { code, level }, FIRST_VALUE_COL);
   }
   return wb;
 }

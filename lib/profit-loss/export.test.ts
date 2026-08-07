@@ -1,8 +1,15 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
+import { sectionTone } from "./datos-sections";
 import { APP_WORKBOOK_META_SHEET, rowsToAppWorkbookMeta } from "./excel-metadata";
-import { buildMultiCenterWorkbook, buildPygWorkbook, pygExportFilename } from "./export";
+import {
+  buildMonthSliceWorkbook,
+  buildMultiCenterWorkbook,
+  buildPygWorkbook,
+  buildSingleMonthSliceWorkbook,
+  pygExportFilename,
+} from "./export";
 import { MONTHLY_ACCOUNTS } from "./parse.fixtures";
 import type { AccountRow, CellEdit, PygDataset } from "./types";
 
@@ -151,6 +158,102 @@ describe("buildPygWorkbook — cell notes", () => {
     expect(notes.filter((n) => n.includes("Valor original"))).toHaveLength(2);
     expect(notes.some((n) => n.includes("Ajuste de enero"))).toBe(true);
     expect(notes.some((n) => n.includes("Revisar febrero"))).toBe(true);
+  });
+});
+
+describe("colores de sección", () => {
+  /** El ARGB del relleno de la fila cuyo código es `code`, o `undefined` si no lleva relleno. */
+  function fillOf(ws: ExcelJS.Worksheet, code: string): string | undefined {
+    let argb: string | undefined;
+    ws.eachRow((row) => {
+      if (String(row.getCell(1).value ?? "") !== code) return;
+      const fill = row.getCell(1).fill;
+      argb = fill?.type === "pattern" ? (fill.fgColor?.argb ?? undefined) : undefined;
+    });
+    return argb;
+  }
+
+  it("pinta la raíz con el tono pleno y el nivel 2 con el claro, como en Datos", async () => {
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
+    expect(fillOf(ws, "4")).toBe(sectionTone("4", 1)?.argb);
+    expect(fillOf(ws, "4.1")).toBe(sectionTone("4.1", 2)?.argb);
+    expect(fillOf(ws, "5")).toBe(sectionTone("5", 1)?.argb);
+    expect(fillOf(ws, "5.1")).toBe(sectionTone("5.1", 2)?.argb);
+    // Y los dos bloques no se confunden entre sí en el archivo.
+    expect(fillOf(ws, "4")).not.toBe(fillOf(ws, "5"));
+  });
+
+  it("del nivel 3 hacia dentro la hoja vuelve a ser blanca", async () => {
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
+    expect(fillOf(ws, "4.1.1")).toBeUndefined();
+    expect(fillOf(ws, "5.1.2.1")).toBeUndefined();
+  });
+
+  it("la fila de resultado no lleva tono: la cierra su propio borde", async () => {
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
+    let resultado: ExcelJS.Row | undefined;
+    ws.eachRow((row) => {
+      if (String(row.getCell(2).value ?? "").startsWith("Utilidad")) resultado = row;
+    });
+    expect(resultado).toBeDefined();
+    // Su raya superior le deja un `fill` vacío al releer; lo que importa es que no tiene color.
+    const fill = resultado?.getCell(1).fill;
+    expect(fill?.type === "pattern" ? fill.fgColor?.argb : undefined).toBeUndefined();
+  });
+
+  it("el tono cubre la fila entera, del código al Total", async () => {
+    const ws = await reload(buildPygWorkbook([{ dataset, edits }], { 2026: ALL_MONTHS }));
+    let raiz: ExcelJS.Row | undefined;
+    ws.eachRow((row) => {
+      if (String(row.getCell(1).value ?? "") === "4") raiz = row;
+    });
+    // 2 columnas de identificación + 12 meses + Total.
+    for (let col = 1; col <= 15; col++) {
+      const fill = raiz?.getCell(col).fill;
+      expect(fill?.type === "pattern" ? fill.fgColor?.argb : undefined).toBe(
+        sectionTone("4", 1)?.argb,
+      );
+    }
+  });
+
+  it("también llega a «un mes en crudo», que tiene su propio escritor", async () => {
+    const porCentros = await reload(
+      buildMonthSliceWorkbook({
+        companyName: "HOTELERA ANDES S.A.",
+        year: 2026,
+        month: 0,
+        centers: [{ name: "SUCURSAL NORTE", dataset: norte, edits: [] }],
+      }),
+    );
+    expect(fillOf(porCentros, "4")).toBe(sectionTone("4", 1)?.argb);
+    expect(fillOf(porCentros, "5.1")).toBe(sectionTone("5.1", 2)?.argb);
+    expect(fillOf(porCentros, "5.1.1")).toBeUndefined();
+
+    const unico = await reload(
+      buildSingleMonthSliceWorkbook({
+        companyName: "HOTELERA ANDES S.A.",
+        year: 2026,
+        month: 0,
+        dataset,
+        edits: [],
+      }),
+    );
+    expect(fillOf(unico, "4")).toBe(sectionTone("4", 1)?.argb);
+    expect(fillOf(unico, "4.1")).toBe(sectionTone("4.1", 2)?.argb);
+  });
+
+  it("también llega al «Excel completo», que comparte el mismo escritor", async () => {
+    const wb = buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+      centers: [{ dataset: norte, edits: [] }],
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const reloaded = new ExcelJS.Workbook();
+    await reloaded.xlsx.load(buffer);
+    for (const ws of reloaded.worksheets.filter((s) => s.state !== "veryHidden")) {
+      expect(fillOf(ws, "4")).toBe(sectionTone("4", 1)?.argb);
+    }
   });
 });
 

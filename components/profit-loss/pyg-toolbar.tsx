@@ -98,6 +98,7 @@ export function PygToolbar() {
           selected={filters.centerIds}
           onToggle={toggleCenter}
           onSelectAll={clearCenters}
+          consolidated={isConsolidated}
         />
         <YearFilter
           years={loadedYears}

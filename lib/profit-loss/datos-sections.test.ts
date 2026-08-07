@@ -80,6 +80,28 @@ describe("sectionTone", () => {
     }
   });
 
+  it("el ARGB del Excel es el MISMO hex que el token de `@theme`", () => {
+    // Un `.xlsx` no resuelve una variable CSS, así que el hex está duplicado. Esta es la prueba
+    // que sostiene la duplicación: si alguien mueve un token y no mueve su ARGB, falla aquí en vez
+    // de salir un verde distinto en la descarga que en la pantalla.
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    const tokenHex = (token: string): string => {
+      const match = css.match(new RegExp(`--color-${token}:\\s*#([0-9a-fA-F]{6});`));
+      if (!match) throw new Error(`falta el token --color-${token} en globals.css`);
+      return `FF${match[1].toUpperCase()}`;
+    };
+    for (const [code, level, token] of [
+      ["4", 1, "section-income"],
+      ["4.1", 2, "section-income-sub"],
+      ["5", 1, "section-cost"],
+      ["5.1", 2, "section-cost-sub"],
+      ["6", 1, "section-other"],
+      ["6.1", 2, "section-other-sub"],
+    ] as const) {
+      expect(sectionTone(code, level)?.argb).toBe(tokenHex(token));
+    }
+  });
+
   it("la fila de resultado no lleva tono: no pertenece a ningún bloque", () => {
     expect(sectionTone("4", 1, true)).toBeNull();
     expect(sectionTone("5", 1, true)).toBeNull();

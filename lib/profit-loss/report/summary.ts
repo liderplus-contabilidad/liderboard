@@ -15,6 +15,7 @@
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { frequencyLabel, type Frequency } from "@/lib/period";
+import type { EntityLogo } from "@/lib/logos";
 import { periodSlotLabel } from "../analytics/period";
 import { CONSOLIDADO_ID, type PygFilters } from "../filters";
 import { systemLabel } from "../upload/systems";
@@ -23,6 +24,8 @@ import type { ReportCover, ReportField } from "./types";
 export interface ReportSummaryInput {
   /** The name the user gave the client — never the razón social of the file. */
   clientName: string;
+  /** El logo del cliente, si subió uno. Encabeza la portada junto al nombre. */
+  logo?: EntityLogo;
   companyName: string;
   /** `null` in a workspace with nothing loaded; the cover then says so instead of guessing. */
   sourceSystemId: string | null;
@@ -57,6 +60,7 @@ const COVERAGE_NOTE = "Los meses no cargados aparecen vacíos, nunca como cero."
 export function describePygReport(input: ReportSummaryInput): ReportCover {
   return {
     clientName: input.clientName,
+    ...(input.logo ? { logo: input.logo } : {}),
     companyName: input.companyName,
     systemLabel:
       input.systemLabelOverride ??

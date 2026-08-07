@@ -119,6 +119,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           year: period.year,
           monthIndex: period.monthIndex,
           clientName: activeClient?.name ?? "",
+          ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
           position: index + 1,
         }),
       );
@@ -126,7 +127,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, rows, period]);
+  }, [activeClient?.name, activeClient?.logo, rows, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {

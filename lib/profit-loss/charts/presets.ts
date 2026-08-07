@@ -163,7 +163,7 @@ export function amountsOver(bundle: SeriesBundle): AmountEntry[] {
     .map((series) => ({
       code: series.key.code,
       label: series.label,
-      value: sumPoints(series),
+      value: seriesTotal(series),
     }))
     .filter((entry): entry is AmountEntry => entry.value !== null);
 }
@@ -171,10 +171,15 @@ export function amountsOver(bundle: SeriesBundle): AmountEntry[] {
 /** One account summed over the bundle's periods, or `null` when it covers none of them. */
 export function sumOver(bundle: SeriesBundle, code: string): number | null {
   const series = bundle.series.find((candidate) => candidate.key.code === code);
-  return series ? sumPoints(series) : null;
+  return series ? seriesTotal(series) : null;
 }
 
-function sumPoints(series: SeriesBundle["series"][number]): number | null {
+/**
+ * One series summed over its own axis — `null` when it covers no period at all, which is the
+ * difference between a total of zero and no total. Exported because ranking a set of series (and
+ * not of `AmountEntry`s) needs it too, and a second sum would be a second coverage rule.
+ */
+export function seriesTotal(series: SeriesBundle["series"][number]): number | null {
   let total: number | null = null;
   for (const point of series.points) {
     if (point.value !== null) {

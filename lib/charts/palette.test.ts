@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHART_COMPOSITION_MAX,
+  CHART_COMPOSITION_PALETTE,
+  CHART_DISTRIBUTION_MAX,
+  CHART_DISTRIBUTION_RAMP,
   CHART_HEAT_EMPTY,
   CHART_HEAT_RAMP,
   CHART_PERIOD_PALETTE,
@@ -8,6 +12,8 @@ import {
   CHART_NEUTRAL,
   CHART_PALETTE,
   CHART_SIGN,
+  colorForCompositionSlot,
+  colorForDistributionSlot,
   colorForEntity,
   colorForPeriod,
   heatStep,
@@ -111,6 +117,88 @@ describe("CHART_PERIOD_PALETTE · un color por marca", () => {
   it("no se pisa con los slots de serie: son dos trabajos distintos", () => {
     // Comparten los primeros por diseño (misma familia de marca), pero el set es más largo.
     expect(CHART_PERIOD_PALETTE.length).toBeGreaterThan(CHART_PALETTE.length);
+  });
+});
+
+describe("CHART_DISTRIBUTION_RAMP · la pila ordenada", () => {
+  it("es la escala medida, de azul marino a verde claro", () => {
+    expect([...CHART_DISTRIBUTION_RAMP]).toEqual([
+      "#1a237e",
+      "#1550e0",
+      "#2f93ff",
+      "#00a651",
+      "#45de88",
+      CHART_NEUTRAL,
+    ]);
+  });
+
+  it("son cinco pasos y el neutro: el arco no da para más sin juntar dos vecinos", () => {
+    // El corte no es estético — a ocho pasos el peor par vecino cae a ΔE 8, bajo el piso de
+    // visión normal, y en una pila los vecinos son justo lo que hay que distinguir.
+    expect(CHART_DISTRIBUTION_MAX).toBe(6);
+    expect(CHART_DISTRIBUTION_MAX).toBeLessThan(CHART_MAX_SERIES);
+    expect(CHART_DISTRIBUTION_RAMP.at(-1)).toBe(CHART_NEUTRAL);
+  });
+
+  it("da el tono por el lugar en la pila, que es el tamaño de la cuenta", () => {
+    expect(colorForDistributionSlot(0)).toBe(CHART_DISTRIBUTION_RAMP[0]);
+    expect(colorForDistributionSlot(5)).toBe(CHART_NEUTRAL);
+  });
+
+  it("un séptimo segmento cae en el neutro: no se inventa un paso", () => {
+    expect(colorForDistributionSlot(6)).toBe(CHART_NEUTRAL);
+    expect(colorForDistributionSlot(-1)).toBe(CHART_NEUTRAL);
+  });
+
+  it("no reutiliza un slot de identidad: son dos trabajos distintos", () => {
+    for (const step of CHART_DISTRIBUTION_RAMP) {
+      expect(CHART_PALETTE).not.toContain(step);
+    }
+  });
+});
+
+describe("CHART_COMPOSITION_PALETTE · el reparto de la tarta", () => {
+  it("es el set cálido medido, del rojo al magenta", () => {
+    expect([...CHART_COMPOSITION_PALETTE]).toEqual([
+      "#e02b2b",
+      "#ff8a00",
+      "#00836f",
+      "#6fa428",
+      "#0f5bb5",
+      "#c2185b",
+    ]);
+  });
+
+  it("NO son los tonos de la referencia, y por eso no hay ningún rojo puro", () => {
+    // `#ff0000` y `#ff5600` daban ΔE 7.6 en visión NORMAL: la porción del 30 % y la del 20 %
+    // eran casi el mismo rojo para cualquiera. Allí lo salvaba el «20%» impreso dentro de la
+    // porción; aquí los rótulos van fuera, así que ese relieve no existe.
+    for (const hex of ["#ff0000", "#ff5600", "#ff8500", "#99aa27"]) {
+      expect(CHART_COMPOSITION_PALETTE).not.toContain(hex);
+    }
+    // El teal sí se conserva: es uno de los cinco de la referencia y pasa tal cual.
+    expect(CHART_COMPOSITION_PALETTE).toContain("#00836f");
+  });
+
+  it("cubre el corte de la tarta entero, así que «Otros» no cae en el neutro", () => {
+    expect(CHART_COMPOSITION_MAX).toBe(6);
+    expect(CHART_COMPOSITION_PALETTE).not.toContain(CHART_NEUTRAL);
+  });
+
+  it("no reutiliza un slot de identidad: son dos trabajos distintos", () => {
+    for (const hue of CHART_COMPOSITION_PALETTE) {
+      expect(CHART_PALETTE).not.toContain(hue);
+    }
+  });
+
+  it("da el tono por el lugar en el reparto, que es el tamaño de la porción", () => {
+    expect(colorForCompositionSlot(0)).toBe(CHART_COMPOSITION_PALETTE[0]);
+    expect(colorForCompositionSlot(5)).toBe(CHART_COMPOSITION_PALETTE[5]);
+  });
+
+  it("una séptima porción cae en el neutro: no se inventa un tono", () => {
+    expect(colorForCompositionSlot(6)).toBe(CHART_NEUTRAL);
+    expect(colorForCompositionSlot(-1)).toBe(CHART_NEUTRAL);
   });
 });
 

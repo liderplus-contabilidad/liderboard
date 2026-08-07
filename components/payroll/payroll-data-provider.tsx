@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import type { EntityLogo } from "@/lib/workspaces";
 import * as payrollDb from "@/lib/payroll/db";
 import {
   emptyFilters,
@@ -31,7 +32,8 @@ interface PayrollDataValue {
   activeClientId: string | null;
   activeClient: payrollDb.PayrollClientSummary | undefined;
   createClient: (name: string) => Promise<string>;
-  renameClient: (clientId: string, name: string) => Promise<void>;
+  /** Cambia la ETIQUETA — nombre y logo — y nada más. */
+  updateClient: (clientId: string, name: string, logo: EntityLogo | null) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
   /** Every período of the active cliente, unfiltered — the count `PayrollEmptyState` reads to
@@ -140,8 +142,9 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     return client.id;
   }, []);
 
-  const renameClient = useCallback(
-    (clientId: string, name: string) => payrollDb.renameClient(clientId, name),
+  const updateClient = useCallback(
+    (clientId: string, name: string, logo: EntityLogo | null) =>
+      payrollDb.updateClient(clientId, name, logo),
     [],
   );
 
@@ -203,7 +206,7 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       activeClientId,
       activeClient,
       createClient,
-      renameClient,
+      updateClient,
       deleteClient,
       selectClient,
       periods,
@@ -227,7 +230,7 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
       activeClientId,
       activeClient,
       createClient,
-      renameClient,
+      updateClient,
       deleteClient,
       selectClient,
       periods,

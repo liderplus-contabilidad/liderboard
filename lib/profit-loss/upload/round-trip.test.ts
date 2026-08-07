@@ -543,3 +543,107 @@ describe("round-trip — meses ocultos", () => {
     expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
   });
 });
+
+describe("round-trip — con el membrete del cliente", () => {
+  /** Un PNG de 1×1 real: exceljs lo mete en el zip de verdad, así que el libro que se relee es
+   *  exactamente el que se descarga. */
+  const LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 640,
+    height: 160,
+  };
+
+  const workspace = (logo?: typeof LOGO) => ({
+    companyName: "HOTELERA ANDES S.A.",
+    loadedMonthsByYear: { 2026: [0, 2] },
+    centers: [
+      { dataset: center("norte", "SUCURSAL NORTE", 0, 100), edits: [] },
+      { dataset: center("sur", "SUCURSAL SUR", 1, 40), edits: [] },
+    ],
+    ...(logo ? { logo } : {}),
+  });
+
+  /**
+   * El riesgo entero del membrete en una prueba: el libro se vuelve a leer con SheetJS, que ignora
+   * las imágenes flotantes, y la razón social se busca en la primera celda no vacía de la COLUMNA
+   * A. Si el logo desplazara una fila o aterrizara en esa columna, esto se cae.
+   */
+  it("un libro con logo vuelve a entrar EXACTAMENTE igual que uno sin logo", async () => {
+    const sinLogo = buildMultiCenterWorkbook(workspace());
+    const conLogo = buildMultiCenterWorkbook(workspace(LOGO));
+
+    const name = multiCenterFilename([2026]);
+    const a = resolveUpload(name, await toBuffer(sinLogo)) as Extract<
+      StagedUpload,
+      { kind: "workspace" }
+    >;
+    const b = resolveUpload(name, await toBuffer(conLogo)) as Extract<
+      StagedUpload,
+      { kind: "workspace" }
+    >;
+
+    // Las mismas cuentas, los mismos valores, la misma cobertura y la misma razón social.
+    expect(b.meta).toEqual(a.meta);
+    expect(b.datasets.map((d) => ({ ...d, id: "", uploadedAt: 0 }))).toEqual(
+      a.datasets.map((d) => ({ ...d, id: "", uploadedAt: 0 })),
+    );
+    expect(b.datasets[0]?.companyName).toBe("HOTELERA ANDES S.A.");
+  });
+
+  it("las notas de celda sobreviven al desplazamiento de filas", async () => {
+    // `spliceRows` mueve filas ya escritas, y en ellas viajan los comentarios y el «Valor original»
+    // de cada ajuste. Si se perdieran, el libro descargado dejaría de explicar sus propias cifras.
+    const conNota = buildMultiCenterWorkbook({
+      ...workspace(LOGO),
+      centers: [
+        {
+          dataset: center("norte", "SUCURSAL NORTE", 0, 100),
+          edits: [
+            {
+              datasetId: "norte",
+              code: "4",
+              monthIndex: 0,
+              value: 175,
+              comment: "Ajuste de enero",
+              updatedAt: 1,
+            },
+          ],
+        },
+      ],
+    });
+    const notes: string[] = [];
+    for (const ws of conNota.worksheets) {
+      ws.eachRow((row) => {
+        row.eachCell({ includeEmpty: false }, (cellRef) => {
+          if (cellRef.note) {
+            notes.push(JSON.stringify(cellRef.note));
+          }
+        });
+      });
+    }
+    expect(notes.join(" ")).toContain("Ajuste de enero");
+  });
+
+  it("sin logo el libro no embebe ninguna imagen", async () => {
+    const wb = buildMultiCenterWorkbook(workspace());
+    expect(wb.model.media ?? []).toHaveLength(0);
+  });
+
+  it("embebe la imagen UNA vez y la ancla en cada hoja visible", async () => {
+    const wb = buildMultiCenterWorkbook(workspace(LOGO));
+
+    // Un solo medio para las tres hojas visibles (Consolidado + dos centros).
+    expect(wb.model.media).toHaveLength(1);
+    const visible = wb.worksheets.filter((ws) => ws.state !== "veryHidden");
+    expect(visible.length).toBeGreaterThan(1);
+    for (const ws of visible) {
+      expect(ws.getImages()).toHaveLength(1);
+    }
+    // La hoja de metadatos va oculta y no la lee nadie: no lleva membrete.
+    for (const ws of wb.worksheets.filter((w) => w.state === "veryHidden")) {
+      expect(ws.getImages()).toHaveLength(0);
+    }
+  });
+});

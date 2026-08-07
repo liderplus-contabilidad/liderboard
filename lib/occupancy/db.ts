@@ -17,7 +17,7 @@
  * concurrent cell saves cannot clobber one another.
  */
 import Dexie, { type Table } from "dexie";
-import { sortByName } from "@/lib/workspaces";
+import { sortByName, type EntityLogo } from "@/lib/workspaces";
 import { daysInMonth, emptyDataset, emptyMonth, monthHasData, ROOM_ROW_IDS } from "./derive";
 import { deriveHotelIdentity, type HotelIdentity } from "./hotel-identity";
 import type { OccupancyHotel } from "./hotels";
@@ -186,8 +186,8 @@ export async function getHotel(hotelId: string): Promise<StoredHotel | undefined
  * Creates an EMPTY hotel and opens it. The name is taken as given: validation and duplicate
  * checking are `hotels.ts`'s, and the caller runs them where it can say what is wrong.
  */
-export async function createHotel(name: string): Promise<StoredHotel> {
-  const hotel: StoredHotel = { id: crypto.randomUUID(), name };
+export async function createHotel(name: string, logo?: EntityLogo): Promise<StoredHotel> {
+  const hotel: StoredHotel = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
   await db.transaction("rw", db.hotels, db.active, async () => {
     await db.hotels.add(hotel);
     await db.active.put({ key: ACTIVE_KEY, hotelId: hotel.id });
@@ -195,9 +195,18 @@ export async function createHotel(name: string): Promise<StoredHotel> {
   return hotel;
 }
 
-/** Renaming touches the label and NOTHING else: the identity is derived from the data. */
-export async function renameHotel(hotelId: string, name: string): Promise<void> {
-  await db.hotels.update(hotelId, { name });
+/**
+ * Changes the hotel's LABEL — its name and its logo — and NOTHING else: the identity is derived
+ * from the data, so no sucursal-año is touched. Both travel in one write because the dialog edits
+ * them together; `logo: null` removes it, and an `undefined` in a Dexie `update` deletes the
+ * property, which is what that means here.
+ */
+export async function updateHotel(
+  hotelId: string,
+  name: string,
+  logo: EntityLogo | null,
+): Promise<void> {
+  await db.hotels.update(hotelId, { name, logo: logo ?? undefined });
 }
 
 /**
