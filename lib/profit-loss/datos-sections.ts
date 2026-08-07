@@ -13,6 +13,10 @@ export const SECTION_TONE_DEPTH = 2;
 /**
  * Tailwind classes for row tones. Classes are literal to ensure Tailwind includes them in the CSS.
  * Includes hover states for rows and sticky cells, and static tones for printed reports.
+ *
+ * `argb` is that same tone for the downloaded `.xlsx`, where a CSS variable does not resolve — the
+ * same permitted duplication `lib/charts/palette.ts` and `lib/payroll/payslip/palette.ts` declare,
+ * and under the same obligation: if a hex moves in `@theme`, it moves here.
  */
 const TONES = {
   income: [
@@ -20,11 +24,13 @@ const TONES = {
       row: "bg-section-income hover:bg-section-income-hover",
       sticky: "bg-section-income group-hover:bg-section-income-hover",
       print: "bg-section-income",
+      argb: "FFD7E4BD",
     },
     {
       row: "bg-section-income-sub hover:bg-section-income-sub-hover",
       sticky: "bg-section-income-sub group-hover:bg-section-income-sub-hover",
       print: "bg-section-income-sub",
+      argb: "FFEBF2DE",
     },
   ],
   cost: [
@@ -32,11 +38,13 @@ const TONES = {
       row: "bg-section-cost hover:bg-section-cost-hover",
       sticky: "bg-section-cost group-hover:bg-section-cost-hover",
       print: "bg-section-cost",
+      argb: "FFB7DEE8",
     },
     {
       row: "bg-section-cost-sub hover:bg-section-cost-sub-hover",
       sticky: "bg-section-cost-sub group-hover:bg-section-cost-sub-hover",
       print: "bg-section-cost-sub",
+      argb: "FFDBEEF4",
     },
   ],
   other: [
@@ -44,11 +52,13 @@ const TONES = {
       row: "bg-section-other hover:bg-section-other-hover",
       sticky: "bg-section-other group-hover:bg-section-other-hover",
       print: "bg-section-other",
+      argb: "FFFCD5B5",
     },
     {
       row: "bg-section-other-sub hover:bg-section-other-sub-hover",
       sticky: "bg-section-other-sub group-hover:bg-section-other-sub-hover",
       print: "bg-section-other-sub",
+      argb: "FFFEEADA",
     },
   ],
 } as const satisfies Record<string, readonly SectionTone[]>;
@@ -62,6 +72,8 @@ export interface SectionTone {
   sticky: string;
   /** Static background for printed reports. */
   print: string;
+  /** The same tone as an Excel ARGB fill, for the downloaded workbook. */
+  argb: string;
 }
 
 /**
