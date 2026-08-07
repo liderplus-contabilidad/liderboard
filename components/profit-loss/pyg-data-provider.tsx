@@ -121,6 +121,14 @@ export interface MonthlyBatchOutcome {
 export interface CenterView {
   id: string;
   name: string;
+  /**
+   * Owner of this view within the consolidated clients. Undefined elsewhere.
+   */
+  group?: string;
+  /**
+   * Short name without the client. Used under the group header.
+   */
+  shortName?: string;
   color?: string;
   role: "consolidado" | "center" | "sin-centro" | "single";
   /**
@@ -352,13 +360,17 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [consolidatableIds, contributions],
   );
   // La selección se aplica ANTES de sumar: el consolidado es lo que quedó dentro, no un total al
-  // que después se le descuenta.
+  // que después se le descuenta. Vale para las dos marcas — clientes y (cliente · centro) —, y por
+  // eso llegan las CRUDAS: `filters` se sanea contra las vistas, que es lo que esto produce.
   const consolidated = useMemo<ConsolidatedWorkspace | null>(
     () =>
       isConsolidated
-        ? consolidateClients(selectContributions(contributions, rawFilters.clientIds))
+        ? consolidateClients(
+            selectContributions(contributions, rawFilters.clientIds),
+            rawFilters.centerIds,
+          )
         : null,
-    [isConsolidated, contributions, rawFilters.clientIds],
+    [isConsolidated, contributions, rawFilters.clientIds, rawFilters.centerIds],
   );
 
   // A partir de aquí el consolidado ES el workspace: un estado único de solo lectura, con sus
@@ -380,10 +392,17 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   // Every year the workspace holds, read off the datasets rather than the metadata: the datasets
   // ARE the workspace, so the two can never disagree about which years exist.
-  const loadedYears = useMemo(
-    () => [...new Set(datasets.map((d) => d.year))].sort((a, b) => a - b),
-    [datasets],
-  );
+  //
+  // En el consolidado el universo son los años de los CLIENTES, no los de la suma acotada: marcar
+  // un centro que solo tiene 2026 no puede borrar 2025 del filtro de años ni de la lista de
+  // centros, que es justamente de donde hay que desmarcarlo para volver.
+  const loadedYears = useMemo(() => {
+    const years = new Set(datasets.map((d) => d.year));
+    for (const dataset of consolidated?.centerDatasets ?? EMPTY_DATASETS) {
+      years.add(dataset.year);
+    }
+    return [...years].sort((a, b) => a - b);
+  }, [datasets, consolidated]);
   // Resolved before the views, because which years are on screen decides which datasets they
   // span. `resolveVisibleYears` prunes marks against `loadedYears` itself, so this never lags a
   // deleted year.
@@ -394,11 +413,11 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   // buildViews needs every center's edits so the computed Consolidado reflects them.
   const views = useMemo<CenterView[]>(() => {
-    const built = buildViews(datasets, allEdits, visibleYears);
-    // El consolidado entre clientes llega como un estado único mensual, que `buildViews` daría por
-    // editable por su frecuencia. No lo es por su NATURALEZA, no por su frecuencia: es derivado.
-    return isConsolidated ? built.map((view) => ({ ...view, editable: false })) : built;
-  }, [datasets, allEdits, visibleYears, isConsolidated]);
+    if (consolidated) {
+      return buildConsolidatedViews(consolidated, visibleYears);
+    }
+    return buildViews(datasets, allEdits, visibleYears);
+  }, [consolidated, datasets, allEdits, visibleYears]);
   const mode: "single" | "multi" =
     views.length <= 1 && views[0]?.role === "single" ? "single" : "multi";
 
@@ -1076,6 +1095,77 @@ function buildViews(
       slices,
       dataset: latestOf(slices),
       editable: ofCenter.every((d) => d.baseFrequency !== "anual"),
+    });
+  }
+  return views;
+}
+
+/**
+ * Builds views for the CONSOLIDATED CLIENTS: the total at the top and individual (client · center)
+ * entries below. These are listed in the "Centro de costo" filter and compared in charts.
+ *
+ * If no centers are present (all clients are single-state), it returns the usual single-state view.
+ * None of these views are editable as they are derived data.
+ */
+function buildConsolidatedViews(
+  consolidated: ConsolidatedWorkspace,
+  visibleYears: number[],
+): CenterView[] {
+  if (consolidated.centerDatasets.length === 0) {
+    return buildViews(consolidated.datasets, EMPTY_EDITS, visibleYears).map((view) => ({
+      ...view,
+      editable: false,
+    }));
+  }
+
+  const years = [...visibleYears].sort((a, b) => a - b);
+  const slicesOf = (group: readonly PygDataset[]): YearSlice[] =>
+    years.flatMap((year) => {
+      const dataset = group.find((candidate) => candidate.year === year);
+      return dataset ? [{ dataset, edits: EMPTY_EDITS }] : [];
+    });
+
+  const total = slicesOf(consolidated.datasets);
+  if (total.length === 0) {
+    return [];
+  }
+  const views: CenterView[] = [
+    {
+      id: CONSOLIDADO_ID,
+      name: "Consolidated",
+      color: CONSOLIDADO_COLOR,
+      role: "consolidado",
+      slices: total,
+      dataset: latestOf(total),
+      editable: false,
+    },
+  ];
+
+  const byCenterId = new Map<string, PygDataset[]>();
+  for (const dataset of consolidated.centerDatasets) {
+    const id = dataset.centerId as string;
+    byCenterId.set(id, [...(byCenterId.get(id) ?? []), dataset]);
+  }
+  const ordered = [...byCenterId.entries()].sort(
+    ([, a], [, b]) => (a[0].order ?? 0) - (b[0].order ?? 0),
+  );
+  for (const [centerId, group] of ordered) {
+    const slices = slicesOf(group);
+    if (slices.length === 0) {
+      continue;
+    }
+    const newest = latestOf(slices);
+    const center = newest.costCenterName || centerId;
+    views.push({
+      id: centerId,
+      name: `${center} · ${newest.companyName}`,
+      group: newest.companyName,
+      shortName: center,
+      color: newest.centerColor,
+      role: newest.role === "sin-centro" ? "sin-centro" : "center",
+      slices,
+      dataset: newest,
+      editable: false,
     });
   }
   return views;

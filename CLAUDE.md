@@ -195,6 +195,34 @@ UNO es legítimo y da ese cliente: la regla de «hacen falta dos» decide si el 
 (`canConsolidate`), no qué puede mirar quien ya entró — vaciarlo al desmarcar el penúltimo sería un
 callejón sin salida.
 
+**Y los CENTROS DE COSTO se cruzan entre clientes en el mismo desplegable de siempre.** El
+consolidado devuelve, además del total, un dataset por cada par (cliente, centro)
+(`ConsolidatedWorkspace.centerDatasets`, `consolidatedCenterId` = `<clientId>::<centerId>`), y esos
+ids compuestos SON ids de vista: por eso el cruce no estrena ni un campo de `PygFilters` ni una
+segunda lista —`centerIds`, `sanitizeFilters`, los chips y `selection.ts` funcionan sin tocarse— y
+`center-filter.tsx` se rinde allí con el mismo control, **agrupado por cliente**: un encabezado con
+el nombre del cliente y debajo sus centros, donde repetirlo en cada fila sería ruido. **No se funden
+por nombre**: el `restaurante` de tres empresas son tres columnas, y las dos mitades del rótulo
+viajan SEPARADAS (`costCenterName` y `companyName` en la capa pura; `group`/`shortName` en la vista)
+porque el desplegable las lee partidas y todos los demás juntas — el `name` de la vista sigue siendo
+«Restaurante · Dingoo», así que un chip, una leyenda o el informe, donde no hay encabezado que
+desambigüe, dicen de quién es aunque ignoren los dos campos nuevos. Los agrupa
+`groupViews` por consecutivos, no por clave: el orden que da el proveedor es el que fija el color y
+la posición de cada centro en el resto de la app. Marcar ACOTA la suma —como «Cliente», no como dentro de un cliente, donde el Consolidado
+tiene que cuadrar contra `GENERAL` y no puede ser un subconjunto; aquí no hay ningún `GENERAL`
+contra el que cuadrar—, y por eso `buildConsolidatedViews` no pasa por `buildViews`, cuyo
+Consolidado es por construcción la suma de los centros que ve. **Con centros marcados la suma es
+EXACTAMENTE esos centros y el filtro manda sobre «Cliente»**: un cliente de estado único no tiene
+ninguno con el que entrar y queda fuera, con un aviso que lo dice, porque no aparece en esa lista y
+su ausencia no se vería en ningún otro sitio. Se probó al revés —entrar completo, gobernado por
+«Cliente»— y no sirve: los archivos de MicroPlus y Dingoo son de estado único, así que «los tres
+restaurantes del grupo» salía siendo casi la suma entera. Para volver a incluirlo se quitan las
+marcas de centro. Una marca huérfana
+(la de un cliente concreto, que sigue en la barra al abrir el consolidado) se cruza contra el
+universo y vale como «ninguna», la misma defensa de `selectContributions`: vaciar la pantalla sería
+peor que no acotar. Los años, en cambio, se leen del UNIVERSO y no de la suma acotada — marcar un
+centro que solo tiene 2026 no puede borrar 2025 de la lista desde la que se desmarca.
+
 PyG › Datos loads real Excel data: `lib/profit-loss/` holds
 the pure parse/derive/export layer plus Dexie (IndexedDB) persistence, and
 `PygDataProvider` — mounted in the dashboard layout — shares `clients`/`dataset`/`edits`/
