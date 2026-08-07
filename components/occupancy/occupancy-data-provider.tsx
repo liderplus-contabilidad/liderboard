@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import type { EntityLogo } from "@/lib/workspaces";
 import { consolidate } from "@/lib/occupancy/consolidate";
 import * as occupancyDb from "@/lib/occupancy/db";
 import { toAnnualGrid, toOccupancyGrid, type OccupancyGrid } from "@/lib/occupancy/derive";
@@ -72,7 +73,8 @@ interface OccupancyDataValue {
   /** El nombre que DECLARAN los archivos del hotel abierto; `undefined` si aún no tiene ninguno. */
   hotelName: string | undefined;
   createHotel: (name: string) => Promise<string>;
-  renameHotel: (hotelId: string, name: string) => Promise<void>;
+  /** Changes the LABEL — name and logo — and nothing else. */
+  updateHotel: (hotelId: string, name: string, logo: EntityLogo | null) => Promise<void>;
   deleteHotel: (hotelId: string) => Promise<void>;
   selectHotel: (hotelId: string) => Promise<void>;
   centers: CenterRow[];
@@ -394,8 +396,9 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     return hotel.id;
   }, []);
 
-  const renameHotel = useCallback(
-    (hotelId: string, name: string) => occupancyDb.renameHotel(hotelId, name),
+  const updateHotel = useCallback(
+    (hotelId: string, name: string, logo: EntityLogo | null) =>
+      occupancyDb.updateHotel(hotelId, name, logo),
     [],
   );
 
@@ -572,7 +575,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       activeHotel,
       hotelName: activeHotel?.identity?.hotelName,
       createHotel,
-      renameHotel,
+      updateHotel,
       deleteHotel,
       selectHotel,
       centers,
@@ -628,7 +631,7 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       activeHotelId,
       activeHotel,
       createHotel,
-      renameHotel,
+      updateHotel,
       deleteHotel,
       selectHotel,
       centers,

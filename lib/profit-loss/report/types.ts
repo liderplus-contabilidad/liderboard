@@ -5,6 +5,7 @@
  * The report is one template for both modes. What the mode changes is declared — which sections
  * exist (`sections.ts`) and what the cover writes — and nowhere else.
  */
+import type { EntityLogo } from "@/lib/logos";
 
 /** One labelled line of the cover: «Centro» → «Consolidado (suma de 6 centros)». */
 export interface ReportField {
@@ -22,6 +23,9 @@ export interface ReportField {
 export interface ReportCover {
   /** The label the user gave this client — never the razón social of the file. */
   clientName: string;
+  /** El logo del cliente, si subió uno. Como el nombre, tampoco sale de ningún archivo. El
+   *  consolidado entre clientes no tiene: no es un cliente. */
+  logo?: EntityLogo;
   /** The razón social the file declares. Different thing, deliberately never compared. */
   companyName: string;
   /** How the accounting system is NAMED; its id is not UI text. */

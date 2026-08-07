@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { EntityLogo } from "@/lib/workspaces";
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
   applyMonthSlice,
@@ -23,7 +24,7 @@ import {
   getWorkspaceMeta,
   listClientSummaries,
   mergeWorkspaceYears,
-  renameClient as renameClientRow,
+  updateClient as updateClientRow,
   replaceClientWorkspace,
   saveCellEdits,
   segmentWorkspace,
@@ -167,8 +168,9 @@ interface PygDataValue {
   clientOptions: { id: string; name: string }[];
   /** Creates an EMPTY client and opens it. Rejects nothing: the caller validates the name with
    * `clients.ts` where it can say what is wrong. */
-  createClient: (name: string) => Promise<string>;
-  renameClient: (clientId: string, name: string) => Promise<void>;
+  createClient: (name: string, logo?: EntityLogo) => Promise<string>;
+  /** Cambia la ETIQUETA — nombre y logo — y nada más. */
+  updateClient: (clientId: string, name: string, logo: EntityLogo | null) => Promise<void>;
   /** Deletes a client with everything it holds; the first remaining one BY NAME takes over. */
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
@@ -791,9 +793,13 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [openClientId],
   );
 
-  const createClient = useCallback(async (name: string) => (await createClientRow(name)).id, []);
-  const renameClient = useCallback(
-    (clientId: string, name: string) => renameClientRow(clientId, name),
+  const createClient = useCallback(
+    async (name: string, logo?: EntityLogo) => (await createClientRow(name, logo)).id,
+    [],
+  );
+  const updateClient = useCallback(
+    (clientId: string, name: string, logo: EntityLogo | null) =>
+      updateClientRow(clientId, name, logo),
     [],
   );
   const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
@@ -860,7 +866,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       contributors: consolidated?.contributors ?? EMPTY_CONTRIBUTORS,
       clientOptions,
       createClient,
-      renameClient,
+      updateClient,
       deleteClient,
       selectClient,
       dataset,
@@ -923,7 +929,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       consolidated,
       clientOptions,
       createClient,
-      renameClient,
+      updateClient,
       deleteClient,
       selectClient,
       dataset,

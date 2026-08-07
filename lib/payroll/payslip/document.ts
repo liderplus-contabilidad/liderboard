@@ -25,6 +25,7 @@
  * corrigiera los días trabajados, y el papel diría una cosa y la pantalla otra.
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
+import type { EntityLogo } from "@/lib/logos";
 import {
   DEDUCTION_CONCEPTS,
   INCOME_CONCEPTS,
@@ -90,6 +91,7 @@ export function buildPayslipDocument({
   year,
   monthIndex,
   clientName,
+  clientLogo,
   position,
 }: {
   line: PayrollEmployeeLine;
@@ -100,6 +102,8 @@ export function buildPayslipDocument({
   /** El nombre que el usuario le dio al cliente. El comprobante del contador imprime aquí la razón
    *  social que declara `GENERAL!B1`, pero la app no la guarda todavía. */
   clientName: string;
+  /** El logo del cliente, si subió uno. Encabeza el comprobante junto al nombre. */
+  clientLogo?: EntityLogo;
   /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
@@ -120,6 +124,7 @@ export function buildPayslipDocument({
 
   return {
     company: clientName,
+    ...(clientLogo ? { logo: clientLogo } : {}),
     title: "ROL DE PAGOS",
     period: `MES: ${payslipMonthLabel(year, monthIndex)}`,
     codeLine: `Codigo: ${position}`,

@@ -41,12 +41,12 @@ function describeClient(client: PayrollClientSummary): string | undefined {
  * `useEntityNaming`; aquí solo se dice qué lista y qué palabras usar.
  */
 function useClientNaming() {
-  const { clients, createClient, renameClient } = usePayrollData();
+  const { clients, createClient, updateClient } = usePayrollData();
   return useEntityNaming({
     entities: clients,
     labels: PAYROLL_LABELS,
     onCreate: createClient,
-    onRename: renameClient,
+    onRename: updateClient,
   });
 }
 
@@ -79,7 +79,12 @@ export function PayrollClientActions() {
     () =>
       clients.map((client) => {
         const caption = describeClient(client);
-        return { id: client.id, name: client.name, ...(caption ? { caption } : {}) };
+        return {
+          id: client.id,
+          name: client.name,
+          ...(caption ? { caption } : {}),
+          ...(client.logo ? { logo: client.logo } : {}),
+        };
       }),
     [clients],
   );
@@ -105,6 +110,7 @@ export function PayrollClientActions() {
               client: {
                 name: activeClient.name,
                 period: pluralize(activeClient.periodCount, "período"),
+                ...(activeClient.logo ? { logo: activeClient.logo } : {}),
               },
             }
           : {})}

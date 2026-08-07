@@ -9,16 +9,31 @@ import type { ReportCover as ReportCoverSpec, ReportField } from "@/lib/profit-l
 export function ReportCover({ cover }: { cover: ReportCoverSpec }) {
   return (
     <section className="print-section flex flex-col gap-7">
-      <header className="border-b border-border pb-5">
-        <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-          Estado de Resultados · Informe
-        </p>
-        <h1 className="mt-2 text-[28px] font-semibold leading-tight text-ink">
-          {cover.clientName}
-        </h1>
-        <p className="mt-1.5 text-[13px] text-muted">
-          {cover.companyName} · {cover.systemLabel} · {cover.modeLabel}
-        </p>
+      <header className="flex items-start gap-5 border-b border-border pb-5">
+        {/* El membrete, a la izquierda del bloque de título — el mismo sitio que ocupa en los
+            Excel de este cliente, para que el papel y el archivo se reconozcan. Sin logo no se
+            dibuja nada y la portada queda exactamente como estaba. */}
+        {cover.logo && (
+          // oxlint-disable-next-line next/no-img-element
+          <img
+            src={cover.logo.dataUrl}
+            alt=""
+            width={cover.logo.width}
+            height={cover.logo.height}
+            className="mt-1 max-h-[64px] w-auto max-w-[180px] shrink-0 object-contain"
+          />
+        )}
+        <div className="min-w-0">
+          <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+            Estado de Resultados · Informe
+          </p>
+          <h1 className="mt-2 text-[28px] font-semibold leading-tight text-ink">
+            {cover.clientName}
+          </h1>
+          <p className="mt-1.5 text-[13px] text-muted">
+            {cover.companyName} · {cover.systemLabel} · {cover.modeLabel}
+          </p>
+        </div>
       </header>
 
       {/* Apilados y no en dos columnas: en A4 vertical, una frase como «Ninguna marcada — el

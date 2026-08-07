@@ -126,3 +126,34 @@ describe("occupancyExportFilename", () => {
     expect(occupancyExportFilename(year)).toBe("OCUPACION_2026.xlsx");
   });
 });
+
+describe("buildOccupancyWorkbook · membrete del hotel", () => {
+  const LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 640,
+    height: 160,
+  };
+
+  /**
+   * Aquí el riesgo es mayor que en PyG: este parser lee el hotel y la sucursal POR POSICIÓN. Lo que
+   * lo salva es que `readNames` recoge solo las líneas NO VACÍAS, así que las filas en blanco del
+   * membrete no corren el índice. Esto lo deja escrito como garantía en vez de como suposición.
+   */
+  it("el membrete no mueve el hotel ni la sucursal que el archivo declara", async () => {
+    const original = importedYear();
+    const sinLogo = await parseYear(buildOccupancyWorkbook(original));
+    const conLogo = await parseYear(buildOccupancyWorkbook(original, LOGO));
+
+    expect(conLogo.hotelName).toBe(sinLogo.hotelName);
+    expect(conLogo.centerId).toBe(sinLogo.centerId);
+    expect(conLogo.centerName).toBe(sinLogo.centerName);
+    expect(conLogo.year).toBe(sinLogo.year);
+    expect(conLogo.months).toEqual(sinLogo.months);
+  });
+
+  it("sin logo no embebe ninguna imagen", () => {
+    expect(buildOccupancyWorkbook(importedYear()).model.media ?? []).toHaveLength(0);
+  });
+});

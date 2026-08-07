@@ -12,13 +12,22 @@
  * against a file. What is compared is the identity it ADOPTED on its first upload — see
  * `hotel-identity.ts` — and that is what `findHotelForIdentity` resolves.
  */
-import { findByName, isNameTaken, normalizeEntityName, proposeEntityName } from "@/lib/workspaces";
+import {
+  findByName,
+  isNameTaken,
+  normalizeEntityName,
+  proposeEntityName,
+  type EntityLogo,
+} from "@/lib/workspaces";
 import { sameHotelIdentity, type HotelIdentity } from "./hotel-identity";
 
 export interface OccupancyHotel {
   id: string;
   /** The user's label. It is not the hotel name the workbook declares, and never compared to it. */
   name: string;
+  /** The logo the user uploaded, if any — the other half of the label, and just as unrelated to
+   *  what any file declares. Optional and NOT indexed, so it cost no Dexie migration. */
+  logo?: EntityLogo;
 }
 
 /** The subject this module names when a name is missing or clashes. */

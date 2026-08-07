@@ -19,7 +19,7 @@ import {
   mergeParsedDataset,
   removeChannel,
   renameChannel,
-  renameHotel,
+  updateHotel,
   replaceHotel,
   saveActiveView,
   saveCell,
@@ -90,13 +90,13 @@ describe("hoteles", () => {
     await createHotel("Ambato Centro");
     expect((await listHotels()).map((h) => h.name)).toEqual(["Ambato Centro", "Manor Galápagos"]);
 
-    await renameHotel(hotelId, "Alfa");
+    await updateHotel(hotelId, "Alfa", null);
     expect((await listHotels()).map((h) => h.name)).toEqual(["Alfa", "Ambato Centro"]);
   });
 
   it("renaming touches the label and nothing else", async () => {
     await mergeParsedDataset(hotelId, parsed(2026, [0], 7));
-    await renameHotel(hotelId, "Otro nombre");
+    await updateHotel(hotelId, "Otro nombre", null);
     const summaries = await listHotelSummaries();
     expect(summaries[0].name).toBe("Otro nombre");
     // The identity is derived from the data, so the label cannot move it.

@@ -7,6 +7,8 @@
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import { writeLogoHeader } from "@/lib/excel-logo";
+import type { EntityLogo } from "@/lib/logos";
 import { toOccupancyGrid, type OccupancyGrid } from "./derive";
 import { DEFAULT_CENTER_ID, type OccupancyDataset } from "./types";
 
@@ -50,10 +52,16 @@ const METRIC_ORDER = [
 ];
 
 /** Builds the whole year as one sheet of stacked month blocks. */
-export function buildOccupancyWorkbook(year: OccupancyDataset): ExcelJS.Workbook {
+export function buildOccupancyWorkbook(
+  year: OccupancyDataset,
+  /** El logo del hotel abierto, que encabeza la hoja. */
+  logo?: EntityLogo,
+): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "LiderPlus";
   const ws = wb.addWorksheet(SHEET_NAME);
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza.
+  writeLogoHeader(wb, ws, logo);
 
   ws.addRow([`Ocupación  - ${year.year}`]).getCell(1).font = { bold: true, size: 14 };
   // Read BY POSITION. The cost-center line is omitted for `principal`: writing it would turn a

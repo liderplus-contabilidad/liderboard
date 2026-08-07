@@ -21,6 +21,7 @@ import {
   normalizeEntityName,
   proposeEntityName,
   sortByName,
+  type EntityLogo,
   type EntityNameCheck,
 } from "@/lib/workspaces";
 import { compareIdentity, type WorkspaceIdentity } from "./workspace-identity";
@@ -29,6 +30,9 @@ export interface PygClient {
   id: string;
   /** Etiqueta del usuario. No es la razón social del archivo, y nunca se compara con ella. */
   name: string;
+  /** El logo que subió el usuario, si subió alguno. La otra mitad de la etiqueta: tampoco sale de
+   *  ningún archivo. Campo opcional y NO indexado, así que no costó migración de Dexie. */
+  logo?: EntityLogo;
 }
 
 /** El sujeto del módulo, lo que sus mensajes nombran cuando falta o choca un nombre. */

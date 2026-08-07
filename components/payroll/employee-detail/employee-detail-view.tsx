@@ -188,6 +188,7 @@ export function EmployeeDetailView({
         year: period.year,
         monthIndex: period.monthIndex,
         clientName: activeClient?.name ?? "",
+        ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
         // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
         // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
         position: index + 1,
@@ -199,7 +200,7 @@ export function EmployeeDetailView({
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, capture, computed, index, line, period]);
+  }, [activeClient?.name, activeClient?.logo, capture, computed, index, line, period]);
 
   const swapIncome = useCallback(
     (from: string, to: string) => {

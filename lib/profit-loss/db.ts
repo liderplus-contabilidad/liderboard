@@ -14,6 +14,7 @@
  * CASCADE — deleting a client takes its edits with it.
  */
 import Dexie, { type Table } from "dexie";
+import type { EntityLogo } from "@/lib/workspaces";
 import { sortClients, type PygClient } from "./clients";
 import { CONSOLIDATED_CLIENT_ID, type ClientContribution } from "./consolidate";
 import { segmentAccounts } from "./segment";
@@ -286,8 +287,8 @@ export async function listClients(): Promise<PygClient[]> {
  * Creates an EMPTY client and opens it. The name is taken as given: validation and duplicate
  * checking are `clients.ts`'s, and the caller runs them where it can say what is wrong.
  */
-export async function createClient(name: string): Promise<PygClient> {
-  const client: PygClient = { id: crypto.randomUUID(), name };
+export async function createClient(name: string, logo?: EntityLogo): Promise<PygClient> {
+  const client: PygClient = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
   await db.transaction("rw", db.clients, db.active, async () => {
     await db.clients.add(client);
     await db.active.put({ key: ACTIVE_KEY, clientId: client.id });
@@ -295,10 +296,20 @@ export async function createClient(name: string): Promise<PygClient> {
   return client;
 }
 
-/** Renaming touches the label and NOTHING else: the identity is derived from the data. */
-export async function renameClient(clientId: string, name: string): Promise<void> {
+/**
+ * Cambia la ETIQUETA del cliente — su nombre y su logo — y NADA más: la identidad se deriva de los
+ * datos, así que ni los datasets, ni los ajustes, ni los comentarios se tocan.
+ *
+ * Los dos van en la misma escritura porque el diálogo los edita a la vez; `logo: null` lo quita, y
+ * un `undefined` en un `update` de Dexie borra la propiedad, que es exactamente lo que se quiere.
+ */
+export async function updateClient(
+  clientId: string,
+  name: string,
+  logo: EntityLogo | null,
+): Promise<void> {
   assertRealClient(clientId);
-  await db.clients.update(clientId, { name });
+  await db.clients.update(clientId, { name, logo: logo ?? undefined });
 }
 
 /**

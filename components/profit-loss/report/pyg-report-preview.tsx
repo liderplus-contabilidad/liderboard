@@ -211,6 +211,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
         clientName: isConsolidated
           ? "Consolidado entre clientes"
           : (activeClient?.name ?? "Sin cliente"),
+        ...(!isConsolidated && activeClient?.logo ? { logo: activeClient.logo } : {}),
         companyName: isConsolidated
           ? formatList(contributors) || "—"
           : (dataset?.companyName ?? "—"),

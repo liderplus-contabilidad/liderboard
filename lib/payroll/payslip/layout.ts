@@ -27,6 +27,7 @@
  * Los colores no son inventados: salen de `palette.ts`, y los dos que mandan son los rellenos que
  * el propio contador usa para ingresos y costos en su hoja.
  */
+import { fitLogoBox } from "@/lib/logos";
 import { PAYSLIP_DECLARATION, PAYSLIP_FOOTNOTE, PAYSLIP_SIGNATURE_CAPTION } from "./document";
 import { PAYSLIP_COLORS } from "./palette";
 import type {
@@ -34,6 +35,7 @@ import type {
   PayslipBox,
   PayslipDocument,
   PayslipFill,
+  PayslipImage,
   PayslipPage,
   PayslipRow,
   PayslipRule,
@@ -68,6 +70,17 @@ const NET_BAND_HEIGHT = 24;
 const PAD_X = 7;
 
 const ELLIPSIS = "…";
+
+/**
+ * El hueco del logo en el encabezado. El alto es el del bloque de dos líneas (empresa + mes) para
+ * que el logo no lo desborde ni por arriba ni por abajo; el ancho se queda holgadamente dentro del
+ * 55% que el nombre de la empresa ya tenía asignado, así que un logo apaisado no puede empujar al
+ * nombre contra el título de la derecha.
+ */
+const LOGO_SLOT = { width: 76, height: COMPANY_SIZE + SUBTITLE_SIZE + 4 } as const;
+
+/** Aire entre el logo y el nombre de la empresa. */
+const LOGO_GAP = 10;
 
 const contentWidth = PAGE_WIDTH - MARGIN_X * 2;
 const ratioTotal = COLUMN_RATIO.label + COLUMN_RATIO.quantity + COLUMN_RATIO.value;
@@ -156,6 +169,7 @@ export function layoutPayslip(
 ): PayslipPage & { overflow: boolean } {
   const fills: PayslipFill[] = [];
   const rules: PayslipRule[] = [];
+  const images: PayslipImage[] = [];
   const boxes: PayslipBox[] = [];
   let y = MARGIN_TOP;
 
@@ -178,9 +192,36 @@ export function layoutPayslip(
   // ── Encabezado ──────────────────────────────────────────────────────────────────────────────
   // La empresa manda; a su derecha, qué documento es y de qué mes. El mes va en su propia línea
   // bajo el título porque es lo que distingue un comprobante de otro en una carpeta con doce.
+  //
+  // El logo, si lo hay, va DELANTE del nombre y le cede su ancho: el nombre no se centra ni se
+  // encoge, solo empieza más a la derecha, así que el escalón entre empresa y título se conserva
+  // igual con logo que sin él. La caja se calcula de las dimensiones que el logo trae guardadas,
+  // sin decodificar la imagen — que es lo que mantiene puro este archivo.
+  const logoBox = document.logo ? fitLogoBox(document.logo, LOGO_SLOT) : null;
+  if (document.logo && logoBox) {
+    images.push({
+      dataUrl: document.logo.dataUrl,
+      mime: document.logo.mime,
+      x: MARGIN_X,
+      // Centrado contra las dos líneas del encabezado, no colgado de la primera: un logo apaisado
+      // alineado por arriba deja un hueco bajo él que se lee como un error de composición.
+      y: y + (LOGO_SLOT.height - logoBox.height) / 2,
+      width: logoBox.width,
+      height: logoBox.height,
+    });
+  }
+  const companyX = logoBox ? MARGIN_X + logoBox.width + LOGO_GAP : MARGIN_X;
   push(
-    clip(document.company, contentWidth * 0.55, COMPANY_SIZE, true, measure),
-    MARGIN_X,
+    clip(
+      document.company,
+      // Lo que le queda al nombre tras ceder el logo. El 0.55 del ancho útil era su tope cuando
+      // empezaba en el margen; aquí el tope es el mismo punto de corte, no la misma anchura.
+      MARGIN_X + contentWidth * 0.55 - companyX,
+      COMPANY_SIZE,
+      true,
+      measure,
+    ),
+    companyX,
     COMPANY_SIZE,
     true,
     PAYSLIP_COLORS.ink,
@@ -361,7 +402,7 @@ export function layoutPayslip(
   push(document.idCardLine, MARGIN_X, 8.5, false, PAYSLIP_COLORS.muted);
   y += 8.5;
 
-  return { fills, rules, boxes, overflow: y > PAGE_HEIGHT - MARGIN_BOTTOM };
+  return { fills, rules, images, boxes, overflow: y > PAGE_HEIGHT - MARGIN_BOTTOM };
 }
 
 /** Los bordes de las columnas, para que el test afirme sobre ellos sin re-derivarlos. */

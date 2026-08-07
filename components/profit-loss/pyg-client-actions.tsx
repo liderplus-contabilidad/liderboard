@@ -41,8 +41,8 @@ function describeClient(client: ClientSummary): string | undefined {
  * que son justamente las de PyG.
  */
 function useClientNaming() {
-  const { clients, createClient, renameClient } = usePygData();
-  return useEntityNaming({ entities: clients, onCreate: createClient, onRename: renameClient });
+  const { clients, createClient, updateClient } = usePygData();
+  return useEntityNaming({ entities: clients, onCreate: createClient, onRename: updateClient });
 }
 
 /**
@@ -91,7 +91,12 @@ export function PygClientActions() {
   const options = useMemo<ClientOption[]>(() => {
     const rows = clients.map((client) => {
       const caption = describeClient(client);
-      return { id: client.id, name: client.name, ...(caption ? { caption } : {}) };
+      return {
+        id: client.id,
+        name: client.name,
+        ...(caption ? { caption } : {}),
+        ...(client.logo ? { logo: client.logo } : {}),
+      };
     });
     // Se ofrece con dos o más clientes con datos. Si ya está abierto se sigue ofreciendo aunque
     // deje de poder sumarse —borrar el penúltimo cliente— porque si no, la entrada abierta
@@ -146,7 +151,11 @@ export function PygClientActions() {
         ...(period ? { period: `${period} · ${pluralize(contributors.length, "cliente")}` } : {}),
       }
     : activeClient
-      ? { name: activeClient.name, ...(period ? { period } : {}) }
+      ? {
+          name: activeClient.name,
+          ...(period ? { period } : {}),
+          ...(activeClient.logo ? { logo: activeClient.logo } : {}),
+        }
       : undefined;
 
   return (

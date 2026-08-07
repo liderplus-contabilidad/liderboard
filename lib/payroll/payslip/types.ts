@@ -10,6 +10,7 @@
  * `PayslipBox` es ese documento ya colocado: una caja por texto, con su posición, su cuerpo y su
  * alineación. `render.ts` las recorre y las dibuja sin decidir nada.
  */
+import type { EntityLogo } from "@/lib/logos";
 
 /** Una fila de concepto del comprobante. `quantity` es la columna `Cantidad`, que solo llenan las
  *  tres de horas extras (con el número de horas) y las dos marcadas `(*)`. */
@@ -25,6 +26,8 @@ export interface PayslipRow {
 export interface PayslipDocument {
   /** Fila 1 del comprobante: la empresa. */
   company: string;
+  /** El logo del cliente, si subió uno. Encabeza el comprobante a la izquierda de `company`. */
+  logo?: EntityLogo;
   /** `ROL DE PAGOS` */
   title: string;
   /** `MES: MARZO 2026` */
@@ -86,9 +89,28 @@ export interface PayslipFill {
   color: string;
 }
 
+/**
+ * El logo del cliente, ya colocado. Es la única primitiva que no es texto ni geometría plana, y
+ * llega hasta aquí con su tamaño YA resuelto: `layout.ts` lo calcula de las dimensiones que el logo
+ * trae guardadas, así que colocarlo no obliga a decodificar la imagen — que es lo que permite
+ * afirmar en un test que no invade el bloque de la empresa sin generar ningún PDF.
+ */
+export interface PayslipImage {
+  dataUrl: string;
+  /** Lo que decide entre `embedPng` y `embedJpg` en `render.ts`. */
+  mime: "image/png" | "image/jpeg";
+  x: number;
+  /** Puntos desde el borde SUPERIOR, como el resto de esta capa. */
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface PayslipPage {
   fills: readonly PayslipFill[];
   rules: readonly PayslipRule[];
+  /** Vacío salvo que el cliente tenga logo. Se dibujan junto a los rellenos, antes que el texto. */
+  images: readonly PayslipImage[];
   boxes: readonly PayslipBox[];
 }
 

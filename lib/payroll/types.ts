@@ -11,6 +11,7 @@
  * step would produce, with no owner yet — `db.ts` is what stamps the `clientId` at the door.
  */
 
+import type { EntityLogo } from "@/lib/workspaces";
 import type { CapturedDeductions } from "./engine/types";
 
 /** El cliente de Rol de Pagos: un nombre elegido por el usuario. Misma forma que `NamedEntity`
@@ -20,6 +21,9 @@ import type { CapturedDeductions } from "./engine/types";
 export interface PayrollClient {
   id: string;
   name: string;
+  /** El logo que subió el usuario, si subió alguno — el que encabeza su comprobante en PDF.
+   *  Opcional y NO indexado, así que no costó migración de Dexie. */
+  logo?: EntityLogo;
 }
 
 /** Único tipo de período por ahora; el tipo deja sitio a "décimos" y "liquidaciones" más adelante. */

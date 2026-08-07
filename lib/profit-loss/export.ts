@@ -12,6 +12,8 @@
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
+import { writeLogoHeader } from "@/lib/excel-logo";
+import type { EntityLogo } from "@/lib/logos";
 import { formatCurrency } from "@/lib/format";
 import type { DatosCell, DatosColumn, DatosGrid, DatosRow } from "./datos-types";
 import { applyEditsToLeafAccounts, mergeCenters, toDatosGrid } from "./derive";
@@ -66,6 +68,8 @@ export function buildPygWorkbook(
   /** «Ocultar ceros» — omits the accounts and the months with no movement in ANY year of the
    * file. */
   hideEmpty = false,
+  /** El logo del cliente abierto, que encabeza cada hoja. */
+  logo?: EntityLogo,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
@@ -78,7 +82,7 @@ export function buildPygWorkbook(
     edits,
     loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
   }));
-  writeStatementSheets(wb, sheets, hideEmpty);
+  writeStatementSheets(wb, sheets, hideEmpty, logo);
   for (const sheet of sheets) {
     sheetRows.push({
       sheetName: sheet.name,
@@ -129,13 +133,16 @@ function writeStatementSheets(
   wb: ExcelJS.Workbook,
   sheets: readonly StatementSheet[],
   hideEmpty: boolean,
+  logo?: EntityLogo,
 ): void {
   const grids = sheets.map((sheet) =>
     toDatosGrid(sheet.dataset, sheet.edits, sheet.dataset.baseFrequency),
   );
   const omit = hideEmpty ? emptyAccountCodes(grids) : NO_OMISSIONS;
   const months = hideEmpty ? movingMonths(grids) : null;
-  sheets.forEach((sheet, index) => writeStatementSheet(wb, sheet, grids[index], omit, months));
+  sheets.forEach((sheet, index) =>
+    writeStatementSheet(wb, sheet, grids[index], omit, months, logo),
+  );
 }
 
 /**
@@ -176,8 +183,11 @@ function writeStatementSheet(
   grid: DatosGrid,
   omit: ReadonlySet<string>,
   months: readonly number[] | null,
+  logo?: EntityLogo,
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(name);
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza.
+  writeLogoHeader(wb, ws, logo);
   const isMonthly = dataset.baseFrequency !== "anual";
   // Which month columns this sheet writes, in order. `null` is every month — the shape the file
   // has always had, and the one it keeps whenever the switch is off.
@@ -412,6 +422,8 @@ export interface MultiCenterInput {
    * file, never sheet by sheet, so every center keeps the same chart of accounts and the same
    * columns. */
   hideEmpty?: boolean;
+  /** El logo del cliente abierto, que encabeza cada hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -474,7 +486,7 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
 
   // The Consolidado sheet is part of the judgement, not an exception to it: an account nobody
   // moved sums to zero there too, so it never keeps a row alive on its own.
-  writeStatementSheets(wb, sheets, input.hideEmpty ?? false);
+  writeStatementSheets(wb, sheets, input.hideEmpty ?? false, input.logo);
 
   attachWorkbookMetadata(
     wb,
@@ -568,6 +580,8 @@ export interface MonthSliceExportInput {
   month: number;
   /** In selector order — "Sin centro de costo" is just the last entry. */
   centers: { name: string; dataset: PygDataset; edits: CellEdit[] }[];
+  /** El logo del cliente abierto, que encabeza la hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -580,6 +594,7 @@ export interface MonthSliceExportInput {
 export function buildMonthSliceWorkbook(input: MonthSliceExportInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
+  writeLogoHeader(wb, ws, input.logo);
 
   ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
   ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
@@ -647,6 +662,8 @@ export interface SingleMonthSliceInput {
   month: number;
   dataset: PygDataset;
   edits: CellEdit[];
+  /** El logo del cliente abierto, que encabeza la hoja. */
+  logo?: EntityLogo;
 }
 
 /**
@@ -660,6 +677,7 @@ export interface SingleMonthSliceInput {
 export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
+  writeLogoHeader(wb, ws, input.logo);
 
   ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
   ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {

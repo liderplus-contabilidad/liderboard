@@ -183,3 +183,70 @@ describe("la capa visual", () => {
     }
   });
 });
+
+describe("el membrete del cliente", () => {
+  const logo = (width: number, height: number) => ({
+    dataUrl: "data:image/png;base64,SGk=",
+    mime: "image/png" as const,
+    width,
+    height,
+  });
+
+  const withLogo = (width: number, height: number): PayslipDocument => ({
+    ...documentFor(),
+    logo: logo(width, height),
+  });
+
+  it("sin logo el comprobante queda EXACTAMENTE como estaba", () => {
+    const { images, boxes, fills, rules } = layoutPayslip(documentFor(), measure);
+    expect(images).toEqual([]);
+    // La regresión que importa: el encabezado no se movió ni un punto por existir esta función.
+    const company = boxes[0];
+    expect(company?.x).toBe(PAYSLIP_COLUMNS.pageLeft);
+    expect(fills.length).toBeGreaterThan(0);
+    expect(rules.length).toBeGreaterThan(0);
+  });
+
+  it("con logo, el nombre de la empresa le cede el sitio y ninguno pisa al otro", () => {
+    const { images, boxes } = layoutPayslip(withLogo(640, 160), measure);
+    expect(images).toHaveLength(1);
+
+    const mark = images[0]!;
+    const company = boxes[0]!;
+    expect(mark.x).toBe(PAYSLIP_COLUMNS.pageLeft);
+    // El nombre empieza DESPUÉS de donde acaba el logo: es lo que evita que se solapen.
+    expect(company.x).toBeGreaterThanOrEqual(mark.x + mark.width);
+  });
+
+  it("el logo no se sale de la hoja por ningún lado, sea cual sea su forma", () => {
+    for (const [w, h] of [
+      [640, 160],
+      [160, 640],
+      [1, 1],
+      [3000, 3000],
+    ]) {
+      const { images, boxes } = layoutPayslip(withLogo(w, h), measure);
+      const mark = images[0]!;
+      expect(mark.x).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft);
+      expect(mark.x + mark.width).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight);
+      expect(mark.y).toBeGreaterThanOrEqual(0);
+
+      // Y no invade el título de la derecha, que es la otra mitad del encabezado.
+      const title = boxes.find((box) => box.text === "ROL DE PAGOS");
+      expect(mark.x + mark.width).toBeLessThan(title!.x);
+    }
+  });
+
+  it("conserva la proporción del logo, así que ninguno sale estirado", () => {
+    const { images } = layoutPayslip(withLogo(640, 160), measure);
+    const mark = images[0]!;
+    expect(mark.width / mark.height).toBeCloseTo(4, 6);
+  });
+
+  it("el logo no baja al panel de identidad: se queda dentro del encabezado", () => {
+    const { images, rules } = layoutPayslip(withLogo(160, 640), measure);
+    const mark = images[0]!;
+    // La primera regla es la raya que cierra el encabezado.
+    expect(mark.y + mark.height).toBeLessThanOrEqual(rules[0]!.y);
+  });
+});
