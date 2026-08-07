@@ -680,15 +680,26 @@ movimiento, y diez leyendas en cero entierran a la que importa), y pasadas las C
 cola se pliega en «Otros» ordenando ANTES de cortar, como el ranking y con el mismo corte que la dona.
 **La línea del total NO es el techo de la pila**, y por eso existe: `4.1.4 Rebajas y/o Descuentos` es
 un ingreso de saldo negativo que se apila hacia ABAJO, así que el neto no está en ningún borde; con
-«Otros» plegado sigue siendo el total de verdad, y es además lo único que imprime una cifra por
-columna, porque los segmentos de una pila no tienen dónde escribirla. Viaja por su propia consulta
+«Otros» plegado sigue siendo el total de verdad, y es además lo único que imprime un MONTO por
+columna. Viaja por su propia consulta
 —nunca re-sumando las barras— y toma un tono de TINTA y no un paso de la escala, la misma regla del
 combo: es una lectura de la misma entidad, no una segunda. Es también la ÚNICA pila de la app que se
 dibuja sin las costuras de 2 px de superficie que separan todo relleno contiguo (`barSeries`,
 `seamless`): una columna que ya declara su total es una sola cifra repartida y no varias puestas en
 fila, y esas costuras la parten en trozos sueltos —lo que separa un segmento del siguiente pasa a ser
 el salto de color, que la escala garantiza—. En la tabla gemela cierra con `emphasis`, y el informe
-imprimible la hereda sin tocarla porque lee el mismo `buildGraficosCards`.
+imprimible la hereda sin tocarla porque lee el mismo `buildGraficosCards`. **Lo que cada segmento sí
+escribe es su PORCENTAJE dentro de ese total** (`distributionShares`, que cuelga la línea como
+`container` y pasa por `toPctOfContainer` —la única definición de «porcentaje sobre el contenedor»—,
+así que un periodo sin cobertura y un total en `0` dan `null` y jamás `0 %`): el monto lo dice la
+línea una vez por columna, y qué PARTE de él es cada hija es justo lo que la pila añade y lo que
+restar montos a ojo cuesta. No pasa por el presupuesto de `sharesFit` —ese mide un elenco que se
+aprieta de lado, y una pila reparte sus etiquetas en VERTICAL, cada una dentro de su trozo—: lo que
+limita aquí es la altura del segmento, que es su propio porcentaje, así que por debajo de
+`MIN_STACK_LABEL_SHARE` el número se apaga en vez de desbordar el trozo, y el tooltip —donde sobra
+el ancho— lo dice igual y nombrando la base. Con el eje despejado el segmento lleva las dos cifras,
+monto arriba y porcentaje debajo, el mismo `rich` de las cuentas anidadas. La tabla gemela sigue
+siendo montos.
 
 **Y es la excepción a «el color de una serie es identidad», por el motivo contrario a `CHART_SECTION`.**
 Allí el color dice de qué BLOQUE habla la serie; aquí no distingue entidades en absoluto: los segmentos

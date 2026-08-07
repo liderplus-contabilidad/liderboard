@@ -13,6 +13,7 @@ import { CULTURA_MANOR_SOURCE, makeSeries } from "../analytics/fixtures";
 import { periodsForYear } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
 import { toPieSlices, toPareto, type AmountEntry } from "../analytics/structure";
+import { distributionShares } from "./distribution";
 import type { Series, SeriesKey } from "../analytics/types";
 import {
   barOption,
@@ -229,6 +230,75 @@ describe("un solo eje por gráfica", () => {
     // La línea es una lectura de la misma entidad, no una segunda: tinta, nunca una ranura.
     expect(option.series[2].lineStyle?.color).toBe(CHART_INK.strong);
     expect(CHART_PALETTE).not.toContain(option.series[2].lineStyle?.color);
+  });
+
+  /** El apilado como lo dibuja la tarjeta: sus hijas, su total y el reparto entre ambos. */
+  function distributionOf(children: Series[], total: Series, periods = PERIODS): ChartOption {
+    const shares = distributionShares(children, total, "Ventas");
+    return stackedTotalOption(children, total, {
+      ...CONTEXT,
+      periods,
+      shares: new Map(shares.map((share) => [share.seriesId, share])),
+    });
+  }
+
+  it("cada segmento imprime su porcentaje y la línea el monto", () => {
+    const year = (value: number) => Array.from({ length: 12 }, () => value);
+    const mayor = makeSeries(year(1500), { code: "4.1.1", label: "Alojamiento" });
+    const menor = makeSeries(year(500), { code: "4.1.8", label: "Otros ingresos" });
+    const option = distributionOf(
+      [mayor, menor],
+      makeSeries(year(2000), { code: "4.1", label: "Ventas" }),
+    );
+
+    // Doce columnas no admiten un monto por segmento, pero sí el porcentaje: es más corto y es
+    // la lectura que la pila añade. El monto de la columna lo declara la línea, una sola vez.
+    expect(option.series[0].label?.formatter?.({ value: 1500, name: "Ene", dataIndex: 0 })).toBe(
+      "{share|75.0 %}",
+    );
+    expect(option.series[1].label?.formatter?.({ value: 500, name: "Ene", dataIndex: 0 })).toBe(
+      "{share|25.0 %}",
+    );
+    expect(option.series[2].label?.formatter?.({ value: 2000, name: "Ene", dataIndex: 0 })).toBe(
+      formatCurrency(2000),
+    );
+  });
+
+  it("con el eje despejado el segmento lleva las dos cifras, monto y porcentaje", () => {
+    const option = distributionOf(
+      [
+        makeSeries([1500], { code: "4.1.1", label: "Alojamiento" }),
+        makeSeries([500], { code: "4.1.8", label: "Otros ingresos" }),
+      ],
+      makeSeries([2000], { code: "4.1", label: "Ventas" }),
+      PERIODS.slice(0, 1),
+    );
+
+    expect(option.series[0].label?.formatter?.({ value: 1500, name: "Ene", dataIndex: 0 })).toBe(
+      `${formatCurrency(1500)}\n{share|75.0 %}`,
+    );
+  });
+
+  it("un segmento demasiado fino para su número no lo imprime, pero el tooltip sí lo dice", () => {
+    const year = (value: number) => Array.from({ length: 12 }, () => value);
+    const option = distributionOf(
+      [
+        makeSeries(year(1960), { code: "4.1.1", label: "Alojamiento" }),
+        makeSeries(year(40), { code: "4.1.8", label: "Otros ingresos" }),
+      ],
+      makeSeries(year(2000), { code: "4.1", label: "Ventas" }),
+    );
+
+    // 2 % no cabe dentro de su propio trozo: se apaga en vez de desbordarlo…
+    expect(option.series[1].label?.formatter?.({ value: 40, name: "Ene", dataIndex: 0 })).toBe("");
+    // …y el tooltip, donde sobra el ancho, lo dice nombrando además la base.
+    expect(
+      tooltipOf(option, [
+        { value: 1960, seriesId: "4.1.1|cultura-manor|2026" },
+        { value: 40, seriesId: "4.1.8|cultura-manor|2026" },
+        { value: 2000, seriesId: "4.1|cultura-manor|2026|total" },
+      ]),
+    ).toContain("2.0 % de Ventas");
   });
 
   it("apila sin costuras cuando la columna ya lleva su total encima", () => {
