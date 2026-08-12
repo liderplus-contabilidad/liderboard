@@ -21,6 +21,7 @@ import {
   normalizeEntityName,
   proposeEntityName,
   sortByName,
+  type CenterLogos,
   type EntityLogo,
   type EntityNameCheck,
 } from "@/lib/workspaces";
@@ -33,6 +34,10 @@ export interface PygClient {
   /** El logo que subió el usuario, si subió alguno. La otra mitad de la etiqueta: tampoco sale de
    *  ningún archivo. Campo opcional y NO indexado, así que no costó migración de Dexie. */
   logo?: EntityLogo;
+  /** Los logos de sus CENTROS DE COSTO, por `centerId`. Cuelgan del cliente porque un centro no es
+   *  una fila guardada —es un slug que sale de los datasets—, y eso además los borra en cascada con
+   *  él y los hace sobrevivir a recargar un año. Opcional y NO indexado: tampoco costó migración. */
+  centerLogos?: CenterLogos;
 }
 
 /** El sujeto del módulo, lo que sus mensajes nombran cuando falta o choca un nombre. */

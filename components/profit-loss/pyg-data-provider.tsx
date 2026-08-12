@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { EntityLogo } from "@/lib/workspaces";
+import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
   applyMonthSlice,
@@ -33,6 +33,7 @@ import {
 } from "@/lib/profit-loss/db";
 import {
   CONSOLIDATED_CLIENT_ID,
+  consolidatedCenterId,
   consolidateClients,
   selectContributions,
   type ClientContribution,
@@ -131,6 +132,13 @@ export interface CenterView {
    */
   shortName?: string;
   color?: string;
+  /**
+   * El logo que el usuario le subió a ESTE centro, si le subió alguno. Va en la vista y no se
+   * resuelve en cada pantalla porque lo leen tres —el desplegable, la cabecera y el informe—, y
+   * tres resoluciones de «cuál es el logo de este centro» podrían separarse en cuanto una de ellas
+   * olvidara el consolidado entre clientes, donde el id es compuesto.
+   */
+  logo?: EntityLogo;
   role: "consolidado" | "center" | "sin-centro" | "single";
   /**
    * This center across the VISIBLE years, ascending — what Datos lays side by side. Each slice
@@ -170,7 +178,12 @@ interface PygDataValue {
    * `clients.ts` where it can say what is wrong. */
   createClient: (name: string, logo?: EntityLogo) => Promise<string>;
   /** Cambia la ETIQUETA — nombre y logo — y nada más. */
-  updateClient: (clientId: string, name: string, logo: EntityLogo | null) => Promise<void>;
+  updateClient: (
+    clientId: string,
+    name: string,
+    logo: EntityLogo | null,
+    centerLogos: CenterLogos | undefined,
+  ) => Promise<void>;
   /** Deletes a client with everything it holds; the first remaining one BY NAME takes over. */
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
@@ -413,13 +426,35 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [rawFilters, loadedYears],
   );
 
+  /**
+   * El logo de cada centro POR ID DE VISTA. Cubre las dos formas del id a la vez —el `centerId`
+   * suelto del cliente abierto y el compuesto `<clientId>::<centerId>` del consolidado entre
+   * clientes—, que es lo que deja a `buildViews` y a `buildConsolidatedViews` sin enterarse de que
+   * existen los logos.
+   */
+  const centerLogoById = useMemo(() => {
+    const byId = new Map<string, EntityLogo>();
+    for (const client of clients) {
+      for (const [centerId, logo] of Object.entries(client.centerLogos ?? {})) {
+        byId.set(consolidatedCenterId(client.id, centerId), logo);
+        if (client.id === activeClientId) {
+          byId.set(centerId, logo);
+        }
+      }
+    }
+    return byId;
+  }, [clients, activeClientId]);
+
   // buildViews needs every center's edits so the computed Consolidado reflects them.
   const views = useMemo<CenterView[]>(() => {
-    if (consolidated) {
-      return buildConsolidatedViews(consolidated, visibleYears);
-    }
-    return buildViews(datasets, allEdits, visibleYears);
-  }, [consolidated, datasets, allEdits, visibleYears]);
+    const built = consolidated
+      ? buildConsolidatedViews(consolidated, visibleYears)
+      : buildViews(datasets, allEdits, visibleYears);
+    return built.map((view) => {
+      const logo = centerLogoById.get(view.id);
+      return logo ? { ...view, logo } : view;
+    });
+  }, [consolidated, datasets, allEdits, visibleYears, centerLogoById]);
   const mode: "single" | "multi" =
     views.length <= 1 && views[0]?.role === "single" ? "single" : "multi";
 
@@ -798,8 +833,12 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [],
   );
   const updateClient = useCallback(
-    (clientId: string, name: string, logo: EntityLogo | null) =>
-      updateClientRow(clientId, name, logo),
+    (
+      clientId: string,
+      name: string,
+      logo: EntityLogo | null,
+      centerLogos: CenterLogos | undefined,
+    ) => updateClientRow(clientId, name, logo, centerLogos),
     [],
   );
   const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);

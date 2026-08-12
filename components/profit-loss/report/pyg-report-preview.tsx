@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatList } from "@/lib/format";
+import { centerLogoOf, type EntityLogo } from "@/lib/logos";
 import {
   loadedColumnPositions,
   sliceColumns,
@@ -138,6 +139,8 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
       key: string;
       name: string | null;
       color: string | undefined;
+      /** El de ESTE centro; el Consolidado, que no lo es, no tiene. */
+      centerLogo: EntityLogo | undefined;
       grid: DatosGrid;
       trimmed: boolean;
     }[] = [];
@@ -154,13 +157,16 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
           key: `${view.id}-${year}`,
           name: several ? `${view.name} · ${year}` : view.name,
           color: view.color,
+          // `view.id` ES el `centerId`; el Consolidado tiene el suyo propio y ningún logo colgado
+          // de él, así que sale `undefined` sin necesitar un caso aparte.
+          centerLogo: centerLogoOf(activeClient?.centerLogos, view.id),
           grid: pruneEmptyColumns(pruneEmptyRows(sliceColumns(grid, positions))),
           trimmed: positions.length < grid.columns.length,
         });
       }
     }
     return out;
-  }, [views, visibleYears, effectiveFrequency, filters.periods]);
+  }, [views, visibleYears, effectiveFrequency, filters.periods, activeClient?.centerLogos]);
 
   const columnCount = Math.max(0, ...tables.map((table) => table.grid.columns.length));
   const fit = statementFit(columnCount);
@@ -251,6 +257,8 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
           grid={table.grid}
           caption={table.name}
           captionColor={table.color}
+          {...(!isConsolidated && activeClient?.logo ? { logo: activeClient.logo } : {})}
+          {...(table.centerLogo ? { centerLogo: table.centerLogo } : {})}
           breakBefore={index > 0}
           showComparison={false}
           baseRow={undefined}

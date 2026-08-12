@@ -90,13 +90,13 @@ describe("hoteles", () => {
     await createHotel("Ambato Centro");
     expect((await listHotels()).map((h) => h.name)).toEqual(["Ambato Centro", "Manor Galápagos"]);
 
-    await updateHotel(hotelId, "Alfa", null);
+    await updateHotel(hotelId, "Alfa", null, undefined);
     expect((await listHotels()).map((h) => h.name)).toEqual(["Alfa", "Ambato Centro"]);
   });
 
   it("renaming touches the label and nothing else", async () => {
     await mergeParsedDataset(hotelId, parsed(2026, [0], 7));
-    await updateHotel(hotelId, "Otro nombre", null);
+    await updateHotel(hotelId, "Otro nombre", null, undefined);
     const summaries = await listHotelSummaries();
     expect(summaries[0].name).toBe("Otro nombre");
     // The identity is derived from the data, so the label cannot move it.

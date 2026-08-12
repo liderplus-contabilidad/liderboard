@@ -99,7 +99,7 @@ describe("clientes", () => {
     const id = await seedClient("Cliente 1", [center("c", "norte")]);
     await saveCellEdit({ datasetId: "c", code: "4", monthIndex: 0, value: 42, comment: "nota" });
 
-    await updateClient(id, "Hospital Durán", null);
+    await updateClient(id, "Hospital Durán", null, undefined);
 
     expect((await listClients())[0].name).toBe("Hospital Durán");
     expect((await clientDatasets(id)).map((d) => d.id)).toEqual(["c"]);
@@ -561,7 +561,7 @@ describe("el consolidado no se escribe", () => {
     ).rejects.toThrow(/vista derivada/);
     await expect(deleteYear(CONSOLIDATED_CLIENT_ID, 2026)).rejects.toThrow(/vista derivada/);
     await expect(deleteClient(CONSOLIDATED_CLIENT_ID)).rejects.toThrow(/vista derivada/);
-    await expect(updateClient(CONSOLIDATED_CLIENT_ID, "Otro", null)).rejects.toThrow(
+    await expect(updateClient(CONSOLIDATED_CLIENT_ID, "Otro", null, undefined)).rejects.toThrow(
       /vista derivada/,
     );
 

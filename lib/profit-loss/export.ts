@@ -13,7 +13,7 @@
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { writeLogoHeader } from "@/lib/excel-logo";
-import type { EntityLogo } from "@/lib/logos";
+import { centerLogoOf, type CenterLogos, type EntityLogo } from "@/lib/logos";
 import { formatCurrency } from "@/lib/format";
 import { sectionTone } from "./datos-sections";
 import type { DatosCell, DatosColumn, DatosGrid, DatosRow } from "./datos-types";
@@ -52,6 +52,8 @@ const FIRST_VALUE_COL = 3;
  * cells their arithmetic and `app-workbook.ts` its round-trip.
  */
 const CURRENCY_FMT = "[$$-409]#,##0.00;-[$$-409]#,##0.00";
+/** Las columnas de rótulos de una hoja de estado: el código y el nombre de la cuenta. */
+const LABEL_COLS = 2;
 const SHEET_NAME = "Estado de Resultados";
 
 /** The Estado de Resultados with edited values and comments, ready to download. `loadedMonths`,
@@ -117,6 +119,11 @@ interface StatementSheet {
   edits: CellEdit[];
   /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
   loadedMonths?: number[];
+  /**
+   * El logo del centro al que pertenece esta hoja, si el usuario le subió uno. La hoja Consolidado
+   * no lleva: no es un centro, y `centerLogoOf` lo responde por sí solo sin caso propio aquí.
+   */
+  centerLogo?: EntityLogo;
 }
 
 const NO_OMISSIONS: ReadonlySet<string> = new Set();
@@ -180,23 +187,28 @@ function movingMonths(grids: readonly DatosGrid[]): number[] {
  */
 function writeStatementSheet(
   wb: ExcelJS.Workbook,
-  { name, dataset, edits, loadedMonths }: StatementSheet,
+  { name, dataset, edits, loadedMonths, centerLogo }: StatementSheet,
   grid: DatosGrid,
   omit: ReadonlySet<string>,
   months: readonly number[] | null,
   logo?: EntityLogo,
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(name);
-  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza.
-  writeLogoHeader(wb, ws, logo);
   const isMonthly = dataset.baseFrequency !== "anual";
   // Which month columns this sheet writes, in order. `null` is every month — the shape the file
   // has always had, and the one it keeps whenever the switch is off.
   const written = isMonthly ? (months ?? MONTHS_FULL_ES.map((_, index) => index)) : [];
 
+  // Los anchos van ANTES del membrete porque de ellos sale el ancla del logo derecho, y poner un
+  // ancho no escribe ninguna fila: nada más de la hoja se entera del adelanto.
+  setColumnWidths(ws, written.length + (isMonthly ? 1 : 0));
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. Las dos
+  // columnas de rótulos —el código y el nombre de la cuenta— son las que marcan el borde derecho
+  // de la banda, que es donde acaba el preámbulo escrito justo debajo.
+  writeLogoHeader(wb, ws, logo, centerLogo, LABEL_COLS);
+
   writePreamble(ws, dataset);
   const headerRowNumber = writeHeader(ws, isMonthly, written);
-  setColumnWidths(ws, written.length + (isMonthly ? 1 : 0));
   freeze(ws, headerRowNumber);
 
   const originals = new Map(dataset.accounts.map((account) => [account.code, account.values]));
@@ -458,6 +470,11 @@ export interface MultiCenterInput {
   hideEmpty?: boolean;
   /** El logo del cliente abierto, que encabeza cada hoja. */
   logo?: EntityLogo;
+  /**
+   * Los logos de los centros, por `centerId`. Solo alcanzan a la hoja de SU centro: el Consolidado
+   * no es uno, así que se queda con el del cliente y nada a la derecha.
+   */
+  centerLogos?: CenterLogos;
 }
 
 /**
@@ -513,7 +530,8 @@ export function buildMultiCenterWorkbook(input: MultiCenterInput): ExcelJS.Workb
         sheetTitle(dataset.costCenterName || dataset.centerId || "Centro", year, years.length > 1),
         used,
       );
-      sheets.push({ name, dataset, edits, loadedMonths });
+      const centerLogo = centerLogoOf(input.centerLogos, dataset.centerId);
+      sheets.push({ name, dataset, edits, loadedMonths, ...(centerLogo ? { centerLogo } : {}) });
       sheetRows.push({ sheetName: name, year, centerId: dataset.centerId ?? dataset.id });
     }
   }

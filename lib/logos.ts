@@ -20,6 +20,52 @@
 /** Los dos formatos que pdf-lib sabe embeber. Un SVG llega hasta aquí ya rasterizado a PNG. */
 export type LogoMime = "image/png" | "image/jpeg";
 
+/**
+ * Los logos de los CENTROS de un workspace, por `centerId`. Cuelgan del cliente —y no del centro—
+ * porque un centro no es una fila guardada en ninguno de los dos módulos que los tienen: en PyG es
+ * un slug que sale de los datasets, y en Ocupaciones es la mitad de la clave `[hotelId+centerId+
+ * year]`. No hay dónde ponerle un campo propio.
+ *
+ * Colgar del cliente además regala las dos cosas que importan: se borra en cascada con él, y
+ * SOBREVIVE a recargar los datos, porque el `centerId` es el mismo slug antes y después.
+ */
+export type CenterLogos = Record<string, EntityLogo>;
+
+/**
+ * El logo del centro, o nada. **Que un `centerId` ausente devuelva `undefined` ES la regla**: el
+ * Consolidado, el mes en crudo y la portada del informe no son un centro, así que se quedan sin
+ * segundo logo sin que ninguna superficie tenga que escribir su propio caso — preguntar «¿y si es
+ * el consolidado?» en cuatro sitios es exactamente cómo tres de ellos acaban respondiendo distinto.
+ */
+export function centerLogoOf(
+  logos: CenterLogos | undefined,
+  centerId: string | null | undefined,
+): EntityLogo | undefined {
+  if (!logos || centerId == null) {
+    return undefined;
+  }
+  return logos[centerId];
+}
+
+/**
+ * El logo de `centerId` puesto o quitado, y el registro entero descartado cuando se queda vacío:
+ * un `{}` guardado y un campo ausente dicen lo mismo, y dejar los dos convierte «este cliente no
+ * tiene logos de centro» en dos preguntas distintas.
+ */
+export function withCenterLogo(
+  logos: CenterLogos | undefined,
+  centerId: string,
+  logo: EntityLogo | null,
+): CenterLogos | undefined {
+  const next = { ...logos };
+  if (logo) {
+    next[centerId] = logo;
+  } else {
+    delete next[centerId];
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 export interface EntityLogo {
   /** `data:image/png;base64,…`. Sirve tal cual a un `<img>` y a `wb.addImage` de exceljs. */
   dataUrl: string;

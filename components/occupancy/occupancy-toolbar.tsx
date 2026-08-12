@@ -26,6 +26,7 @@ import { pickId } from "@/lib/occupancy/analytics/scope";
 import { daysInMonth } from "@/lib/occupancy/derive";
 import type { DateRef } from "@/lib/occupancy/analytics/types";
 import { cn } from "@/lib/cn";
+import { centerLogoOf } from "@/lib/logos";
 import { useOccupancyData } from "./occupancy-data-provider";
 
 /** Named, not implied: the reader has to know whether they asked for a total or a comparison. */
@@ -191,6 +192,7 @@ export function OccupancyToolbar() {
   const {
     datasets,
     centers,
+    activeHotel,
     allYears,
     filters,
     toggleCenterMark,
@@ -247,15 +249,32 @@ export function OccupancyToolbar() {
               : "Todas las sucursales"}
           </DropdownTrigger>
           <DropdownPanel width={260}>
-            {centers.map((center) => (
-              <DropdownOption
-                key={center.id}
-                selected={filters.centerIds.includes(center.id)}
-                onToggle={() => toggleCenterMark(center.id)}
-              >
-                {center.name}
-              </DropdownOption>
-            ))}
+            {centers.map((center) => {
+              const logo = centerLogoOf(activeHotel?.centerLogos, center.id);
+              return (
+                <DropdownOption
+                  key={center.id}
+                  selected={filters.centerIds.includes(center.id)}
+                  onToggle={() => toggleCenterMark(center.id)}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {/* La miniatura solo donde hay logo: reservarle hueco a todas las filas
+                        sangraría la lista por un espacio que casi nunca se llena. */}
+                    {logo && (
+                      // oxlint-disable-next-line next/no-img-element
+                      <img
+                        src={logo.dataUrl}
+                        alt=""
+                        width={logo.width}
+                        height={logo.height}
+                        className="size-4 shrink-0 rounded-[3px] object-contain"
+                      />
+                    )}
+                    {center.name}
+                  </span>
+                </DropdownOption>
+              );
+            })}
             <DropdownFooter>
               <button
                 type="button"

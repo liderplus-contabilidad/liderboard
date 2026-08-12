@@ -157,3 +157,62 @@ describe("buildOccupancyWorkbook · membrete del hotel", () => {
     expect(buildOccupancyWorkbook(importedYear()).model.media ?? []).toHaveLength(0);
   });
 });
+
+describe("buildOccupancyWorkbook · el logo de la sucursal", () => {
+  const HOTEL_LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 640,
+    height: 160,
+  };
+  // Otro data URL, para que la deduplicación por URL no los funda en una sola imagen.
+  const CENTER_LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 200,
+    height: 200,
+  };
+
+  function anchors(wb: ReturnType<typeof buildOccupancyWorkbook>) {
+    // `getImages()` es la lectura pública de dónde quedó anclada cada imagen de la hoja.
+    return wb.worksheets[0].getImages();
+  }
+
+  it("embebe los DOS logos: el del hotel y el de la sucursal", () => {
+    const wb = buildOccupancyWorkbook(importedYear(), HOTEL_LOGO, CENTER_LOGO);
+    expect(wb.model.media ?? []).toHaveLength(2);
+    expect(anchors(wb)).toHaveLength(2);
+  });
+
+  it("el del hotel pegado al borde izquierdo y el de la sucursal a su derecha", () => {
+    const [hotel, center] = anchors(
+      buildOccupancyWorkbook(importedYear(), HOTEL_LOGO, CENTER_LOGO),
+    );
+    expect(hotel.range.tl.nativeCol).toBe(0);
+    expect(center.range.tl.col).toBeGreaterThan(hotel.range.tl.col);
+  });
+
+  it("una sucursal sin logo deja el membrete exactamente como estaba", () => {
+    const wb = buildOccupancyWorkbook(importedYear(), HOTEL_LOGO);
+    expect(anchors(wb)).toHaveLength(1);
+    expect(anchors(wb)[0].range.tl.nativeCol).toBe(0);
+  });
+
+  // Un hotel sin logo pero con uno en la sucursal no puede perder el segundo: el hueco lo abre
+  // quien tenga algo que poner en él, no el principal.
+  it("el logo de la sucursal se dibuja aunque el hotel no tenga ninguno", () => {
+    expect(anchors(buildOccupancyWorkbook(importedYear(), undefined, CENTER_LOGO))).toHaveLength(1);
+  });
+
+  it("el membrete de dos logos tampoco mueve lo que el archivo declara", async () => {
+    const original = importedYear();
+    const sinLogo = await parseYear(buildOccupancyWorkbook(original));
+    const conLogos = await parseYear(buildOccupancyWorkbook(original, HOTEL_LOGO, CENTER_LOGO));
+
+    expect(conLogos.hotelName).toBe(sinLogo.hotelName);
+    expect(conLogos.centerId).toBe(sinLogo.centerId);
+    expect(conLogos.months).toEqual(sinLogo.months);
+  });
+});

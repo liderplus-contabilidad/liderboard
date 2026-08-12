@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  centerLogoOf,
   checkLogoFile,
   decodeLogoBytes,
   fitLogoBox,
   formatBytes,
   logoBase64,
   logoExtension,
+  withCenterLogo,
   LOGO_MAX_BYTES,
   type EntityLogo,
 } from "./logos";
@@ -114,5 +116,62 @@ describe("el logo hacia exceljs y pdf-lib", () => {
 
   it("los bytes se decodifican para pdf-lib", () => {
     expect(Array.from(decodeLogoBytes(png(10, 10)))).toEqual([72, 105]);
+  });
+});
+
+describe("los logos por centro", () => {
+  const restaurante = png(120, 40);
+
+  it("devuelve el del centro pedido", () => {
+    expect(centerLogoOf({ restaurante }, "restaurante")).toBe(restaurante);
+  });
+
+  it("un centro SIN logo no hereda el de otro", () => {
+    expect(centerLogoOf({ restaurante }, "hospedaje")).toBeUndefined();
+  });
+
+  // Es la regla que deja al Consolidado, al mes en crudo y a la portada sin segundo logo sin que
+  // ninguna de las tres superficies tenga que escribir su propio caso.
+  it("sin centro no hay logo: es lo que responde por el Consolidado y la portada", () => {
+    expect(centerLogoOf({ restaurante }, undefined)).toBeUndefined();
+    expect(centerLogoOf({ restaurante }, null)).toBeUndefined();
+  });
+
+  it("sin registro tampoco falla", () => {
+    expect(centerLogoOf(undefined, "restaurante")).toBeUndefined();
+  });
+});
+
+describe("withCenterLogo", () => {
+  const uno = png(120, 40);
+  const otro = png(80, 80);
+
+  it("pone el primero sobre un cliente que no tenía ninguno", () => {
+    expect(withCenterLogo(undefined, "restaurante", uno)).toEqual({ restaurante: uno });
+  });
+
+  it("no toca a los demás centros", () => {
+    expect(withCenterLogo({ restaurante: uno }, "hospedaje", otro)).toEqual({
+      restaurante: uno,
+      hospedaje: otro,
+    });
+  });
+
+  it("no muta el registro que recibe", () => {
+    const before = { restaurante: uno };
+    withCenterLogo(before, "hospedaje", otro);
+    expect(before).toEqual({ restaurante: uno });
+  });
+
+  it("quitar uno deja a los demás en pie", () => {
+    expect(withCenterLogo({ restaurante: uno, hospedaje: otro }, "restaurante", null)).toEqual({
+      hospedaje: otro,
+    });
+  });
+
+  // Un `{}` guardado y un campo ausente dicen lo mismo; dejar los dos convertiría «este cliente no
+  // tiene logos de centro» en dos preguntas distintas.
+  it("quitar el último descarta el registro entero en vez de guardar un objeto vacío", () => {
+    expect(withCenterLogo({ restaurante: uno }, "restaurante", null)).toBeUndefined();
   });
 });

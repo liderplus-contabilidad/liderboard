@@ -56,12 +56,18 @@ export function buildOccupancyWorkbook(
   year: OccupancyDataset,
   /** El logo del hotel abierto, que encabeza la hoja. */
   logo?: EntityLogo,
+  /** El de la SUCURSAL que esta hoja es, si le subieron uno. Va a la derecha del membrete. */
+  centerLogo?: EntityLogo,
 ): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "LiderPlus";
   const ws = wb.addWorksheet(SHEET_NAME);
-  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza.
-  writeLogoHeader(wb, ws, logo);
+  // El ancho va antes del membrete porque de él sale el ancla del logo derecho; poner un ancho no
+  // escribe ninguna fila, así que adelantarlo no cambia nada más de la hoja.
+  ws.getColumn(1).width = 40;
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. Aquí la
+  // banda la marca UNA sola columna de rótulos: las demás son un día cada una.
+  writeLogoHeader(wb, ws, logo, centerLogo, 1);
 
   ws.addRow([`Ocupación  - ${year.year}`]).getCell(1).font = { bold: true, size: 14 };
   // Read BY POSITION. The cost-center line is omitted for `principal`: writing it would turn a
@@ -77,7 +83,6 @@ export function buildOccupancyWorkbook(
     ws.addRow([]); // blank separator between blocks, as the source files have
   }
 
-  ws.getColumn(1).width = 40;
   return wb;
 }
 

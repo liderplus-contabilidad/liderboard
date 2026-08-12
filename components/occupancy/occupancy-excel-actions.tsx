@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { centerLogoOf } from "@/lib/logos";
 import { useOccupancyData } from "./occupancy-data-provider";
 import { OccupancyUploadModal } from "./occupancy-upload-modal";
 
@@ -35,13 +36,19 @@ export function OccupancyExcelActions() {
             import("@/lib/download"),
           ]);
           const blob = await exportMod.workbookToBlob(
-            exportMod.buildOccupancyWorkbook(year, activeHotel?.logo),
+            // La hoja ES una sucursal, así que lleva las dos mitades del membrete: el hotel a la
+            // izquierda y ella a la derecha.
+            exportMod.buildOccupancyWorkbook(
+              year,
+              activeHotel?.logo,
+              centerLogoOf(activeHotel?.centerLogos, year.centerId),
+            ),
           );
           downloadBlob(blob, exportMod.occupancyExportFilename(year));
         },
       },
     ],
-    [year, isConsolidated, activeHotel?.logo],
+    [year, isConsolidated, activeHotel?.logo, activeHotel?.centerLogos],
   );
 
   return (
