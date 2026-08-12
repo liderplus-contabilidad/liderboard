@@ -92,11 +92,15 @@ export interface TwinWrite {
 }
 
 /**
- * The twin's write for an edit on a non-operating cell; null when nothing is reclassified
- * (comment-only edit, code outside the block, missing twin, or an unchanged value).
+ * Computes the twin's write for a non-operating cell edit. Returns null if no reclassification
+ * is needed (e.g., comment-only edit, code outside the block, missing twin, or unchanged value).
  *
- * The discount is by DIFFERENCE against the twin's current value, so manual corrections on 5.2
- * survive and re-editing a cell moves only the delta. Unclamped: over-classifying goes negative.
+ * Ensures the pair always sums to the original file amount, anchoring the discount to the file's
+ * `original − value`. This avoids inconsistencies caused by edit order, ensuring classification
+ * logic remains predictable and consistent.
+ *
+ * Note: Over-classification (exceeding the file's amount) results in a negative value, signaling
+ * the discrepancy to the reader.
  */
 export function twinWriteFor(
   accounts: AccountRow[],
@@ -109,12 +113,12 @@ export function twinWriteFor(
     return null;
   }
   const twin = twinCode(code);
-  if (twin === null || !accounts.some((account) => account.code === twin)) {
+  const original = accounts.find((account) => account.code === twin)?.values[monthIndex];
+  if (twin === null || original === undefined) {
     return null;
   }
-  const previous = currentValue(accounts, edits, code, monthIndex);
   const next = value ?? 0;
-  if (next === previous) {
+  if (next === currentValue(accounts, edits, code, monthIndex)) {
     return null;
   }
   const comment = edits.find(
@@ -123,7 +127,7 @@ export function twinWriteFor(
   return {
     code: twin,
     monthIndex,
-    value: currentValue(accounts, edits, twin, monthIndex) - (next - previous),
+    value: original - next,
     ...(comment ? { comment } : {}),
   };
 }

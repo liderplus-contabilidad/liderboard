@@ -119,7 +119,7 @@ describe("twinWriteFor", () => {
     });
   });
 
-  it("discounts BY DIFFERENCE, so re-typing the same cell doesn't discount twice", () => {
+  it("re-typing the same cell doesn't discount twice", () => {
     const edits = [edit("6.1.1", 0, { value: 10 }), edit("5.2.1.1", 0, { value: 20 })];
     // 10 → 25 moves 15 more, and only that.
     expect(twinWriteFor(accounts, edits, "6.1.1", 0, 25)?.value).toBe(5);
@@ -131,9 +131,20 @@ describe("twinWriteFor", () => {
     expect(twinWriteFor(accounts, edits, "6.1.1", 0, null)?.value).toBe(30);
   });
 
-  it("discounts from a manual correction on 5.2, not from the file's original", () => {
-    const edits = [edit("5.2.1.1", 0, { value: 70 })];
-    expect(twinWriteFor(accounts, edits, "6.1.1", 0, 30)?.value).toBe(40);
+  describe("the pair adds up to the file's amount whichever gesture comes first", () => {
+    it("does not discount again what was already emptied by hand", () => {
+      const edits = [edit("5.2.1.1", 0, { value: 0 })];
+      expect(twinWriteFor(accounts, edits, "6.1.1", 0, 30)?.value).toBe(0);
+    });
+
+    it("lands on the same amount with no hand-made cut at all", () => {
+      expect(twinWriteFor(accounts, [], "6.1.1", 0, 30)?.value).toBe(0);
+    });
+
+    it("overrides a hand-made correction on 5.2 rather than compounding with it", () => {
+      const edits = [edit("6.1.1", 0, { value: 10 }), edit("5.2.1.1", 0, { value: 70 })];
+      expect(twinWriteFor(accounts, edits, "6.1.1", 0, 12)?.value).toBe(18);
+    });
   });
 
   it("lets the twin go negative rather than clamping", () => {

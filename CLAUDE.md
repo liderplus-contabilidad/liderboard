@@ -400,8 +400,15 @@ the control disappears once there is nothing left to segment instead of sitting 
 presence of root 6 IS the flag, so there is no dataset field to migrate. `lib/profit-loss/
 segment.ts` (pure + tested) owns the rules: the 5.2→6 mapping, `twinCode` (6.1.1 ↔ 5.2.1.1) and
 `twinWriteFor`, which is what makes the pair hold — writing a non-operating amount ALSO writes its
-twin inside 5.2, discounted **by difference** against what the twin holds right now, so a manual
-correction on 5.2 survives and re-typing a cell moves only the delta. Section 5 keeps behaving
+twin inside 5.2, **anclado a lo que trajo el archivo** (`original − valor`), así que el par SIEMPRE
+suma el monto cargado y re-teclear una celda no descuenta dos veces. Se descontaba «por diferencia»
+contra lo que el gemelo tuviera en ese momento —mismo resultado mientras nadie más escribiera en
+5.2, y una corrección manual sobrevivía—, pero eso hacía que el resultado dependiera del ORDEN de
+dos gestos que significan lo mismo: vaciar 5.2 a mano y luego teclear ese monto abajo lo descontaba
+dos veces y dejaba la celda operativa en NEGATIVO, un gasto que el archivo nunca trajo.
+Reclasificar a mano es reclasificar, así que los dos órdenes tienen que caer en el mismo sitio; el
+precio, escrito en los tests, es que una corrección hecha a mano sobre 5.2 la PISA la siguiente
+escritura en su gemela en vez de componerse con ella. Section 5 keeps behaving
 exactly as before (still editable); nothing clamps, so over-classifying leaves the twin negative.
 `computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
 `toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
