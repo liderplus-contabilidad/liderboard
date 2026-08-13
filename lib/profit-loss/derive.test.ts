@@ -43,6 +43,37 @@ describe("buildAccountTree", () => {
     expect(energia.children).toEqual([]);
   });
 
+  it("ordena raíces y hermanas por segmento numérico, no por orden de llegada", () => {
+    // Un plan real llega desordenado: `merge-month` ordena lo que guarda, pero la UNIÓN de
+    // varios años, centros o clientes concatena por primer avistamiento, y una cuenta que solo
+    // trae el segundo aporte aterriza al final. El árbol es la única definición de la forma del
+    // plan, así que el orden se decide aquí y lo heredan Datos, el filtro, el Excel y el informe.
+    const rows: AccountRow[] = [
+      { code: "5", name: "Costos", values: [0] },
+      { code: "4", name: "Ingresos", values: [0] },
+      { code: "4.1", name: "Ventas", values: [0] },
+      { code: "4.1.11", name: "Otros", values: [0] },
+      { code: "4.1.2", name: "Servicios", values: [0] },
+    ];
+    const { roots } = buildAccountTree(rows);
+    expect(roots.map((r) => r.code)).toEqual(["4", "5"]);
+    // `4.1.2` antes que `4.1.11`: numérico por segmento, jamás lexicográfico.
+    expect(roots[0].children[0].children.map((c) => c.code)).toEqual(["4.1.2", "4.1.11"]);
+  });
+
+  it("anida una hija que llega antes que su padre", () => {
+    // En una unión el padre puede venir del segundo aporte. Anidar mientras se recorre dejaba a
+    // la hija de raíz suelta al lado de su propio padre; los códigos se indexan antes de enlazar.
+    const rows: AccountRow[] = [
+      { code: "4.1", name: "Ventas", values: [10] },
+      { code: "4", name: "Ingresos", values: [0] },
+    ];
+    const { roots, warnings } = buildAccountTree(rows);
+    expect(roots.map((r) => r.code)).toEqual(["4"]);
+    expect(roots[0].children.map((c) => c.code)).toEqual(["4.1"]);
+    expect(warnings).toEqual([]);
+  });
+
   it("attaches an orphan to its nearest existing ancestor with a warning", () => {
     const rows: AccountRow[] = [
       { code: "4", name: "Ingresos", values: [0] },
