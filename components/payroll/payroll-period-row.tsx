@@ -8,6 +8,10 @@ import { GridRow } from "@/components/data-table/data-grid";
 import { Cell } from "@/components/data-table/grid-cells";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
+import { listEmployees } from "@/lib/payroll/db";
+import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
+import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
+import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
 import { periodKindLabel, periodLongLabel } from "@/lib/payroll/periods";
 import type { PayrollPeriod, PayrollRosterSummary } from "@/lib/payroll/types";
@@ -40,9 +44,10 @@ interface PayrollPeriodRowProps {
 }
 
 function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriodRowProps) {
-  const { deletePeriod } = usePayrollData();
+  const { activeClient, deletePeriod } = usePayrollData();
   const hasFinancials = financials !== undefined;
   const hasRoster = roster.employees > 0;
+  const [downloading, setDownloading] = useState(false);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   // "menu": «Duplicar en otro período…» y «Eliminar período». "form": el mismo formulario del
@@ -67,6 +72,37 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
     setStage("closed");
     setAnchor(null);
   }, []);
+
+  /**
+   * Los comprobantes del período, sin abrirlo. Es el MISMO PDF que baja su pantalla de detalle,
+   * por el mismo constructor: desde el historial se bajan los roles de varios meses seguidos sin
+   * entrar y salir de cada uno.
+   *
+   * La nómina se lee AQUÍ, al pulsar, y no con un `useLiveQuery` de la fila: el historial lista
+   * todos los períodos del cliente, y sostener la nómina entera de cada uno en memoria por si
+   * alguien descarga uno es pagar la lista completa para el caso de una fila.
+   */
+  const downloadRoles = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const lines = await listEmployees(period.id);
+      if (lines.length === 0) {
+        return;
+      }
+      await downloadPayslips(
+        buildPeriodPayslips({
+          period,
+          lines,
+          parameters: DEFAULT_PAYROLL_PARAMETERS,
+          clientName: activeClient?.name ?? "",
+          ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
+        }),
+        payslipBatchFilename(period.year, period.monthIndex),
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }, [activeClient?.name, activeClient?.logo, period]);
 
   const confirmDelete = useCallback(async () => {
     setBusy(true);
@@ -133,12 +169,14 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
             </Link>
             <button
               type="button"
-              disabled={!hasFinancials}
-              title={hasFinancials ? "Descargar rol de pagos" : NO_DATA_REASON}
-              aria-label={hasFinancials ? "Descargar rol de pagos" : NO_DATA_REASON}
+              disabled={!hasFinancials || downloading}
+              title={hasFinancials ? "Descargar roles (PDF)" : NO_DATA_REASON}
+              aria-label={hasFinancials ? "Descargar roles (PDF)" : NO_DATA_REASON}
+              aria-busy={downloading}
+              onClick={() => void downloadRoles()}
               className={ROW_ACTION_CLASS}
             >
-              <Download size={15} />
+              <Download size={15} className={cn(downloading && "animate-pulse")} />
             </button>
             <button
               ref={triggerRef}

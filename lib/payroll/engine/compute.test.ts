@@ -20,6 +20,7 @@ function employee(overrides: Partial<PayrollEmployeeInput> = {}): PayrollEmploye
     fixedCommission: 0,
     variableCommission: 0,
     bonus: 0,
+    extras: { contributory: 0, nonContributory: 0 },
     deductions: {
       iessLoans: 0,
       unpaidLeave: 0,
@@ -394,5 +395,82 @@ describe("redondeo: las derivaciones redondean, los totales NO (§9)", () => {
     // No es un defecto: es lo que hace que la app y el Excel del contador digan lo mismo.
     const r = compute({ baseSalary: 488.66 });
     expect(r.grossIncome).toBe(569.5500000000001);
+  });
+});
+
+/**
+ * La prueba de que las DOS CLASES significan lo que dicen, contra el motor entero y no solo contra
+ * las bases: `bases.test.ts` ya declara en qué bases entra cada una, pero lo que la firma revisa
+ * son las veinte columnas, y entre una base y una columna hay un redondeo y un parámetro.
+ */
+describe("conceptos de ingreso extra: aportable contra no aportable", () => {
+  const CONTRIBUTORY_COLUMNS = [
+    "iessEmployee",
+    "iessEmployer",
+    "thirteenthMonthly",
+    "vacationProvision",
+    "grossIncome",
+  ] as const;
+
+  it("sin conceptos declarados no cambia ninguna columna", () => {
+    const sin = compute({ baseSalary: 487.21 });
+    const conCero = compute({
+      baseSalary: 487.21,
+      extras: { contributory: 0, nonContributory: 0 },
+    });
+    expect(conCero).toEqual(sin);
+  });
+
+  it("un APORTABLE mueve las columnas que dependen de la base aportable", () => {
+    const sin = compute({ baseSalary: 480 });
+    const con = compute({ baseSalary: 480, extras: { contributory: 100, nonContributory: 0 } });
+
+    for (const column of CONTRIBUTORY_COLUMNS) {
+      expect(con[column]).toBeGreaterThan(sin[column]);
+    }
+    // El aporte personal es la base aportable por el 9,45 %: 100 más de base son 9,45 más.
+    expect(con.iessEmployee - sin.iessEmployee).toBeCloseTo(9.45, 10);
+    expect(con.grossIncome - sin.grossIncome).toBeCloseTo(
+      100 + (con.thirteenthMonthly - sin.thirteenthMonthly),
+      10,
+    );
+  });
+
+  it("un NO APORTABLE mueve el total y NADA más", () => {
+    const sin = compute({ baseSalary: 480 });
+    const con = compute({ baseSalary: 480, extras: { contributory: 0, nonContributory: 100 } });
+
+    expect(con.grossIncome - sin.grossIncome).toBeCloseTo(100, 10);
+    expect(con.iessEmployee).toBe(sin.iessEmployee);
+    expect(con.iessEmployer).toBe(sin.iessEmployer);
+    expect(con.thirteenthMonthly).toBe(sin.thirteenthMonthly);
+    expect(con.vacationProvision).toBe(sin.vacationProvision);
+    expect(con.reserveFundAccrued).toBe(sin.reserveFundAccrued);
+  });
+
+  it("el no aportable llega íntegro al líquido; el aportable llega menos su aporte", () => {
+    const sin = compute({ baseSalary: 480 });
+    const noAportable = compute({
+      baseSalary: 480,
+      extras: { contributory: 0, nonContributory: 100 },
+    });
+    const aportable = compute({
+      baseSalary: 480,
+      extras: { contributory: 100, nonContributory: 0 },
+    });
+
+    expect(noAportable.netPay - sin.netPay).toBeCloseTo(100, 10);
+    expect(aportable.netPay - sin.netPay).toBeLessThan(100);
+  });
+
+  it("el fondo de reserva acumulado también sigue al aportable", () => {
+    const ficha = { baseSalary: 480, hasReserveFund: true, accumulatesReserveFund: true };
+    const sin = compute(ficha);
+    const con = compute({ ...ficha, extras: { contributory: 100, nonContributory: 0 } });
+
+    expect(con.reserveFundAccrued).toBeGreaterThan(sin.reserveFundAccrued);
+    expect(
+      compute({ ...ficha, extras: { contributory: 0, nonContributory: 100 } }).reserveFundAccrued,
+    ).toBe(sin.reserveFundAccrued);
   });
 });

@@ -39,6 +39,36 @@ export interface PayrollRosterSummary {
   areas: number;
 }
 
+/**
+ * Las dos clases de un concepto de ingreso extra, y lo único de él que el CÁLCULO mira.
+ *
+ * `aportable` se comporta exactamente como `R` viáticos y `S`/`T` comisiones: entra en las cinco
+ * bases parciales y en el total. `noAportable` se comporta como `V` bono y `U` fondo de reserva:
+ * solo llega al total. El rótulo es libre justamente porque no decide nada.
+ */
+export type PayrollExtraConceptKind = "aportable" | "noAportable";
+
+/**
+ * Un concepto de ingreso que ESTE período declara además de los trece del libro.
+ *
+ * Existe porque el rol de cada empresa nombra los suyos: `MOVILIZACION NO APORTABLE` y
+ * `ALIMENTACION NO APORTABLE` en el libro de DELICMAR, otros en el siguiente. Un catálogo cerrado
+ * no puede crecer a ese ritmo sin tocar el motor, el asiento y el comprobante cada vez.
+ *
+ * **El rótulo vive en el PERÍODO y el importe en la ficha.** Un concepto extra es una COLUMNA del
+ * rol, compartida por toda la nómina del mes — si el nombre viviera en cada captura, dos empleados
+ * podrían llamar distinto a la misma columna y el rol dejaría de ser una tabla.
+ *
+ * El `id` es lo que la captura referencia, y por eso es estable e independiente del rótulo:
+ * renombrar no mueve ningún importe.
+ */
+export interface PayrollExtraConcept {
+  id: string;
+  /** Como lo escribe el rol de esa empresa, verbatim: `MOVILIZACION NO APORTABLE`. */
+  label: string;
+  kind: PayrollExtraConceptKind;
+}
+
 export interface PayrollPeriod {
   id: string;
   clientId: string;
@@ -46,6 +76,14 @@ export interface PayrollPeriod {
   /** 0–11, igual que el resto de la app. */
   monthIndex: number;
   kind: PayrollPeriodKind;
+  /**
+   * Los conceptos de ingreso extra que este período declara, en el orden en que se declararon.
+   *
+   * AUSENTE en un período que no declara ninguno, que es todo lo que existía antes de que esto
+   * hubiera. Opcional y NO indexado, así que no costó migración de Dexie — igual que
+   * `PayrollClient.logo`.
+   */
+  extraConcepts?: PayrollExtraConcept[];
 }
 
 /** Lo que produciría la capa de parseo, sin dueño todavía: `db.ts` estampa el `clientId`. */
@@ -83,6 +121,17 @@ export interface PayrollMonthlyCapture {
    *  recalcula nada. */
   variableCommission: number;
   bonus: number;
+  /**
+   * El importe de cada concepto extra que el PERÍODO declara, por `id`.
+   *
+   * Solo el importe: el rótulo y la clase viven en `PayrollPeriod.extraConcepts`, porque un
+   * concepto extra es una columna del rol y no una decisión de cada empleado. Una entrada cuyo
+   * concepto ya no exista es huérfana y no suma —nadie la recorre sin su declaración—, pero se
+   * limpia al borrarlo, en la misma transacción, para que no reviva si alguien reusara el `id`.
+   *
+   * AUSENTE en toda captura anterior a este campo, que se lee como «ningún importe extra».
+   */
+  extraAmounts?: Record<string, number>;
   /** `Y`…`AN` · los doce egresos con nombre. El aporte al IESS (`X`) no está aquí: lo deriva
    *  el motor. */
   deductions: CapturedDeductions;

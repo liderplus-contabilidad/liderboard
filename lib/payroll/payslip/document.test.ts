@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { emptyCapture, toEngineInput } from "../employee-input";
 import { computeEmployeePayroll } from "../engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
-import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
-import { buildPayslipDocument, compareExcelColumns, payslipIncomeConcepts } from "./document";
+import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
+import {
+  NOT_CONTRIBUTORY_MARK,
+  PAYSLIP_FOOTNOTE,
+  buildPayslipDocument,
+  compareExcelColumns,
+  payslipIncomeConcepts,
+} from "./document";
 import type { PayslipDocument, PayslipRow } from "./types";
 
 /**
@@ -69,7 +75,7 @@ function build(line: PayrollEmployeeLine, position = 6): PayslipDocument {
   const capture: PayrollMonthlyCapture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,
@@ -259,5 +265,78 @@ describe("las horas extras", () => {
     // `Cantidad` no tiene caso para el cero en ningún sitio.
     const doc = build({ ...SORIA, capture: undefined });
     expect(row(doc.incomes, "VALOR GANADO EXTRAS 100%")).toBeUndefined();
+  });
+});
+
+describe("conceptos de ingreso extra del período", () => {
+  const APORTABLE: PayrollExtraConcept = { id: "x1", label: "Movilización", kind: "aportable" };
+  const NO_APORTABLE: PayrollExtraConcept = {
+    id: "x2",
+    label: "Alimentación",
+    kind: "noAportable",
+  };
+
+  const buildWith = (
+    concepts: readonly PayrollExtraConcept[],
+    extraAmounts: Record<string, number>,
+  ) => {
+    const line: PayrollEmployeeLine = {
+      ...FULL,
+      capture: { ...(FULL.capture ?? emptyCapture()), extraAmounts },
+    };
+    return buildPayslipDocument({
+      line,
+      computed: computeEmployeePayroll(toEngineInput(line, concepts), DEFAULT_PAYROLL_PARAMETERS),
+      capture: line.capture ?? emptyCapture(),
+      year: 2026,
+      monthIndex: 2,
+      clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+      position: 6,
+      extraConcepts: concepts,
+    });
+  };
+
+  it("imprime el rótulo que el período le puso, en mayúsculas", () => {
+    const document = buildWith([APORTABLE], { x1: 45 });
+    const row = document.incomes.find((entry) => entry.label === "MOVILIZACIÓN");
+    expect(row).toBeDefined();
+    expect(row?.value).toBe("$45.00");
+  });
+
+  it("el NO aportable lleva el (*) y el aportable no", () => {
+    const document = buildWith([APORTABLE, NO_APORTABLE], { x1: 45, x2: 30 });
+    const aportable = document.incomes.find((entry) => entry.label === "MOVILIZACIÓN");
+    const noAportable = document.incomes.find((entry) => entry.label === "ALIMENTACIÓN");
+
+    expect(noAportable?.quantity).toBe(NOT_CONTRIBUTORY_MARK);
+    expect(aportable?.quantity).toBeNull();
+  });
+
+  it("un no aportable enciende la nota al pie aunque el bono y el FR estén en cero", () => {
+    expect(buildWith([NO_APORTABLE], { x2: 30 }).footnote).toBe(PAYSLIP_FOOTNOTE);
+  });
+
+  it("uno en cero no produce fila", () => {
+    const document = buildWith([APORTABLE], { x1: 0 });
+    expect(document.incomes.some((entry) => entry.label === "MOVILIZACIÓN")).toBe(false);
+  });
+
+  it("van DETRÁS de las trece filas del catálogo", () => {
+    const document = buildWith([APORTABLE], { x1: 45 });
+    const last = document.incomes[document.incomes.length - 1];
+    expect(last.label).toBe("MOVILIZACIÓN");
+  });
+
+  it("sin conceptos declarados el comprobante es exactamente el de antes", () => {
+    const sin = buildWith([], {});
+    const conImporteHuerfano = buildWith([], { x1: 999 });
+    expect(conImporteHuerfano).toEqual(sin);
+  });
+
+  it("el total de ingresos INCLUYE el concepto extra", () => {
+    const amount = (formatted: string) => Number(formatted.replace(/[$,]/g, ""));
+    const sin = buildWith([], {});
+    const con = buildWith([NO_APORTABLE], { x2: 30 });
+    expect(amount(con.totalIncome) - amount(sin.totalIncome)).toBeCloseTo(30, 2);
   });
 });

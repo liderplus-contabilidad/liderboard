@@ -39,7 +39,7 @@ import {
 } from "../concepts";
 import { sameToTheCentavo } from "../amounts";
 import type { PayrollEmployeeComputation } from "../engine/types";
-import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
+import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
 import { formatPayslipAmount, formatQuantity } from "./format";
 import type { PayslipDocument, PayslipRow } from "./types";
 
@@ -112,6 +112,36 @@ function rowFor(
   ];
 }
 
+/**
+ * Las filas de los conceptos que el PERÍODO declara, con el rótulo que el usuario les puso.
+ *
+ * El `code` va vacío: los `I-01`…`I-13` del catálogo son posiciones del libro que el contador
+ * reconoce, y numerar estos con la misma gramática afirmaría que también salen de su hoja. El
+ * rótulo se imprime en MAYÚSCULAS, que es la convención de todos los `payslipLabel`.
+ *
+ * Los NO aportables llevan el `(*)`, la misma marca que `U` y `V`, porque su nota al pie —«No
+ * aporta IESS ni es Ingreso Gravado»— es literalmente lo que su clase significa.
+ */
+function extraIncomeRows(
+  concepts: readonly PayrollExtraConcept[] | undefined,
+  capture: PayrollMonthlyCapture,
+): PayslipRow[] {
+  return (concepts ?? []).flatMap((concept) => {
+    const amount = capture.extraAmounts?.[concept.id] ?? 0;
+    if (sameToTheCentavo(amount, 0)) {
+      return [];
+    }
+    return [
+      {
+        code: "",
+        label: concept.label.toUpperCase(),
+        quantity: concept.kind === "noAportable" ? NOT_CONTRIBUTORY_MARK : null,
+        value: formatPayslipAmount(amount),
+      },
+    ];
+  });
+}
+
 /** El mes tal como lo escribe el comprobante: `MARZO 2026`. */
 export function payslipMonthLabel(year: number, monthIndex: number): string {
   return `${MONTHS_FULL_ES[monthIndex].toUpperCase()} ${year}`;
@@ -126,6 +156,7 @@ export function buildPayslipDocument({
   clientName,
   clientLogo,
   position,
+  extraConcepts,
 }: {
   line: PayrollEmployeeLine;
   computed: PayrollEmployeeComputation;
@@ -140,10 +171,18 @@ export function buildPayslipDocument({
   /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
+  /** Los conceptos de ingreso que el PERÍODO declara además de los del catálogo. */
+  extraConcepts?: readonly PayrollExtraConcept[];
 }): PayslipDocument {
-  const incomes: PayslipRow[] = payslipIncomeConcepts().flatMap((concept) =>
-    rowFor(concept, incomeAmount(concept, computed, capture), incomeQuantity(concept, capture)),
-  );
+  const incomes: PayslipRow[] = [
+    ...payslipIncomeConcepts().flatMap((concept) =>
+      rowFor(concept, incomeAmount(concept, computed, capture), incomeQuantity(concept, capture)),
+    ),
+    // Los conceptos extra van DETRÁS del catálogo y no intercalados: el orden del papel es el de
+    // COLUMNAS del libro, y estos no tienen ninguna — no hay sitio donde meterlos que signifique
+    // algo. Detrás, además, deja intacta la posición de las trece filas que el contador conoce.
+    ...extraIncomeRows(extraConcepts, capture),
+  ];
 
   const deductions: PayslipRow[] = payslipDeductionConcepts().flatMap((concept) =>
     rowFor(concept, deductionAmount(concept, computed, capture), null),

@@ -77,7 +77,7 @@ function documentFor(overrides: Partial<PayrollEmployeeLine> = {}): PayslipDocum
   const capture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,

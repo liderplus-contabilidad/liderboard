@@ -12,6 +12,7 @@ import Dexie, { type Table } from "dexie";
 import { sortByName, type EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll } from "./employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
+import { newExtraConcept, removeExtraConcept, validateExtraLabel } from "./extra-income";
 import { computePeriodFinancials, type PayrollPeriodFinancials } from "./period-detail";
 import { sortPeriodsDesc } from "./periods";
 import { copyRoster } from "./roster";
@@ -19,6 +20,8 @@ import type {
   ParsedPayrollEmployeeLine,
   PayrollClient,
   PayrollEmployeeLine,
+  PayrollExtraConcept,
+  PayrollExtraConceptKind,
   PayrollPeriod,
   PayrollRosterSummary,
 } from "./types";
@@ -214,6 +217,14 @@ export async function createPeriod(
   }
 
   await db.transaction("rw", db.periods, db.employees, async () => {
+    // Las DECLARACIONES de conceptos extra se arrastran; los importes no. Es la misma frontera que
+    // `copyRoster` aplica a ficha frente a captura: una columna es forma del rol y sobrevive al
+    // mes, mientras que lo que cada empleado cobró en ella es del mes y se captura de nuevo. Se
+    // conserva el `id`, así que las dos columnas son «la misma» de un mes a otro.
+    const source = await db.periods.get(copyFrom);
+    if (source?.extraConcepts?.length) {
+      period.extraConcepts = source.extraConcepts.map((concept) => ({ ...concept }));
+    }
     await db.periods.add(period);
     const sourceLines = await db.employees.where("periodId").equals(copyFrom).toArray();
     const copiedLines: PayrollEmployeeLine[] = copyRoster(sourceLines).map((line) => ({
@@ -226,6 +237,110 @@ export async function createPeriod(
     }
   });
   return period;
+}
+
+// ---------------------------------------------------------------------------
+// Conceptos de ingreso extra (las columnas que un período declara por su cuenta)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que un período declara además de los trece ingresos del libro. Ausente se lee como ninguno.
+ *
+ * Vive en el PERÍODO y no en la ficha porque un concepto extra es una COLUMNA del rol, compartida
+ * por toda la nómina del mes: si el rótulo viviera en cada captura, dos empleados podrían llamar
+ * distinto a la misma columna y el rol dejaría de ser una tabla.
+ */
+export async function listExtraConcepts(periodId: string): Promise<PayrollExtraConcept[]> {
+  return (await db.periods.get(periodId))?.extraConcepts ?? [];
+}
+
+/** El resultado de declarar o renombrar: el concepto, o el motivo del rechazo con el que la
+ *  pantalla puede explicarse sin volver a validar por su cuenta. */
+export type ExtraConceptResult =
+  | { ok: true; concept: PayrollExtraConcept }
+  | { ok: false; message: string };
+
+/** Declara un concepto nuevo al final de la lista del período. */
+export async function addExtraConcept(
+  periodId: string,
+  label: string,
+  kind: PayrollExtraConceptKind,
+): Promise<ExtraConceptResult> {
+  return db.transaction("rw", db.periods, async () => {
+    const period = await db.periods.get(periodId);
+    if (!period) {
+      return { ok: false as const, message: "El período ya no existe." };
+    }
+    const existing = period.extraConcepts ?? [];
+    const check = validateExtraLabel(label, existing);
+    if (!check.ok) {
+      return { ok: false as const, message: check.message };
+    }
+    const concept = newExtraConcept(check.name, kind, existing);
+    await db.periods.update(periodId, { extraConcepts: [...existing, concept] });
+    return { ok: true as const, concept };
+  });
+}
+
+/**
+ * Renombra un concepto. **No mueve ningún importe**: la captura referencia el `id`, y ese es todo
+ * el motivo por el que el `id` existe además del rótulo.
+ */
+export async function renameExtraConcept(
+  periodId: string,
+  conceptId: string,
+  label: string,
+): Promise<ExtraConceptResult> {
+  return db.transaction("rw", db.periods, async () => {
+    const period = await db.periods.get(periodId);
+    const existing = period?.extraConcepts ?? [];
+    const current = existing.find((concept) => concept.id === conceptId);
+    if (!current) {
+      return { ok: false as const, message: "Ese concepto ya no existe en el período." };
+    }
+    const check = validateExtraLabel(label, existing, conceptId);
+    if (!check.ok) {
+      return { ok: false as const, message: check.message };
+    }
+    const concept = { ...current, label: check.name };
+    await db.periods.update(periodId, {
+      extraConcepts: existing.map((entry) => (entry.id === conceptId ? concept : entry)),
+    });
+    return { ok: true as const, concept };
+  });
+}
+
+/**
+ * Borra un concepto Y los importes que las capturas del período guardaban para él, en la MISMA
+ * transacción.
+ *
+ * Un importe huérfano no sumaría —`sumExtraIncome` recorre las declaraciones, no los importes—,
+ * pero volvería a la vida si alguien reusara el `id`. Es improbable y silencioso, que es justo el
+ * modo de fallo que conviene cerrar en la puerta, y esta es la puerta.
+ */
+export async function deleteExtraConcept(periodId: string, conceptId: string): Promise<void> {
+  await db.transaction("rw", db.periods, db.employees, async () => {
+    const period = await db.periods.get(periodId);
+    if (!period) {
+      return;
+    }
+    const { concepts, pruneAmounts } = removeExtraConcept(period.extraConcepts ?? [], conceptId);
+    await db.periods.update(periodId, { extraConcepts: concepts });
+
+    const lines = await db.employees.where("periodId").equals(periodId).toArray();
+    const touched = lines.filter((line) => line.capture?.extraAmounts?.[conceptId] !== undefined);
+    if (touched.length > 0) {
+      await db.employees.bulkPut(
+        touched.map((line) => ({
+          ...line,
+          capture: line.capture && {
+            ...line.capture,
+            extraAmounts: pruneAmounts(line.capture.extraAmounts),
+          },
+        })),
+      );
+    }
+  });
 }
 
 /**
@@ -407,14 +522,24 @@ export async function periodFinancials(
     .where("periodId")
     .anyOf(periodIds as string[])
     .toArray();
+  // Los conceptos extra son del PERÍODO y el rol de cada línea los necesita, así que la lectura
+  // acotada trae también los períodos: sin ellos los cuatro totales saldrían por debajo de lo que
+  // la pantalla del período enseña, y nada lo delataría porque las dos cifras son plausibles.
+  const periods = await db.periods.bulkGet(periodIds as string[]);
+  const conceptsByPeriod = new Map<string, readonly PayrollExtraConcept[]>(
+    periods
+      .filter((period) => period !== undefined)
+      .map((period) => [period.id, period.extraConcepts ?? []]),
+  );
   const byPeriod = new Map<string, PayrollEmployeeLine[]>();
   for (const line of lines) {
     byPeriod.set(line.periodId, [...(byPeriod.get(line.periodId) ?? []), line]);
   }
   for (const periodId of periodIds) {
+    const extraConcepts = conceptsByPeriod.get(periodId) ?? [];
     const financials = computePeriodFinancials(
       (byPeriod.get(periodId) ?? []).map((line) =>
-        computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS),
+        computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, extraConcepts),
       ),
     );
     if (financials) {

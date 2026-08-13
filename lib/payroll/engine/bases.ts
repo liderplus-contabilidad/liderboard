@@ -16,16 +16,35 @@
  */
 import type { IncomeComponents } from "./types";
 
-/** Lo que comparten las cinco bases parciales: sueldo, horas extras y los cuatro «otros pagos»
- *  que siempre entran (viáticos y las dos comisiones van juntos en todas). */
+/** Lo que comparten las cinco bases parciales: sueldo, horas extras, los cuatro «otros pagos»
+ *  que siempre entran (viáticos y las dos comisiones van juntos en todas) y los conceptos extra
+ *  APORTABLES que el período declare. */
 type CoreEarnings = Pick<
   IncomeComponents,
-  "unifiedSalary" | "overtimeTotal" | "allowances" | "fixedCommission" | "variableCommission"
+  | "unifiedSalary"
+  | "overtimeTotal"
+  | "allowances"
+  | "fixedCommission"
+  | "variableCommission"
+  | "contributoryExtras"
 >;
 
+/**
+ * `contributoryExtras` entra AQUÍ y no base por base, y esa es toda la implementación de «un bono
+ * aportable se comporta como los viáticos»: este punto único es lo que lo mete de una vez en el
+ * aporte personal `X`, el patronal `AU`, el décimo III `O`, la provisión de vacaciones `AV`, el
+ * fondo de reserva `U`/`AW` y la provisión XIII `AS`. Repartirlo en cinco sumandos serían cinco
+ * sitios donde equivocarse, y este archivo avisa arriba de lo que cuesta una columna de más o de
+ * menos en una base.
+ */
 function core(c: CoreEarnings): number {
   return (
-    c.unifiedSalary + c.overtimeTotal + c.allowances + c.fixedCommission + c.variableCommission
+    c.unifiedSalary +
+    c.overtimeTotal +
+    c.allowances +
+    c.fixedCommission +
+    c.variableCommission +
+    c.contributoryExtras
   );
 }
 
@@ -96,6 +115,11 @@ export function thirteenthProvisionBase(
  * que se compara contra el `PAGADO` tecleado a mano. Con los seis empleados de marzo 2026 los
  * dos órdenes coinciden —solo `F`, `N` y `O` son distintos de cero—, así que ningún test lo
  * habría delatado: por eso se escribe explícito.
+ *
+ * Los dos agregados de conceptos extra van AL FINAL por ese mismo motivo leído al revés: no tienen
+ * columna en el libro, así que no hay orden que heredar y el sitio en la suma es una decisión que
+ * se escribe en vez de heredarse. Con un período que no declara ninguno los dos valen `0`, y
+ * `x + 0 === x` exacto en IEEE-754, así que el fixture de oro no se mueve ni un bit.
  */
 export function grossIncome(c: IncomeComponents): number {
   return (
@@ -109,6 +133,8 @@ export function grossIncome(c: IncomeComponents): number {
     c.variableCommission +
     c.reserveFundPaid +
     c.thirteenthMonthly +
-    c.bonus
+    c.bonus +
+    c.contributoryExtras +
+    c.nonContributoryExtras
   );
 }

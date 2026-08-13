@@ -64,7 +64,7 @@ describe("toEngineInput", () => {
     // La app tiene que servir sin Excel: una nómina creada a mano o copiada del mes anterior ya
     // tiene sueldo base, días y tipo de contrato, y con eso el rol se calcula entero. Devolver
     // `null` aquí dejaba la pantalla en blanco justo en el caso de uso principal.
-    const input = toEngineInput(line());
+    const input = toEngineInput(line(), []);
 
     expect(input.baseSalary).toBe(487.21);
     expect(input.days).toBe(30);
@@ -76,7 +76,7 @@ describe("toEngineInput", () => {
   it("sin captura, un empleado ya tiene su rol completo", () => {
     // Las cifras de MORALES sin ninguna captura: su sueldo unificado, sus dos décimos, su aporte
     // al IESS y el costo que le supone a la empresa salen todos de la ficha.
-    const computed = computeEmployeePayroll(toEngineInput(line()), DEFAULT_PAYROLL_PARAMETERS);
+    const computed = computeEmployeePayroll(toEngineInput(line(), []), DEFAULT_PAYROLL_PARAMETERS);
 
     expect(computed.unifiedSalary).toBe(487.21);
     expect(computed.fourteenthMonthly).toBe(40.17);
@@ -88,11 +88,11 @@ describe("toEngineInput", () => {
   });
 
   it("una captura vacía y ninguna captura dan exactamente lo mismo", () => {
-    expect(toEngineInput(line({ capture: emptyCapture() }))).toEqual(toEngineInput(line()));
+    expect(toEngineInput(line({ capture: emptyCapture() }), [])).toEqual(toEngineInput(line(), []));
   });
 
   it("cruza la ficha con lo capturado del mes", () => {
-    const input = toEngineInput(line({ capture: capture({ overtimeHours50: 5.5 }) }));
+    const input = toEngineInput(line({ capture: capture({ overtimeHours50: 5.5 }) }), []);
 
     expect(input.baseSalary).toBe(487.21);
     expect(input.days).toBe(30);
@@ -105,6 +105,7 @@ describe("toEngineInput", () => {
     // captura, copiar la nómina del mes anterior las perdería.
     const input = toEngineInput(
       line({ hasReserveFund: true, accumulatesReserveFund: false, capture: capture() }),
+      [],
     );
     expect(input.hasReserveFund).toBe(true);
     expect(input.accumulatesReserveFund).toBe(false);
@@ -113,21 +114,22 @@ describe("toEngineInput", () => {
   it("`paid` sale de la captura, y es null mientras nadie lo declare", () => {
     // Es del MES y se TECLEA, así que da igual si lo escribió quien arma el rol o lo trajo el
     // `BZ` de un archivo: para el motor son la misma cosa, y por eso un alta a mano concilia.
-    expect(toEngineInput(line({ capture: capture() })).paid).toBeNull();
-    expect(toEngineInput(line({ capture: capture({ paid: 457.69 }) })).paid).toBe(457.69);
-    expect(toEngineInput(line()).paid).toBeNull();
+    expect(toEngineInput(line({ capture: capture() }), []).paid).toBeNull();
+    expect(toEngineInput(line({ capture: capture({ paid: 457.69 }) }), []).paid).toBe(457.69);
+    expect(toEngineInput(line(), []).paid).toBeNull();
   });
 
   it("las provisiones viajan a las banderas del motor", () => {
     const input = toEngineInput(
       line({ capture: capture({ provisionsThirteenth: true, provisionsFourteenth: true }) }),
+      [],
     );
     expect(input.flags).toEqual({ provisionsThirteenth: true, provisionsFourteenth: true });
   });
 
   it("no comparte referencias con la línea: mutar el resultado no toca lo guardado", () => {
     const stored = line({ capture: capture() });
-    const input = toEngineInput(stored);
+    const input = toEngineInput(stored, []);
     input.deductions.salaryAdvance = 999;
     expect(stored.capture?.deductions.salaryAdvance).toBe(0);
   });
@@ -143,6 +145,7 @@ describe("toEngineInput", () => {
           paid: 457.69,
         }),
       }),
+      [],
     );
     const result = computeEmployeePayroll(input, DEFAULT_PAYROLL_PARAMETERS);
 

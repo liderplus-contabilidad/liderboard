@@ -19,6 +19,7 @@ const BASE_INPUT: PayrollEmployeeInput = {
   fixedCommission: 0,
   variableCommission: 0,
   bonus: 0,
+  extras: { contributory: 0, nonContributory: 0 },
   deductions: {
     iessLoans: 0,
     unpaidLeave: 0,

@@ -4,7 +4,11 @@ import { DEFAULT_PAYROLL_PARAMETERS as PARAMS } from "./engine/parameters";
 import { GOLDEN_MARCH_2026 } from "./engine/golden.fixtures";
 import { buildJournalEntry, JOURNAL_ACCOUNTS } from "./journal";
 import { journalAmountsFor, journalAmountsForInputs } from "./journal-amounts";
-import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "./types";
+import type {
+  ParsedPayrollEmployeeLine,
+  PayrollExtraConcept,
+  PayrollMonthlyCapture,
+} from "./types";
 
 function line(
   overrides: Partial<ParsedPayrollEmployeeLine> = {},
@@ -29,7 +33,7 @@ function line(
 
 /** El asiento de una nómina, que es lo que la pantalla arma. */
 function entryFor(lines: readonly ParsedPayrollEmployeeLine[]) {
-  return buildJournalEntry(journalAmountsFor(lines, PARAMS));
+  return buildJournalEntry(journalAmountsFor(lines, PARAMS, []));
 }
 
 describe("el asiento derivado de la nómina CUADRA", () => {
@@ -130,7 +134,7 @@ describe("journalAmountsFor", () => {
   it("devuelve las claves del catálogo COMPLETAS, con cero explícito", () => {
     // Un `0` dice «esa columna no se movió»; una clave ausente diría «no se sabe», y alimentado del
     // período eso ya no puede ocurrir: la nómina se conoce entera.
-    const amounts = journalAmountsFor([line()], PARAMS);
+    const amounts = journalAmountsFor([line()], PARAMS, []);
 
     for (const account of JOURNAL_ACCOUNTS) {
       expect(amounts[account.id]).toBeTypeOf("number");
@@ -147,14 +151,14 @@ describe("journalAmountsFor", () => {
   });
 
   it("suma la nómina entera, no un empleado", () => {
-    const uno = journalAmountsFor([line()], PARAMS);
-    const dos = journalAmountsFor([line(), line({ idCard: "2" })], PARAMS);
+    const uno = journalAmountsFor([line()], PARAMS, []);
+    const dos = journalAmountsFor([line(), line({ idCard: "2" })], PARAMS, []);
 
     expect(dos["sueldos-administracion"]).toBeCloseTo(uno["sueldos-administracion"]! * 2, 8);
   });
 
   it("una ficha sin captura vale cero en lo capturado, no rompe", () => {
-    const amounts = journalAmountsFor([{ ...line(), capture: undefined }], PARAMS);
+    const amounts = journalAmountsFor([{ ...line(), capture: undefined }], PARAMS, []);
 
     expect(amounts["anticipo-empleados"]).toBe(0);
     expect(amounts["sueldos-administracion"]).toBeGreaterThan(0);
@@ -170,7 +174,7 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
 
   it("«Viaticos» lee R, no V", () => {
     // `ASIENTOS` leía `V` (el Bono ND) en la fila de Viáticos; la corregida lee `R`.
-    const amounts = journalAmountsFor([line({}, capture)], PARAMS);
+    const amounts = journalAmountsFor([line({}, capture)], PARAMS, []);
 
     expect(amounts.viaticos).toBe(111);
     expect(amounts["bono-nd"]).toBe(222);
@@ -179,7 +183,7 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
   it("los décimos van al derecho: 621004 ← AS+O y 621005 ← AT+N", () => {
     // `ASIENTOS` los cruzaba entre sí.
     const [row] = [line()];
-    const amounts = journalAmountsFor([row], PARAMS);
+    const amounts = journalAmountsFor([row], PARAMS, []);
     const tercero = amounts["decimo-tercer-sueldo-administracion"]!;
     const cuarto = amounts["decimo-cuarto-sueldo-administracion"]!;
 
@@ -196,10 +200,11 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
     // Es la corrección de los 64.25: `ASIENTOS` leía `AB` («PRESTAMOS EMPRESARIALES») en vez de `Y`.
     // Solo se mueve `Y`: los viáticos entran en la base aportable y moverlos arrastraría también a
     // `X` y `AU`, que están en esta misma cuenta — la resta dejaría de aislar lo que se mide.
-    const sinPrestamo = journalAmountsFor([line()], PARAMS)["aportes-iess-por-pagar"]!;
+    const sinPrestamo = journalAmountsFor([line()], PARAMS, [])["aportes-iess-por-pagar"]!;
     const conPrestamo = journalAmountsFor(
       [line({}, { deductions: { ...emptyCapture().deductions, iessLoans: 64.25 } })],
       PARAMS,
+      [],
     )["aportes-iess-por-pagar"]!;
 
     expect(conPrestamo - sinPrestamo).toBeCloseTo(64.25, 8);
@@ -207,10 +212,11 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
 
   it("un préstamo empresarial NO toca la cuenta del IESS", () => {
     // El otro lado de la misma corrección: `AB` tiene su propia cuenta y no entra en `2.1.7.1.9`.
-    const base = journalAmountsFor([line()], PARAMS);
+    const base = journalAmountsFor([line()], PARAMS, []);
     const conPrestamo = journalAmountsFor(
       [line({}, { deductions: { ...emptyCapture().deductions, companyLoans: 64.25 } })],
       PARAMS,
+      [],
     );
 
     expect(conPrestamo["aportes-iess-por-pagar"]).toBeCloseTo(base["aportes-iess-por-pagar"]!, 8);
@@ -250,7 +256,7 @@ describe("contraste contra el archivo real de MARZO 2026", () => {
     expect(amounts[id]).toBeCloseTo(expected, 2);
   });
 
-  it("las otras 16 cuentas quedan en cero, como en la hoja", () => {
+  it("las otras 17 cuentas quedan en cero, como en la hoja", () => {
     const conMovimiento = JOURNAL_ACCOUNTS.filter((a) => amounts[a.id] !== 0).map((a) => a.id);
 
     expect(conMovimiento).toHaveLength(9);
@@ -258,5 +264,77 @@ describe("contraste contra el archivo real de MARZO 2026", () => {
 
   it("«Seguro Privado» vale cero — por eso el descuadre no se veía en este mes", () => {
     expect(amounts["seguro-privado"]).toBe(0);
+  });
+});
+
+/**
+ * Los conceptos de ingreso extra que un período declara. Es la prueba de que la cuenta 26
+ * (`bonos-aportables`) hace falta: sin ella el asiento descuadraría por lo que la nómina sí pagó,
+ * exactamente el mismo agujero que obligó a añadir `Seguro Privado`.
+ */
+describe("conceptos de ingreso extra en el asiento", () => {
+  const APORTABLE: PayrollExtraConcept = { id: "x1", label: "Movilización", kind: "aportable" };
+  const NO_APORTABLE: PayrollExtraConcept = {
+    id: "x2",
+    label: "Alimentación",
+    kind: "noAportable",
+  };
+
+  const conConceptos = (
+    concepts: readonly PayrollExtraConcept[],
+    extraAmounts: Record<string, number>,
+  ) => journalAmountsFor([line({}, { extraAmounts })], PARAMS, concepts);
+
+  it("el asiento CUADRA con un aportable", () => {
+    const entry = buildJournalEntry(conConceptos([APORTABLE], { x1: 120 }));
+    expect(entry.balanced).toBe(true);
+  });
+
+  it("el asiento CUADRA con un no aportable", () => {
+    const entry = buildJournalEntry(conConceptos([NO_APORTABLE], { x2: 80 }));
+    expect(entry.balanced).toBe(true);
+  });
+
+  it("el asiento CUADRA con las dos clases y varios conceptos a la vez", () => {
+    const concepts: PayrollExtraConcept[] = [
+      APORTABLE,
+      NO_APORTABLE,
+      { id: "x3", label: "Bono", kind: "noAportable" },
+    ];
+    const entry = buildJournalEntry(conConceptos(concepts, { x1: 120, x2: 80, x3: 45 }));
+    expect(entry.balanced).toBe(true);
+  });
+
+  it("el aportable va a su propia cuenta y el no aportable a «Bono ND»", () => {
+    const amounts = conConceptos([APORTABLE, NO_APORTABLE], { x1: 120, x2: 80 });
+    expect(amounts["bonos-aportables"]).toBeCloseTo(120, 8);
+    expect(amounts["bono-nd"]).toBeCloseTo(80, 8);
+  });
+
+  it("«Bono ND» suma la columna `V` y los no aportables en la MISMA cuenta", () => {
+    const amounts = journalAmountsFor([line({}, { bonus: 26, extraAmounts: { x2: 80 } })], PARAMS, [
+      NO_APORTABLE,
+    ]);
+    expect(amounts["bono-nd"]).toBeCloseTo(106, 8);
+  });
+
+  it("un aportable arrastra también el aporte patronal, el no aportable no", () => {
+    const sin = journalAmountsFor([line()], PARAMS, []);
+    const aportable = conConceptos([APORTABLE], { x1: 120 });
+    const noAportable = conConceptos([NO_APORTABLE], { x2: 120 });
+
+    expect(aportable["aporte-patronal-iess-administracion"]).toBeGreaterThan(
+      sin["aporte-patronal-iess-administracion"]!,
+    );
+    expect(noAportable["aporte-patronal-iess-administracion"]).toBeCloseTo(
+      sin["aporte-patronal-iess-administracion"]!,
+      8,
+    );
+  });
+
+  it("sin conceptos declarados, las dos cuentas nuevas quedan en cero", () => {
+    const amounts = journalAmountsFor([line({}, { extraAmounts: { x1: 999 } })], PARAMS, []);
+    expect(amounts["bonos-aportables"]).toBe(0);
+    expect(amounts["bono-nd"]).toBe(0);
   });
 });

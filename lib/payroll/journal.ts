@@ -4,8 +4,14 @@
  * la hoja `ASIENTOS`) y las derivaciones puras sobre él. Los importes llegan por parámetro; quien
  * los produce es `journal-amounts.ts`, sumando la nómina entera del período a través del motor.
  *
- * Son **25** cuentas: las 24 del libro y una que añade esta app (`seguro-privado`), sin la cual el
- * asiento descuadra por el importe de `Q` — el porqué, con el álgebra, está en su propia entrada.
+ * Son **26** cuentas: las 24 del libro y dos que añade esta app —`seguro-privado`, sin la cual el
+ * asiento descuadra por el importe de `Q`, y `bonos-aportables`, sin la cual descuadra por los
+ * conceptos de ingreso extra aportables que un período declare—. El porqué, con el álgebra, está
+ * en la entrada de cada una; las dos están pendientes de confirmar con la firma.
+ *
+ * Dos de sus `sourceColumns` NO son columnas del libro sino pseudo-columnas (`EXTRA_AP`,
+ * `EXTRA_NA`): los conceptos extra no tienen sitio en la hoja `GENERAL`, y darles el nombre de una
+ * columna que sí existe haría creer al contador que puede cotejarlas contra ella.
  *
  * Por qué la clave de una cuenta es `id` y no `code`: `621001` aparece DOS VECES en el catálogo
  * (el gasto de sueldos en el `debe`, `GENERAL!C44`, y en el `haber` las licencias/permisos/tiempo
@@ -121,7 +127,26 @@ export const JOURNAL_ACCOUNTS = [
     code: "6",
     name: "Bono ND",
     side: "debe",
-    sourceColumns: ["V"],
+    // `EXTRA_NA` son los conceptos extra NO APORTABLES que el período declare. Van aquí y no a una
+    // cuenta propia porque esta cuenta ES exactamente eso: el destino del bono que no aporta.
+    // Sumárselos dice la verdad en vez de abrir una segunda cuenta para lo mismo.
+    sourceColumns: ["V", "EXTRA_NA"],
+  },
+  {
+    id: "bonos-aportables",
+    code: null,
+    name: "Bonos Aportables",
+    side: "debe",
+    // ⚠ La SEGUNDA cuenta que no sale de `GENERAL!43-71`, por el mismo álgebra que `seguro-privado`
+    // (abajo): un concepto extra APORTABLE entra en `W` y le llega al empleado por el haber dentro
+    // de `AP`, así que sin destino en el debe el asiento descuadraría por su importe. Sus efectos
+    // sobre `X`, `AU`, `AS`, `AV` y `AW` sí los recogen las cuentas que ya leen esas columnas, así
+    // que esta solo tiene que cubrir el ingreso en sí.
+    //
+    // Sin código, el mismo trato que `Viaticos` y `Seguro Privado`. **Pendiente de confirmar con la
+    // firma**: si prefieren repartirlo entre cuentas existentes —`Comisiones Administracion`, o una
+    // por concepto— se cambia esta entrada y su fila del mapa de `journal-amounts.ts`.
+    sourceColumns: ["EXTRA_AP"],
   },
   {
     id: "seguro-privado",

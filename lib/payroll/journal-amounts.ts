@@ -25,7 +25,7 @@ import type { PayrollParameters } from "./engine/parameters";
 import type { PayrollEmployeeComputation, PayrollEmployeeInput } from "./engine/types";
 import { toEngineInput } from "./employee-input";
 import { JOURNAL_ACCOUNTS, type JournalAccountId, type JournalAmounts } from "./journal";
-import type { ParsedPayrollEmployeeLine } from "./types";
+import type { ParsedPayrollEmployeeLine, PayrollExtraConcept } from "./types";
 
 /**
  * Las columnas del rol que alguna cuenta nombra, derivadas del catálogo — nunca una lista aparte,
@@ -71,6 +71,16 @@ const COLUMN_SOURCES: Record<
   U: (c) => c.reserveFundPaid,
   /** `V` · BONO CUMPLIMIENTO */
   V: (_c, k) => k.bonus,
+  /**
+   * `EXTRA_AP` y `EXTRA_NA` no son columnas del libro sino los dos agregados de los conceptos que
+   * el PERÍODO declara — el motor ya los recibe reducidos, así que aquí se leen de la entrada.
+   *
+   * Salen de `input.extras` y no de la captura: el reparto por clase lo decide la declaración del
+   * período, y `toEngineInput` es el único sitio donde ese cruce ocurre. Leer `capture.extraAmounts`
+   * aquí obligaría a repetirlo y podría discrepar.
+   */
+  EXTRA_AP: (_c, k) => k.extras.contributory,
+  EXTRA_NA: (_c, k) => k.extras.nonContributory,
   /** `X` · APORTE IESS del empleado */
   X: (c) => c.iessEmployee,
   /** `Y` · PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS */
@@ -158,8 +168,14 @@ export function journalAmountsForInputs(
 export function journalAmountsFor(
   lines: readonly ParsedPayrollEmployeeLine[],
   parameters: PayrollParameters,
+  /** Los conceptos extra que declara el período de esa nómina. Sin ellos los importes de las dos
+   *  cuentas nuevas saldrían en cero y el asiento DESCUADRARÍA por lo que la nómina sí pagó. */
+  extraConcepts: readonly PayrollExtraConcept[],
 ): JournalAmounts {
   // `toEngineInput` es la única traducción de ficha + captura a entrada de motor, y se reusa en vez
   // de leer `line.capture` aquí: una segunda lectura podría discrepar de la suya.
-  return journalAmountsForInputs(lines.map(toEngineInput), parameters);
+  return journalAmountsForInputs(
+    lines.map((line) => toEngineInput(line, extraConcepts)),
+    parameters,
+  );
 }

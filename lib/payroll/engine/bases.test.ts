@@ -21,6 +21,8 @@ const ZERO: IncomeComponents = {
   variableCommission: 0,
   reserveFundPaid: 0,
   bonus: 0,
+  contributoryExtras: 0,
+  nonContributoryExtras: 0,
 };
 
 const BASES = {
@@ -94,6 +96,19 @@ const MEMBERSHIP: Record<keyof IncomeComponents, readonly BaseName[]> = {
   // `U` y `V` no son base de NADA: solo llegan al total.
   reserveFundPaid: ["gross"],
   bonus: ["gross"],
+  // Los conceptos extra, que no tienen columna: el aportable se comporta EXACTAMENTE como `R`,
+  // `S` y `T` —las seis— y el no aportable exactamente como `U` y `V` —solo el total—. Esta fila
+  // es la definición ejecutable de qué significan las dos clases, y el `Record` sobre
+  // `keyof IncomeComponents` es lo que impide añadir un componente sin declararla.
+  contributoryExtras: [
+    "contributory",
+    "thirteenth",
+    "reserveFundAccrual",
+    "vacation",
+    "thirteenthProvision",
+    "gross",
+  ],
+  nonContributoryExtras: ["gross"],
 };
 
 describe("las seis bases de cálculo (§2)", () => {
@@ -121,14 +136,18 @@ describe("las seis bases de cálculo (§2)", () => {
       variableCommission: 256,
       reserveFundPaid: 512,
       bonus: 1024,
+      contributoryExtras: 2048,
+      nonContributoryExtras: 4096,
     };
     // Potencias de dos: cada total identifica sin ambigüedad qué sumandos entraron.
-    expect(contributoryBase(all)).toBe(1 + 2 + 16 + 32 + 64 + 128 + 256);
-    expect(thirteenthBase(all)).toBe(1 + 2 + 32 + 64 + 128 + 256);
-    expect(reserveFundAccrualBase(all)).toBe(1 + 2 + 16 + 64 + 128 + 256);
-    expect(vacationBase(all)).toBe(1 + 2 + 4 + 16 + 64 + 128 + 256);
-    expect(thirteenthProvisionBase(all)).toBe(1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256);
-    expect(grossIncome(all)).toBe(1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024);
+    expect(contributoryBase(all)).toBe(1 + 2 + 16 + 32 + 64 + 128 + 256 + 2048);
+    expect(thirteenthBase(all)).toBe(1 + 2 + 32 + 64 + 128 + 256 + 2048);
+    expect(reserveFundAccrualBase(all)).toBe(1 + 2 + 16 + 64 + 128 + 256 + 2048);
+    expect(vacationBase(all)).toBe(1 + 2 + 4 + 16 + 64 + 128 + 256 + 2048);
+    expect(thirteenthProvisionBase(all)).toBe(1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 2048);
+    expect(grossIncome(all)).toBe(
+      1 + 2 + 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 + 1024 + 2048 + 4096,
+    );
   });
 
   it("una base sin nada vale cero, no NaN", () => {

@@ -147,7 +147,7 @@ function registered(entry: GoldenCase): PayrollEmployeeLine {
 }
 
 function compute(entry: GoldenCase) {
-  return computeEmployeePayroll(toEngineInput(registered(entry)), DEFAULT_PAYROLL_PARAMETERS);
+  return computeEmployeePayroll(toEngineInput(registered(entry), []), DEFAULT_PAYROLL_PARAMETERS);
 }
 
 describe("los seis de MARZO 2026, dados de alta por el formulario", () => {
