@@ -5,11 +5,14 @@
  * que el empleado firma cada mes. Tres decisiones sostienen la fidelidad y conviene tenerlas
  * juntas, porque las tres son al revés de lo que hace la PANTALLA de detalle:
  *
- * 1. **Se imprimen las 26 filas siempre**, con `-` donde no hay importe. `visibleIncomeConcepts`
- *    esconde en pantalla los capturados en cero para que la tabla no parezca un formulario a medio
- *    llenar; el comprobante hace lo contrario porque es un formulario de POSICIÓN FIJA — quien lo
- *    revisa busca el anticipo en la cuarta fila de egresos, y dos empleados del mismo mes se leen
- *    en paralelo.
+ * 1. **Solo se imprimen las filas CON importe.** El papel se imprimía entero, las 26 filas con `-`
+ *    donde no había nada, porque un formulario de posición fija se revisa buscando cada concepto
+ *    donde siempre está. La firma pidió lo contrario: que el comprobante liste lo que este mes se
+ *    pagó y se descontó, y nada más. No es la regla de la PANTALLA, que es otra y sigue siendo
+ *    otra: `visibleIncomeConcepts` esconde lo que se TECLEA en cero y conserva siempre lo que la
+ *    app deriva —esa tabla es donde se captura, y una fila que se va se lleva consigo el sitio
+ *    donde escribirla—; aquí no se captura nada, así que se juzga el IMPORTE, venga del motor o
+ *    de la captura.
  * 2. **El orden es el de COLUMNAS del libro**, no el del catálogo. `concepts.ts` agrupa los
  *    calculados arriba (una decisión de la tabla, donde son las filas grises que no se editan) y
  *    por eso pone el fondo de reserva séptimo; el papel lo pone duodécimo, porque su columna `U`
@@ -34,10 +37,14 @@ import {
   deductionAmount,
   incomeAmount,
 } from "../concepts";
+import { sameToTheCentavo } from "../amounts";
 import type { PayrollEmployeeComputation } from "../engine/types";
 import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
-import { formatQuantity, formatRowAmount, formatTotal } from "./format";
+import { formatPayslipAmount, formatQuantity } from "./format";
 import type { PayslipDocument, PayslipRow } from "./types";
+
+/** La marca de la columna `Cantidad` que la nota al pie explica. */
+export const NOT_CONTRIBUTORY_MARK = "(*)";
 
 /**
  * Ordena dos columnas de Excel: primero por longitud, luego alfabéticamente. Sin la longitud, un
@@ -65,7 +72,7 @@ export function payslipDeductionConcepts(): DeductionConcept[] {
  */
 function incomeQuantity(concept: IncomeConcept, capture: PayrollMonthlyCapture): string | null {
   if (concept.notContributory) {
-    return "(*)";
+    return NOT_CONTRIBUTORY_MARK;
   }
   if (concept.kind === "calculado" && concept.hoursField) {
     return formatQuantity(capture[concept.hoursField]);
@@ -77,6 +84,32 @@ function incomeQuantity(concept: IncomeConcept, capture: PayrollMonthlyCapture):
  *  Se redondea a centavos para no arrastrar el ruido de coma flotante del motor. */
 function plainNumber(value: number): string {
   return String(Math.round(value * 100) / 100);
+}
+
+/**
+ * La fila de un concepto, o NINGUNA si no tiene importe — la regla 1 de la cabecera, escrita en un
+ * solo sitio para los dos bloques.
+ *
+ * El cero se juzga al CENTAVO y con `sameToTheCentavo`, que es la única definición de «el mismo
+ * importe» del módulo: el motor no redondea sus totales y arrastra ruido de coma flotante, así que
+ * un `1e-14` no es una cifra que declarar y su fila no tiene por qué ocupar un renglón.
+ */
+function rowFor(
+  concept: IncomeConcept | DeductionConcept,
+  amount: number,
+  quantity: string | null,
+): PayslipRow[] {
+  if (sameToTheCentavo(amount, 0)) {
+    return [];
+  }
+  return [
+    {
+      code: concept.code,
+      label: concept.payslipLabel,
+      quantity,
+      value: formatPayslipAmount(amount),
+    },
+  ];
 }
 
 /** El mes tal como lo escribe el comprobante: `MARZO 2026`. */
@@ -108,19 +141,13 @@ export function buildPayslipDocument({
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
 }): PayslipDocument {
-  const incomes: PayslipRow[] = payslipIncomeConcepts().map((concept) => ({
-    code: concept.code,
-    label: concept.payslipLabel,
-    quantity: incomeQuantity(concept, capture),
-    value: formatRowAmount(incomeAmount(concept, computed, capture)),
-  }));
+  const incomes: PayslipRow[] = payslipIncomeConcepts().flatMap((concept) =>
+    rowFor(concept, incomeAmount(concept, computed, capture), incomeQuantity(concept, capture)),
+  );
 
-  const deductions: PayslipRow[] = payslipDeductionConcepts().map((concept) => ({
-    code: concept.code,
-    label: concept.payslipLabel,
-    quantity: null,
-    value: formatRowAmount(deductionAmount(concept, computed, capture)),
-  }));
+  const deductions: PayslipRow[] = payslipDeductionConcepts().flatMap((concept) =>
+    rowFor(concept, deductionAmount(concept, computed, capture), null),
+  );
 
   return {
     company: clientName,
@@ -138,9 +165,15 @@ export function buildPayslipDocument({
     role: line.role,
     incomes,
     deductions,
-    totalIncome: formatTotal(computed.grossIncome),
-    totalDeductions: formatTotal(computed.totalDeductions),
-    netPay: formatTotal(computed.netPay),
+    // La nota solo sale si queda en la hoja alguna marca que explicar: las dos filas que la llevan
+    // son las que más veces valen cero, y un pie que aclara un `(*)` que no está en el papel manda
+    // a buscar algo que no existe.
+    footnote: incomes.some((row) => row.quantity === NOT_CONTRIBUTORY_MARK)
+      ? PAYSLIP_FOOTNOTE
+      : null,
+    totalIncome: formatPayslipAmount(computed.grossIncome),
+    totalDeductions: formatPayslipAmount(computed.totalDeductions),
+    netPay: formatPayslipAmount(computed.netPay),
     idCardLine: `C.C. ${line.idCard}`,
   };
 }

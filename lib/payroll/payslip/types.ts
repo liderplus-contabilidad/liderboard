@@ -2,7 +2,7 @@
  * EL COMPROBANTE COMO DATO PLANO, y las cajas en las que se dibuja.
  *
  * `PayslipDocument` es la hoja `INDIVIDUAL` del libro del contador reducida a texto: sus líneas de
- * encabezado, sus campos de identidad, sus 26 filas con el importe YA formateado, sus tres totales
+ * encabezado, sus campos de identidad, sus filas con el importe YA formateado, sus tres totales
  * y su pie. Que los importes lleguen aquí como cadenas es deliberado — es lo que permite afirmar
  * en un test que un cero se imprime `-` y que un total lleva `US$`, comparando cadenas contra el
  * Excel en vez de números contra otro cálculo.
@@ -18,7 +18,7 @@ export interface PayslipRow {
   /** El código del catálogo. No se imprime: está para que un test nombre la fila que falla. */
   code: string;
   label: string;
-  /** `null` en las 21 filas que no la usan. */
+  /** `null` en las filas que no la usan, que son casi todas. */
   quantity: string | null;
   value: string;
 }
@@ -40,8 +40,12 @@ export interface PayslipDocument {
   reserveFundLine: string;
   employeeName: string;
   role: string;
+  /** Solo las filas CON importe, en el orden de columnas del libro. */
   incomes: readonly PayslipRow[];
   deductions: readonly PayslipRow[];
+  /** La nota que explica el `(*)`, o `null` cuando ninguna fila impresa lo lleva. Se decide aquí y
+   *  no en el layout porque depende de qué filas sobrevivieron a la omisión. */
+  footnote: string | null;
   /** `US$567.98` */
   totalIncome: string;
   /** `US$246.04` */

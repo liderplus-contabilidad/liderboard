@@ -28,7 +28,7 @@
  * el propio contador usa para ingresos y costos en su hoja.
  */
 import { fitLogoBox } from "@/lib/logos";
-import { PAYSLIP_DECLARATION, PAYSLIP_FOOTNOTE, PAYSLIP_SIGNATURE_CAPTION } from "./document";
+import { PAYSLIP_DECLARATION, PAYSLIP_SIGNATURE_CAPTION } from "./document";
 import { PAYSLIP_COLORS } from "./palette";
 import type {
   MeasureText,
@@ -303,7 +303,7 @@ export function layoutPayslip(
   };
 
   const conceptRow = (row: PayslipRow, index: number) => {
-    // La franja alterna: 26 filas que cruzan la hoja de una punta a otra se saltan de renglón sin
+    // La franja alterna: una fila que cruza la hoja de una punta a otra se salta de renglón sin
     // ella. Va tan clara que en fotocopia desaparece, que es justo lo que se quiere — ayuda a
     // seguir la línea, no informa de nada.
     if (index % 2 === 1) {
@@ -324,26 +324,13 @@ export function layoutPayslip(
     push(label.text, X_LEFT, label.size, false, PAYSLIP_COLORS.inkSoft);
 
     if (row.quantity !== null) {
-      push(
-        row.quantity,
-        X_QUANTITY_END,
-        BODY_SIZE,
-        false,
-        row.quantity === "-" ? PAYSLIP_COLORS.faint : PAYSLIP_COLORS.muted,
-        "right",
-      );
+      push(row.quantity, X_QUANTITY_END, BODY_SIZE, false, PAYSLIP_COLORS.muted, "right");
     }
 
-    // Un cero va en tinta débil: veintidós rayas a peso completo compiten con las cuatro cifras que
-    // sí dicen algo, y lo que se viene a leer son esas cuatro.
-    push(
-      row.value,
-      X_RIGHT,
-      BODY_SIZE,
-      false,
-      row.value === "-" ? PAYSLIP_COLORS.faint : PAYSLIP_COLORS.ink,
-      "right",
-    );
+    // Todo importe va a peso completo. La tinta débil existía para que veintidós rayas no
+    // compitieran con las cuatro cifras que decían algo; ahora las rayas no se imprimen, así que
+    // cuanto queda en la columna es una cifra y todas pesan igual.
+    push(row.value, X_RIGHT, BODY_SIZE, false, PAYSLIP_COLORS.ink, "right");
     y += ROW_PITCH;
   };
 
@@ -362,7 +349,10 @@ export function layoutPayslip(
     y += TOTAL_SIZE + 6;
   };
 
-  sectionHeader("INGRESOS", "Cantidad", PAYSLIP_COLORS.income);
+  // La cabecera `Cantidad` solo se escribe si alguna fila impresa la usa: rotular una columna
+  // vacía es prometer un dato que no está en la hoja.
+  const quantityHeader = document.incomes.some((row) => row.quantity !== null) ? "Cantidad" : null;
+  sectionHeader("INGRESOS", quantityHeader, PAYSLIP_COLORS.income);
   document.incomes.forEach(conceptRow);
   totalRow("TOTAL DE INGRESOS", document.totalIncome);
   y += 9;
@@ -384,8 +374,10 @@ export function layoutPayslip(
   // ── Pie ─────────────────────────────────────────────────────────────────────────────────────
   // La declaración son ~168 caracteres que en la hoja van a una celda combinada de 355 px donde no
   // caben: aquí se parte en líneas, que es una MEJORA sobre el original.
-  push(PAYSLIP_FOOTNOTE, MARGIN_X, FOOTNOTE_SIZE, false, PAYSLIP_COLORS.faint);
-  y += 13;
+  if (document.footnote) {
+    push(document.footnote, MARGIN_X, FOOTNOTE_SIZE, false, PAYSLIP_COLORS.faint);
+    y += 13;
+  }
 
   for (const line of wrapText(PAYSLIP_DECLARATION, contentWidth, FOOTNOTE_SIZE, false, measure)) {
     push(line, MARGIN_X, FOOTNOTE_SIZE, false, PAYSLIP_COLORS.muted);

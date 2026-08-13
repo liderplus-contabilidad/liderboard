@@ -811,10 +811,18 @@ contra el Excel comparando cadenas en vez de números contra otro cálculo; `lay
 generar un PDF que ninguna se sale de la hoja; `render.ts` las recorre y dibuja. Tipografía
 **Helvetica**, una de las base-14 del formato: cero bytes embebidos y dígitos de ancho fijo, además
 de métricamente compatible con la Arial del libro. Se importa en dinámico, como `exceljs`.
-Tres reglas son al revés que en la PANTALLA de detalle, y a propósito: **se imprimen las 26 filas
-siempre** con `-` donde no hay importe (`visibleIncomeConcepts` esconde los capturados en cero
-porque una tabla no puede parecer un formulario a medio llenar; el papel ES un formulario de
-posición fija, y quien lo revisa busca el anticipo en la cuarta fila de egresos); **el orden es el de
+**Solo se imprimen las filas CON importe** —cinco de las 26 en el empleado de muestra—, y eso NO es
+la regla de la pantalla aunque se le parezca: `visibleIncomeConcepts` esconde lo que se TECLEA en
+cero y conserva siempre lo derivado, porque esa tabla es donde se captura y una fila que se va se
+lleva el sitio donde escribirla; el papel no captura nada, así que juzga el IMPORTE, venga del motor
+o de la captura, con `sameToTheCentavo` para que un `1e-14` del motor no ocupe renglón. Se
+imprimieron las 26 siempre, con `-` en las vacías, tratándolo como el formulario de posición fija
+que es el Excel; la firma pidió lo contrario. Omitir filas se lleva por delante tres cosas más: no
+queda ningún cero de fila al que ponerle la raya del libro (filas y totales comparten un solo
+`formatPayslipAmount`, y el `$0.00` de un total se queda porque un total es una afirmación sobre el
+mes), ningún importe va ya en tinta débil, y la cabecera `Cantidad` y la nota al pie del `(*)` solo
+se escriben si alguna fila impresa las usa — rotular una columna vacía promete un dato que no está.
+Dos reglas siguen siendo al revés que en la pantalla: **el orden es el de
 COLUMNAS del libro**, así que el fondo de reserva sale duodécimo y no séptimo — y eso no obliga a una
 segunda lista, se ordena por el campo `column` que `concepts.ts` ya trae; y **no salen las cuatro
 filas de egreso sin rótulo** (`AJ`–`AM`), que el catálogo excluye desde antes. Los rótulos son
@@ -836,9 +844,9 @@ escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee l
 desde la ficha y el motor, la misma regla que el asiento y los totales del período.
 **Todo importe lleva el `$`** de `formatCurrency`, filas incluidas, aunque el libro las deje sin
 símbolo y solo ponga `US$` en sus tres totales: un solo dialecto del dólar entre la pantalla y el
-papel. Lo que sí se conserva es la raya del cero, y solo en las FILAS — un total en cero escribe
-`$0.00`, porque la raya de una fila dice «nada que declarar» y un total es una afirmación sobre el
-mes que tras una raya parecería un dato que falta.
+papel. `formatPayslipAmount` no sube a `lib/format.ts` por dos razones que siguen en pie — dos
+decimales SIEMPRE, y el signo juzgado tras redondear a centavos, porque el ruido de coma flotante
+del motor imprimiría un `-$0.00` en la banda del líquido con la regla de `formatCurrency`.
 **La JERARQUÍA es del documento y los COLORES son del libro**, que es la única desviación deliberada
 de la fidelidad: cinco bloques con peso distinto —encabezado, panel de identidad, las dos secciones
 y la banda del líquido— en vez de la rejilla plana del Excel, porque un papel que se firma se lee de
@@ -847,9 +855,9 @@ rellenos del propio contador que Datos ya usa en la raíz 4 y la 5, así que un 
 en su Excel, en la pantalla y aquí; los hexes viven en `payslip/palette.ts`, espejo del `@theme` —
 la misma duplicación permitida que `lib/charts/palette.ts`, porque ni un canvas ni un PDF resuelven
 una variable CSS. `LIQUIDO A RECIBIR` es la ÚNICA banda oscura (`ink`, texto blanco) y NO usa
-`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. Un
-cero va en `faint` para no competir con las pocas cifras que dicen algo, la franja alterna es tan
-clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de escribirse con `_`.
+`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. La
+franja alterna es tan clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de
+escribirse con `_`.
 `layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
 revés, una banda taparía su propio rótulo.
 

@@ -4,7 +4,6 @@ import {
   LineChart,
   Microscope,
   Receipt,
-  ShoppingBag,
   Table2,
   Users,
   type LucideIcon,
@@ -71,13 +70,6 @@ export const MODULES: DashboardModule[] = [
     label: "Ocupaciones",
     title: "Ocupaciones · Análisis Hotelero",
     icon: BedDouble,
-    tabs: [TAB_GRAFICOS, TAB_DATOS],
-  },
-  {
-    slug: "sales",
-    label: "Ventas",
-    title: "Ventas · Análisis Comercial",
-    icon: ShoppingBag,
     tabs: [TAB_GRAFICOS, TAB_DATOS],
   },
   {
