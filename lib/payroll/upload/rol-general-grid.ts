@@ -38,7 +38,12 @@ import { compactLabel, normalizeLabel, toNumber, type Cell } from "@/lib/excel/w
  * `MONTHS_FULL_ES` entries carry none. */
 const PERIOD_TEXT = /^(\p{L}+)\s+(\d{4})$/u;
 
-export function parsePeriodText(cell: Cell): { year: number; monthIndex: number } | null {
+export interface PeriodRef {
+  year: number;
+  monthIndex: number;
+}
+
+export function parsePeriodText(cell: Cell): PeriodRef | null {
   if (typeof cell !== "string") {
     return null;
   }
@@ -53,6 +58,32 @@ export function parsePeriodText(cell: Cell): { year: number; monthIndex: number 
     return null;
   }
   return { year: Number(match[2]), monthIndex };
+}
+
+/**
+ * EL PERÍODO, POR SU FORMA Y NO POR SU CELDA — la última coordenada que quedaba en este archivo.
+ *
+ * Se leía en `B2` fijo, que era la única excepción a la regla que la cabecera de este módulo
+ * declara: todo se localiza por lo que el informe escribe. La excepción dejó de sostenerse cuando la
+ * app empezó a GENERAR este mismo formato: su membrete abre unas filas por encima del preámbulo y
+ * `B2` deja de ser `B2`, así que el archivo descargado no habría podido volver a entrar.
+ *
+ * Se barre por encima de la cabecera `EMPLEADO` —donde vive el preámbulo y nada más— y se toma la
+ * primera celda cuyo texto ENTERO sea «mes año». Los archivos que la firma ya tiene se leen igual:
+ * su `B2` es la primera que casa. Y nada más de ese preámbulo puede casar por accidente, porque
+ * `parsePeriodText` exige que el mes esté en `MONTHS_FULL_ES` y que la celda no lleve nada más.
+ */
+export function findPeriod(grid: readonly Cell[][], headerRow: number | null): PeriodRef | null {
+  const end = headerRow ?? grid.length;
+  for (let row = 0; row < end; row++) {
+    for (const cell of grid[row] ?? []) {
+      const period = parsePeriodText(cell);
+      if (period) {
+        return period;
+      }
+    }
+  }
+  return null;
 }
 
 /** Excel's day-0 in the (non-1904) epoch every desktop workbook uses: `1899-12-30`, already
@@ -331,9 +362,19 @@ export interface RolGeneralEmployeeRow {
   /** `AS`, `AT` — el importe provisionado, del que se deduce si el mes provisiona los décimos. */
   thirteenthProvisionRaw: number;
   fourteenthProvisionRaw: number;
-  /** `null` only when the workbook never declared a `PAGADO` column at all — `paidCol === null`.
-   * A column that exists but is blank for this one employee reads as `0`, the same convention
-   * every other figure in this row follows. */
+  /**
+   * `null` cuando nadie declaró lo pagado: ni el libro trae la columna, ni la celda de este empleado
+   * tiene nada. Es la ÚNICA columna que distingue el blanco del cero, y no por simetría con el resto
+   * sino porque aquí las dos cosas significan distinto: sin `PAGADO` el empleado no está ni
+   * conciliado ni con diferencia, mientras que un `0` escrito afirma que se le transfirió cero y
+   * deja una diferencia igual a su líquido.
+   *
+   * Leía el blanco como `0`, con la convención de las otras cuarenta columnas. Se cambió al empezar
+   * a generar este formato: el rol descargado escribe en blanco al que no tiene pago declarado, y
+   * con la regla vieja volvía como «con diferencia» por todo su líquido — el archivo de la app no
+   * habría podido describir su propio estado. Acierta también con el libro del contador, donde una
+   * fila sin `PAGADO` es una que todavía no se ha pagado.
+   */
   paid: number | null;
 }
 
@@ -393,6 +434,12 @@ export function readEmployeeRows(
     // propio motivo escrito en el tipo: de las dos, la ausencia sí dice algo distinto del cero.
     const num = (key: ColumnKey): number => toNumber(valueAt(row, columns[key]));
     const text = (key: ColumnKey): string => cellText(valueAt(row, columns[key]));
+    /** Como `num`, pero distinguiendo la celda EN BLANCO del cero escrito. Solo `PAGADO` la usa, y
+     *  por eso está aquí abajo: para las otras cuarenta y tantas columnas vacío ES cero. */
+    const numOrNull = (key: ColumnKey): number | null => {
+      const cell = valueAt(row, columns[key]);
+      return isFilled(cell) ? toNumber(cell) : null;
+    };
     rows.push({
       area: currentArea ?? "",
       name,
@@ -432,7 +479,7 @@ export function readEmployeeRows(
       medicalLeaveDeduction: num("medicalLeaveDeductionCol"),
       thirteenthProvisionRaw: num("thirteenthProvisionCol"),
       fourteenthProvisionRaw: num("fourteenthProvisionCol"),
-      paid: columns.paidCol === null ? null : num("paidCol"),
+      paid: numOrNull("paidCol"),
     });
   }
 

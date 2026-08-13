@@ -375,10 +375,10 @@ Cargar y descargar Excel se ve **igual en toda la app**: un solo primitivo,
 dominio. La galería viva está en `/docs/components#excel-actions`.
 
 - **La forma del control de descarga se deriva de las opciones**, no se declara: una sola
-  opción rinde un **botón plano** que la ejecuta directo (Ocupaciones, y PyG cuando su sistema de
-  origen es de solo lectura), dos o más rinden el **menú** («Excel completo»/«Excel con tus
-  datos» + «Un mes en crudo»). Añadir o quitar una descarga es añadir o quitar un elemento del
-  array: la forma se ajusta sola, sin un `if` en el módulo.
+  opción rinde un **botón plano** que la ejecuta directo (Ocupaciones, Rol de Pagos, y PyG cuando
+  su sistema de origen es de solo lectura), dos o más rinden el **menú** («Excel completo»/«Excel
+  con tus datos» + «Un mes en crudo»). Añadir o quitar una descarga es añadir o quitar un elemento
+  del array: la forma se ajusta sola, sin un `if` en el módulo.
 - **El progreso y el error viven en el primitivo.** Un módulo aporta `run: () => Promise<void>`
   —construye el workbook y lo entrega al navegador— y nada más: el bloque bloquea reentradas,
   cambia el icono por un spinner y, si la promesa rechaza, muestra un panel de error bajo el

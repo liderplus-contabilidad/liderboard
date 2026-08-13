@@ -861,6 +861,37 @@ escribirse con `_`.
 `layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
 revés, una banda taparía su propio rótulo.
 
+**LA DESCARGA DEL ROL EN EXCEL** (`lib/payroll/export/`) es el espejo del importador: aquel dice DÓNDE
+ESTÁ cada columna en el archivo del contador, este DÓNDE SE ESCRIBE y DE DÓNDE SALE. Una sola hoja
+`GENERAL` con la forma del libro —`B1` el cliente, el período en su fila de rótulos, los rótulos
+repartidos en DOS filas como allí, y el cuerpo de cabecera de área → empleados con ordinal corrido →
+`SUBTOTAL` → `SUMAN`—, en NÚMEROS PLANOS del motor y sin una sola fórmula: una fórmula sería una
+segunda definición de cada cálculo, capaz de separarse de la del motor sin que ninguna cifra lo
+delate. **La LETRA es el contrato**, porque el contador coteja columna por columna, así que lo que la
+app no guarda (`AJ`–`AM`, `AQ`, `BE`) conserva rótulo y sale VACÍO en vez de omitirse —omitirlo
+correría todo lo de su derecha y su `AY` dejaría de ser `AY`—, y la hoja termina en `CA`: el bloque
+`CC`–`CF` del original es el área de trabajo del contador repitiendo `PAGADO`, y su fila de índices de
+búsqueda está DESINCRONIZADA en el archivo real. `columns.ts` declara ese layout una vez y
+`columns.test.ts` lo cruza contra el catálogo de conceptos, porque el modo de fallo real no es
+equivocar una cifra —el motor ya está probado— sino que escritor y lector se SEPAREN, y eso ninguna
+suma lo delata. `rol-grid.ts` es la rejilla pura (vía `computeLinePayroll`, nunca un cálculo propio) y
+`workbook.ts` la dibuja sin decidir nada, con exceljs en dinámico: la misma separación de tres capas
+del comprobante. **Lo prueba `GOLDEN_MARCH_2026`**, que ya trae los seis empleados del archivo real
+con sus veinte columnas al bit, y aquí exige además que cada una caiga en su LETRA —un motor exacto
+escribiendo el patronal en la columna de al lado sigue dando un archivo que no cuadra— y que el
+`SUMAN` reproduzca la fila 39 del libro. **Y el archivo VUELVE a entrar**, que es lo que cobró dos
+precios en el importador, los dos por el mismo motivo: la app ahora GENERA el formato que lee. El
+membrete del logo (`writeLogoHeader`, el de PyG y Ocupaciones) empuja el preámbulo, así que el período
+dejó de leerse en `B2` fijo —la única coordenada de un módulo que declara localizarlo todo por
+rótulo— y pasó a localizarse por su FORMA entre las filas anteriores a la cabecera (`findPeriod`); y
+una celda de `PAGADO` en blanco pasó a leerse `null` y no `0`, porque el rol descargado deja en blanco
+a quien no tiene pago declarado y con la regla vieja volvía «con diferencia» por todo su líquido — el
+archivo de la app no habría podido describir su propio estado. Es `.xlsx` y no el `.xls` del original
+(exceljs no escribe BIFF; SheetJS lee las dos). Los conceptos extra van SUMADOS en una columna
+`OTROS INGRESOS` tras `CA` —al final para no correr ninguna letra, agregados para no ensanchar la hoja
+por período—, y el importador todavía no la lee: re-subir el archivo los pierde, lo dice el `ⓘ` y hay
+un test que lo fija para el día que deje de ser cierto.
+
 **SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
 `EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL
 (`employerCost`, `AY`) por área y por empleado a lo largo de meses y años. **No es un módulo** —lo

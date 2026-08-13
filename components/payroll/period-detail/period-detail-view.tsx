@@ -186,7 +186,14 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
         className="px-7 pt-[18px]"
         rightSlot={
           tab === "empleados" ? (
-            <PayrollExcelActions period={period} periods={periods} employeeCount={lines.length} />
+            <PayrollExcelActions
+              period={period}
+              periods={periods}
+              lines={lines}
+              extraConcepts={extraConcepts}
+              clientName={activeClient?.name ?? ""}
+              {...(activeClient?.logo ? { clientLogo: activeClient.logo } : {})}
+            />
           ) : null
         }
       />

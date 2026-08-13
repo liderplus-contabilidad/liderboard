@@ -5,8 +5,9 @@
  * - the sheet: always `GENERAL`, never the first sheet — the workbook also carries `OTROS`,
  *   `ANTICIPO`, `INDIVIDUAL`, `H.E.`, `ASIENTOS`, `REPORTE HORAS EXTRAS` and `IESS`, none of them
  *   nómina;
- * - the period: `GENERAL!B2`'s own declared text ("MARZO 2026"), never the file name — the
- *   opposite of PyG's monthly-by-centers format, which has no such line and leans on the name;
+ * - the period: the sheet's own declared text ("MARZO 2026"), located by its SHAPE among the
+ *   preamble rows (`findPeriod`) and never by the file name — the opposite of PyG's
+ *   monthly-by-centers format, which has no such line and leans on the name;
  * - what counts as a valid `contractType` (`"CT" | "TP"`) and what a bad one defaults to;
  * - what an unparseable hire date becomes (`null`, not a guess);
  * - qué cuenta como un «sí» en `FR`/`AC FR`, y cómo se RECUPERAN los dos interruptores que el
@@ -26,9 +27,9 @@ import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
 import { PayrollParseError } from "./errors";
 import {
   excelSerialToISODate,
+  findPeriod,
   locateColumns,
   missingColumnLabels,
-  parsePeriodText,
   readEmployeeRows,
   type RolGeneralEmployeeRow,
 } from "./rol-general-grid";
@@ -136,12 +137,14 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
   }
 
   const company = cellText(grid[0]?.[1] ?? null);
-  const period = parsePeriodText(grid[1]?.[1] ?? null);
+  const columns = locateColumns(grid);
+  // Por su FORMA, no por su celda: el rol que esta app genera lleva membrete, y unas filas de logo
+  // por encima del preámbulo movían el `B2` fijo que se leía antes.
+  const period = findPeriod(grid, columns.headerRow);
   if (!period) {
     throw new PayrollParseError("invalid-period");
   }
 
-  const columns = locateColumns(grid);
   const { rows, warnings: rowWarnings } = readEmployeeRows(grid, columns);
   if (rows.length === 0) {
     throw new PayrollParseError("no-employees");
