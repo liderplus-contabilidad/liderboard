@@ -12,6 +12,7 @@
  *   is re-implemented here.
  */
 import {
+  CHART_BAND,
   CHART_FONT,
   CHART_INK,
   CHART_LINES,
@@ -25,6 +26,8 @@ export type { ChartTable, ChartTableRow } from "@/lib/charts/types";
 import { sectionOf } from "../datos-sections";
 import type {
   ChartAxis,
+  ChartMarkArea,
+  ChartMarkPoint,
   ChartTable,
   ChartLabel,
   ChartLegend,
@@ -61,13 +64,14 @@ const MAX_DIRECT_LABELS = 4;
  */
 const MAX_DIRECT_LABEL_MARKS = 14;
 
+/** Whether a per-mark amount can still be read on this many series over this many points. */
+function fitsDirectLabels(seriesCount: number, points: number): boolean {
+  return seriesCount <= MAX_DIRECT_LABELS && seriesCount * points <= MAX_DIRECT_LABEL_MARKS;
+}
+
 /** Whether a per-mark amount can still be read on this many series over this many periods. */
 function labelsFit(seriesCount: number, points: number, context: SeriesOptionContext): boolean {
-  return (
-    (context.labels ?? true) &&
-    seriesCount <= MAX_DIRECT_LABELS &&
-    seriesCount * points <= MAX_DIRECT_LABEL_MARKS
-  );
+  return (context.labels ?? true) && fitsDirectLabels(seriesCount, points);
 }
 
 /**
@@ -298,6 +302,192 @@ export function hundredPercentOption(series: Series[], context: SeriesOptionCont
     series: shares.map((entry) => ({
       ...barSeries(entry, shares.length, { ...context, unit: "porcentaje" }, { stacked: true }),
       stack: STACK_ID,
+    })),
+  };
+}
+
+/**
+ * Una serie de un gráfico cuyo eje X son las CATEGORÍAS y no los periodos: un valor por categoría,
+ * en el orden del eje. Es la forma que necesita una lectura donde lo comparado dentro de cada barra
+ * son los meses o los centros, y no al revés.
+ */
+export interface CategorySeries {
+  id: string;
+  label: string;
+  values: (number | null)[];
+}
+
+export interface CategoryOptionContext {
+  colorOf: (id: string) => string;
+  unit?: ChartUnit;
+}
+
+/**
+ * Barras agrupadas con las CATEGORÍAS en el eje X — el eje girado.
+ *
+ * Existe porque una lectura de seis líneas de negocio sobre doce meses aplasta contra el eje a las
+ * cinco que no son hospedaje: comparten grupo con una barra cien veces mayor y no tienen ni rótulo
+ * propio ni sitio para su cifra. Girando el eje, cada categoría tiene su hueco y su nombre aunque su
+ * barra mida dos píxeles, y lo que se compara dentro de ella —los meses, los centros— es lo que el
+ * usuario haya marcado. Ninguna escala arregla la diferencia de tamaño; lo que la arregla es que la
+ * pequeña deje de competir por el espacio de la grande.
+ *
+ * Con una o dos series por categoría el monto va ENCIMA de cada barra (el mismo presupuesto de
+ * marcas que el resto de la app), que es lo que hace legible una barra corta: se lee el número. Con
+ * más, lo dicen el tooltip y la tabla gemela.
+ */
+export function categoryBarOption(
+  categories: string[],
+  series: CategorySeries[],
+  context: CategoryOptionContext,
+  groups: readonly { label: string; span: number }[] = [],
+): ChartOption {
+  const labels = fitsDirectLabels(series.length, categories.length);
+  const chromeOf = chrome(series.length);
+  return {
+    ...chromeOf,
+    ...(groups.length > 0
+      ? {
+          grid: {
+            ...chromeOf.grid,
+            bottom: Number(chromeOf.grid?.bottom ?? 8) + GROUP_BAND_HEIGHT,
+          },
+        }
+      : {}),
+    xAxis:
+      groups.length > 0
+        ? [categoryAxis(categories), groupBandAxis(categories.length, groups)]
+        : categoryAxis(categories),
+    yAxis: valueAxis(context.unit),
+    tooltip: axisTooltip("shadow", context.unit),
+    series: series.map((entry, index) => ({
+      id: entry.id,
+      type: "bar" as const,
+      name: entry.label,
+      data: [...entry.values],
+      // La franja va en la PRIMERA serie y una sola vez: es fondo del gráfico, no de una serie, y
+      // repetirla en cada una la oscurecería tantas veces como series haya.
+      ...(index === 0 && groups.length > 1 ? { markArea: groupBands(groups) } : {}),
+      itemStyle: {
+        color: context.colorOf(entry.id),
+        borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0] as [
+          number,
+          number,
+          number,
+          number,
+        ],
+        ...(series.length > 1 ? { borderColor: CHART_SURFACE, borderWidth: CHART_MARK.gap } : {}),
+      },
+      label: directLabel(labels, context.unit),
+      labelLayout: { hideOverlap: true },
+    })),
+  };
+}
+
+/**
+ * Cuánto baja el eje real para dejar sitio al renglón de grupos, y cuánto se separa este de él.
+ */
+const GROUP_BAND_HEIGHT = 18;
+
+/**
+ * El renglón que nombra el GRUPO bajo sus columnas: un segundo eje de categorías, sin línea, sin
+ * marcas y sin ninguna serie atada — no es una escala, es un rótulo que abarca varias columnas.
+ *
+ * El nombre se escribe en el CENTRO de su tramo y el resto de sus posiciones van en blanco, que es
+ * lo que lo hace parecer un encabezado y no un rótulo por columna. Con un tramo par no hay centro
+ * exacto y cae en la columna de la izquierda del medio: desplazarlo medio ancho de columna exigiría
+ * medir el gráfico, y esto se decide sin renderizar nada.
+ */
+function groupBandAxis(
+  columns: number,
+  groups: readonly { label: string; span: number }[],
+): ChartAxis {
+  const data = Array.from({ length: columns }, () => "");
+  let start = 0;
+  for (const group of groups) {
+    data[start + Math.floor((group.span - 1) / 2)] = group.label;
+    start += group.span;
+  }
+  return {
+    type: "category",
+    data,
+    position: "bottom",
+    offset: GROUP_BAND_HEIGHT,
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: { show: false },
+    axisLabel: {
+      show: true,
+      interval: 0,
+      color: CHART_INK.strong,
+      fontSize: 11.5,
+      fontWeight: 600,
+      hideOverlap: false,
+    },
+  };
+}
+
+/**
+ * De dónde a dónde llega cada grupo, dicho con una franja de fondo en los IMPARES — la lectura de
+ * una tabla con filas alternas, que es la que ya sabe leer cualquiera.
+ *
+ * Se alternan en vez de pintarse todas porque lo que hace ver el corte es el CAMBIO, y una línea
+ * divisoria por grupo añadiría verticales a una retícula que ya tiene horizontales. Los extremos
+ * son índices de columna y no rótulos: el mismo establecimiento aparece en varios grupos, así que
+ * un rango por nombre engancharía la primera aparición y no la de este tramo.
+ */
+function groupBands(groups: readonly { label: string; span: number }[]): ChartMarkArea {
+  const data: [ChartMarkPoint, ChartMarkPoint][] = [];
+  let start = 0;
+  groups.forEach((group, index) => {
+    if (index % 2 === 1) {
+      data.push([{ xAxis: start }, { xAxis: start + group.span - 1 }]);
+    }
+    start += group.span;
+  });
+  return { silent: true, itemStyle: { color: CHART_BAND }, data };
+}
+
+/** El grupo al que pertenece cada columna, expandido de los tramos. */
+function groupLabels(
+  columns: number,
+  groups: readonly { label: string; span: number }[],
+): (string | undefined)[] {
+  const out: (string | undefined)[] = Array.from({ length: columns }, () => undefined);
+  let start = 0;
+  for (const group of groups) {
+    for (let i = 0; i < group.span; i += 1) {
+      out[start + i] = group.label;
+    }
+    start += group.span;
+  }
+  return out;
+}
+
+/**
+ * La gemela en tabla del eje girado: una fila por categoría y una columna por lo comparado, que es
+ * la forma exacta de la hoja del contador —categoría × establecimiento— y la única lectura donde
+ * una cifra pequeña se lee igual de bien que una grande.
+ */
+export function categoryTable(
+  categories: string[],
+  series: CategorySeries[],
+  context: CategoryOptionContext,
+  groups: readonly { label: string; span: number }[] = [],
+): ChartTable {
+  const groupOf = groupLabels(categories.length, groups);
+  return {
+    columns: series.map((entry) => entry.label),
+    rows: categories.map((label, index) => ({
+      id: `${groupOf[index] ?? ""}|${label}`,
+      label,
+      // El grupo va de SUBRÓTULO y no pegado al nombre: en la tabla hay sitio para los dos, y así
+      // la fila se lee igual que su columna en el gráfico.
+      ...(groupOf[index] === undefined ? {} : { sublabel: groupOf[index] }),
+      values: series.map((entry) => {
+        const value = entry.values[index];
+        return value === null || value === undefined ? null : formatChartValue(value, context.unit);
+      }),
     })),
   };
 }

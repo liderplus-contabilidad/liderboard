@@ -2,6 +2,7 @@
 
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { periodSlotLabel } from "@/lib/profit-loss/analytics/period";
+import { findPreset } from "@/lib/profit-loss/charts/preset-views";
 import { usePygData } from "./pyg-data-provider";
 
 /**
@@ -21,15 +22,18 @@ export function ActiveFilterChips() {
     toggleClient,
     toggleYear,
     togglePeriod,
+    clearPreset,
     clearFilters,
   } = usePygData();
+  const presetLabel = findPreset(filters.preset)?.label;
 
   const total =
     filters.clientIds.length +
     filters.codes.length +
     filters.centerIds.length +
     filters.years.length +
-    filters.periods.length;
+    filters.periods.length +
+    (filters.preset === null ? 0 : 1);
   if (total === 0) {
     return null;
   }
@@ -46,6 +50,7 @@ export function ActiveFilterChips() {
           onRemove={() => toggleClient(id)}
         />
       ))}
+      {presetLabel === undefined ? null : <FilterChip label={presetLabel} onRemove={clearPreset} />}
       {filters.codes.map((code) => (
         <FilterChip
           key={`code-${code}`}

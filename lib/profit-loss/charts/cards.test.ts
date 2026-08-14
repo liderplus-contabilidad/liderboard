@@ -11,6 +11,7 @@ import { emptyFilters, type PygFilters } from "../filters";
 import type { Frequency } from "../types";
 import { buildSeries } from "../analytics/series";
 import { buildAnalisisCards, buildGraficosCards } from "./cards";
+import { BUSINESS_LINES_PRESET } from "./preset-views";
 import { expenseRootsOf, presetQuery, sumOver } from "./presets";
 import { activeSource, type SelectionContext } from "./selection";
 
@@ -26,13 +27,25 @@ import { activeSource, type SelectionContext } from "./selection";
 function ctx(
   sources: AnalyticsSource[],
   activeCenterId: string,
-  options: { frequency?: Frequency; year?: number } = {},
+  options: {
+    frequency?: Frequency;
+    year?: number;
+    centers?: readonly { id: string; name: string; kind: "centro" | "sin-centro" }[];
+  } = {},
 ): SelectionContext {
   return {
     sources,
     activeCenterId,
     frequency: options.frequency ?? "mensual",
     year: options.year ?? 2026,
+    // Los establecimientos reales; las fuentes de prueba no traen ni Consolidado ni «Sin centro».
+    centers:
+      options.centers ??
+      sources.map((source) => ({
+        id: source.centerId,
+        name: source.centerName,
+        kind: "centro" as const,
+      })),
   };
 }
 
@@ -49,6 +62,28 @@ const SIN_INGRESOS = ctx(
         [...CULTURA_MANOR_SOURCE.valuesByCode].map(([code, values]) => [
           code,
           code.startsWith("4") ? values.map(() => 0) : values,
+        ]),
+      ),
+    },
+  ],
+  "cultura-manor",
+);
+
+/**
+ * El mismo centro con TODO rótulo de hotelería renombrado: ni la rama ni sus hijas declaran
+ * nada. Renombrar solo la rama no basta desde que el nodo se reconoce también por sus hijas —que
+ * es lo que hace aparecer la vista en un plan que no escribe «hospedaje» en ninguna parte—.
+ */
+const SIN_HOTEL = ctx(
+  [
+    {
+      ...CULTURA_MANOR_SOURCE,
+      namesByCode: new Map(
+        [...CULTURA_MANOR_SOURCE.namesByCode].map(([code, name]) => [
+          code,
+          /habitacion|hospedaj|alojamient|lavander|restaurant|aliment|bebida|tour/i.test(name)
+            ? "Ventas Generales"
+            : name,
         ]),
       ),
     },
@@ -472,6 +507,135 @@ describe("lo que cada tarjeta dice de sí misma", () => {
  * cuenta, que la línea del total sea una consulta propia y no el techo de la pila, y que sin
  * nada que repartir lo diga en vez de dibujar.
  */
+describe("la vista predeterminada de líneas de negocio", () => {
+  const lines = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }));
+  const plain = buildGraficosCards(MANOR, emptyFilters());
+
+  it("cambia la primera tarjeta y ninguna otra", () => {
+    expect(lines.cards[0].title).toBe("Ventas por línea de negocio");
+    // Por JSON porque una opción lleva formateadores: dos cierres iguales no son el mismo objeto.
+    expect(JSON.stringify(lines.cards.slice(1))).toBe(JSON.stringify(plain.cards.slice(1)));
+    expect(lines.tiles).toEqual(plain.tiles);
+  });
+
+  it("dibuja una serie por categoría, con la rama de hospedaje fundida en una sola", () => {
+    expect(lines.cards[0].table.rows.map((row) => row.label)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Lavandería",
+      "Otros ingresos ordinarios",
+    ]);
+  });
+
+  it("gira el eje: las categorías son las FILAS de la tabla y las columnas lo comparado", () => {
+    // Con los meses en el eje, las cinco categorías que no son hospedaje quedan aplastadas contra
+    // él, sin rótulo propio ni sitio para su cifra.
+    expect(lines.cards[0].table.columns.length).toBeGreaterThan(0);
+    expect(lines.cards[0].option?.xAxis?.data).toEqual(
+      lines.cards[0].table.rows.map((row) => row.label),
+    );
+  });
+
+  it("dice qué agrupa y qué deja fuera, porque una barra no se llama como el plan", () => {
+    expect(lines.cards[0].note).toContain("Rebaja y/o Descuentos sobre Ventas");
+  });
+
+  it("desmarcarlos TODOS vuelve al centro resuelto, la regla de siempre", () => {
+    const sinMarcas = buildGraficosCards(
+      DOS_CENTROS,
+      withFilters({ preset: BUSINESS_LINES_PRESET }),
+    );
+    expect(sinMarcas.cards[0].subtitle).not.toContain("centros");
+  });
+
+  it("un establecimiento sin ventas en una línea no abre columna, y lo DICE", () => {
+    // Hospedaje enseña tres de los cinco marcados porque los otros dos no venden hospedaje; sin
+    // decirlo, una columna que falta se lee como un dato que falta.
+    // El segundo centro no vende lavandería: su columna no existe bajo esa categoría.
+    const sinLavanderia = {
+      ...CENTRO_PRINCIPAL_SOURCE,
+      valuesByCode: new Map(
+        [...CENTRO_PRINCIPAL_SOURCE.valuesByCode].map(([code, values]) => [
+          code,
+          // Lavandería vive en dos ramas del plan de prueba: `4.1.1.5` y el servicio externo.
+          code.startsWith("4.1.1.5") || code.startsWith("4.1.8") ? values.map(() => 0) : values,
+        ]),
+      ),
+    };
+    const porCentro = buildGraficosCards(
+      ctx([CULTURA_MANOR_SOURCE, sinLavanderia], "cultura-manor"),
+      withFilters({
+        preset: BUSINESS_LINES_PRESET,
+        centerIds: ["cultura-manor", "centro-de-costo-principal"],
+      }),
+    ).cards[0];
+    expect(porCentro.table.rows.filter((row) => row.sublabel === "Lavandería")).toHaveLength(1);
+    expect(porCentro.note).toContain("sin ventas en una línea no abre columna");
+  });
+
+  it("«Sin centro de costo» queda fuera del reparto y se DICE", () => {
+    // Son dólares que estaban en el consolidado y ya no están en ninguna columna; el resto de
+    // ausencias son desmarcados a la vista, en el propio desplegable.
+    const conCajon = ctx([CULTURA_MANOR_SOURCE, CENTRO_PRINCIPAL_SOURCE], "cultura-manor", {
+      centers: [
+        { id: "cultura-manor", name: "Cultura Manor", kind: "centro" },
+        { id: "centro-de-costo-principal", name: "Centro de Costo Principal", kind: "centro" },
+        { id: "sin-centro", name: "Sin centro de costo", kind: "sin-centro" },
+      ],
+    });
+    const card = buildGraficosCards(
+      conCajon,
+      withFilters({
+        preset: BUSINESS_LINES_PRESET,
+        centerIds: ["cultura-manor", "centro-de-costo-principal"],
+      }),
+    ).cards[0];
+    expect(card.subtitle).toContain("× 2 centros");
+    expect(card.note).toContain("Sin centro de costo no entra en el reparto");
+  });
+
+  it("con VARIOS centros marcados dibuja una barra por establecimiento", () => {
+    // Es la tabla del contador —categoría × sucursal— en un solo gráfico, y la única tarjeta que
+    // lee varios centros a la vez en vez del resuelto.
+    const porCentro = buildGraficosCards(
+      DOS_CENTROS,
+      withFilters({
+        preset: BUSINESS_LINES_PRESET,
+        centerIds: ["cultura-manor", "centro-de-costo-principal"],
+      }),
+    );
+    // Las COLUMNAS son los pares (categoría, establecimiento) y las barras siguen siendo los
+    // meses: las dos lecturas conviven en un gráfico, que es la forma de la hoja del contador.
+    // La fila lleva el ESTABLECIMIENTO y la categoría de subrótulo: el eje la escribe una vez
+    // sobre sus columnas en vez de repetirla entera en cada rótulo.
+    expect(porCentro.cards[0].table.rows.map((row) => `${row.sublabel} · ${row.label}`)).toEqual([
+      "Hospedaje · Cultura Manor",
+      "Hospedaje · Centro de Costo Principal",
+      "Restaurante · Cultura Manor",
+      "Restaurante · Centro de Costo Principal",
+      "Lavandería · Cultura Manor",
+      "Lavandería · Centro de Costo Principal",
+      "Otros ingresos ordinarios · Cultura Manor",
+      "Otros ingresos ordinarios · Centro de Costo Principal",
+    ]);
+    expect(porCentro.cards[0].table.columns[0]).toBe("Ene");
+    // Y el eje del gráfico gana un segundo renglón que nombra cada categoría sobre sus columnas.
+    const axes = porCentro.cards[0].option?.xAxis;
+    expect(Array.isArray(axes) && axes[1].data?.filter(Boolean)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Lavandería",
+      "Otros ingresos ordinarios",
+    ]);
+  });
+
+  it("se queda inerte con un plan que no declara líneas", () => {
+    const encendido = buildGraficosCards(SIN_HOTEL, withFilters({ preset: BUSINESS_LINES_PRESET }));
+    const apagado = buildGraficosCards(SIN_HOTEL, emptyFilters());
+    expect(encendido.cards[0].title).toBe(apagado.cards[0].title);
+  });
+});
+
 describe("la distribución de una cuenta", () => {
   const distribucionOf = (filters: PygFilters) => buildGraficosCards(MANOR, filters).cards[1];
 

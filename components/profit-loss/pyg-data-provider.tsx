@@ -40,6 +40,7 @@ import {
   type ConsolidatedWorkspace,
 } from "@/lib/profit-loss/consolidate";
 import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
+import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
 import {
   allowedFrequencies,
   applyEditsToLeafAccounts,
@@ -71,6 +72,8 @@ import {
   withClientToggled,
   withCodesCleared,
   withCodeToggled,
+  withPresetCleared,
+  withPresetSelected,
   withPeriodsCleared,
   withPeriodToggled,
   withYearsCleared,
@@ -287,6 +290,9 @@ interface PygDataValue {
   toggleClient: (clientId: string) => void;
   toggleYear: (year: number) => void;
   togglePeriod: (period: PeriodSlot) => void;
+  /** Elige (o quita, si ya estaba) una vista predeterminada; elegirla borra las marcas de cuenta. */
+  selectPreset: (id: string) => void;
+  clearPreset: () => void;
   /** Each dropdown's own "Quitar selección" footer button. */
   clearCodes: () => void;
   clearYears: () => void;
@@ -628,6 +634,38 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [filters, frequency],
   );
 
+  // La vista predeterminada siembra los ESTABLECIMIENTOS —los centros reales, sin el Consolidado
+  // (que es su suma) ni «Sin centro de costo» (que no es un establecimiento)—: lo que dibuja queda
+  // marcado en el desplegable, así que se ve qué entra y se quita desmarcando.
+  //
+  // Salvo en el CONSOLIDADO ENTRE CLIENTES, donde no se siembra nada: ahí los centros son de todos
+  // los clientes juntos y sembrarlos abriría decenas de columnas de golpe. Quien entra al
+  // consolidado sabe cuántos hay, así que elegir cuáles comparar es suyo.
+  // Y siembra también los PERIODOS cubiertos de la granularidad abierta, por el mismo motivo: los
+  // meses que dibuja se quitan y se ponen desde «Periodo». Un mes que el archivo nunca trajo no se
+  // marca — sería una columna vacía pidiendo sitio.
+  const selectPreset = useCallback(
+    (id: string) => {
+      const covered = aggregateCoverage(
+        new Set(loadedMonthsByYear[chartYear] ?? EMPTY_MONTHS),
+        "mensual",
+        frequency,
+      );
+      setRawFilters(
+        withPresetSelected(
+          filters,
+          id,
+          isConsolidated
+            ? []
+            : views.filter((view) => view.role === "center").map((view) => view.id),
+          periodSlots(frequency).filter((slot) => covered.has(slot.index)),
+        ),
+      );
+    },
+    [filters, views, isConsolidated, loadedMonthsByYear, chartYear, frequency],
+  );
+  const clearPreset = useCallback(() => setRawFilters(withPresetCleared(filters)), [filters]);
+
   const clearCodes = useCallback(() => setRawFilters(withCodesCleared(filters)), [filters]);
   const clearCenters = useCallback(() => setRawFilters(withCentersCleared(filters)), [filters]);
   const clearClients = useCallback(() => setRawFilters(withClientsCleared(filters)), [filters]);
@@ -946,6 +984,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       toggleClient,
       toggleYear,
       togglePeriod,
+      selectPreset,
+      clearPreset,
       clearCodes,
       clearCenters,
       clearClients,
@@ -1006,6 +1046,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       toggleClient,
       toggleYear,
       togglePeriod,
+      selectPreset,
+      clearPreset,
       clearCodes,
       clearCenters,
       clearClients,

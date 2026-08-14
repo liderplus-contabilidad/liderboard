@@ -43,6 +43,14 @@ function makeContext(overrides: Partial<SelectionContext> = {}): SelectionContex
     activeCenterId: "cultura-manor",
     frequency: "mensual",
     year: 2026,
+    centers: [
+      { id: "cultura-manor", name: "Cultura Manor", kind: "centro" as const },
+      {
+        id: "centro-de-costo-principal",
+        name: "Centro de Costo Principal",
+        kind: "centro" as const,
+      },
+    ],
     ...overrides,
   };
 }

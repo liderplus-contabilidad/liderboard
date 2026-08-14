@@ -26,10 +26,19 @@ export interface PygFilters {
   years: number[];
   /** Marked periods, year-less: a mark narrows the axis of EVERY visible year. */
   periods: PeriodSlot[];
+  /**
+   * La VISTA PREDETERMINADA elegida (`preset-views.ts`), o `null`. No es una marca sino otra forma
+   * de decidir qué compara la primera tarjeta de Gráficos, y por eso es EXCLUYENTE con `codes` en
+   * los dos sentidos: elegir una borra las marcas de cuenta y marcar una cuenta la deselecciona.
+   * Las dos a la vez pondrían dos respuestas distintas a «qué series dibujo» sin nada que las
+   * arbitre. Es un `string` y no el tipo del catálogo para que este módulo —que `PygDataProvider`
+   * importa por Datos— no arrastre `charts/` consigo.
+   */
+  preset: string | null;
 }
 
 export function emptyFilters(): PygFilters {
-  return { codes: [], centerIds: [], clientIds: [], years: [], periods: [] };
+  return { codes: [], centerIds: [], clientIds: [], years: [], periods: [], preset: null };
 }
 
 /**
@@ -47,12 +56,48 @@ function toggled<T>(current: readonly T[], value: T, universe: readonly T[]): T[
   return universe.filter((candidate) => picked.has(candidate));
 }
 
+/** Marcar una cuenta deselecciona la vista predeterminada: dos respuestas a la misma pregunta. */
 export function withCodeToggled(
   filters: PygFilters,
   code: string,
   universe: readonly string[],
 ): PygFilters {
-  return { ...filters, codes: toggled(filters.codes, code, universe) };
+  return {
+    ...filters,
+    codes: toggled(filters.codes, code, universe),
+    preset: null,
+  };
+}
+
+/**
+ * Elige una vista predeterminada — y elegir la que ya está puesta la quita, que es como se sale de
+ * ella sin un «ninguna» que no dice nada. Al entrar borra las marcas de cuenta, la otra mitad de
+ * esa exclusividad.
+ *
+ * Y SIEMBRA lo que la vista reparte —los centros y los periodos— en vez de repartirlo por su
+ * cuenta: lo que dibuja queda marcado en «Centro de costo» y en «Periodo», así que se ve qué entra
+ * y se quita o se añade desde los mismos desplegables de siempre, que es donde el usuario ya sabe
+ * buscar. Al salir se limpian: eran marcas que puso la vista, y dejar chips detrás de un
+ * interruptor apagado es basura que el usuario no puso.
+ */
+export function withPresetSelected(
+  filters: PygFilters,
+  id: string,
+  seedCenterIds: readonly string[] = [],
+  seedPeriods: readonly PeriodSlot[] = [],
+): PygFilters {
+  const next = filters.preset === id ? null : id;
+  return {
+    ...filters,
+    preset: next,
+    codes: next === null ? filters.codes : [],
+    centerIds: next === null ? [] : [...seedCenterIds],
+    periods: next === null ? [] : [...seedPeriods],
+  };
+}
+
+export function withPresetCleared(filters: PygFilters): PygFilters {
+  return { ...filters, preset: null, centerIds: [], periods: [] };
 }
 
 export function withCenterToggled(
@@ -260,5 +305,9 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
     clientIds: prunedClientIds,
     years: prunedYears,
     periods: prunedPeriods,
+    // No se poda aquí: si una vista predeterminada es dibujable se sabe por los NOMBRES de las
+    // cuentas, que este contexto no trae. Con un plan que no la admite queda inerte —la tarjeta
+    // dibuja lo de siempre— y la sección de la barra ni siquiera se rinde.
+    preset: filters.preset,
   };
 }

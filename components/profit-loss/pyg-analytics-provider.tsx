@@ -68,9 +68,24 @@ export function PygAnalyticsProvider({
   );
   const year = dataset?.year ?? 0;
 
+  // Los establecimientos reales, que es lo que la vista de líneas de negocio dibuja por defecto:
+  // sin el Consolidado —la suma de todos, no un centro— y sin «Sin centro de costo», que no es un
+  // establecimiento sino lo que el sistema contable no supo asignar.
+  const centers = useMemo(
+    () =>
+      views
+        .filter((view) => view.role === "center" || view.role === "sin-centro")
+        .map((view) => ({
+          id: view.id,
+          name: view.name,
+          kind: view.role === "sin-centro" ? ("sin-centro" as const) : ("centro" as const),
+        })),
+    [views],
+  );
+
   const context = useMemo<SelectionContext>(
-    () => ({ sources, activeCenterId, frequency, year }),
-    [sources, activeCenterId, frequency, year],
+    () => ({ sources, activeCenterId, frequency, year, centers }),
+    [sources, activeCenterId, frequency, year, centers],
   );
 
   // Sanitized on read rather than in an effect, like every other derived value here: a base the

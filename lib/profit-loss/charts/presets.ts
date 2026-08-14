@@ -48,6 +48,13 @@ const UNCAPPED = Number.MAX_SAFE_INTEGER;
 
 export interface PresetQueryOptions {
   limit?: number;
+  /**
+   * Los centros que la consulta lee, cuando NO son el resuelto. Lo pide la vista de líneas de
+   * negocio, que dibuja una barra por establecimiento y por tanto necesita leer varios a la vez —
+   * el resto de tarjetas siguen leyendo el que resolvió la barra, que es lo que las hace comparables
+   * entre sí.
+   */
+  centerIds?: readonly string[];
   /** Marked periods that narrow the eje; omit (or empty) for the whole axis of the frequency —
    * the same "acota, no multiplica" rule the filter bar's periods apply everywhere else. */
   periods?: readonly PeriodRef[];
@@ -65,7 +72,10 @@ export function presetQuery(
 ): SeriesQuery {
   return {
     codes,
-    centerIds: [context.activeCenterId],
+    centerIds:
+      options.centerIds && options.centerIds.length > 0
+        ? [...options.centerIds]
+        : [context.activeCenterId],
     years: [context.year],
     frequency: context.frequency,
     ...(options.periods && options.periods.length > 0 ? { periods: [...options.periods] } : {}),
@@ -77,7 +87,7 @@ export function presetQuery(
 export function compositionQuery(
   codes: string[],
   context: SelectionContext,
-  options: Pick<PresetQueryOptions, "periods"> = {},
+  options: Pick<PresetQueryOptions, "periods" | "centerIds"> = {},
 ): SeriesQuery {
   return presetQuery(codes, context, { ...options, limit: UNCAPPED });
 }

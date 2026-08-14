@@ -11,10 +11,12 @@ import { periodSlots } from "@/lib/profit-loss/filters";
 import { deepestLevel, matchExpandLevel } from "@/lib/profit-loss/filter";
 import type { AccountRow, Frequency } from "@/lib/profit-loss/types";
 import { AccountFilter } from "./account-filter";
+
 import { ActiveFilterChips } from "./active-filter-chips";
 import { CenterFilter } from "./center-filter";
 import { ClientFilter } from "./client-filter";
 import { PeriodFilter } from "./period-filter";
+import { PresetFilter } from "./preset-filter";
 import { YearFilter } from "./year-filter";
 import { usePygData } from "./pyg-data-provider";
 
@@ -114,6 +116,7 @@ export function PygToolbar() {
           onToggle={togglePeriod}
           onClear={clearPeriods}
         />
+        <PresetFilter />
 
         <div className="ml-auto flex items-center gap-2.5">
           <ToolbarLabel>Ver por</ToolbarLabel>
