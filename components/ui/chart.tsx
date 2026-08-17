@@ -4,6 +4,7 @@ import { BarChart, LineChart, PieChart } from "echarts/charts";
 import {
   GridComponent,
   LegendComponent,
+  MarkAreaComponent,
   MarkLineComponent,
   TooltipComponent,
 } from "echarts/components";
@@ -20,7 +21,9 @@ import { cn } from "@/lib/cn";
  * means adding it here, deliberately.
  *
  * `LabelLayout` is what `labelLayout.hideOverlap` needs to DROP a label that does not fit instead
- * of drawing it clipped. `MarkLineComponent` draws the 80% cut of the Pareto card.
+ * of drawing it clipped. `MarkLineComponent` draws the 80% cut of the Pareto card, y
+ * `MarkAreaComponent` la franja que dice hasta dónde llega cada grupo del eje girado — sin
+ * registrarlo, un `markArea` no falla: no se dibuja, que es peor.
  */
 use([
   BarChart,
@@ -30,6 +33,7 @@ use([
   TooltipComponent,
   LegendComponent,
   MarkLineComponent,
+  MarkAreaComponent,
   LabelLayout,
   SVGRenderer,
 ]);

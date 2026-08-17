@@ -23,7 +23,7 @@ import { MONTHS_SHORT_ES } from "@/lib/date";
 import { areaKey, areaOptions } from "../areas";
 import { computeLinePayroll } from "../employee-input";
 import type { PayrollParameters } from "../engine/parameters";
-import type { PayrollEmployeeLine } from "../types";
+import type { PayrollEmployeeLine, PayrollExtraConcept } from "../types";
 import { passes, type SalariesFilters, type SalariesUniverse } from "./filters";
 import { employeeKey } from "./identity";
 
@@ -33,6 +33,10 @@ export interface SalariesPeriodRef {
   year: number;
   /** 0–11, como en el resto de la app. */
   monthIndex: number;
+  /** Los conceptos de ingreso extra que ese período declara, si declara alguno. Opcional porque
+   *  lo es en `PayrollPeriod`, del que esto es una proyección: el costo de un mes con bonos
+   *  aportables los INCLUYE, y sin este campo la columna saldría por debajo. */
+  extraConcepts?: readonly PayrollExtraConcept[];
 }
 
 export interface SalariesColumn {
@@ -131,9 +135,14 @@ function buildColumns(periods: readonly SalariesPeriodRef[]): SalariesColumn[] {
   }));
 }
 
-/** El costo patronal de una ficha: la columna `AY` del libro, siempre derivada por el motor. */
-function costOf(line: PayrollEmployeeLine, parameters: PayrollParameters): number {
-  return computeLinePayroll(line, parameters).employerCost;
+/** El costo patronal de una ficha: la columna `AY` del libro, siempre derivada por el motor. Los
+ *  conceptos extra son del PERÍODO, así que llegan con él y no con la ficha. */
+function costOf(
+  line: PayrollEmployeeLine,
+  parameters: PayrollParameters,
+  extraConcepts: readonly PayrollExtraConcept[],
+): number {
+  return computeLinePayroll(line, parameters, extraConcepts).employerCost;
 }
 
 /**
@@ -170,7 +179,10 @@ function buildAreaRows(
         // Ninguna ficha de esa área ese mes: hueco, no cero.
         return own.length === 0
           ? null
-          : own.reduce((sum, line) => sum + costOf(line, parameters), 0);
+          : own.reduce(
+              (sum, line) => sum + costOf(line, parameters, period.extraConcepts ?? []),
+              0,
+            );
       });
       return { id: `area:${key}`, label: area, values };
     })
@@ -210,7 +222,8 @@ function buildEmployeeRows(
       // Los períodos se recorren en orden ascendente, así que la última pasada es la más reciente.
       row.label = line.name;
       row.sublabel = line.role;
-      row.values[column] = (row.values[column] ?? 0) + costOf(line, parameters);
+      row.values[column] =
+        (row.values[column] ?? 0) + costOf(line, parameters, period.extraConcepts ?? []);
       rows.set(id, row);
     }
   });

@@ -135,6 +135,8 @@ export function PygExcelActions() {
               hideEmpty: hideZeroRows,
               centers: withEdits,
               ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
+              // Cada hoja de centro se lleva el suyo; la del Consolidado no, porque no es un centro.
+              ...(activeClient?.centerLogos ? { centerLogos: activeClient.centerLogos } : {}),
             });
             const blob = await exportMod.workbookToBlob(workbook);
             downloadBlob(blob, exportMod.multiCenterFilename(loadedYears));
@@ -251,6 +253,7 @@ export function PygExcelActions() {
     isConsolidated,
     contributors.length,
     activeClient?.logo,
+    activeClient?.centerLogos,
     dataset,
     datasets,
     mode,

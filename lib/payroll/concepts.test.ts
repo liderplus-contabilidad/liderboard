@@ -393,6 +393,8 @@ describe("el asterisco del comprobante", () => {
     variableCommission: 0,
     reserveFundPaid: 0,
     bonus: 0,
+    contributoryExtras: 0,
+    nonContributoryExtras: 0,
   };
 
   const BASES = [

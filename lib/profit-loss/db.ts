@@ -14,11 +14,11 @@
  * CASCADE — deleting a client takes its edits with it.
  */
 import Dexie, { type Table } from "dexie";
-import type { EntityLogo } from "@/lib/workspaces";
+import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
 import { sortClients, type PygClient } from "./clients";
 import { CONSOLIDATED_CLIENT_ID, type ClientContribution } from "./consolidate";
 import { segmentAccounts } from "./segment";
-import { assignCenterSlots } from "./workspace";
+import { assignCenterSlots, listCenters, type CenterOption } from "./workspace";
 import type { CellEdit, ImportedComment, ParsedDataset, PygDataset, WorkspaceMeta } from "./types";
 import { LEGACY_SYSTEM } from "./upload/systems";
 import { deriveWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity";
@@ -297,19 +297,25 @@ export async function createClient(name: string, logo?: EntityLogo): Promise<Pyg
 }
 
 /**
- * Cambia la ETIQUETA del cliente — su nombre y su logo — y NADA más: la identidad se deriva de los
- * datos, así que ni los datasets, ni los ajustes, ni los comentarios se tocan.
+ * Cambia la ETIQUETA del cliente — su nombre, su logo y los de sus centros — y NADA más: la
+ * identidad se deriva de los datos, así que ni los datasets, ni los ajustes, ni los comentarios se
+ * tocan.
  *
- * Los dos van en la misma escritura porque el diálogo los edita a la vez; `logo: null` lo quita, y
+ * Los tres van en la misma escritura porque el diálogo los edita a la vez; `logo: null` lo quita, y
  * un `undefined` en un `update` de Dexie borra la propiedad, que es exactamente lo que se quiere.
+ *
+ * `centerLogos` viaja SIEMPRE, aunque venga vacío: el diálogo que edita el nombre es el mismo que
+ * edita los logos de los centros, así que lo que trae es la foto completa. Hacerlo opcional
+ * obligaría a distinguir «no los toques» de «quítalos todos», y las dos llamadas se escriben igual.
  */
 export async function updateClient(
   clientId: string,
   name: string,
   logo: EntityLogo | null,
+  centerLogos: CenterLogos | undefined,
 ): Promise<void> {
   assertRealClient(clientId);
-  await db.clients.update(clientId, { name, logo: logo ?? undefined });
+  await db.clients.update(clientId, { name, logo: logo ?? undefined, centerLogos });
 }
 
 /**
@@ -355,6 +361,13 @@ export interface ClientSummary extends PygClient {
   identity: WorkspaceIdentity | null;
   /** Ascending; `[]` for a client with no data. */
   years: number[];
+  /**
+   * Sus centros de costo, en el orden del selector; `[]` en estado único o sin datos. Van en el
+   * MISMO resumen que ya alimenta el desplegable porque el diálogo que sube el logo de cada centro
+   * puede abrirse sobre un cliente que no está abierto — y las vistas del proveedor, que es de
+   * donde el resto de la app saca los centros, solo existen para el que sí lo está.
+   */
+  centerOptions: CenterOption[];
 }
 
 /**
@@ -380,6 +393,7 @@ export async function listClientSummaries(): Promise<ClientSummary[]> {
         ...client,
         identity: deriveWorkspaceIdentity(own, metaByClient.get(client.id)),
         years: [...new Set(own.map((d) => d.year))].sort((a, b) => a - b),
+        centerOptions: listCenters(own),
       };
     }),
   );

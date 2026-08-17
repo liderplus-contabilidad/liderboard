@@ -29,6 +29,7 @@ const MARCH_2026: JournalAmounts = {
   "fondo-reserva-iess-administracion": 0,
   viaticos: 0,
   "bono-nd": 0,
+  "bonos-aportables": 0,
   "seguro-privado": 0,
   "licencias-permisos-tiempo-parcial": 0,
   "sueldos-por-pagar": 2862.76,
@@ -58,6 +59,7 @@ const EXPECTED_ORDER = [
   "fondo-reserva-iess-administracion",
   "viaticos",
   "bono-nd",
+  "bonos-aportables",
   "seguro-privado",
   "licencias-permisos-tiempo-parcial",
   "sueldos-por-pagar",
@@ -76,13 +78,13 @@ const EXPECTED_ORDER = [
 ];
 
 describe("JOURNAL_ACCOUNTS", () => {
-  it("tiene 25 cuentas: 11 debe y 14 haber, en el orden del catálogo", () => {
+  it("tiene 26 cuentas: 12 debe y 14 haber, en el orden del catálogo", () => {
     expect(JOURNAL_ACCOUNTS.map((account) => account.id)).toEqual(EXPECTED_ORDER);
-    expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "debe")).toHaveLength(11);
+    expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "debe")).toHaveLength(12);
     expect(JOURNAL_ACCOUNTS.filter((account) => account.side === "haber")).toHaveLength(14);
   });
 
-  it("no repite ningún id entre las 25 cuentas", () => {
+  it("no repite ningún id entre las 26 cuentas", () => {
     const ids = JOURNAL_ACCOUNTS.map((account) => account.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -96,9 +98,14 @@ describe("JOURNAL_ACCOUNTS", () => {
     expect(sueldos621001[0].id).not.toBe(sueldos621001[1].id);
   });
 
-  it("Viaticos, Seguro Privado e Impuesto a la Renta no tienen código de cuenta", () => {
+  it("Viaticos, Bonos Aportables, Seguro Privado e Impuesto a la Renta no tienen código", () => {
     const sinCodigo = JOURNAL_ACCOUNTS.filter((account) => account.code === null).map((a) => a.id);
-    expect(sinCodigo).toEqual(["viaticos", "seguro-privado", "impuesto-renta-empleados"]);
+    expect(sinCodigo).toEqual([
+      "viaticos",
+      "bonos-aportables",
+      "seguro-privado",
+      "impuesto-renta-empleados",
+    ]);
   });
 
   it("«Seguro Privado» es la cuenta añadida, en el debe y leyendo Q", () => {
@@ -109,7 +116,7 @@ describe("JOURNAL_ACCOUNTS", () => {
     expect(cuenta?.sourceColumns).toEqual(["Q"]);
   });
 
-  it("las 25 cuentas declaran al menos una columna fuente", () => {
+  it("las 26 cuentas declaran al menos una columna fuente", () => {
     for (const account of JOURNAL_ACCOUNTS) {
       expect(account.sourceColumns.length).toBeGreaterThan(0);
     }
@@ -157,9 +164,9 @@ describe("buildJournalEntry", () => {
     expect(entry.balanced).toBe(false);
   });
 
-  it("sin importes, las 25 filas quedan en null y los totales en 0", () => {
+  it("sin importes, las 26 filas quedan en null y los totales en 0", () => {
     const entry = buildJournalEntry({});
-    expect(entry.lines).toHaveLength(25);
+    expect(entry.lines).toHaveLength(26);
     expect(entry.lines.every((line) => line.amount === null)).toBe(true);
     expect(entry.debit).toBe(0);
     expect(entry.credit).toBe(0);
@@ -171,7 +178,7 @@ describe("movingJournalLines", () => {
     const entry = buildJournalEntry(MARCH_2026);
     const moving = movingJournalLines(entry);
     expect(moving).toHaveLength(9);
-    expect(entry.lines).toHaveLength(25);
+    expect(entry.lines).toHaveLength(26);
   });
 
   it("no esconde una fila con amount null — no se sabe cuánto vale, no es cero", () => {

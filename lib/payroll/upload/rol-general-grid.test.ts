@@ -10,6 +10,7 @@ import {
 } from "./rol-general.fixtures";
 import {
   excelSerialToISODate,
+  findPeriod,
   locateColumns,
   missingColumnLabels,
   parsePeriodText,
@@ -247,5 +248,76 @@ describe("excelSerialToISODate", () => {
     expect(excelSerialToISODate(null)).toBeNull();
     expect(excelSerialToISODate(0)).toBeNull();
     expect(excelSerialToISODate(-5)).toBeNull();
+  });
+});
+
+describe("findPeriod — por su forma, no por su celda", () => {
+  it("lee el período del archivo del contador, donde vive en B2", () => {
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    expect(findPeriod(ROL_GENERAL_AOA, columns.headerRow)).toEqual({ year: 2026, monthIndex: 2 });
+  });
+
+  it("lo sigue leyendo cuando un membrete lo empuja hacia abajo", () => {
+    // Es el archivo que esta app genera: `writeLogoHeader` abre unas filas por encima del
+    // preámbulo, así que `B2` deja de ser `B2` y una coordenada fija no lo encontraría.
+    const withBand: Cell[][] = [[], [], [], ...ROL_GENERAL_AOA];
+    const columns = locateColumns(withBand);
+    expect(findPeriod(withBand, columns.headerRow)).toEqual({ year: 2026, monthIndex: 2 });
+  });
+
+  it("no mira por debajo de la cabecera, donde el cuerpo podría llevar cualquier texto", () => {
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    const sinPreambulo = ROL_GENERAL_AOA.map((row, index) =>
+      index < (columns.headerRow ?? 0) ? [] : row,
+    );
+    expect(findPeriod(sinPreambulo, columns.headerRow)).toBeNull();
+  });
+
+  it("ignora los rótulos del preámbulo, que no tienen su forma", () => {
+    // «TOTAL HORAS EXTRAS», «DECIMO IV MENSUAL» y la razón social conviven con el período en esas
+    // mismas filas: solo casa la celda que es, entera, un mes y un año.
+    const columns = locateColumns(ROL_GENERAL_AOA);
+    expect(findPeriod(ROL_GENERAL_AOA, columns.headerRow)).not.toBeNull();
+    expect(parsePeriodText("TOTAL HORAS EXTRAS")).toBeNull();
+    expect(parsePeriodText("HOTEL BOUTIQUE FICTICIO")).toBeNull();
+  });
+});
+
+describe("PAGADO en blanco no es cero", () => {
+  const columns = locateColumns(ROL_GENERAL_AOA);
+  const paidCol = columns.paidCol ?? -1;
+  const ordinalCol = columns.ordinalCol ?? -1;
+
+  /** El mismo libro, con la celda de `PAGADO` vacía en todas las filas de empleado. */
+  const blanked: Cell[][] = ROL_GENERAL_AOA.map((row) => {
+    const cells = [...row] as Cell[];
+    if (cells[ordinalCol] !== null && cells[ordinalCol] !== undefined && cells[ordinalCol] !== "") {
+      cells[paidCol] = null;
+    }
+    return cells;
+  });
+
+  it("una celda vacía se lee null: nadie declaró lo pagado", () => {
+    // Con la regla vieja volvía como `0`, y el empleado salía «con diferencia» por todo su líquido
+    // — que es exactamente lo que el rol descargado por la app diría de quien aún no ha cobrado.
+    const { rows } = readEmployeeRows(blanked, locateColumns(blanked));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.paid === null)).toBe(true);
+  });
+
+  it("un cero escrito sigue siendo cero", () => {
+    const zeroed: Cell[][] = blanked.map((row) => {
+      const cells = [...row] as Cell[];
+      if (
+        cells[ordinalCol] !== null &&
+        cells[ordinalCol] !== undefined &&
+        cells[ordinalCol] !== ""
+      ) {
+        cells[paidCol] = 0;
+      }
+      return cells;
+    });
+    const { rows } = readEmployeeRows(zeroed, locateColumns(zeroed));
+    expect(rows.every((row) => row.paid === 0)).toBe(true);
   });
 });

@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { EntityLogo } from "@/lib/workspaces";
+import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
   applyMonthSlice,
@@ -33,12 +33,14 @@ import {
 } from "@/lib/profit-loss/db";
 import {
   CONSOLIDATED_CLIENT_ID,
+  consolidatedCenterId,
   consolidateClients,
   selectContributions,
   type ClientContribution,
   type ConsolidatedWorkspace,
 } from "@/lib/profit-loss/consolidate";
 import { canSegment, isSegmented, twinWriteFor } from "@/lib/profit-loss/segment";
+import { aggregateCoverage } from "@/lib/profit-loss/analytics/source";
 import {
   allowedFrequencies,
   applyEditsToLeafAccounts,
@@ -70,6 +72,8 @@ import {
   withClientToggled,
   withCodesCleared,
   withCodeToggled,
+  withPresetCleared,
+  withPresetSelected,
   withPeriodsCleared,
   withPeriodToggled,
   withYearsCleared,
@@ -131,6 +135,13 @@ export interface CenterView {
    */
   shortName?: string;
   color?: string;
+  /**
+   * El logo que el usuario le subió a ESTE centro, si le subió alguno. Va en la vista y no se
+   * resuelve en cada pantalla porque lo leen tres —el desplegable, la cabecera y el informe—, y
+   * tres resoluciones de «cuál es el logo de este centro» podrían separarse en cuanto una de ellas
+   * olvidara el consolidado entre clientes, donde el id es compuesto.
+   */
+  logo?: EntityLogo;
   role: "consolidado" | "center" | "sin-centro" | "single";
   /**
    * This center across the VISIBLE years, ascending — what Datos lays side by side. Each slice
@@ -170,7 +181,12 @@ interface PygDataValue {
    * `clients.ts` where it can say what is wrong. */
   createClient: (name: string, logo?: EntityLogo) => Promise<string>;
   /** Cambia la ETIQUETA — nombre y logo — y nada más. */
-  updateClient: (clientId: string, name: string, logo: EntityLogo | null) => Promise<void>;
+  updateClient: (
+    clientId: string,
+    name: string,
+    logo: EntityLogo | null,
+    centerLogos: CenterLogos | undefined,
+  ) => Promise<void>;
   /** Deletes a client with everything it holds; the first remaining one BY NAME takes over. */
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
@@ -274,6 +290,9 @@ interface PygDataValue {
   toggleClient: (clientId: string) => void;
   toggleYear: (year: number) => void;
   togglePeriod: (period: PeriodSlot) => void;
+  /** Elige (o quita, si ya estaba) una vista predeterminada; elegirla borra las marcas de cuenta. */
+  selectPreset: (id: string) => void;
+  clearPreset: () => void;
   /** Each dropdown's own "Quitar selección" footer button. */
   clearCodes: () => void;
   clearYears: () => void;
@@ -413,13 +432,35 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [rawFilters, loadedYears],
   );
 
+  /**
+   * El logo de cada centro POR ID DE VISTA. Cubre las dos formas del id a la vez —el `centerId`
+   * suelto del cliente abierto y el compuesto `<clientId>::<centerId>` del consolidado entre
+   * clientes—, que es lo que deja a `buildViews` y a `buildConsolidatedViews` sin enterarse de que
+   * existen los logos.
+   */
+  const centerLogoById = useMemo(() => {
+    const byId = new Map<string, EntityLogo>();
+    for (const client of clients) {
+      for (const [centerId, logo] of Object.entries(client.centerLogos ?? {})) {
+        byId.set(consolidatedCenterId(client.id, centerId), logo);
+        if (client.id === activeClientId) {
+          byId.set(centerId, logo);
+        }
+      }
+    }
+    return byId;
+  }, [clients, activeClientId]);
+
   // buildViews needs every center's edits so the computed Consolidado reflects them.
   const views = useMemo<CenterView[]>(() => {
-    if (consolidated) {
-      return buildConsolidatedViews(consolidated, visibleYears);
-    }
-    return buildViews(datasets, allEdits, visibleYears);
-  }, [consolidated, datasets, allEdits, visibleYears]);
+    const built = consolidated
+      ? buildConsolidatedViews(consolidated, visibleYears)
+      : buildViews(datasets, allEdits, visibleYears);
+    return built.map((view) => {
+      const logo = centerLogoById.get(view.id);
+      return logo ? { ...view, logo } : view;
+    });
+  }, [consolidated, datasets, allEdits, visibleYears, centerLogoById]);
   const mode: "single" | "multi" =
     views.length <= 1 && views[0]?.role === "single" ? "single" : "multi";
 
@@ -592,6 +633,38 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     },
     [filters, frequency],
   );
+
+  // La vista predeterminada siembra los ESTABLECIMIENTOS —los centros reales, sin el Consolidado
+  // (que es su suma) ni «Sin centro de costo» (que no es un establecimiento)—: lo que dibuja queda
+  // marcado en el desplegable, así que se ve qué entra y se quita desmarcando.
+  //
+  // Salvo en el CONSOLIDADO ENTRE CLIENTES, donde no se siembra nada: ahí los centros son de todos
+  // los clientes juntos y sembrarlos abriría decenas de columnas de golpe. Quien entra al
+  // consolidado sabe cuántos hay, así que elegir cuáles comparar es suyo.
+  // Y siembra también los PERIODOS cubiertos de la granularidad abierta, por el mismo motivo: los
+  // meses que dibuja se quitan y se ponen desde «Periodo». Un mes que el archivo nunca trajo no se
+  // marca — sería una columna vacía pidiendo sitio.
+  const selectPreset = useCallback(
+    (id: string) => {
+      const covered = aggregateCoverage(
+        new Set(loadedMonthsByYear[chartYear] ?? EMPTY_MONTHS),
+        "mensual",
+        frequency,
+      );
+      setRawFilters(
+        withPresetSelected(
+          filters,
+          id,
+          isConsolidated
+            ? []
+            : views.filter((view) => view.role === "center").map((view) => view.id),
+          periodSlots(frequency).filter((slot) => covered.has(slot.index)),
+        ),
+      );
+    },
+    [filters, views, isConsolidated, loadedMonthsByYear, chartYear, frequency],
+  );
+  const clearPreset = useCallback(() => setRawFilters(withPresetCleared(filters)), [filters]);
 
   const clearCodes = useCallback(() => setRawFilters(withCodesCleared(filters)), [filters]);
   const clearCenters = useCallback(() => setRawFilters(withCentersCleared(filters)), [filters]);
@@ -798,8 +871,12 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [],
   );
   const updateClient = useCallback(
-    (clientId: string, name: string, logo: EntityLogo | null) =>
-      updateClientRow(clientId, name, logo),
+    (
+      clientId: string,
+      name: string,
+      logo: EntityLogo | null,
+      centerLogos: CenterLogos | undefined,
+    ) => updateClientRow(clientId, name, logo, centerLogos),
     [],
   );
   const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
@@ -907,6 +984,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       toggleClient,
       toggleYear,
       togglePeriod,
+      selectPreset,
+      clearPreset,
       clearCodes,
       clearCenters,
       clearClients,
@@ -967,6 +1046,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       toggleClient,
       toggleYear,
       togglePeriod,
+      selectPreset,
+      clearPreset,
       clearCodes,
       clearCenters,
       clearClients,

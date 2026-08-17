@@ -15,7 +15,12 @@
  * would only open the door to a caller reading series from somewhere other than the context —
  * exactly the divergence this module exists to close.
  */
-import { CHART_COMPOSITION_MAX, colorForCompositionSlot } from "@/lib/charts/palette";
+import {
+  CHART_COMPOSITION_MAX,
+  CHART_MAX_SERIES,
+  colorForCompositionSlot,
+  colorForEntity,
+} from "@/lib/charts/palette";
 import type { ChartCardSpec, ChartTable } from "@/lib/charts/types";
 import { periodLabel, periodRangeLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
@@ -24,12 +29,25 @@ import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/type
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
 import {
+  buildBusinessLines,
+  describeBusinessLines,
+  columnsByCategory,
+  columnsByCenter,
+  readByPeriod,
+  readTotal,
+  sumBusinessLines,
+  type BusinessLineSet,
+} from "./business-lines";
+import { BUSINESS_LINES_PRESET } from "./preset-views";
+import {
   distributionColor,
   distributionShares,
   foldDistribution,
   resolveDistributionParent,
 } from "./distribution";
 import {
+  categoryBarOption,
+  categoryTable,
   entryTable,
   horizontalBarOption,
   paretoOption,
@@ -56,6 +74,7 @@ import {
   leavesOfAny,
   presetQuery,
   REVENUE_ROOT,
+  seriesTotal,
   sumOver,
   topByMagnitude,
   topEntries,
@@ -151,6 +170,18 @@ function defaultEvolutionCodes(source: AnalyticsSource | undefined): string[] {
   return [REVENUE_ROOT, ...expenseRootsOf(source)];
 }
 
+/**
+ * Suma una lista de totales que pueden no existir: `null` es «no cubierto» y no cuenta, pero una
+ * lista ENTERA sin cobertura sigue siendo `null` — la diferencia entre un total de cero y no tener
+ * total, que es la regla del motor y no puede romperse justo en la línea que declara el cuadre.
+ */
+function addTotals(values: readonly (number | null)[]): number | null {
+  return values.reduce<number | null>(
+    (total, value) => (value === null ? total : (total ?? 0) + value),
+    null,
+  );
+}
+
 /** A card only carries `note` when there is one; an explicit `undefined` is a different shape. */
 function withNote(note: string | undefined): { note?: string } {
   return note === undefined ? {} : { note };
@@ -168,6 +199,126 @@ function paretoNote(pareto: ParetoResult): string | undefined {
     excludedNote(pareto.excluded, "Sin acumular") ?? "",
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+/**
+ * La tarjeta de cabecera cuando se lee por LÍNEAS DE NEGOCIO — con las CATEGORÍAS en el eje X.
+ *
+ * El eje va girado respecto del resto de la app, y esa es la decisión de la tarjeta. Con los meses
+ * en el eje, las cinco categorías que no son hospedaje comparten grupo con una barra cien veces
+ * mayor: quedan aplastadas contra el eje, sin rótulo propio y sin sitio para su cifra. Girándolo,
+ * cada categoría tiene su hueco y su nombre aunque su barra mida dos píxeles.
+ *
+ * Lo que se compara DENTRO de cada categoría no se declara: sale de lo que está marcado, la misma
+ * figura del módulo entero. Varios centros marcados dibujan una barra por establecimiento —que es
+ * la tabla del contador, categoría × sucursal, en un solo gráfico—; si no, cada periodo cubierto es
+ * una barra, y cuando son más de los que la paleta admite se cierra en una sola barra por categoría
+ * con el total del tramo, que además es la única lectura donde cada barra imprime su cifra encima.
+ */
+function businessLineCard(
+  set: BusinessLineSet,
+  bundle: SeriesBundle,
+  periodName: string,
+  centers: readonly { id: string; label: string }[],
+  omitted: readonly string[],
+): ChartCardSpec {
+  // Se suma CENTRO A CENTRO, siempre — también con uno solo. La tanda trae una serie por (cuenta,
+  // centro), así que una suma que las indexe por código se queda con la última y habla de un solo
+  // establecimiento: las barras dirían cinco hoteles y el cuadre uno, y la nota declararía medio
+  // millón «sin clasificar» que en realidad está dibujado.
+  const byCenter = centers.map((center) => ({
+    ...center,
+    summed: sumBusinessLines(
+      bundle.series.filter((entry) => entry.key.centerId === center.id),
+      set.lines,
+    ).series,
+  }));
+  const drawnCodes = new Set(
+    byCenter.flatMap((center) => center.summed.map((entry) => entry.key.code)),
+  );
+  const balance = {
+    lines: addTotals(
+      byCenter.flatMap((center) => center.summed.map((entry) => seriesTotal(entry))),
+    ),
+    section: addTotals(set.sectionCodes.map((code) => sumAllOver(bundle, code))),
+    excluded: addTotals(set.excluded.map((entry) => sumAllOver(bundle, entry.code))),
+    idle: set.lines.length - drawnCodes.size,
+  };
+
+  // Con varios centros cada columna del eje es un par (categoría, establecimiento) —la forma de la
+  // hoja del contador—, y las barras de dentro siguen siendo los periodos: las dos lecturas
+  // conviven en el mismo gráfico en vez de turnarse.
+  const columns =
+    centers.length > 1
+      ? columnsByCenter(byCenter, set.lines)
+      : columnsByCategory(byCenter[0]?.summed ?? []);
+  // Los periodos CUBIERTOS, no el eje entero: un año cargado hasta mayo compara cinco barras por
+  // categoría —el gráfico que la firma dibuja a mano—, y en cuanto pasa de las ocho ranuras de la
+  // paleta se cierra en una sola barra por categoría con el total, que es además la única lectura
+  // donde cada barra imprime su cifra encima.
+  const marks = bundle.periods
+    .map((period, index) => ({ index, label: periodLabel(period) }))
+    .filter((mark) => columns.some((column) => column.series.points[mark.index]?.value != null));
+  const reading =
+    marks.length > 1 && marks.length <= CHART_MAX_SERIES
+      ? readByPeriod(columns, marks)
+      : readTotal(columns, marks.length === 1 ? marks[0].label : periodName);
+  const order = reading.series.map((entry) => entry.id);
+  const context = { colorOf: (id: string) => colorForEntity(id, order) };
+
+  // El subtítulo cuenta LÍNEAS, no columnas: con tres centros marcados, «10 líneas» sería falso —
+  // son cuatro líneas vistas en tres establecimientos.
+  const drawnLines = new Set(columns.map((column) => column.series.key.code)).size;
+  const subtitle =
+    centers.length > 1
+      ? `${drawnLines} ${drawnLines === 1 ? "línea" : "líneas"} × ${centers.length} centros · ${periodName}`
+      : `${drawnLines} ${drawnLines === 1 ? "línea" : "líneas"} · ${periodName}`;
+
+  const drawn = reading.categories.length > 0 && reading.series.length > 0;
+  return {
+    id: "evolucion",
+    title: "Ventas por línea de negocio",
+    subtitle,
+    option: drawn
+      ? categoryBarOption(reading.categories, reading.series, context, reading.groups)
+      : null,
+    table: drawn
+      ? categoryTable(reading.categories, reading.series, context, reading.groups)
+      : EMPTY_TABLE,
+    warnings: bundle.warnings,
+    ...withNote(
+      [
+        describeBusinessLines(set, balance),
+        // Por qué Hospedaje enseña tres establecimientos y no los cinco marcados: los otros dos no
+        // venden hospedaje. Sin decirlo, una columna que falta se lee como un dato que falta.
+        centers.length > 1 && columns.length < drawnLines * centers.length
+          ? "Un establecimiento sin ventas en una línea no abre columna."
+          : "",
+        // Por qué doce meses marcados dibujan UNA barra: la paleta tiene ocho colores. Se dice con
+        // lo que hay que hacer para volver a verlos uno a uno, no solo con el motivo.
+        marks.length > CHART_MAX_SERIES
+          ? `Con más de ${CHART_MAX_SERIES} periodos marcados cada columna muestra el total del tramo; desmarca alguno en «Periodo» para compararlos uno a uno.`
+          : "",
+        omitted.length > 0 && centers.length > 1
+          ? `${omitted.join(" y ")} no entra en el reparto por establecimiento; márcalo en «Centro de costo» para incluirlo.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined,
+    ),
+    height: 300,
+  };
+}
+
+/**
+ * Una cuenta sumada sobre TODAS las series que la traen, que con varios centros en juego son
+ * varias. `sumOver` devuelve la primera, y con eso el cuadre de la nota hablaría de un solo
+ * establecimiento mientras las barras hablan de cinco.
+ */
+function sumAllOver(bundle: SeriesBundle, code: string): number | null {
+  return addTotals(
+    bundle.series.filter((entry) => entry.key.code === code).map((entry) => seriesTotal(entry)),
+  );
 }
 
 /**
@@ -219,6 +370,41 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
     periods: evolution.periods,
     shares: new Map(shares.map((share) => [share.seriesId, share])),
   };
+
+  // La primera tarjeta responde UNA de dos preguntas, nunca las dos: qué comparan las cuentas
+  // marcadas, o —con una vista predeterminada elegida— lo que esa vista presenta. Que sean
+  // excluyentes lo garantiza `filters.ts`; aquí solo se elige, y un plan que no declara líneas
+  // deja la marca inerte en vez de vaciar la tarjeta.
+  const lineSet = filters.preset === BUSINESS_LINES_PRESET ? buildBusinessLines(source) : null;
+  // La consulta lleva, además de las cuentas miembro, las EXCLUIDAS y la sección entera: son las
+  // dos cifras con las que la nota cuadra la lectura contra el estado, y pedirlas aparte abriría la
+  // puerta a cuadrar contra un tramo distinto del que dibujan las barras.
+  // Qué establecimientos dibuja la vista: los MARCADOS, que al encenderla son todos los reales
+  // porque `withPresetSelected` los siembra — así lo dibujado y lo marcado son lo mismo y se quita
+  // uno desmarcándolo. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre. Es la
+  // única tarjeta que lee varios centros a la vez, y por eso la consulta los pide aquí.
+  const lineCenters = filters.centerIds.length > 0 ? filters.centerIds : [context.activeCenterId];
+  // Lo que el reparto deja fuera se DICE: son dólares que estaban en el consolidado y ya no están
+  // en ninguna columna. El cajón del sistema contable es el único que la vista deja fuera sola —el
+  // resto de ausencias son desmarcados a la vista, en el propio desplegable.
+  const omittedCenters = context.centers.filter(
+    (center) => center.kind === "sin-centro" && !lineCenters.includes(center.id),
+  );
+  const lineBundle =
+    lineSet && lineSet.lines.length > 0
+      ? runQuery(
+          compositionQuery(
+            [
+              ...lineSet.lines.flatMap((line) => line.codes),
+              ...lineSet.excluded.map((entry) => entry.code),
+              ...lineSet.sectionCodes,
+            ],
+            context,
+            { periods: periodRefs, centerIds: lineCenters },
+          ),
+        )
+      : null;
+  const centerLabels = new Map(context.sources.map((entry) => [entry.centerId, entry.centerName]));
 
   // Distribución: de qué está hecha una cuenta, periodo a periodo. La cuenta la resuelve la misma
   // figura que el centro y el año — exactamente una marcada es esa, ninguna o varias es Ingresos —
@@ -312,19 +498,27 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
       },
     ],
     cards: [
-      {
-        id: "evolucion",
-        title: filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos",
-        subtitle: `${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`,
-        option:
-          evolution.series.length > 0
-            ? seriesOptionFor("barras", evolution.series, evolutionContext)
-            : null,
-        table: seriesTableFor("barras", evolution.series, evolutionContext),
-        warnings: evolution.warnings,
-        ...withNote(describeShares(shares)),
-        height: 300,
-      },
+      lineSet && lineBundle
+        ? businessLineCard(
+            lineSet,
+            lineBundle,
+            periodName,
+            lineCenters.map((id) => ({ id, label: centerLabels.get(id) ?? id })),
+            omittedCenters.map((center) => center.name),
+          )
+        : {
+            id: "evolucion",
+            title: filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos",
+            subtitle: `${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`,
+            option:
+              evolution.series.length > 0
+                ? seriesOptionFor("barras", evolution.series, evolutionContext)
+                : null,
+            table: seriesTableFor("barras", evolution.series, evolutionContext),
+            warnings: evolution.warnings,
+            ...withNote(describeShares(shares)),
+            height: 300,
+          },
       {
         id: "distribucion",
         title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",

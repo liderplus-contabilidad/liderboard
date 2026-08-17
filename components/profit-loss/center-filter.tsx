@@ -97,6 +97,19 @@ export function CenterFilter({
                       className="h-2 w-2 shrink-0 rounded-[2px]"
                       style={{ backgroundColor: view.color ?? "var(--color-faintest)" }}
                     />
+                    {/* La miniatura solo aparece donde hay logo: reservarle hueco a todas las filas
+                        sangraría la lista entera por un espacio que casi nunca se llena, y lo que
+                        se lee en vertical aquí es el nombre. */}
+                    {view.logo && (
+                      // oxlint-disable-next-line next/no-img-element
+                      <img
+                        src={view.logo.dataUrl}
+                        alt=""
+                        width={view.logo.width}
+                        height={view.logo.height}
+                        className="size-4 shrink-0 rounded-[3px] object-contain"
+                      />
+                    )}
                     {/* Bajo el encabezado de su cliente, repetirlo en cada fila sería ruido. */}
                     {group.label === null ? view.name : (view.shortName ?? view.name)}
                   </span>

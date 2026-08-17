@@ -400,8 +400,15 @@ the control disappears once there is nothing left to segment instead of sitting 
 presence of root 6 IS the flag, so there is no dataset field to migrate. `lib/profit-loss/
 segment.ts` (pure + tested) owns the rules: the 5.2→6 mapping, `twinCode` (6.1.1 ↔ 5.2.1.1) and
 `twinWriteFor`, which is what makes the pair hold — writing a non-operating amount ALSO writes its
-twin inside 5.2, discounted **by difference** against what the twin holds right now, so a manual
-correction on 5.2 survives and re-typing a cell moves only the delta. Section 5 keeps behaving
+twin inside 5.2, **anclado a lo que trajo el archivo** (`original − valor`), así que el par SIEMPRE
+suma el monto cargado y re-teclear una celda no descuenta dos veces. Se descontaba «por diferencia»
+contra lo que el gemelo tuviera en ese momento —mismo resultado mientras nadie más escribiera en
+5.2, y una corrección manual sobrevivía—, pero eso hacía que el resultado dependiera del ORDEN de
+dos gestos que significan lo mismo: vaciar 5.2 a mano y luego teclear ese monto abajo lo descontaba
+dos veces y dejaba la celda operativa en NEGATIVO, un gasto que el archivo nunca trajo.
+Reclasificar a mano es reclasificar, así que los dos órdenes tienen que caer en el mismo sitio; el
+precio, escrito en los tests, es que una corrección hecha a mano sobre 5.2 la PISA la siguiente
+escritura en su gemela en vez de componerse con ella. Section 5 keeps behaving
 exactly as before (still editable); nothing clamps, so over-classifying leaves the twin negative.
 `computeResult` now returns the split (`operating`/`nonOperating`/`expenses`/`values`) and
 `toDatosGrid` emits ONE «Utilidad o Pérdida» row unsegmented, four summaries segmented — each
@@ -667,6 +674,121 @@ acotar «Periodo» reaparece el monto encima. Nada de lo que se veía antes deja
 sin parentesco dejan la gráfica exactamente igual. La tabla gemela sigue siendo montos y el informe
 imprimible lo hereda sin tocarlo, porque lee el mismo `buildGraficosCards`.
 
+**«PREDETERMINADOS» es una SECCIÓN propia de la barra**, con su rótulo y separada por una línea de
+los cinco desplegables: aquellos ACOTAN lo que ya hay en pantalla y este lo SUSTITUYE por otra
+lectura, de las que la firma presenta siempre. `lib/profit-loss/charts/preset-views.ts` es el
+catálogo —una lista y no un `if`—, cada entrada con su `isAvailable`, porque quién puede dibujar una
+vista es de la vista; añadir la siguiente es una entrada ahí más su rama en `cards.ts`, sin tocar la
+barra ni los filtros. Cada vista es un INTERRUPTOR a la vista y no una opción dentro de un menú —se
+presentan de un clic, y un menú esconde tras un rótulo genérico lo único que hay que leer—, y la
+sección **se rinde entera** cuando el plan abierto no admite ninguna, ya que un rótulo sobre un
+control muerto enseña a no leer ninguno de los dos.
+
+**Su primera vista, «Ventas», es la primera vez que una serie NO es una cuenta, y la única tarjeta
+con el EJE GIRADO.** La primera tarjeta de Gráficos pasa a comparar SEIS CATEGORÍAS —Hospedaje,
+Restaurante, Lavandería, Bar, Tours y el resto de los ingresos ordinarios—, una serie por línea
+sobre el mismo eje de periodos. Existe porque esa pregunta no cabe en el plan: «hospedaje» son dos
+ramas enteras de tarifa menos lo que el contador colgó ahí y es otro negocio (Eventos);
+«restaurante» y «bar» viven MEZCLADOS bajo una sola cuenta de Alimentos y Bebidas donde solo el
+nombre los separa; y «lavandería» y «tours» están DUPLICADOS en ramas distintas y a distinta
+profundidad, uno de ellos escondido bajo un padre llamado «Otros Ingresos de Actividades
+Ordinarias». `lib/profit-loss/charts/business-lines.ts` (puro + testeado) localiza todo POR RÓTULO y
+jamás por código —la regla de `microplus-grid.ts` y `dingoo-grid.ts`, y lo que hace que funcione con
+`4.1.01.01` y con `4.1.1.1`—: el nodo de hospedaje se busca por su nombre a cualquier profundidad
+bajo Ingresos y su PADRE es la sección de actividades ordinarias, en vez de dar por hecho que es
+`4.1` — y si NINGUNA cuenta escribe «hospedaje», el nodo se reconoce por sus hijas, la que vende
+habitaciones, que es un plan real de la firma. **La lectura entra además en toda rama hermana que el
+PLAN declare también ordinaria**: un cliente llama a su `4.2` «Otros Ingresos de Actividades
+Ordinarias» y mete ahí las `Comisiones Tours` que su propio informe cuenta como Tours, mientras otro
+llama al suyo «Otros Ingresos» a secas; seguir lo que el plan declara es lo que deja fuera solos a
+los ingresos financieros. Sin esa regla faltaban $684 de enero contra el informe del contador.
+
+**Son categorías DECLARADAS y no una barra por cuenta**, y eso se probó al revés primero: con una
+barra por cuenta suelta, el plan real daba DOCE líneas para las OCHO ranuras de la paleta, así que
+la lectura dependía de cuáles cabían —las dos lavanderías salían separadas, una dibujada y la otra
+dentro de un «Otras líneas» que nadie podía cuadrar—. Con cinco categorías más el resto son seis,
+nunca se pliega nada, y una cuenta duplicada suma en su categoría en vez de competir consigo misma
+por una ranura. Tres reglas sostienen el reparto: **Hospedaje corta por PROFUNDIDAD** —solo las
+hijas DIRECTAS del nodo que dicen hospedaje, alojamiento, habitación, suite o tarifa, y esas se
+llevan su rama completa, incluida una `Ventas Restaurante` colgada dentro de `Habitaciones
+Sencillas`—, lo que separa ese caso del de `Ventas Eventos`, que cuelga del mismo nodo y no es
+hospedaje; **Bar es lo que dice bebidas y Restaurante es EL RESTO** de Alimentos y Bebidas, no otra
+lista de palabras, así que los dos siempre suman esa cuenta entera y un «Sin desglosar» nuevo cae en
+Restaurante en vez de desaparecer; y **se DESCIENDE por lo que no encaja en ninguna categoría**, que
+es lo único que encuentra `Servicios de Lavandería` bajo un padre llamado «Otros Ingresos». Las
+líneas SIN MOVIMIENTO en el tramo se van y se cuentan —la regla de `foldDistribution`—, porque el
+plan declara `Venta Parqueadero` y `Ventas Telefono` en cero todo el año y cuatro barras invisibles
+entierran a la que importa. Rebajas y descuentos quedan fuera de todo: son un menos dentro de los
+ingresos y no una línea de negocio. **Y la nota CUADRA la lectura contra el estado**, que es la
+primera cuenta que hace cualquiera al ver seis barras — «Las 6 líneas suman $204.045,51 y el estado
+declara $201.998,26: la diferencia son −$2.047,25 de cuentas que quedan fuera» —, con centavos, al
+revés que el eje: aquí la cifra no se mira, se COTEJA. Por eso `excluded` lleva el código además del
+rótulo y `sectionCode` viaja en el conjunto: sin ellos la tarjeta puede nombrar lo excluido pero no
+sumarlo, y hacer esa resta a mano contra otra pestaña es lo que convierte una lectura correcta en
+una sospecha. Si lo excluido no explica la diferencia, la nota dice cuánto queda «sin clasificar» en
+vez de dejar dos cifras que no cierran. Una vista es **excluyente con las marcas de cuenta en los
+dos sentidos** —elegirla las borra, marcar una cuenta la deselecciona—, porque son dos respuestas a
+«qué series dibujo» sin nada que las arbitre; por eso `preset` vive en `PygFilters` (como `string |
+null`, para no arrastrar `charts/` a `filters.ts`) y no en la cabecera de su tarjeta, y por eso deja
+chip. La de «Ventas» no se ofrece cuando el plan no declara líneas (MicroPlus, Dingoo, un comercio),
+la misma regla que `center-filter.tsx` en modo estado único, y se exigen DOS o más: una sola barra
+no es una comparación. Datos, Análisis, las otras cuatro tarjetas y el informe imprimible no cambian
+ni una línea.
+
+**El eje va girado —las CATEGORÍAS en la X— y esa es la decisión de la tarjeta.** Con los meses en
+el eje, las cinco categorías que no son hospedaje comparten grupo con una barra cien veces mayor:
+quedan aplastadas contra él, sin rótulo propio y sin sitio para su cifra. Ninguna escala arregla esa
+diferencia de tamaño; lo que la arregla es que la pequeña deje de competir por el espacio de la
+grande. `categoryBarOption` y `categoryTable` (en `option.ts`) son los builders, y
+`ChartTableRow.color` pasó a ser OPCIONAL por ellos: ahí las filas son categorías y el color lo
+llevan las columnas, así que un punto de color emparejaría con algo que no existe. Lo que se compara
+DENTRO de cada columna sale de lo marcado, la figura de siempre: los periodos CUBIERTOS son las
+barras, y pasadas las ocho ranuras de la paleta se cierra en una sola barra por columna con el total
+del tramo —la única lectura donde cada barra imprime su cifra encima—.
+
+**Reparte por ESTABLECIMIENTO y por MES, y las marcas lo dicen.** Encender «Ventas» SIEMBRA los
+periodos cubiertos del año abierto en «Periodo» —los que dibuja, ni uno que el archivo no trajera— y
+los centros reales en «Centro de costo» (`withPresetSelected` recibe la lista; el proveedor la saca
+de las vistas con rol `center`), así que lo dibujado y lo marcado son lo mismo: se ve cuáles entran
+y se quita uno desmarcándolo, donde el usuario ya sabe buscar. Apagarla las limpia — eran marcas que
+puso la vista, y dejar cinco chips detrás de un interruptor apagado es basura que el usuario no
+puso. El Consolidado no se siembra porque no es un centro sino su suma, y «Sin centro de costo»
+tampoco porque no es un establecimiento sino lo que el sistema contable no supo asignar: mientras
+siga desmarcado la nota lo DICE, ya que son dólares que estaban en el consolidado y ya no están en
+ninguna columna. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre, y desmarcar
+meses acota el eje de TODAS las tarjetas, que es lo que una marca de «Periodo» siempre ha hecho. Con
+más de ocho periodos marcados cada columna se cierra en el total del tramo —ocho es lo que da la
+paleta— y la nota dice qué hacer para volver a compararlos uno a uno. **El CONSOLIDADO ENTRE
+CLIENTES es la excepción y no siembra nada**: allí los centros son de todos los clientes juntos y
+sembrarlos abriría decenas de columnas de golpe; quien entra al consolidado sabe cuántos hay, así
+que elegir cuáles comparar es suyo. Cada columna es entonces un par (categoría, establecimiento) con
+los meses dentro —la hoja del contador entera, actividad × sucursal × mes, en un gráfico—, y un par
+que no se mueve no abre columna, porque son justo las columnas vacías las que hacen ilegible el
+resto — con cinco centros marcados, Hospedaje enseña tres, y la nota lo DICE, porque una columna que
+falta se lee como un dato que falta. La suma del cuadre se hace CENTRO A CENTRO también con uno
+solo: la tanda trae una serie por (cuenta, centro), y una suma que las indexe por código se queda
+con la última —las barras dirían cinco hoteles, el cuadre uno, y la nota declararía medio millón
+«sin clasificar» que en realidad está dibujado—.
+
+**El eje lleva DOS RENGLONES**: abajo la categoría, una sola vez y en negrita sobre sus columnas, y
+encima el establecimiento de cada una. Repetir «Hospedaje · C. C. ALBEMARLE» cinco veces seguidas es
+lo que hacía ilegible el eje, así que la categoría viaja aparte (`CategoryColumn.group`) y
+`CategoryReading.groups` la resuelve en TRAMOS por consecutivos —el orden de las columnas es el que
+dice dónde empieza y acaba cada una, igual que `groupViews` en Ocupaciones—. El renglón es un
+SEGUNDO `xAxis`, y por eso `ChartOption` pasó a admitir un par: no es una segunda escala —ninguna
+serie se ata a él, es una banda de rótulos—, y el invariante que sigue intacto es el de `yAxis`,
+donde una segunda entrada sí haría comparables dos unidades que no lo son. El nombre se escribe en
+el CENTRO de su tramo y el resto de posiciones van en blanco, que es lo que lo hace parecer un
+encabezado; con un tramo par cae en la columna de la izquierda del medio, porque centrarlo exacto
+exigiría medir el gráfico y esto se decide sin renderizar nada. En la tabla gemela el grupo va de
+`sublabel`, no pegado al nombre: ahí hay sitio para los dos. **Hasta dónde llega cada grupo lo dice
+una FRANJA de fondo en los impares** (`markArea` con `CHART_BAND`, que espeja
+`--color-border-soft`), la lectura de una tabla de filas alternas: lo que hace ver el corte es el
+CAMBIO, y una divisoria por grupo añadiría verticales a una retícula que ya tiene horizontales. Sus
+extremos son ÍNDICES de columna y no rótulos, porque el mismo establecimiento aparece en varios
+grupos y un rango por nombre engancharía la primera aparición. Exigió registrar `MarkAreaComponent`
+en `chart.tsx`: sin él un `markArea` no falla, simplemente no se dibuja, que es peor.
+
 **«Distribución» es la tercera lectura de la composición y no repite a las otras dos**: la dona dice
 de qué se compone el TRAMO entero y el ranking cuáles son las más grandes, pero solo un apilado por
 periodo dice si una hija está ganando peso mes a mes. `lib/profit-loss/charts/distribution.ts` (puro y
@@ -804,10 +926,18 @@ contra el Excel comparando cadenas en vez de números contra otro cálculo; `lay
 generar un PDF que ninguna se sale de la hoja; `render.ts` las recorre y dibuja. Tipografía
 **Helvetica**, una de las base-14 del formato: cero bytes embebidos y dígitos de ancho fijo, además
 de métricamente compatible con la Arial del libro. Se importa en dinámico, como `exceljs`.
-Tres reglas son al revés que en la PANTALLA de detalle, y a propósito: **se imprimen las 26 filas
-siempre** con `-` donde no hay importe (`visibleIncomeConcepts` esconde los capturados en cero
-porque una tabla no puede parecer un formulario a medio llenar; el papel ES un formulario de
-posición fija, y quien lo revisa busca el anticipo en la cuarta fila de egresos); **el orden es el de
+**Solo se imprimen las filas CON importe** —cinco de las 26 en el empleado de muestra—, y eso NO es
+la regla de la pantalla aunque se le parezca: `visibleIncomeConcepts` esconde lo que se TECLEA en
+cero y conserva siempre lo derivado, porque esa tabla es donde se captura y una fila que se va se
+lleva el sitio donde escribirla; el papel no captura nada, así que juzga el IMPORTE, venga del motor
+o de la captura, con `sameToTheCentavo` para que un `1e-14` del motor no ocupe renglón. Se
+imprimieron las 26 siempre, con `-` en las vacías, tratándolo como el formulario de posición fija
+que es el Excel; la firma pidió lo contrario. Omitir filas se lleva por delante tres cosas más: no
+queda ningún cero de fila al que ponerle la raya del libro (filas y totales comparten un solo
+`formatPayslipAmount`, y el `$0.00` de un total se queda porque un total es una afirmación sobre el
+mes), ningún importe va ya en tinta débil, y la cabecera `Cantidad` y la nota al pie del `(*)` solo
+se escriben si alguna fila impresa las usa — rotular una columna vacía promete un dato que no está.
+Dos reglas siguen siendo al revés que en la pantalla: **el orden es el de
 COLUMNAS del libro**, así que el fondo de reserva sale duodécimo y no séptimo — y eso no obliga a una
 segunda lista, se ordena por el campo `column` que `concepts.ts` ya trae; y **no salen las cuatro
 filas de egreso sin rótulo** (`AJ`–`AM`), que el catálogo excluye desde antes. Los rótulos son
@@ -829,9 +959,9 @@ escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee l
 desde la ficha y el motor, la misma regla que el asiento y los totales del período.
 **Todo importe lleva el `$`** de `formatCurrency`, filas incluidas, aunque el libro las deje sin
 símbolo y solo ponga `US$` en sus tres totales: un solo dialecto del dólar entre la pantalla y el
-papel. Lo que sí se conserva es la raya del cero, y solo en las FILAS — un total en cero escribe
-`$0.00`, porque la raya de una fila dice «nada que declarar» y un total es una afirmación sobre el
-mes que tras una raya parecería un dato que falta.
+papel. `formatPayslipAmount` no sube a `lib/format.ts` por dos razones que siguen en pie — dos
+decimales SIEMPRE, y el signo juzgado tras redondear a centavos, porque el ruido de coma flotante
+del motor imprimiría un `-$0.00` en la banda del líquido con la regla de `formatCurrency`.
 **La JERARQUÍA es del documento y los COLORES son del libro**, que es la única desviación deliberada
 de la fidelidad: cinco bloques con peso distinto —encabezado, panel de identidad, las dos secciones
 y la banda del líquido— en vez de la rejilla plana del Excel, porque un papel que se firma se lee de
@@ -840,11 +970,42 @@ rellenos del propio contador que Datos ya usa en la raíz 4 y la 5, así que un 
 en su Excel, en la pantalla y aquí; los hexes viven en `payslip/palette.ts`, espejo del `@theme` —
 la misma duplicación permitida que `lib/charts/palette.ts`, porque ni un canvas ni un PDF resuelven
 una variable CSS. `LIQUIDO A RECIBIR` es la ÚNICA banda oscura (`ink`, texto blanco) y NO usa
-`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. Un
-cero va en `faint` para no competir con las pocas cifras que dicen algo, la franja alterna es tan
-clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de escribirse con `_`.
+`brand`: teñirlo de marca haría del comprobante un documento de la app en vez del de la firma. La
+franja alterna es tan clara que desaparece en fotocopia, y la raya de la firma se DIBUJA en vez de
+escribirse con `_`.
 `layout.ts` emite rellenos, reglas y cajas por separado y `render.ts` los dibuja en ese orden — al
 revés, una banda taparía su propio rótulo.
+
+**LA DESCARGA DEL ROL EN EXCEL** (`lib/payroll/export/`) es el espejo del importador: aquel dice DÓNDE
+ESTÁ cada columna en el archivo del contador, este DÓNDE SE ESCRIBE y DE DÓNDE SALE. Una sola hoja
+`GENERAL` con la forma del libro —`B1` el cliente, el período en su fila de rótulos, los rótulos
+repartidos en DOS filas como allí, y el cuerpo de cabecera de área → empleados con ordinal corrido →
+`SUBTOTAL` → `SUMAN`—, en NÚMEROS PLANOS del motor y sin una sola fórmula: una fórmula sería una
+segunda definición de cada cálculo, capaz de separarse de la del motor sin que ninguna cifra lo
+delate. **La LETRA es el contrato**, porque el contador coteja columna por columna, así que lo que la
+app no guarda (`AJ`–`AM`, `AQ`, `BE`) conserva rótulo y sale VACÍO en vez de omitirse —omitirlo
+correría todo lo de su derecha y su `AY` dejaría de ser `AY`—, y la hoja termina en `CA`: el bloque
+`CC`–`CF` del original es el área de trabajo del contador repitiendo `PAGADO`, y su fila de índices de
+búsqueda está DESINCRONIZADA en el archivo real. `columns.ts` declara ese layout una vez y
+`columns.test.ts` lo cruza contra el catálogo de conceptos, porque el modo de fallo real no es
+equivocar una cifra —el motor ya está probado— sino que escritor y lector se SEPAREN, y eso ninguna
+suma lo delata. `rol-grid.ts` es la rejilla pura (vía `computeLinePayroll`, nunca un cálculo propio) y
+`workbook.ts` la dibuja sin decidir nada, con exceljs en dinámico: la misma separación de tres capas
+del comprobante. **Lo prueba `GOLDEN_MARCH_2026`**, que ya trae los seis empleados del archivo real
+con sus veinte columnas al bit, y aquí exige además que cada una caiga en su LETRA —un motor exacto
+escribiendo el patronal en la columna de al lado sigue dando un archivo que no cuadra— y que el
+`SUMAN` reproduzca la fila 39 del libro. **Y el archivo VUELVE a entrar**, que es lo que cobró dos
+precios en el importador, los dos por el mismo motivo: la app ahora GENERA el formato que lee. El
+membrete del logo (`writeLogoHeader`, el de PyG y Ocupaciones) empuja el preámbulo, así que el período
+dejó de leerse en `B2` fijo —la única coordenada de un módulo que declara localizarlo todo por
+rótulo— y pasó a localizarse por su FORMA entre las filas anteriores a la cabecera (`findPeriod`); y
+una celda de `PAGADO` en blanco pasó a leerse `null` y no `0`, porque el rol descargado deja en blanco
+a quien no tiene pago declarado y con la regla vieja volvía «con diferencia» por todo su líquido — el
+archivo de la app no habría podido describir su propio estado. Es `.xlsx` y no el `.xls` del original
+(exceljs no escribe BIFF; SheetJS lee las dos). Los conceptos extra van SUMADOS en una columna
+`OTROS INGRESOS` tras `CA` —al final para no correr ninguna letra, agregados para no ensanchar la hoja
+por período—, y el importador todavía no la lee: re-subir el archivo los pierde, lo dice el `ⓘ` y hay
+un test que lo fija para el día que deje de ser cierto.
 
 **SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
 `EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL

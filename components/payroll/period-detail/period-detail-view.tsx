@@ -6,19 +6,19 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { TabBar, type TabBarItem } from "@/components/ui/tab-bar";
 import { listEmployees } from "@/lib/payroll/db";
-import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
+import { computeLinePayroll } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
 import { journalAmountsFor } from "@/lib/payroll/journal-amounts";
-import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
 import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
+import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import {
   computePeriodFinancials,
   computeReconciliationCounts,
   matchesEmployeeSearch,
 } from "@/lib/payroll/period-detail";
 import { adjacentPeriod } from "@/lib/payroll/periods";
-import type { PayrollEmployeeLine } from "@/lib/payroll/types";
+import type { PayrollEmployeeLine, PayrollExtraConcept } from "@/lib/payroll/types";
 import { DeletePeriodDialog } from "../delete-period-dialog";
 import { usePayrollData } from "../payroll-data-provider";
 import { EmployeeTable } from "./employee-table";
@@ -30,6 +30,9 @@ import { PeriodNotFound } from "./period-not-found";
 import { PeriodParameters } from "./period-parameters";
 
 const EMPTY_LINES: PayrollEmployeeLine[] = [];
+/** Estable entre renders: un `[]` nuevo cada vez invalidaría los `useMemo` que lo llevan en las
+ *  dependencias, y con ellos el rol entero de la pantalla. */
+const EMPTY_EXTRA_CONCEPTS: readonly PayrollExtraConcept[] = [];
 
 type DetailTab = "empleados" | "asiento";
 
@@ -72,13 +75,16 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
 
   // El rol de cada línea, calculado UNA vez para toda la pantalla. Todo lo de abajo se deriva de
   // aquí — KPIs, tabla y comprobantes —, que es lo que garantiza que las tres cosas digan lo mismo.
+  // Los conceptos extra son del PERÍODO —una columna del rol, no una decisión de cada empleado—,
+  // así que viajan aparte de la ficha y llegan a las tres lecturas de abajo por el mismo camino.
+  const extraConcepts = period?.extraConcepts ?? EMPTY_EXTRA_CONCEPTS;
   const rows = useMemo(
     () =>
       lines.map((line) => ({
         line,
-        computed: computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS),
+        computed: computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, extraConcepts),
       })),
-    [lines],
+    [lines, extraConcepts],
   );
   const computations = useMemo(() => rows.map((row) => row.computed), [rows]);
   const financials = useMemo(() => computePeriodFinancials(computations), [computations]);
@@ -93,41 +99,37 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   // `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-deps` no
   // está para atraparlo.
   const journalEntry = useMemo(
-    () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS)),
-    [lines],
+    () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS, extraConcepts)),
+    [lines, extraConcepts],
   );
 
   /**
    * Los comprobantes de la nómina entera, uno por página y en el orden en que se lee la tabla.
    *
-   * Es el MISMO constructor que la pantalla de un empleado, llamado en bucle: no hay dos rutas de
-   * generación que puedan separarse, y el PDF del período no cuesta más que recorrer las líneas.
-   * Nada se persiste — cada cifra sale del motor en este instante.
+   * `buildPeriodPayslips` es el MISMO constructor que usa la fila del historial, que baja este PDF
+   * sin abrir el período. Nada se persiste — cada cifra sale del motor en este instante.
    */
   const [downloading, setDownloading] = useState(false);
   const downloadPayslipsForPeriod = useCallback(async () => {
-    if (!period || rows.length === 0) {
+    if (!period || lines.length === 0) {
       return;
     }
     setDownloading(true);
     try {
-      const documents = rows.map(({ line, computed }, index) =>
-        buildPayslipDocument({
-          line,
-          computed,
-          capture: line.capture ?? emptyCapture(),
-          year: period.year,
-          monthIndex: period.monthIndex,
+      await downloadPayslips(
+        buildPeriodPayslips({
+          period,
+          lines,
+          parameters: DEFAULT_PAYROLL_PARAMETERS,
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
-          position: index + 1,
         }),
+        payslipBatchFilename(period.year, period.monthIndex),
       );
-      await downloadPayslips(documents, payslipBatchFilename(period.year, period.monthIndex));
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, rows, period]);
+  }, [activeClient?.name, activeClient?.logo, lines, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -184,7 +186,14 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
         className="px-7 pt-[18px]"
         rightSlot={
           tab === "empleados" ? (
-            <PayrollExcelActions period={period} periods={periods} employeeCount={lines.length} />
+            <PayrollExcelActions
+              period={period}
+              periods={periods}
+              lines={lines}
+              extraConcepts={extraConcepts}
+              clientName={activeClient?.name ?? ""}
+              {...(activeClient?.logo ? { clientLogo: activeClient.logo } : {})}
+            />
           ) : null
         }
       />

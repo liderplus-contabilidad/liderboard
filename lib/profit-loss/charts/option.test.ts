@@ -17,6 +17,7 @@ import { distributionShares } from "./distribution";
 import type { Series, SeriesKey } from "../analytics/types";
 import {
   barOption,
+  categoryBarOption,
   comboOption,
   entryTable,
   horizontalBarOption,
@@ -781,5 +782,34 @@ describe("la cascada se dibuja como barras", () => {
       color: CHART_SIGN.negative,
       values: [formatCurrency(-77_847), formatCurrency(98_456)],
     });
+  });
+});
+
+describe("el eje girado", () => {
+  const columns = ["ISAMAR", "CARTAGO", "ISAMAR"];
+  const series = [{ id: "ene", label: "Ene", values: [10, 5, 1] }];
+  const groups = [
+    { label: "Hospedaje", span: 2 },
+    { label: "Bar", span: 1 },
+  ];
+
+  it("cuelga un SEGUNDO eje que nombra cada grupo en el centro de su tramo", () => {
+    const option = categoryBarOption(columns, series, { colorOf: () => "#000" }, groups);
+    const axes = option.xAxis;
+    expect(Array.isArray(axes)).toBe(true);
+    expect(Array.isArray(axes) && axes[0].data).toEqual(columns);
+    // Hospedaje abarca dos columnas y su nombre cae en la izquierda del medio; Bar, en la suya.
+    expect(Array.isArray(axes) && axes[1].data).toEqual(["Hospedaje", "", "Bar"]);
+  });
+
+  it("dice hasta dónde llega cada grupo con una franja en los impares, no con una línea por grupo", () => {
+    const option = categoryBarOption(columns, series, { colorOf: () => "#000" }, groups);
+    expect(option.series[0].markArea?.data).toEqual([[{ xAxis: 2 }, { xAxis: 2 }]]);
+  });
+
+  it("sin grupos no hay ni segundo eje ni franjas", () => {
+    const option = categoryBarOption(columns, series, { colorOf: () => "#000" });
+    expect(Array.isArray(option.xAxis)).toBe(false);
+    expect(option.series[0].markArea).toBeUndefined();
   });
 });

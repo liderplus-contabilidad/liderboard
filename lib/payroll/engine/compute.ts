@@ -111,6 +111,8 @@ export function computeEmployeePayroll(
     variableCommission: input.variableCommission,
     reserveFundPaid: 0,
     bonus: input.bonus,
+    contributoryExtras: input.extras.contributory,
+    nonContributoryExtras: input.extras.nonContributory,
   };
 
   // 5 · `O` — un doceavo de su propia base, que deja fuera las vacaciones mensualizadas.

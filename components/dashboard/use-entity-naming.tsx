@@ -6,12 +6,25 @@ import {
   DEFAULT_ENTITY_LABELS,
   type EntityLabels,
 } from "@/components/dashboard/active-client";
+import { withCenterLogo } from "@/lib/logos";
 import {
   findByName,
   normalizeEntityName,
+  type CenterLogos,
+  type CenterOption,
   type EntityLogo,
   type NamedEntity,
 } from "@/lib/workspaces";
+
+/**
+ * Un workspace tal como este diálogo lo lee: su nombre, su logo y —en los módulos que tienen
+ * centros— los suyos y los logos que ya les subió. Los dos últimos son opcionales, que es lo que
+ * deja a Rol de Pagos usando este hook sin enterarse de que existen.
+ */
+export type NameableEntity = NamedEntity & {
+  centerLogos?: CenterLogos;
+  centerOptions?: readonly CenterOption[];
+};
 
 export interface EntityNaming {
   openCreate: () => void;
@@ -37,20 +50,28 @@ export function useEntityNaming({
   onCreate,
   onRename,
 }: {
-  entities: readonly NamedEntity[];
+  entities: readonly NameableEntity[];
   labels?: EntityLabels;
   onCreate: (name: string, logo?: EntityLogo) => Promise<unknown>;
-  onRename: (id: string, name: string, logo: EntityLogo | null) => Promise<unknown>;
+  onRename: (
+    id: string,
+    name: string,
+    logo: EntityLogo | null,
+    centerLogos: CenterLogos | undefined,
+  ) => Promise<unknown>;
 }): EntityNaming {
   const [naming, setNaming] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<EntityLogo | null>(null);
+  const [centerLogos, setCenterLogos] = useState<CenterLogos | undefined>(undefined);
   const [nameError, setNameError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openCreate = useCallback(() => {
     setName("");
     setLogo(null);
+    // Un workspace nuevo nace vacío, así que no tiene centros a los que ponerle logo todavía.
+    setCenterLogos(undefined);
     setNameError(null);
     setNaming({ mode: "create" });
   }, []);
@@ -60,13 +81,17 @@ export function useEntityNaming({
       const entity = entities.find((candidate) => candidate.id === id);
       setName(entity?.name ?? "");
       // El logo guardado se precarga, así que el diálogo abre mostrando lo que hay: si no, cada
-      // renombrado parecería estar quitándolo, y guardar lo quitaría de verdad.
+      // renombrado parecería estar quitándolo, y guardar lo quitaría de verdad. Lo mismo vale, y
+      // multiplicado por el número de centros, para los suyos.
       setLogo(entity?.logo ?? null);
+      setCenterLogos(entity?.centerLogos);
       setNameError(null);
       setNaming({ mode: "rename", id });
     },
     [entities],
   );
+
+  const editing = naming?.id ? entities.find((entity) => entity.id === naming.id) : undefined;
 
   const submit = useCallback(async () => {
     if (!naming) {
@@ -87,13 +112,13 @@ export function useEntityNaming({
       if (naming.mode === "create") {
         await onCreate(check.name, logo ?? undefined);
       } else if (naming.id) {
-        await onRename(naming.id, check.name, logo);
+        await onRename(naming.id, check.name, logo, centerLogos);
       }
       setNaming(null);
     } finally {
       setBusy(false);
     }
-  }, [naming, name, logo, entities, labels.subject, onCreate, onRename]);
+  }, [naming, name, logo, centerLogos, entities, labels.subject, onCreate, onRename]);
 
   const dialog = (
     <ClientNameDialog
@@ -101,6 +126,8 @@ export function useEntityNaming({
       mode={naming?.mode ?? "create"}
       value={name}
       logo={logo}
+      {...(editing?.centerOptions ? { centers: editing.centerOptions } : {})}
+      centerLogos={centerLogos}
       error={nameError}
       busy={busy}
       labels={labels}
@@ -109,6 +136,9 @@ export function useEntityNaming({
         setNameError(null);
       }}
       onLogoChange={setLogo}
+      onCenterLogoChange={(centerId, next) =>
+        setCenterLogos((current) => withCenterLogo(current, centerId, next))
+      }
       onSubmit={() => void submit()}
       onCancel={() => setNaming(null)}
     />

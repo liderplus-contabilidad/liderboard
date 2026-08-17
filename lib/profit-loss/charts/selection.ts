@@ -98,6 +98,17 @@ export interface SelectionContext {
   /** Always the "Ver por" control's — no chart carries a frequency of its own. */
   frequency: Frequency;
   year: number;
+  /**
+   * Los centros del cliente SIN el Consolidado, que no es un centro sino su suma. `[]` en modo
+   * estado único.
+   *
+   * Cada uno dice si es un establecimiento o el cajón «Sin centro de costo» del sistema contable,
+   * porque la vista de líneas de negocio reparte por establecimiento y ese cajón no lo es: entra
+   * solo si el usuario lo marca a mano. Lo llena el proveedor porque el rol de cada vista vive
+   * ahí; una fuente de analítica solo trae id y nombre, y distinguirlos por el nombre sería
+   * adivinar.
+   */
+  centers: readonly { id: string; name: string; kind: "centro" | "sin-centro" }[];
 }
 
 /**

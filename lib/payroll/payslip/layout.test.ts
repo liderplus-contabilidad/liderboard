@@ -40,12 +40,44 @@ const LINE: PayrollEmployeeLine = {
   capture: { ...emptyCapture(), deductions: { ...emptyCapture().deductions, salaryAdvance: 200 } },
 };
 
+/** Todo capturado: el comprobante MÁS LARGO posible, sus 26 filas. Es el caso que decide si la
+ *  hoja da de sí, porque una ficha real imprime cinco. */
+const FULL: Partial<PayrollEmployeeLine> = {
+  hasReserveFund: true,
+  capture: {
+    ...emptyCapture(),
+    overtimeHours50: 2,
+    overtimeHours100: 3,
+    overtimeHours25: 4,
+    vacationPay: 10,
+    privateInsurance: 11,
+    allowances: 12,
+    fixedCommission: 13,
+    variableCommission: 14,
+    bonus: 15,
+    deductions: {
+      iessLoans: 1,
+      unpaidLeave: 2,
+      salaryAdvance: 3,
+      companyLoans: 4,
+      incomeTax: 5,
+      meals: 6,
+      fines: 7,
+      inHouseConsumption: 8,
+      solidarityContribution: 9,
+      otherDeductions: 10,
+      partTimeDeduction: 11,
+      medicalLeaveDeduction: 12,
+    },
+  },
+};
+
 function documentFor(overrides: Partial<PayrollEmployeeLine> = {}): PayslipDocument {
   const line = { ...LINE, ...overrides };
   const capture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,
@@ -56,7 +88,7 @@ function documentFor(overrides: Partial<PayrollEmployeeLine> = {}): PayslipDocum
 
 describe("el comprobante cabe en la hoja", () => {
   it("ninguna caja se sale del ancho útil", () => {
-    const { boxes } = layoutPayslip(documentFor(), measure);
+    const { boxes } = layoutPayslip(documentFor(FULL), measure);
     for (const box of boxes) {
       const width = measure(box.text, box.size, box.bold);
       const left = box.align === "right" ? box.x - width : box.x;
@@ -66,7 +98,7 @@ describe("el comprobante cabe en la hoja", () => {
   });
 
   it("ninguna caja se sale del alto útil, ni el comprobante desborda", () => {
-    const layout = layoutPayslip(documentFor(), measure);
+    const layout = layoutPayslip(documentFor(FULL), measure);
     expect(layout.overflow).toBe(false);
     for (const box of layout.boxes) {
       expect(box.y, box.text).toBeGreaterThanOrEqual(0);
@@ -75,8 +107,13 @@ describe("el comprobante cabe en la hoja", () => {
     expect(PAGE_WIDTH).toBeGreaterThan(PAYSLIP_COLUMNS.right);
   });
 
-  it("un empleado sin nada capturado tampoco desborda: sus 26 filas están igual", () => {
-    expect(layoutPayslip(documentFor({ capture: undefined }), measure).overflow).toBe(false);
+  it("una ficha real, que imprime cinco filas, se queda muy corta", () => {
+    // Omitir las filas sin importe solo puede ACORTAR la hoja, nunca alargarla: el caso que decide
+    // si cabe es el de arriba, con las 26.
+    const short = layoutPayslip(documentFor(), measure);
+    const long = layoutPayslip(documentFor(FULL), measure);
+    expect(short.overflow).toBe(false);
+    expect(short.boxes.length).toBeLessThan(long.boxes.length);
   });
 });
 
@@ -84,7 +121,7 @@ describe("las columnas se respetan", () => {
   it("el rótulo más largo no invade la columna de valores", () => {
     // 39 caracteres, el peor caso del catálogo. Su fila no usa `Cantidad`, así que puede correr
     // hasta el inicio de `Valores` — que es exactamente el desbordamiento que hace el Excel.
-    const { boxes } = layoutPayslip(documentFor(), measure);
+    const { boxes } = layoutPayslip(documentFor(FULL), measure);
     const box = boxes.find((b) => b.text.startsWith("PRESTAMOS QUIROGRAFARIOS"));
     expect(box, "la fila del préstamo tiene que estar").toBeDefined();
     expect(box?.text).toBe("PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS");
@@ -94,7 +131,7 @@ describe("las columnas se respetan", () => {
   });
 
   it("un rótulo de fila CON cantidad se para antes de esa columna", () => {
-    const { boxes } = layoutPayslip(documentFor(), measure);
+    const { boxes } = layoutPayslip(documentFor(FULL), measure);
     const box = boxes.find((b) => b.text.startsWith("VALOR GANADO EXTRAS 100%"));
     expect(box!.x + measure(box!.text, box!.size, box!.bold)).toBeLessThanOrEqual(
       PAYSLIP_COLUMNS.quantityStart,
@@ -160,18 +197,35 @@ describe("la capa visual", () => {
   });
 
   it("la franja alterna cubre la mitad de las filas de concepto", () => {
-    // 26 filas: 13 impares en cada bloque contando desde cero → 6 + 6.
-    const { fills } = layoutPayslip(documentFor(), measure);
+    // 26 filas: 13 impares en cada bloque contando desde cero → 6 + 6. Con menos filas son menos,
+    // y siguen alternando desde la primera de cada bloque.
+    const { fills } = layoutPayslip(documentFor(FULL), measure);
     expect(fills.filter((f) => f.color === PAYSLIP_COLORS.zebra)).toHaveLength(12);
+    // SORIA imprime 3 ingresos y 2 egresos: 1 + 1.
+    const real = layoutPayslip(documentFor(), measure);
+    expect(real.fills.filter((f) => f.color === PAYSLIP_COLORS.zebra)).toHaveLength(2);
   });
 
-  it("un importe en cero va en tinta débil y uno real en tinta plena", () => {
-    // Veintidós rayas a peso completo compiten con las cuatro cifras que sí dicen algo.
+  it("todo importe impreso va en tinta plena, porque ya no hay rayas con las que competir", () => {
     const { boxes } = layoutPayslip(documentFor(), measure);
-    const dash = boxes.find((b) => b.text === "-" && b.align === "right");
-    const amount = boxes.find((b) => b.text === "$487.21");
-    expect(dash?.color).toBe(PAYSLIP_COLORS.faint);
-    expect(amount?.color).toBe(PAYSLIP_COLORS.ink);
+    expect(boxes.find((b) => b.text === "$487.21")?.color).toBe(PAYSLIP_COLORS.ink);
+    expect(boxes.some((b) => b.text === "-")).toBe(false);
+  });
+
+  it("la cabecera `Cantidad` solo se escribe si alguna fila la usa", () => {
+    // Rotular una columna vacía promete un dato que no está en la hoja.
+    const full = layoutPayslip(documentFor(FULL), measure);
+    expect(full.boxes.some((b) => b.text === "Cantidad")).toBe(true);
+    const real = layoutPayslip(documentFor(), measure);
+    expect(real.boxes.some((b) => b.text === "Cantidad")).toBe(false);
+  });
+
+  it("la nota al pie solo se escribe si queda un (*) que explicar", () => {
+    const marker = "(*) No aporta IESS ni es Ingreso Gravado";
+    expect(layoutPayslip(documentFor(FULL), measure).boxes.some((b) => b.text === marker)).toBe(
+      true,
+    );
+    expect(layoutPayslip(documentFor(), measure).boxes.some((b) => b.text === marker)).toBe(false);
   });
 
   it("ningún relleno se sale de la hoja útil", () => {

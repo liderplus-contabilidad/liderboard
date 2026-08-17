@@ -17,6 +17,7 @@ import {
   isNameTaken,
   normalizeEntityName,
   proposeEntityName,
+  type CenterLogos,
   type EntityLogo,
 } from "@/lib/workspaces";
 import { sameHotelIdentity, type HotelIdentity } from "./hotel-identity";
@@ -28,6 +29,10 @@ export interface OccupancyHotel {
   /** The logo the user uploaded, if any — the other half of the label, and just as unrelated to
    *  what any file declares. Optional and NOT indexed, so it cost no Dexie migration. */
   logo?: EntityLogo;
+  /** Los logos de sus SUCURSALES, por `centerId`. Cuelgan del hotel porque una sucursal no es una
+   *  fila guardada —es la mitad de la clave `[hotelId+centerId+year]`—, y eso los borra en cascada
+   *  con él y los hace sobrevivir a recargar un año. Opcional y NO indexado: sin migración. */
+  centerLogos?: CenterLogos;
 }
 
 /** The subject this module names when a name is missing or clashes. */

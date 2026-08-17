@@ -623,3 +623,97 @@ describe("buildMultiCenterWorkbook — ocultar meses en cero", () => {
     expect(await totalOf(book(true))).toBe(100);
   });
 });
+
+describe("buildMultiCenterWorkbook — el membrete de cada hoja", () => {
+  const CLIENT_LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 640,
+    height: 160,
+  };
+  // Otro data URL, para que la deduplicación por URL no funda los dos en una sola imagen.
+  const NORTE_LOGO = {
+    dataUrl:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    mime: "image/png" as const,
+    width: 200,
+    height: 200,
+  };
+
+  function workbook(centerLogos?: Record<string, typeof NORTE_LOGO>) {
+    return buildMultiCenterWorkbook({
+      companyName: "HOTELERA ANDES S.A.",
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+      logo: CLIENT_LOGO,
+      ...(centerLogos ? { centerLogos } : {}),
+      centers: [
+        {
+          dataset: {
+            ...norte,
+            role: "center" as const,
+            centerId: "norte",
+            costCenterName: "SUCURSAL NORTE",
+          },
+          edits: [],
+        },
+        {
+          dataset: {
+            ...sur,
+            role: "center" as const,
+            centerId: "sur",
+            costCenterName: "SUCURSAL SUR",
+          },
+          edits: [],
+        },
+      ],
+    });
+  }
+
+  const imagesOf = (wb: ExcelJS.Workbook, sheet: string) => wb.getWorksheet(sheet)!.getImages();
+
+  it("la hoja de un centro lleva el del cliente Y el suyo", () => {
+    const images = imagesOf(workbook({ norte: NORTE_LOGO }), "SUCURSAL NORTE");
+    expect(images).toHaveLength(2);
+    expect(images[0].range.tl.nativeCol).toBe(0);
+    expect(images[0].range.tl.nativeColOff).toBe(0);
+  });
+
+  /**
+   * Lo que pidió la firma: pegado al final de la columna del nombre, no flotando sobre las cifras.
+   *
+   * Se afirma sobre `nativeCol` + `nativeColOff`, que es lo que se escribe en el `.xlsx`, y NO
+   * sobre el `col` fraccionario de exceljs: ese getter reconvierte los EMU con `caracteres ×
+   * 10000` y devuelve una cifra que no es la que Excel dibuja — es el mismo error que dejaba el
+   * logo al principio de la columna, y un test escrito contra él lo habría dado por bueno.
+   */
+  it("el del centro muere donde muere la columna del nombre, no sobre los meses", () => {
+    const [, center] = imagesOf(workbook({ norte: NORTE_LOGO }), "SUCURSAL NORTE");
+    // Código (89 px) + nombre (299 px) = 388; el logo mide 56 de ancho, así que empieza en 332,
+    // o sea 243 px dentro de la columna del nombre.
+    expect(center.range.tl.nativeCol).toBe(1);
+    expect(center.range.tl.nativeColOff).toBe(243 * 9525);
+  });
+
+  // El Consolidado no es un centro: no hay logo que le corresponda, y `centerLogoOf` lo responde
+  // sin que esta hoja tenga que preguntarse por sí misma.
+  it("la hoja Consolidado se queda solo con el del cliente", () => {
+    expect(imagesOf(workbook({ norte: NORTE_LOGO }), "Consolidado")).toHaveLength(1);
+  });
+
+  it("un centro sin logo propio queda como estaba", () => {
+    expect(imagesOf(workbook({ norte: NORTE_LOGO }), "SUCURSAL SUR")).toHaveLength(1);
+  });
+
+  it("sin ningún logo de centro, el libro es el de siempre", () => {
+    const wb = workbook();
+    expect(imagesOf(wb, "SUCURSAL NORTE")).toHaveLength(1);
+    // Un solo PNG embebido para las tres hojas: `addImage` no deduplica, y sin la caché el libro
+    // llevaría una copia por hoja.
+    expect(wb.model.media ?? []).toHaveLength(1);
+  });
+
+  it("cada PNG se embebe UNA vez aunque lo usen varias hojas", () => {
+    expect(workbook({ norte: NORTE_LOGO, sur: NORTE_LOGO }).model.media ?? []).toHaveLength(2);
+  });
+});

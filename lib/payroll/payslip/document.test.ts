@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { emptyCapture, toEngineInput } from "../employee-input";
 import { computeEmployeePayroll } from "../engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
-import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
-import { buildPayslipDocument, compareExcelColumns, payslipIncomeConcepts } from "./document";
+import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
+import {
+  NOT_CONTRIBUTORY_MARK,
+  PAYSLIP_FOOTNOTE,
+  buildPayslipDocument,
+  compareExcelColumns,
+  payslipIncomeConcepts,
+} from "./document";
 import type { PayslipDocument, PayslipRow } from "./types";
 
 /**
@@ -29,11 +35,47 @@ const SORIA: PayrollEmployeeLine = {
   capture: { ...emptyCapture(), deductions: { ...emptyCapture().deductions, salaryAdvance: 200 } },
 };
 
+/**
+ * El mismo empleado con TODO capturado. Es el único caso en el que el comprobante imprime sus 26
+ * filas, así que es donde se puede afirmar el orden completo del papel — con la ficha real solo
+ * salen cinco.
+ */
+const FULL: PayrollEmployeeLine = {
+  ...SORIA,
+  hasReserveFund: true,
+  capture: {
+    ...emptyCapture(),
+    overtimeHours50: 2,
+    overtimeHours100: 3,
+    overtimeHours25: 4,
+    vacationPay: 10,
+    privateInsurance: 11,
+    allowances: 12,
+    fixedCommission: 13,
+    variableCommission: 14,
+    bonus: 15,
+    deductions: {
+      iessLoans: 1,
+      unpaidLeave: 2,
+      salaryAdvance: 3,
+      companyLoans: 4,
+      incomeTax: 5,
+      meals: 6,
+      fines: 7,
+      inHouseConsumption: 8,
+      solidarityContribution: 9,
+      otherDeductions: 10,
+      partTimeDeduction: 11,
+      medicalLeaveDeduction: 12,
+    },
+  },
+};
+
 function build(line: PayrollEmployeeLine, position = 6): PayslipDocument {
   const capture: PayrollMonthlyCapture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,
@@ -79,37 +121,81 @@ describe("el comprobante del empleado 6 de marzo 2026", () => {
   });
 
   it("marca con (*) el fondo de reserva y el bono, y nada más", () => {
-    const marked = doc.incomes.filter((r) => r.quantity === "(*)").map((r) => r.label);
+    const full = build(FULL);
+    const marked = full.incomes.filter((r) => r.quantity === "(*)").map((r) => r.label);
     expect(marked).toEqual(["FONDO DE RESERVA", "BONO CUMPLIMIENTO"]);
-    expect(doc.deductions.every((r) => r.quantity === null)).toBe(true);
+    expect(full.deductions.every((r) => r.quantity === null)).toBe(true);
   });
 });
 
 describe("qué filas se imprimen", () => {
-  it("las 26 siempre, aunque no haya nada capturado", () => {
+  it("solo las que traen importe", () => {
+    // La ficha real de SORIA: sueldo, los dos décimos, el aporte al IESS y su anticipo. Las otras
+    // veintiuna valen cero y no ocupan renglón.
+    expect(build(SORIA).incomes.map((r) => r.label)).toEqual([
+      "SUELDO UNIFICADO",
+      "DECIMO IV SUELDO-MENSUAL",
+      "DECIMO III SUELDO-MENSUAL",
+    ]);
+    expect(build(SORIA).deductions.map((r) => r.label)).toEqual([
+      "APORTES AL IESS",
+      "ANTICIPO SUELDO",
+    ]);
+  });
+
+  it("ninguna fila sale con raya ni en cero", () => {
+    const doc = build(SORIA);
+    for (const line of [...doc.incomes, ...doc.deductions]) {
+      expect(line.value, line.label).not.toBe("-");
+      expect(line.value, line.label).not.toBe("$0.00");
+    }
+  });
+
+  it("sin nada capturado quedan solo las cuatro que el motor deriva", () => {
     const doc = build({ ...SORIA, capture: undefined });
+    expect(doc.incomes.map((r) => r.label)).toEqual([
+      "SUELDO UNIFICADO",
+      "DECIMO IV SUELDO-MENSUAL",
+      "DECIMO III SUELDO-MENSUAL",
+    ]);
+    expect(doc.deductions.map((r) => r.label)).toEqual(["APORTES AL IESS"]);
+  });
+
+  it("con todo capturado vuelven las 26", () => {
+    const doc = build(FULL);
     expect(doc.incomes).toHaveLength(13);
     expect(doc.deductions).toHaveLength(13);
   });
 
-  it("un concepto sin importe sale con raya, no en cero", () => {
-    const doc = build({ ...SORIA, capture: undefined });
-    expect(row(doc.incomes, "VACACIONES - MENSUAL")?.value).toBe("-");
-    expect(row(doc.deductions, "ANTICIPO SUELDO")?.value).toBe("-");
-    // Un empleado sin nada capturado imprime veintidós rayas —solo el sueldo, los dos décimos y
-    // el aporte al IESS traen cifra— y sigue teniendo sus 26 filas: es un formulario de posición
-    // fija, no una lista de lo que hay.
-    const dashes = [...doc.incomes, ...doc.deductions].filter((r) => r.value === "-");
-    expect(dashes).toHaveLength(22);
+  it("un total en cero SÍ es una cifra: no se esconde", () => {
+    // Lo omitido son FILAS. Un total es una afirmación sobre el mes —«no se le descontó nada»— y
+    // esconderlo lo haría parecer un dato que falta.
+    const doc = build({ ...SORIA, capture: undefined, baseSalary: 0, days: 0 });
+    expect(doc.deductions).toHaveLength(0);
+    expect(doc.totalDeductions).toBe("$0.00");
   });
 
   it("no imprime las cuatro filas mudas del Excel", () => {
-    const doc = build(SORIA);
+    const doc = build(FULL);
     const labels = doc.deductions.map((r) => r.label);
     expect(labels.indexOf("Descuento PERMISO MEDICO")).toBe(
       labels.indexOf("DESCUENTO TIEMPO PACIAL") + 1,
     );
     expect(labels.every((label) => label.trim() !== "")).toBe(true);
+  });
+});
+
+describe("la nota al pie sigue a la marca que explica", () => {
+  it("sale cuando alguna fila impresa lleva (*)", () => {
+    expect(build(FULL).footnote).toBe("(*) No aporta IESS ni es Ingreso Gravado");
+  });
+
+  it("no sale cuando el fondo de reserva y el bono se quedaron fuera", () => {
+    // Son las dos filas que más veces valen cero: un pie que aclara un `(*)` ausente manda a
+    // buscar en la hoja algo que no está.
+    const doc = build(SORIA);
+    expect(doc.incomes.some((r) => r.quantity === "(*)")).toBe(false);
+    expect(doc.footnote).toBeNull();
   });
 });
 
@@ -133,15 +219,23 @@ describe("el orden es el de columnas del libro, no el del catálogo", () => {
   });
 
   it("el fondo de reserva es DUODÉCIMO en el papel y séptimo en la pantalla", () => {
-    const doc = build(SORIA);
+    const doc = build(FULL);
     expect(doc.incomes.map((r) => r.label).indexOf("FONDO DE RESERVA")).toBe(11);
     expect(doc.incomes[10].label).toBe("COMISION VARIABLE");
   });
 
   it("los egresos arrancan en el aporte y terminan en el permiso médico", () => {
-    const doc = build(SORIA);
+    const doc = build(FULL);
     expect(doc.deductions[0].label).toBe("APORTES AL IESS");
     expect(doc.deductions[12].label).toBe("Descuento PERMISO MEDICO");
+  });
+
+  it("omitir filas no reordena las que quedan", () => {
+    // El orden es el del papel, no el de lo que sobrevivió: las tres de SORIA salen en las mismas
+    // posiciones relativas que ocupan con todo capturado.
+    const printed = build(SORIA).incomes.map((r) => r.label);
+    const all = build(FULL).incomes.map((r) => r.label);
+    expect(printed).toEqual(all.filter((label) => printed.includes(label)));
   });
 
   it("una columna de dos letras va DESPUÉS de una de una", () => {
@@ -166,8 +260,83 @@ describe("las horas extras", () => {
     expect(doc.totalIncome).toBe("$567.98");
   });
 
-  it("sin horas, la cantidad sale con raya", () => {
+  it("sin horas no hay fila que imprimir", () => {
+    // Sin horas la fila vale cero, y una fila en cero ya no ocupa renglón: por eso la columna
+    // `Cantidad` no tiene caso para el cero en ningún sitio.
     const doc = build({ ...SORIA, capture: undefined });
-    expect(row(doc.incomes, "VALOR GANADO EXTRAS 100%")?.quantity).toBe("-");
+    expect(row(doc.incomes, "VALOR GANADO EXTRAS 100%")).toBeUndefined();
+  });
+});
+
+describe("conceptos de ingreso extra del período", () => {
+  const APORTABLE: PayrollExtraConcept = { id: "x1", label: "Movilización", kind: "aportable" };
+  const NO_APORTABLE: PayrollExtraConcept = {
+    id: "x2",
+    label: "Alimentación",
+    kind: "noAportable",
+  };
+
+  const buildWith = (
+    concepts: readonly PayrollExtraConcept[],
+    extraAmounts: Record<string, number>,
+  ) => {
+    const line: PayrollEmployeeLine = {
+      ...FULL,
+      capture: { ...(FULL.capture ?? emptyCapture()), extraAmounts },
+    };
+    return buildPayslipDocument({
+      line,
+      computed: computeEmployeePayroll(toEngineInput(line, concepts), DEFAULT_PAYROLL_PARAMETERS),
+      capture: line.capture ?? emptyCapture(),
+      year: 2026,
+      monthIndex: 2,
+      clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+      position: 6,
+      extraConcepts: concepts,
+    });
+  };
+
+  it("imprime el rótulo que el período le puso, en mayúsculas", () => {
+    const document = buildWith([APORTABLE], { x1: 45 });
+    const row = document.incomes.find((entry) => entry.label === "MOVILIZACIÓN");
+    expect(row).toBeDefined();
+    expect(row?.value).toBe("$45.00");
+  });
+
+  it("el NO aportable lleva el (*) y el aportable no", () => {
+    const document = buildWith([APORTABLE, NO_APORTABLE], { x1: 45, x2: 30 });
+    const aportable = document.incomes.find((entry) => entry.label === "MOVILIZACIÓN");
+    const noAportable = document.incomes.find((entry) => entry.label === "ALIMENTACIÓN");
+
+    expect(noAportable?.quantity).toBe(NOT_CONTRIBUTORY_MARK);
+    expect(aportable?.quantity).toBeNull();
+  });
+
+  it("un no aportable enciende la nota al pie aunque el bono y el FR estén en cero", () => {
+    expect(buildWith([NO_APORTABLE], { x2: 30 }).footnote).toBe(PAYSLIP_FOOTNOTE);
+  });
+
+  it("uno en cero no produce fila", () => {
+    const document = buildWith([APORTABLE], { x1: 0 });
+    expect(document.incomes.some((entry) => entry.label === "MOVILIZACIÓN")).toBe(false);
+  });
+
+  it("van DETRÁS de las trece filas del catálogo", () => {
+    const document = buildWith([APORTABLE], { x1: 45 });
+    const last = document.incomes[document.incomes.length - 1];
+    expect(last.label).toBe("MOVILIZACIÓN");
+  });
+
+  it("sin conceptos declarados el comprobante es exactamente el de antes", () => {
+    const sin = buildWith([], {});
+    const conImporteHuerfano = buildWith([], { x1: 999 });
+    expect(conImporteHuerfano).toEqual(sin);
+  });
+
+  it("el total de ingresos INCLUYE el concepto extra", () => {
+    const amount = (formatted: string) => Number(formatted.replace(/[$,]/g, ""));
+    const sin = buildWith([], {});
+    const con = buildWith([NO_APORTABLE], { x2: 30 });
+    expect(amount(con.totalIncome) - amount(sin.totalIncome)).toBeCloseTo(30, 2);
   });
 });

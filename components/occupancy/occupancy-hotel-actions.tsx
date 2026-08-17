@@ -13,6 +13,7 @@ import { DiscardedRow } from "@/components/ui/discarded-row";
 import { formatList, pluralize } from "@/lib/format";
 import type { HotelContents, HotelSummary } from "@/lib/occupancy/db";
 import { describeHotelContents } from "@/lib/occupancy/db";
+import { centerLogoOf } from "@/lib/logos";
 import { DEFAULT_CENTER_ID } from "@/lib/occupancy/types";
 import { useOccupancyData } from "./occupancy-data-provider";
 
@@ -21,6 +22,8 @@ export const HOTEL_LABELS: EntityLabels = {
   subject: "hotel",
   plural: "hoteles",
   renameKeeps: "sus sucursales, años y lo que hayas escrito a mano",
+  centerSubject: "sucursal",
+  centerPlural: "sucursales",
 };
 
 /** Los años de un hotel en una frase: «2025» o «2024–2026». */
@@ -133,6 +136,11 @@ export function OccupancyHotelActions() {
       : activeCenterName;
   const period = [activeYear, centerLabel].filter(Boolean).join(" · ") || undefined;
 
+  // El consolidado suma varias sucursales, así que ninguna es «la suya».
+  const activeCenterLogo = isConsolidated
+    ? undefined
+    : centerLogoOf(activeHotel?.centerLogos, activeCenterId);
+
   return (
     <>
       <ActiveClient
@@ -142,6 +150,8 @@ export function OccupancyHotelActions() {
                 name: activeHotel.name,
                 ...(period ? { period } : {}),
                 ...(activeHotel.logo ? { logo: activeHotel.logo } : {}),
+                // Solo con UNA sucursal abierta: el consolidado es un cálculo y no tiene logo.
+                ...(activeCenterLogo ? { centerLogo: activeCenterLogo } : {}),
               },
             }
           : {})}

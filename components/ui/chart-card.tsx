@@ -197,11 +197,13 @@ function TableTwin({ table }: { table: ChartTable }) {
                 )}
               >
                 <span className="flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-                    style={{ backgroundColor: row.color }}
-                  />
+                  {row.color === undefined ? null : (
+                    <span
+                      aria-hidden
+                      className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                      style={{ backgroundColor: row.color }}
+                    />
+                  )}
                   <span className="min-w-0">
                     <span className="block truncate">{row.label}</span>
                     {row.sublabel && (

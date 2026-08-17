@@ -69,7 +69,7 @@ describe("deepestLevel", () => {
 });
 
 describe("accountOptions", () => {
-  it("lists every account (parents included) in file order", () => {
+  it("lists every account (parents included) in tree order", () => {
     const options = accountOptions(MONTHLY_ACCOUNTS);
     expect(options[0]).toEqual({ code: "4", name: "Ingresos", level: 1, hasChildren: true });
     expect(options.map((o) => o.code)).toEqual([
@@ -102,10 +102,53 @@ describe("accountOptions", () => {
     expect(byCode.get("4.2")?.hasChildren).toBe(false); // leaf
     expect(byCode.get("5.1.2.1")?.hasChildren).toBe(false); // leaf
   });
+
+  it("devuelve cada cuenta dentro de su rama aunque la lista llegue desordenada", () => {
+    // El universo del filtro es una UNIÓN por primer avistamiento (los años visibles en el
+    // proveedor, los centros/clientes en `mergeCenters`), así que un código que solo trae el
+    // segundo aporte aterriza al final de la lista — detrás del bloque de la raíz 6. Dibujado
+    // plano con sangrado por nivel, eso pinta cuentas de Ingresos colgando de No operacionales.
+    const options = accountOptions([
+      account("4"),
+      account("4.1"),
+      account("5"),
+      account("6"),
+      account("6.1"),
+      account("4.2"),
+      account("4.1.1"),
+    ]);
+    expect(options.map((o) => o.code)).toEqual(["4", "4.1", "4.1.1", "4.2", "5", "6", "6.1"]);
+  });
+
+  it("ordena las hermanas por segmento numérico", () => {
+    expect(
+      accountOptions([account("4"), account("4.1"), account("4.1.11"), account("4.1.2")]).map(
+        (o) => o.code,
+      ),
+    ).toEqual(["4", "4.1", "4.1.2", "4.1.11"]);
+  });
+
+  it("cuelga a un huérfano de su ancestro más cercano, como hace la tabla", () => {
+    // Sin `4.1` en el plan, `4.1.1` se anida bajo `4`: el mismo re-emparentado de
+    // `buildAccountTree`, para que el filtro y Datos no discrepen sobre quién es hija de quién.
+    expect(
+      accountOptions([account("5"), account("4"), account("4.1.1")]).map((o) => o.code),
+    ).toEqual(["4", "4.1.1", "5"]);
+  });
+
+  it("no repite un código duplicado", () => {
+    expect(
+      accountOptions([account("4"), account("4.1"), account("4.1")]).map((o) => o.code),
+    ).toEqual(["4", "4.1"]);
+  });
 });
 
+/** Minimal AccountRow builder for the ordering tests. */
+function account(code: string): AccountRow {
+  return { code, name: code, values: [] };
+}
+
 describe("visibleAccountOptions", () => {
-  const account = (code: string): AccountRow => ({ code, name: code, values: [] });
   const visibleCodes = (accounts: AccountRow[], collapsed: Set<string>) =>
     visibleAccountOptions(accountOptions(accounts), collapsed).map((o) => o.code);
 

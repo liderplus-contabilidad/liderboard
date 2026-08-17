@@ -8,7 +8,10 @@
  * statement) no longer exist under the monthly-by-centers model. Loading a workspace now goes
  * through the upload registry (`upload/`) and `merge-month.ts` instead.
  */
+import type { CenterOption } from "@/lib/workspaces";
 import type { ImportedComment, ParsedDataset, WorkspaceMeta } from "./types";
+
+export type { CenterOption };
 
 /** Center dot palette (from the design's `_ccColorMap`). */
 export const CENTER_PALETTE = ["#1e3a5f", "#0e7490", "#d97706", "#16a34a", "#7c3aed", "#dc2626"];
@@ -78,6 +81,41 @@ export function assignCenterSlots<T extends ParsedDataset>(datasets: readonly T[
       centerColor: CENTER_PALETTE[slot % CENTER_PALETTE.length],
     };
   });
+}
+
+/**
+ * Los centros de un workspace, en el orden del selector — el que fija `assignCenterSlots`, así que
+ * no estrena una segunda idea de en qué orden van.
+ *
+ * Existe porque hay superficies que necesitan SABER QUÉ CENTROS HAY sin construir sus datos: el
+ * diálogo que sube el logo de cada uno los lista para un cliente que ni siquiera está abierto, y
+ * las vistas del proveedor solo existen para el que sí lo está.
+ *
+ * El nombre lo pone el año MÁS RECIENTE que trajo ese centro, que es el criterio que las vistas ya
+ * aplican: si el contador renombró «COCINA» a «COCINA CENTRAL» en 2026, es ese el nombre vivo.
+ */
+export function listCenters(datasets: readonly ParsedDataset[]): CenterOption[] {
+  const newest = new Map<string, ParsedDataset>();
+  for (const dataset of datasets) {
+    if (dataset.role !== "center" && dataset.role !== SIN_CENTRO_ROLE) {
+      continue;
+    }
+    const centerId = dataset.centerId;
+    if (centerId === undefined) {
+      continue;
+    }
+    const current = newest.get(centerId);
+    if (!current || dataset.year > current.year) {
+      newest.set(centerId, dataset);
+    }
+  }
+  return [...newest.entries()]
+    .sort(([, a], [, b]) => (a.order ?? 0) - (b.order ?? 0))
+    .map(([id, dataset]) => ({
+      id,
+      name: dataset.costCenterName || id,
+      ...(dataset.centerColor ? { color: dataset.centerColor } : {}),
+    }));
 }
 
 /**

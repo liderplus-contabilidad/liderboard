@@ -16,7 +16,15 @@
  * del archivo —si `M` ≠ `J+K+L`, `M` es el importe que se reconoció; si coinciden, no hubo
  * recorte y va `null`—, que es también como lo recuperará el importador sin leer fórmulas.
  */
-import type { PayrollEmployeeComputation, PayrollEmployeeInput } from "./types";
+import type { ExtraIncomeTotals, PayrollEmployeeComputation, PayrollEmployeeInput } from "./types";
+
+/**
+ * El libro de Cultura Manor no declara ningún concepto de ingreso extra: sus trece ingresos son los
+ * del catálogo. Va explícito en las seis filas —y no como un default del tipo— porque es
+ * justamente lo que este fixture certifica: **con los dos agregados en cero, las veinte columnas
+ * son las del archivo, al bit.**
+ */
+const NO_EXTRAS: ExtraIncomeTotals = { contributory: 0, nonContributory: 0 };
 
 export interface GoldenEmployee {
   /** Fila de la hoja `GENERAL`, para poder volver al archivo. */
@@ -47,6 +55,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 64.25,
         unpaidLeave: 0,
@@ -109,6 +118,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 0,
         unpaidLeave: 0,
@@ -169,6 +179,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 0,
         unpaidLeave: 0,
@@ -229,6 +240,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 0,
         unpaidLeave: 0,
@@ -289,6 +301,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 0,
         unpaidLeave: 0,
@@ -349,6 +362,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
       fixedCommission: 0,
       variableCommission: 0,
       bonus: 0,
+      extras: NO_EXTRAS,
       deductions: {
         iessLoans: 0,
         unpaidLeave: 0,

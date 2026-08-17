@@ -36,6 +36,30 @@ export interface IncomeComponents {
   reserveFundPaid: number;
   /** `V` · BONO CUMPLIMIENTO */
   bonus: number;
+  /**
+   * Los conceptos extra APORTABLES que el período declara, ya sumados. **Sin columna en el libro**
+   * de Cultura Manor: son los que otros roles rotulan por su cuenta (`MOVILIZACION`,
+   * `ALIMENTACION`), y aquí llegan como un solo número porque para las seis bases tres bonos de 50
+   * y uno de 150 son indistinguibles.
+   *
+   * Se comporta como `R`, `S` y `T`: entra en las cinco bases parciales y en el total.
+   */
+  contributoryExtras: number;
+  /** Los conceptos extra NO aportables, ya sumados. Se comporta como `U` y `V`: solo llega al
+   *  total, sin ser base de nada. */
+  nonContributoryExtras: number;
+}
+
+/**
+ * Los conceptos extra reducidos a lo único que el cálculo mira: cuánto suma cada clase.
+ *
+ * Vive aquí, en el vocabulario del motor, y no en `lib/payroll/extra-income.ts`, que es quien lo
+ * PRODUCE: así el motor no adquiere una dependencia de la forma en que esos conceptos se almacenan
+ * ni, a través de ella, de las reglas genéricas de nombre de `lib/workspaces.ts`.
+ */
+export interface ExtraIncomeTotals {
+  contributory: number;
+  nonContributory: number;
 }
 
 /**
@@ -142,6 +166,16 @@ export interface PayrollEmployeeInput {
   variableCommission: number;
   /** `V` · BONO CUMPLIMIENTO */
   bonus: number;
+  /**
+   * Los conceptos de ingreso que el PERÍODO declara además de los del libro, ya sumados por clase.
+   *
+   * Llega agregado y no como lista porque el motor no tiene por qué saber cuántos hay ni cómo se
+   * llaman — eso lo necesitan la pantalla, el comprobante y el aviso de tope, que leen la
+   * declaración del período directamente. Quien reduce la lista a estos dos números es
+   * `sumExtraIncome` (`lib/payroll/extra-income.ts`), en el mismo sitio donde se cruza la ficha con
+   * la captura.
+   */
+  extras: ExtraIncomeTotals;
   deductions: CapturedDeductions;
   /** `BZ` · PAGADO, tecleado a mano. `null` cuando el período no lo declara todavía — y eso NO
    *  es cero: sin él un empleado no está ni conciliado ni con diferencia. */

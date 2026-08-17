@@ -24,22 +24,36 @@ export function deepestLevel(accounts: AccountRow[]): number {
   return accounts.reduce((max, account) => Math.max(max, account.code.split(".").length), 0);
 }
 
-/** Every account (parents included) as a filter option, in file order. */
+/**
+ * Every account (parents included) as a filter option, in TREE order — each one immediately
+ * after its parent, with its whole branch before the next.
+ *
+ * It is NOT the input array's order, and that distinction is the whole point: the account
+ * universe reaching this function is a UNION by first sighting (the visible years in
+ * `PygDataProvider`, the centers or clients in `mergeCenters`), so an account only the second
+ * contributor reports lands after everything the first one had, root 6 included. The list is
+ * drawn FLAT and its nesting is only the per-level indent, so that account rendered as an
+ * Ingresos row dangling under No operacionales.
+ *
+ * It flattens `buildAccountTree` rather than sorting on its own because that is the module's one
+ * definition of the shape of the plan — who nests under whom, and in what order. A second rule
+ * here would drift from the Datos table, and the two are read side by side.
+ */
 export function accountOptions(accounts: AccountRow[]): AccountOption[] {
-  // A code is a parent iff some account nests under it — by dot-prefix, matching how
-  // `buildAccountTree` re-parents orphans onto their nearest existing ancestor.
-  const withChildren = new Set<string>();
-  for (const account of accounts) {
-    for (let prefix = parentPrefix(account.code); prefix !== null; prefix = parentPrefix(prefix)) {
-      withChildren.add(prefix);
+  const options: AccountOption[] = [];
+  const walk = (nodes: AccountNode[]) => {
+    for (const node of nodes) {
+      options.push({
+        code: node.code,
+        name: node.name,
+        level: node.level,
+        hasChildren: node.children.length > 0,
+      });
+      walk(node.children);
     }
-  }
-  return accounts.map((account) => ({
-    code: account.code,
-    name: account.name,
-    level: account.code.split(".").length,
-    hasChildren: withChildren.has(account.code),
-  }));
+  };
+  walk(buildAccountTree(accounts).roots);
+  return options;
 }
 
 /**

@@ -63,6 +63,15 @@ export const CHART_SECTION = {
 export const CHART_NEUTRAL = "#b4bec9";
 
 /**
+ * El relleno de una FRANJA de fondo — lo que separa un grupo de columnas del siguiente sin añadir
+ * una línea a la retícula. Espeja `--color-border-soft`, un paso por debajo de la línea de la
+ * retícula: tiene que decir «esto va junto» de un vistazo sin competir con la barra que le cae
+ * encima. `--color-surface-sunken` se probó primero y no se veía — con las barras delante, tres
+ * puntos de luminosidad sobre el blanco no son un tramo, son ruido de compresión.
+ */
+export const CHART_BAND = "#edf1f5";
+
+/**
  * The color comes from the entity's stable position in the compared dimension, NEVER from its
  * index in the result: filtering one series out leaves every other one painted as it was.
  */

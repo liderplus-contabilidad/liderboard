@@ -17,7 +17,7 @@
  * concurrent cell saves cannot clobber one another.
  */
 import Dexie, { type Table } from "dexie";
-import { sortByName, type EntityLogo } from "@/lib/workspaces";
+import { sortByName, type CenterLogos, type EntityLogo } from "@/lib/workspaces";
 import { daysInMonth, emptyDataset, emptyMonth, monthHasData, ROOM_ROW_IDS } from "./derive";
 import { deriveHotelIdentity, type HotelIdentity } from "./hotel-identity";
 import type { OccupancyHotel } from "./hotels";
@@ -196,17 +196,21 @@ export async function createHotel(name: string, logo?: EntityLogo): Promise<Stor
 }
 
 /**
- * Changes the hotel's LABEL — its name and its logo — and NOTHING else: the identity is derived
- * from the data, so no sucursal-año is touched. Both travel in one write because the dialog edits
- * them together; `logo: null` removes it, and an `undefined` in a Dexie `update` deletes the
- * property, which is what that means here.
+ * Changes the hotel's LABEL — its name, its logo and those of its sucursales — and NOTHING else:
+ * the identity is derived from the data, so no sucursal-año is touched. They travel in one write
+ * because the dialog edits them together; `logo: null` removes it, and an `undefined` in a Dexie
+ * `update` deletes the property, which is what that means here.
+ *
+ * `centerLogos` viaja SIEMPRE, aunque venga vacío: quien llama es el mismo diálogo que los edita,
+ * así que lo que trae es la foto completa y no hay que distinguir «no los toques» de «quítalos».
  */
 export async function updateHotel(
   hotelId: string,
   name: string,
   logo: EntityLogo | null,
+  centerLogos: CenterLogos | undefined,
 ): Promise<void> {
-  await db.hotels.update(hotelId, { name, logo: logo ?? undefined });
+  await db.hotels.update(hotelId, { name, logo: logo ?? undefined, centerLogos });
 }
 
 /**
@@ -250,6 +254,13 @@ export interface HotelSummary extends StoredHotel {
   years: number[];
   /** Sucursales counted across years: the same one in 2025 and 2026 is one sucursal. */
   centers: number;
+  /**
+   * Sus sucursales, en el orden en que el selector las enseña; `[]` sin datos. Van en el MISMO
+   * resumen que ya alimenta el desplegable porque el diálogo que sube el logo de cada sucursal
+   * puede abrirse sobre un hotel que no está abierto, y las del proveedor son las del que sí lo
+   * está. Es la lista de la que `centers` es el conteo, así que las dos no pueden discrepar.
+   */
+  centerOptions: CenterRow[];
 }
 
 /**
@@ -266,11 +277,13 @@ export async function listHotelSummaries(): Promise<HotelSummary[]> {
   return sortByName(
     hotels.map((hotel) => {
       const own = byHotel.get(hotel.id) ?? [];
+      const centerOptions = centersOf(own);
       return {
         ...hotel,
         identity: deriveHotelIdentity(own),
         years: [...new Set(own.map((d) => d.year))].sort((a, b) => a - b),
-        centers: new Set(own.map((d) => d.centerId)).size,
+        centers: centerOptions.length,
+        centerOptions,
       };
     }),
   );

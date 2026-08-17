@@ -12,9 +12,9 @@
  * Galápagos» what the file calls `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, so a name is
  * never compared against a file — only against other names.
  */
-import type { EntityLogo } from "@/lib/logos";
+import type { CenterLogos, EntityLogo } from "@/lib/logos";
 
-export type { EntityLogo };
+export type { CenterLogos, EntityLogo };
 
 /** Name cap. A header selector cannot render more, and nobody types that much on purpose. */
 export const MAX_ENTITY_NAME_LENGTH = 60;
@@ -68,6 +68,22 @@ export interface NamedEntity {
   id: string;
   name: string;
   logo?: EntityLogo;
+}
+
+/**
+ * Un CENTRO de un workspace, como lo lista una superficie que no dibuja sus cifras: el centro de
+ * costo de PyG y la sucursal de Ocupaciones son la misma figura con dos nombres, y el diálogo que
+ * les sube el logo es uno solo.
+ *
+ * Vive aquí por la misma razón que `NamedEntity`: no sabe de qué módulo habla. Lo que cada módulo
+ * pone encima es cómo LLAMA a esto (`EntityLabels.centerPlural`), que es lo único que cambia.
+ */
+export interface CenterOption {
+  /** El `centerId`: el id de la vista, y la clave con la que se guarda su logo. */
+  id: string;
+  name: string;
+  /** El punto de color del selector, si el módulo le da uno. */
+  color?: string;
 }
 
 /**

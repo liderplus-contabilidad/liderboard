@@ -155,6 +155,8 @@ export function PygClientActions() {
           name: activeClient.name,
           ...(period ? { period } : {}),
           ...(activeClient.logo ? { logo: activeClient.logo } : {}),
+          // Solo con UN centro resuelto: el Consolidado no es un centro y no tiene logo propio.
+          ...(activeView?.logo ? { centerLogo: activeView.logo } : {}),
         }
       : undefined;
 

@@ -3,8 +3,9 @@
  * importing `EChartsOption` keeps `lib/` free of the renderer and lets Vitest reason about plain
  * objects; `components/ui/chart.tsx` does the widening.
  *
- * Two invariants are encoded in the types, so violating them does not compile: `xAxis`/`yAxis`
- * are single objects — never a pair of scales — and `series` is always a list.
+ * Two invariants are encoded in the types, so violating them does not compile: no chart declares
+ * two SCALES —`yAxis` is a single object, y `xAxis` admite un segundo solo como banda de rótulos,
+ * sin serie atada— and `series` is always a list.
  */
 
 export type ChartValue = number | null;
@@ -65,6 +66,9 @@ export interface ChartAxisLabel extends ChartTextStyle {
 export interface ChartAxis {
   type: "category" | "value";
   data?: string[];
+  /** Solo la BANDA DE RÓTULOS la usa: se cuelga bajo el eje real, separada por `offset`. */
+  position?: "bottom" | "top";
+  offset?: number;
   min?: number | string;
   max?: number | string;
   /** Category axes of horizontal bars are inverted so the largest sits on top. */
@@ -107,6 +111,16 @@ export interface ChartMarkLine {
   data: (ChartMarkPoint | [ChartMarkPoint, ChartMarkPoint])[];
 }
 
+/**
+ * Una FRANJA de fondo que abarca de una categoría a otra — con la que un eje agrupado dice hasta
+ * dónde llega cada grupo sin dibujar una línea más en la retícula.
+ */
+export interface ChartMarkArea {
+  silent?: boolean;
+  itemStyle?: ChartItemStyle;
+  data: [ChartMarkPoint, ChartMarkPoint][];
+}
+
 /** One slice of a pie, which needs its own name alongside the value. */
 export interface ChartPieDatum {
   id: string;
@@ -145,6 +159,7 @@ export interface ChartSeries {
   radius?: string | [string, string];
   center?: [string, string];
   markLine?: ChartMarkLine;
+  markArea?: ChartMarkArea;
   /** Takes the series out of hover and emphasis — for a mark that exists only to hold space. */
   silent?: boolean;
   z?: number;
@@ -189,7 +204,14 @@ export interface ChartOption {
   animationDuration?: number;
   textStyle?: ChartTextStyle;
   grid?: ChartGrid;
-  xAxis?: ChartAxis;
+  /**
+   * Uno, o DOS cuando el segundo es una BANDA DE RÓTULOS y no una segunda escala: las columnas
+   * agrupadas (categoría × establecimiento) necesitan un renglón que nombre el grupo bajo sus
+   * columnas, y ese eje no lleva serie ninguna —`xAxisIndex` no se escribe, así que todas siguen
+   * atadas al primero—. El invariante que sigue en pie es el de `yAxis`, que es donde una segunda
+   * entrada SÍ sería una segunda escala y haría comparables dos unidades que no lo son.
+   */
+  xAxis?: ChartAxis | [ChartAxis, ChartAxis];
   yAxis?: ChartAxis;
   legend?: ChartLegend;
   tooltip?: ChartTooltip;
@@ -212,7 +234,12 @@ export interface ChartTableRow {
    * entity in the list.
    */
   emphasis?: boolean;
-  color: string;
+  /**
+   * El punto de color que empareja la fila con su marca en el gráfico. AUSENTE cuando la fila no es
+   * una serie: en la tabla del eje girado las filas son las categorías y el color lo llevan las
+   * COLUMNAS, así que un punto ahí emparejaría con algo que no existe.
+   */
+  color?: string;
   /** Already formatted; `null` is a period with no coverage and must render EMPTY, not `$0`. */
   values: (string | null)[];
 }

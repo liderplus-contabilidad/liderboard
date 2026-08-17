@@ -13,9 +13,14 @@ import {
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LogoPicker } from "@/components/ui/logo-picker";
+import { CenterLogoRow, LogoPicker } from "@/components/ui/logo-picker";
 import { cn } from "@/lib/cn";
-import { matchesSearch, type EntityLogo } from "@/lib/workspaces";
+import {
+  matchesSearch,
+  type CenterLogos,
+  type CenterOption,
+  type EntityLogo,
+} from "@/lib/workspaces";
 
 export interface ActiveClientInfo {
   /** Empresa / client shown in bold. */
@@ -24,6 +29,12 @@ export interface ActiveClientInfo {
   period?: string;
   /** The logo, if this workspace has one. */
   logo?: EntityLogo;
+  /**
+   * El del CENTRO abierto, cuando hay exactamente uno resuelto. Va junto al del cliente y en el
+   * mismo orden que en los archivos —principal primero—, así que la cabecera confirma en pantalla
+   * lo que el Excel y el informe van a imprimir.
+   */
+  centerLogo?: EntityLogo;
 }
 
 /** One row of the selector. `caption` is what the client IS — its system, mode and years. */
@@ -86,6 +97,18 @@ export interface EntityLabels {
   plural: string;
   /** Lo que un renombrado NO toca, en las palabras del módulo. */
   renameKeeps: string;
+  /**
+   * Cómo llama el módulo a un centro: «centro de costo», «sucursal». OPCIONAL porque hay módulos
+   * que no tienen ninguno —los clientes de Rol de Pagos—, y obligarles a nombrar algo que no
+   * existe sería copia muerta. Sin estas dos palabras la sección de logos por centro NO se rinde
+   * aunque lleguen centros: quedarse sin la sección se ve, y llamarla por el nombre del módulo
+   * equivocado no.
+   */
+  centerSubject?: string;
+  /** Su plural: «centros de costo», «sucursales». No se deriva del singular — «centros de costo»
+   *  no es «centro de costo» + «s», y una regla que lo intentara acertaría en un módulo y no en el
+   *  otro. */
+  centerPlural?: string;
 }
 
 /** Las de PyG, que es quien estrenó el bloque, y por eso son también el default. */
@@ -93,6 +116,8 @@ export const DEFAULT_ENTITY_LABELS: EntityLabels = {
   subject: "cliente",
   plural: "clientes",
   renameKeeps: "sus datos, ajustes y comentarios",
+  centerSubject: "centro de costo",
+  centerPlural: "centros de costo",
 };
 
 export interface ActiveClientProps {
@@ -217,8 +242,10 @@ export function ActiveClient({
   const block = (
     <div className="flex min-w-0 items-center gap-2.5">
       {/* A la IZQUIERDA del nombre, no encima: el bloque va alineado a la derecha contra el borde
-          de la cabecera, así que el logo es lo primero que se cruza al venir desde el contenido. */}
+          de la cabecera, así que el logo es lo primero que se cruza al venir desde el contenido.
+          Con el del centro detrás, el par se lee en el mismo orden en que se imprime. */}
       <EntityLogoMark logo={client?.logo} size={28} />
+      <EntityLogoMark logo={client?.centerLogo} size={24} />
       <div className="flex min-w-0 flex-col items-end gap-[3px]">
         <span
           className={cn(
@@ -476,10 +503,13 @@ export function ClientNameDialog({
   mode,
   value,
   logo,
+  centers,
+  centerLogos,
   error,
   busy,
   onChange,
   onLogoChange,
+  onCenterLogoChange,
   onSubmit,
   onCancel,
   labels = DEFAULT_ENTITY_LABELS,
@@ -488,10 +518,18 @@ export function ClientNameDialog({
   mode: "create" | "rename";
   value: string;
   logo: EntityLogo | null;
+  /**
+   * Los centros de este workspace. SIN ellos —o vacíos— el diálogo queda exactamente como estaba,
+   * que es lo que deja intacto a Rol de Pagos, cuyos clientes no tienen centros, y a un cliente en
+   * estado único, que tampoco.
+   */
+  centers?: readonly CenterOption[];
+  centerLogos?: CenterLogos | undefined;
   error: string | null;
   busy?: boolean;
   onChange: (value: string) => void;
   onLogoChange: (logo: EntityLogo | null) => void;
+  onCenterLogoChange?: (centerId: string, logo: EntityLogo | null) => void;
   onSubmit: () => void;
   onCancel: () => void;
   labels?: EntityLabels;
@@ -508,6 +546,12 @@ export function ClientNameDialog({
     return null;
   }
   const creating = mode === "create";
+  // Las dos palabras van juntas o no van: media sección rotulada «Logos por» sin sujeto es peor
+  // que ninguna.
+  const centerWords =
+    labels.centerSubject && labels.centerPlural
+      ? { subject: labels.centerSubject, plural: labels.centerPlural }
+      : null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-6">
@@ -561,6 +605,43 @@ export function ClientNameDialog({
             hint={`Opcional. Acompaña al nombre del ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
           />
         </div>
+
+        {/*
+          Los logos de los centros van DEBAJO del principal y en el mismo diálogo porque son la
+          misma cosa —la identidad visual de este workspace— y separarlos en dos sitios obligaría a
+          recordar cuál se edita dónde. La sección no existe hasta que hay centros: un cliente
+          recién creado no tiene ninguno, y un título que promete una lista sobre una lista vacía es
+          peor que no estar.
+        */}
+        {centers && centers.length > 0 && onCenterLogoChange && centerWords && (
+          <div className="mt-4 flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+                Logos por {centerWords.plural}
+              </span>
+              <span className="text-[11px] text-faintest">opcional</span>
+            </div>
+            <p className="text-[11.5px] text-faint">
+              En la hoja de cada {centerWords.subject}, el logo del {labels.subject} va a la
+              izquierda y el suyo a la derecha.
+            </p>
+            {/* Con más de cuatro centros la lista scrollea en vez de empujar «Guardar» fuera de
+                la pantalla: el botón que cierra el diálogo no puede depender de cuántos centros
+                cargó el cliente. */}
+            <ul className="max-h-[196px] divide-y divide-border-faint overflow-y-auto rounded-[9px] border border-border-soft px-2.5">
+              {centers.map((center) => (
+                <CenterLogoRow
+                  key={center.id}
+                  name={center.name}
+                  color={center.color}
+                  value={centerLogos?.[center.id] ?? null}
+                  disabled={busy}
+                  onChange={(next) => onCenterLogoChange(center.id, next)}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
 
         {creating && (
           <p className="mt-4 rounded-[9px] bg-surface-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-soft">

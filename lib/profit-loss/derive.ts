@@ -31,6 +31,16 @@ export interface AccountNode {
  * Links accounts by dot-prefix (parent of "4.1.1" is "4.1"). An orphan whose immediate
  * parent is missing attaches to its nearest existing ancestor; duplicates keep the
  * first occurrence. Both cases produce a Spanish warning.
+ *
+ * **Neither the nesting nor the order comes from the input array's order**, and that is
+ * load-bearing: what reaches this function is often a UNION by first sighting — the visible
+ * years, the centers of a Consolidado, the clients of a cross-client one, `mergeCenters`'
+ * synthetic «Sin desglosar» subaccounts — where an account only the second contributor reports
+ * lands after everything the first one had, root 6 included. So the codes are all indexed before
+ * anything is linked (a child that arrives before its parent still nests under it), and roots and
+ * siblings come out in plan order. This is the module's one definition of the SHAPE of the chart
+ * of accounts, so Datos, the account filter, the workbooks and the printed report all inherit it
+ * instead of each sorting on its own.
  */
 export function buildAccountTree(accounts: AccountRow[]): {
   roots: AccountNode[];
@@ -38,36 +48,46 @@ export function buildAccountTree(accounts: AccountRow[]): {
 } {
   const warnings: string[] = [];
   const byCode = new Map<string, AccountNode>();
-  const roots: AccountNode[] = [];
 
   for (const account of accounts) {
     if (byCode.has(account.code)) {
       warnings.push(`Cuenta duplicada en el archivo: ${account.code}; se conserva la primera.`);
       continue;
     }
-    const node: AccountNode = {
+    byCode.set(account.code, {
       code: account.code,
       name: account.name,
       values: [...account.values],
       level: account.code.split(".").length,
       children: [],
-    };
-    byCode.set(account.code, node);
-
-    const ancestor = nearestAncestor(account.code, byCode);
-    if (ancestor) {
-      if (ancestor.code !== parentCode(account.code)) {
-        warnings.push(
-          `La cuenta ${account.code} no tiene padre directo en el archivo; se anida bajo ${ancestor.code}.`,
-        );
-      }
-      ancestor.children.push(node);
-    } else {
-      roots.push(node);
-    }
+    });
   }
 
+  const roots: AccountNode[] = [];
+  for (const node of byCode.values()) {
+    const ancestor = nearestAncestor(node.code, byCode);
+    if (!ancestor) {
+      roots.push(node);
+      continue;
+    }
+    if (ancestor.code !== parentCode(node.code)) {
+      warnings.push(
+        `La cuenta ${node.code} no tiene padre directo en el archivo; se anida bajo ${ancestor.code}.`,
+      );
+    }
+    ancestor.children.push(node);
+  }
+
+  sortSiblings(roots);
   return { roots, warnings };
+}
+
+/** Orders a level and every level below it by code — `4.1.2` before `4.1.11`. */
+function sortSiblings(nodes: AccountNode[]): void {
+  nodes.sort((a, b) => compareCodes(a.code, b.code));
+  for (const node of nodes) {
+    sortSiblings(node.children);
+  }
 }
 
 function parentCode(code: string): string | null {
@@ -780,9 +800,9 @@ export function mergeCenters(
     }
   });
 
-  // Al FINAL del orden, para que cada «Sin desglosar» quede como última hija de la suya y el
-  // desglose real se lea primero. `buildAccountTree` la ancla por prefijo, así que su padre ya
-  // está en el árbol cuando llega.
+  // El sitio en pantalla lo decide `buildAccountTree`, que ordena por código: `4.1.0` abre el
+  // desglose de `4.1` en vez de cerrarlo. Se lee bien —el código dice 0, y lo que cuelga ahí es
+  // el saldo directo que nadie repartió—, y es el precio de que el plan tenga UN solo orden.
   for (const code of [...undistributed.keys()].sort(compareCodes)) {
     const values = undistributed.get(code) as number[];
     // Un cero declarado no gana una fila: no aporta al total y solo ensucia el árbol.

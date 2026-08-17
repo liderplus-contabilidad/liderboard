@@ -13,6 +13,8 @@ import {
   withCentersCleared,
   withCodesCleared,
   withCodeToggled,
+  withPresetCleared,
+  withPresetSelected,
   withPeriodsCleared,
   withPeriodToggled,
   type FilterView,
@@ -62,7 +64,47 @@ describe("emptyFilters", () => {
       clientIds: [],
       years: [],
       periods: [],
+      preset: null,
     });
+  });
+});
+
+describe("una vista predeterminada y las cuentas marcadas son excluyentes", () => {
+  const VISTA = "lineas-de-negocio";
+
+  it("elegir una vista borra las marcas de cuenta", () => {
+    const marked = withCodeToggled(makeFilters(), HABITACIONES, [HABITACIONES]);
+    const view = withPresetSelected(marked, VISTA);
+    expect(view.preset).toBe(VISTA);
+    expect(view.codes).toEqual([]);
+  });
+
+  it("marcar una cuenta deselecciona la vista", () => {
+    const view = withPresetSelected(makeFilters(), VISTA);
+    const marked = withCodeToggled(view, HABITACIONES, [HABITACIONES]);
+    expect(marked.preset).toBeNull();
+    expect(marked.codes).toEqual([HABITACIONES]);
+  });
+
+  it("elegir una vista SIEMBRA los centros y los periodos que reparte, y quitarla los limpia", () => {
+    // Lo dibujado y lo marcado son lo mismo: se quita un establecimiento o un mes desmarcándolo
+    // donde el usuario ya sabe buscar, y apagar la vista no deja detrás chips que él no puso.
+    const meses = [
+      { frequency: "mensual" as const, index: 0 },
+      { frequency: "mensual" as const, index: 1 },
+    ];
+    const view = withPresetSelected(makeFilters(), VISTA, ["quito", "cuenca"], meses);
+    expect(view.centerIds).toEqual(["quito", "cuenca"]);
+    expect(view.periods).toEqual(meses);
+    const off = withPresetSelected(view, VISTA, ["quito", "cuenca"], meses);
+    expect([off.centerIds, off.periods]).toEqual([[], []]);
+    expect([withPresetCleared(view).centerIds, withPresetCleared(view).periods]).toEqual([[], []]);
+  });
+
+  it("elegir la que ya está puesta la quita, y quitarla no reintroduce marcas", () => {
+    const off = withPresetSelected(withPresetSelected(makeFilters(), VISTA), VISTA);
+    expect(off).toEqual(makeFilters());
+    expect(withPresetCleared(withPresetSelected(makeFilters(), VISTA))).toEqual(makeFilters());
   });
 });
 
