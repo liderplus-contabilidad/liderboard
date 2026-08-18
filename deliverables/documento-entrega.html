@@ -1,0 +1,1040 @@
+<title>Documento de Entrega</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap"
+/>
+
+<style>
+  :root {
+    --ground: #f2f5f8;
+    --surface: #ffffff;
+    --surface-2: #f7f9fb;
+    --surface-3: #eef2f6;
+    --border: #dde4ec;
+    --border-soft: #e9eef4;
+    --ink: #1e293b;
+    --ink-soft: #334155;
+    --muted: #64748b;
+    --faint: #94a3b8;
+    --accent: #1e3a5f;
+    --accent-soft: rgba(30, 58, 95, 0.08);
+    --accent-line: #1e3a5f;
+    --warn: #d97706;
+    --ok: #16a34a;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #10161d;
+      --surface: #18212b;
+      --surface-2: #1d2833;
+      --surface-3: #232f3c;
+      --border: #2d3a48;
+      --border-soft: #26313d;
+      --ink: #e3eaf2;
+      --ink-soft: #c6d2df;
+      --muted: #94a4b6;
+      --faint: #6d7f92;
+      --accent: #8fb4dd;
+      --accent-soft: rgba(143, 180, 221, 0.12);
+      --accent-line: #8fb4dd;
+      --warn: #f0a63a;
+      --ok: #4ade80;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #10161d;
+    --surface: #18212b;
+    --surface-2: #1d2833;
+    --surface-3: #232f3c;
+    --border: #2d3a48;
+    --border-soft: #26313d;
+    --ink: #e3eaf2;
+    --ink-soft: #c6d2df;
+    --muted: #94a4b6;
+    --faint: #6d7f92;
+    --accent: #8fb4dd;
+    --accent-soft: rgba(143, 180, 221, 0.12);
+    --accent-line: #8fb4dd;
+    --warn: #f0a63a;
+    --ok: #4ade80;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family:
+      "IBM Plex Sans",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 48px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px 96px;
+  }
+
+  @media (max-width: 900px) {
+    .shell {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      padding: 0 20px 64px;
+    }
+    nav.toc {
+      position: static !important;
+      padding-top: 0 !important;
+      margin-bottom: 32px;
+    }
+  }
+
+  header.masthead {
+    grid-column: 1 / -1;
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    font-size: 17px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-top: 28px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta-strip b {
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding-top: 8px;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  nav.toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  nav.toc a {
+    display: flex;
+    gap: 10px;
+    padding: 6px 10px 6px 8px;
+    border-radius: 7px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+  }
+  nav.toc a:hover {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+  nav.toc a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  nav.toc .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--faint);
+    padding-top: 2px;
+  }
+
+  main {
+    min-width: 0;
+  }
+  section {
+    margin-bottom: 64px;
+    scroll-margin-top: 24px;
+  }
+
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    margin: 34px 0 10px;
+    color: var(--ink);
+  }
+
+  .section-note {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 26px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-soft);
+    max-width: 68ch;
+  }
+
+  p {
+    max-width: 68ch;
+    margin: 0 0 14px;
+  }
+  ul {
+    max-width: 68ch;
+    margin: 0 0 14px;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  li::marker {
+    color: var(--faint);
+  }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.875em;
+    background: var(--surface-3);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--ink-soft);
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 13px 18px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .card-head h4 {
+    margin: 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .card-head span {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .scroller {
+    overflow-x: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 10px 18px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td.k {
+    color: var(--ink);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  td.t {
+    color: var(--muted);
+    font-size: 12.5px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  td.n {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    border-radius: 11px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+  }
+  .callout.info {
+    border-left-color: var(--accent-line);
+  }
+  .callout p {
+    margin: 0;
+    font-size: 13.5px;
+  }
+  .callout p + p {
+    margin-top: 10px;
+  }
+  .callout .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--warn);
+    display: block;
+    margin-bottom: 5px;
+  }
+  .callout.info .label {
+    color: var(--accent);
+  }
+
+  .check {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 22px;
+    max-width: 68ch;
+  }
+  .check li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 14px;
+  }
+  .check li:last-child {
+    border-bottom: none;
+  }
+  .check li::before {
+    content: "";
+    width: 15px;
+    height: 15px;
+    margin-top: 4px;
+    border: 1.5px solid var(--faint);
+    border-radius: 4px;
+  }
+
+  /* Campos que se completan antes de entregar. La regla dibujada (no un «_____» tecleado)
+     es lo que hace que la línea siga siendo una línea al imprimir a cualquier tamaño. */
+  .fill {
+    display: inline-block;
+    min-width: 220px;
+    border-bottom: 1px solid var(--faint);
+    padding: 0 6px 1px;
+    color: var(--faint);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.2px;
+  }
+  .fill.sm {
+    min-width: 130px;
+  }
+  .fill.lg {
+    min-width: 100%;
+    margin-top: 4px;
+  }
+  td .fill {
+    min-width: 180px;
+  }
+
+  .authors {
+    margin-top: 26px;
+  }
+  .authors-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 26px;
+    padding: 18px;
+  }
+  @media (max-width: 900px) {
+    .authors-body {
+      grid-template-columns: 1fr;
+    }
+  }
+  .author .who {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .author .role {
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .obs-box {
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface);
+    padding: 16px 18px;
+    min-height: 132px;
+    margin-bottom: 22px;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 27px,
+      var(--border-soft) 27px,
+      var(--border-soft) 28px
+    );
+    background-position: 0 34px;
+  }
+  .obs-box .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding-top: 22px;
+    font-size: 12.5px;
+    color: var(--faint);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  a {
+    color: var(--accent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  /* Se imprime en papel: es el único de los entregables pensado para eso. */
+  @media print {
+    :root {
+      --ground: #ffffff;
+      --surface: #ffffff;
+      --surface-2: #f4f6f9;
+      --surface-3: #eef2f6;
+      --shadow: none;
+    }
+    body {
+      background: #fff;
+      font-size: 10.5pt;
+      line-height: 1.5;
+    }
+    .shell {
+      display: block;
+      max-width: none;
+      padding: 0;
+    }
+    nav.toc,
+    .no-print {
+      display: none !important;
+    }
+    header.masthead {
+      padding: 0 0 18px;
+      margin-bottom: 26px;
+    }
+    h1 {
+      font-size: 26pt;
+    }
+    .lede {
+      font-size: 11pt;
+    }
+    section {
+      margin-bottom: 26px;
+      break-inside: avoid-page;
+    }
+    h2 {
+      font-size: 15pt;
+      break-after: avoid-page;
+    }
+    h3 {
+      break-after: avoid-page;
+    }
+    .card,
+    .callout,
+    .obs-box {
+      break-inside: avoid-page;
+      box-shadow: none;
+    }
+    .authors {
+      break-inside: avoid-page;
+    }
+    section.page-break {
+      break-before: page;
+    }
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+    thead {
+      display: table-header-group;
+    }
+    * {
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+  }
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <p class="eyebrow">LiderPlus · Lider Plusboard</p>
+    <h1>Documento de Entrega</h1>
+    <p class="lede">
+      Documento que cierra el proyecto: qué se entrega, cómo se verificó, qué queda fuera y quién lo
+      construyó.
+    </p>
+    <div class="meta-strip">
+      <span><b>Sistema</b> liderboard 0.1.0</span>
+      <span><b>Fecha de entrega</b> 25 ago 2026</span>
+      <span><b>Documento</b> ENTREGA-2026-01</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contenido">
+    <ol>
+      <li>
+        <a href="#objeto"><span class="num">01</span> Objeto de la entrega</a>
+      </li>
+      <li>
+        <a href="#ejecucion"><span class="num">02</span> Ejecución del proyecto</a>
+      </li>
+      <li>
+        <a href="#verificacion"><span class="num">03</span> Verificación</a>
+      </li>
+      <li>
+        <a href="#fuera"><span class="num">04</span> Alcance no incluido</a>
+      </li>
+      <li>
+        <a href="#aceptacion"><span class="num">05</span> Aceptación</a>
+      </li>
+      <li>
+        <a href="#anexo-a"><span class="num">A</span> Inventario de entregables</a>
+      </li>
+      <li>
+        <a href="#anexo-b"><span class="num">B</span> Licencias de terceros</a>
+      </li>
+    </ol>
+  </nav>
+
+  <main>
+    <section id="objeto">
+      <h2><span class="num">01</span> Objeto de la entrega</h2>
+      <p class="section-note">
+        Qué es el sistema que se recibe. El detalle funcional está en el manual de usuario y el
+        arquitectónico en el manual técnico; aquí se declara el alcance entregado.
+      </p>
+
+      <p>
+        Se entrega <strong>LiderPlus</strong> (repositorio <code>liderboard</code>), versión
+        <strong>0.1.0</strong>: una aplicación web de escritorio para el análisis financiero de la
+        firma contable, que lee los archivos Excel que los sistemas contables ya producen y los
+        convierte en estados, gráficos, informes y comprobantes.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Módulos entregados</h4>
+          <span>3 módulos · 1 submódulo</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Módulo</th>
+                <th>Alcance funcional</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">Pérdidas y Ganancias</td>
+                <td>
+                  Carga incremental del estado de resultados de varios clientes, con centros de
+                  costo, varios años y tres sistemas contables de origen. Edición de cifras con
+                  nota, consolidado entre centros y entre clientes, gráficos, análisis vertical,
+                  informe imprimible y descarga a Excel.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Ocupaciones</td>
+                <td>
+                  Carga anual de ocupación hotelera por hotel y sucursal, rejilla diaria editable,
+                  vista anual, consolidado de sucursales, indicadores (ADR, ocupación, RevPAR, PAX),
+                  gráficos, mapa de calor y canales de venta.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Rol de Pagos</td>
+                <td>
+                  Nómina por cliente, año y mes: ficha del empleado, captura mensual, motor de
+                  cálculo de las veinte columnas del rol, conciliación de lo pagado, asiento
+                  contable consolidado, comprobante en PDF que firma el empleado y descarga del rol
+                  en Excel.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Sueldos por Áreas</td>
+                <td>
+                  Submódulo de Rol de Pagos: evolución del costo total por área y por empleado a lo
+                  largo de meses y años, en tabla y gráfico.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="label">Naturaleza del sistema</span>
+        <p>
+          La aplicación <strong>no tiene servidor propio ni base de datos central</strong>: la
+          información se guarda en el navegador de cada persona (IndexedDB) y no viaja a ningún
+          servicio externo. Esto tiene dos consecuencias que el cliente declara conocer: los datos
+          <strong>no se comparten</strong> entre personas ni entre equipos, y
+          <strong>borrar los datos del sitio en el navegador borra el trabajo guardado</strong>. El
+          respaldo es la descarga a Excel, disponible en cada módulo.
+        </p>
+      </div>
+    </section>
+
+    <section id="ejecucion">
+      <h2><span class="num">02</span> Ejecución del proyecto</h2>
+
+      <div class="card">
+        <div class="scroller">
+          <table>
+            <tbody>
+              <tr>
+                <td class="k">Inicio</td>
+                <td class="n">20 de julio de 2026</td>
+              </tr>
+              <tr>
+                <td class="k">Entrega</td>
+                <td class="n">25 de agosto de 2026</td>
+              </tr>
+              <tr>
+                <td class="k">Duración</td>
+                <td>5 semanas (36 días calendario)</td>
+              </tr>
+              <tr>
+                <td class="k">Revisiones</td>
+                <td>
+                  Reunión de revisión y seguimiento <strong>todos los martes</strong> con el equipo
+                  de la firma: <strong>seis reuniones</strong>, del 21 de julio al 25 de agosto de
+                  2026, la última el propio día de la entrega.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Seguimiento</td>
+                <td>Grupo de WhatsApp para consultas y avisos entre reuniones.</td>
+              </tr>
+              <tr>
+                <td class="k">Insumos</td>
+                <td>
+                  Archivos y formatos reales de la firma compartidos en documentos en línea, sobre
+                  los que se validó cada cálculo.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p>
+        Cada funcionalidad se presentó en la reunión semanal correspondiente y se ajustó según la
+        observación de la firma antes de darse por terminada.
+      </p>
+    </section>
+
+    <section id="verificacion">
+      <h2><span class="num">03</span> Verificación</h2>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Evidencia al 18 de agosto de 2026</h4>
+          <span>rama main</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Comprobación</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">Pruebas automatizadas</td>
+                <td>
+                  <strong>2.376 pruebas en 111 archivos, todas pasan</strong> (<code>pnpm test</code
+                  >). Cubren la capa de cálculo: motor de nómina, análisis financiero, consolidados,
+                  lectura y escritura de Excel.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Integración continua</td>
+                <td>
+                  Cuatro compuertas independientes en cada cambio: análisis estático, formato,
+                  compilación con verificación de tipos y pruebas.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Contraste con el rol real</td>
+                <td>
+                  El motor reproduce <strong>al centavo</strong> las veinte columnas de los seis
+                  empleados del rol de marzo de 2026 de la firma, tomado como caso de referencia.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Contraste del asiento</td>
+                <td>
+                  El asiento contable generado cuadra contra el asiento corregido del libro de la
+                  firma: <span class="n">3.889,06</span> en el debe y en el haber, y las nueve
+                  cuentas con movimiento coinciden al centavo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Reingreso de archivos</td>
+                <td>
+                  Los Excel que la aplicación descarga vuelven a cargarse sin pérdida, verificado
+                  con pruebas de ida y vuelta.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="fuera">
+      <h2><span class="num">04</span> Alcance no incluido</h2>
+      <p class="section-note">
+        Lo que el sistema no hace, declarado para que no se lea como un defecto.
+      </p>
+
+      <ul>
+        <li>
+          <strong>Sin usuarios ni contraseñas.</strong> No hay inicio de sesión, roles ni permisos:
+          quien abre la dirección ve la aplicación, y no existe un perfil de administrador.
+        </li>
+        <li>
+          <strong>Sin trabajo compartido.</strong> Cada persona trabaja sobre sus propios datos en
+          su navegador; no hay sincronización ni edición simultánea.
+        </li>
+        <li>
+          <strong>Sin versión móvil.</strong> El diseño es de escritorio; en teléfono la aplicación
+          no está adaptada.
+        </li>
+        <li>
+          <strong>Sin integración con sistemas contables.</strong> La entrada son los archivos Excel
+          que el usuario descarga de esos sistemas; no hay conexión automática ni API.
+        </li>
+        <li>
+          <strong>Sin migración de datos históricos.</strong> La carga de períodos anteriores la
+          realiza la firma con los archivos que ya posee.
+        </li>
+        <li>
+          <strong>Sin capacitación adicional</strong> más allá de la entrega del manual de usuario y
+          la sesión de entrega, salvo pacto expreso.
+        </li>
+      </ul>
+    </section>
+
+    <section id="aceptacion" class="page-break">
+      <h2><span class="num">05</span> Aceptación</h2>
+      <p class="section-note">
+        Declaración de conformidad. Si hay salvedades, se dejan escritas: sin ellas, la recepción se
+        entiende como aceptación plena.
+      </p>
+
+      <p>
+        El cliente declara haber <strong>recibido, revisado y probado</strong> el sistema descrito
+        en la sección 01 junto con los entregables del Anexo A; haber tomado conocimiento de las
+        condiciones de la sección 01 sobre el almacenamiento de los datos y de las exclusiones de la
+        sección 04; y <strong>lo acepta a conformidad</strong>.
+      </p>
+
+      <div class="obs-box">
+        <span class="label">Salvedades y observaciones</span>
+      </div>
+
+      <div class="card authors">
+        <div class="card-head">
+          <h4>AUTORES</h4>
+          <span>equipo de desarrollo</span>
+        </div>
+        <div class="authors-body">
+          <div class="author">
+            <div class="who">Ing. Lenin Mazabanda</div>
+            <div class="role">Desarrollo de la plataforma</div>
+          </div>
+          <div class="author">
+            <div class="who">Ing. Yadira Allauca</div>
+            <div class="role">Desarrollo de la plataforma</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="anexo-a" class="page-break">
+      <h2><span class="num">A</span> Inventario de entregables</h2>
+      <p class="section-note">
+        Todo lo que se entrega, enumerado. Los documentos son archivos HTML autocontenidos: se abren
+        en cualquier navegador sin servidor ni conexión, y se convierten a PDF imprimiendo desde el
+        propio navegador.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Documentación</h4>
+          <span>carpeta deliverables/</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Documento</th>
+                <th>Contenido</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="n">A.1</td>
+                <td class="k">Manual de usuario</td>
+                <td>
+                  Guía por tarea de cada pantalla, con capturas tomadas sobre datos de demostración.
+                </td>
+              </tr>
+              <tr>
+                <td class="n">A.2</td>
+                <td class="k">Manual técnico</td>
+                <td>
+                  Arquitectura, tecnologías, diagramas ER de las tres bases y diccionario de datos.
+                </td>
+              </tr>
+              <tr>
+                <td class="n">A.3</td>
+                <td class="k">Manual de despliegue</td>
+                <td>
+                  Instalación local, publicación, verificación, rollback y operativa de los datos.
+                </td>
+              </tr>
+              <tr>
+                <td class="n">A.4</td>
+                <td class="k">Documento de entrega</td>
+                <td>
+                  El presente: qué se entrega, cómo se verificó, qué queda fuera y quién lo
+                  construyó.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Sistema</h4>
+          <span>código y publicación</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Elemento</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="n">A.5</td>
+                <td class="k">Código fuente</td>
+                <td>
+                  Repositorio <code>liderboard</code> completo, con su historial y su integración
+                  continua, bajo la cuenta de la firma.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p class="section-note" style="border: 0; padding: 0">
+        El sistema no se entrega como instalador ni como archivo ejecutable: se accede por navegador
+        a la dirección publicada, y toda actualización futura llega sola al recargar la página.
+      </p>
+    </section>
+
+    <section id="anexo-b">
+      <h2><span class="num">B</span> Licencias de terceros</h2>
+      <p class="section-note">
+        Componentes de terceros que el sistema incorpora. Todos son de código abierto con licencia
+        permisiva: no generan pago de regalías ni obligan a liberar el código de la firma.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Dependencias de ejecución</h4>
+          <span>10 componentes</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Componente</th>
+                <th>Para qué</th>
+                <th>Licencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">Next.js</td>
+                <td>Marco de la aplicación web</td>
+                <td class="t">MIT</td>
+              </tr>
+              <tr>
+                <td class="k">React · React DOM</td>
+                <td>Interfaz de usuario</td>
+                <td class="t">MIT</td>
+              </tr>
+              <tr>
+                <td class="k">Dexie · Dexie React Hooks</td>
+                <td>Almacenamiento en el navegador</td>
+                <td class="t">Apache-2.0</td>
+              </tr>
+              <tr>
+                <td class="k">ECharts</td>
+                <td>Gráficos</td>
+                <td class="t">Apache-2.0</td>
+              </tr>
+              <tr>
+                <td class="k">SheetJS (xlsx)</td>
+                <td>Lectura de archivos Excel</td>
+                <td class="t">Apache-2.0</td>
+              </tr>
+              <tr>
+                <td class="k">ExcelJS</td>
+                <td>Escritura de archivos Excel</td>
+                <td class="t">MIT</td>
+              </tr>
+              <tr>
+                <td class="k">pdf-lib</td>
+                <td>Generación del comprobante en PDF</td>
+                <td class="t">MIT</td>
+              </tr>
+              <tr>
+                <td class="k">Lucide</td>
+                <td>Iconografía</td>
+                <td class="t">ISC</td>
+              </tr>
+              <tr>
+                <td class="k">IBM Plex Sans · Mono</td>
+                <td>Tipografías</td>
+                <td class="t">OFL-1.1</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p>
+        Las herramientas usadas solo para construir el sistema (TypeScript, Tailwind CSS, Vitest,
+        oxlint y oxfmt) son igualmente MIT o Apache-2.0 y
+        <strong>no forman parte de lo que se ejecuta</strong>
+        en el navegador del usuario.
+      </p>
+    </section>
+
+    <footer>Documento de entrega · liderboard 0.1.0 · 25 ago 2026</footer>
+  </main>
+</div>

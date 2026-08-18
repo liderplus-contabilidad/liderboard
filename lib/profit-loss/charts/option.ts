@@ -39,6 +39,7 @@ import type {
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { periodLabel } from "../analytics/period";
 import {
+  OTHERS_CODE,
   toPctOfContainer,
   type AmountEntry,
   type ParetoResult,
@@ -158,7 +159,14 @@ export interface EntryOptionContext {
   unit?: ChartUnit;
 }
 
-/** The single value formatter every axis, label and tooltip goes through. */
+/**
+ * The single value formatter every label, tooltip and table twin goes through.
+ *
+ * Los importes llevan DOS DECIMALES, exactamente como la tabla de Datos —el mismo
+ * `formatCurrency({ cents: true })`—, porque una cifra de un gráfico se coteja contra la hoja del
+ * contador: `$204,045` frente a `204.045,51` obliga a preguntarse si lo que falta son centavos o
+ * una carga incompleta, y esa duda cuesta más que el ancho que ocupa el `.51`.
+ */
 export function formatChartValue(value: number, unit: ChartUnit = "moneda"): string {
   switch (unit) {
     case "porcentaje":
@@ -166,8 +174,21 @@ export function formatChartValue(value: number, unit: ChartUnit = "moneda"): str
     case "indice":
       return formatNumber(Math.round(value * 10) / 10);
     default:
-      return formatCurrency(value);
+      return formatCurrency(value, { cents: true });
   }
+}
+
+/**
+ * Lo mismo para las marcas del EJE, que es el único sitio donde el importe va SIN centavos.
+ *
+ * Un eje no es una cifra que nadie coteje: es la escala contra la que se estima el alto de una
+ * barra, y seis rótulos de «$204,045.51» se comen el ancho que le queda al dibujo para decir algo
+ * que el tooltip y la tabla ya dicen exacto. Es la regla que Ocupaciones ya tenía escrita en
+ * `formatMetric` («right for an axis, wrong for a figure someone compares against their own
+ * spreadsheet»), y la razón de que Datos no necesite este caso: una tabla no tiene eje.
+ */
+export function formatAxisValue(value: number, unit: ChartUnit = "moneda"): string {
+  return unit === "moneda" ? formatCurrency(value) : formatChartValue(value, unit);
 }
 
 /** Vertical bars — one series is an evolution, several are a grouped comparison. */
@@ -177,7 +198,7 @@ export function barOption(series: Series[], context: SeriesOptionContext): Chart
     ...chrome(series.length),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("shadow", context.unit, context),
+    tooltip: axisTooltip("shadow", context.unit, context, tooltipCodes(seriesCodes(series))),
     series: series.map((entry) => barSeries(entry, series.length, context, { sharedCount })),
   };
 }
@@ -185,13 +206,18 @@ export function barOption(series: Series[], context: SeriesOptionContext): Chart
 /** El nombre de la pila. Uno solo: todas las series se acumulan en la misma columna. */
 const STACK_ID = "total";
 
+/** El id de la línea del total, que la opción y su tabla gemela tienen que nombrar igual. */
+function totalLineId(total: Series): string {
+  return `${seriesKeyId(total.key)}|total`;
+}
+
 /** Stacked bars — what a total is made of, period by period. */
 export function stackedOption(series: Series[], context: SeriesOptionContext): ChartOption {
   return {
     ...chrome(series.length),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("shadow", context.unit),
+    tooltip: axisTooltip("shadow", context.unit, undefined, tooltipCodes(seriesCodes(series))),
     series: series.map((entry) => ({
       ...barSeries(entry, series.length, context, { stacked: true }),
       stack: STACK_ID,
@@ -223,11 +249,17 @@ export function stackedTotalOption(
   total: Series,
   context: SeriesOptionContext,
 ): ChartOption {
+  const totalId = totalLineId(total);
   return {
     ...chrome(series.length + 1),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("shadow", context.unit, context),
+    tooltip: axisTooltip(
+      "shadow",
+      context.unit,
+      context,
+      tooltipCodes([...seriesCodes(series), [totalId, total.key.code]]),
+    ),
     series: [
       ...series.map((entry) => ({
         ...barSeries(entry, series.length, context, {
@@ -238,7 +270,7 @@ export function stackedTotalOption(
         stack: STACK_ID,
       })),
       {
-        id: `${seriesKeyId(total.key)}|total`,
+        id: totalId,
         type: "line",
         name: total.label,
         data: total.points.map((point) => point.value),
@@ -272,10 +304,11 @@ export function stackedTotalTable(
     rows: [
       ...table.rows,
       {
-        id: `${seriesKeyId(total.key)}|total`,
+        id: totalLineId(total),
         label: total.label,
         color: CHART_INK.strong,
         emphasis: true,
+        ...sublabelFor(total.key.code),
         values: total.points.map((point) =>
           point.value === null ? null : formatChartValue(point.value, context.unit),
         ),
@@ -298,7 +331,7 @@ export function hundredPercentOption(series: Series[], context: SeriesOptionCont
     ...chrome(shares.length),
     xAxis: periodAxis(context),
     yAxis: { ...valueAxis("porcentaje"), max: 100 },
-    tooltip: axisTooltip("shadow", "porcentaje"),
+    tooltip: axisTooltip("shadow", "porcentaje", undefined, tooltipCodes(seriesCodes(shares))),
     series: shares.map((entry) => ({
       ...barSeries(entry, shares.length, { ...context, unit: "porcentaje" }, { stacked: true }),
       stack: STACK_ID,
@@ -507,7 +540,7 @@ export function lineOption(series: Series[], context: SeriesOptionContext): Char
     ...chrome(series.length),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("cross", context.unit, context),
+    tooltip: axisTooltip("cross", context.unit, context, tooltipCodes(seriesCodes(series))),
     series: series.map((entry) => lineSeries(entry, series.length, context, sharedCount)),
   };
 }
@@ -527,7 +560,7 @@ export function comboOption(
     ...chrome(MIN_LEGEND_SERIES),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
-    tooltip: axisTooltip("cross", context.unit),
+    tooltip: axisTooltip("cross", context.unit, undefined, tooltipCodes(seriesCodes([bars]))),
     series: [
       barSeries(bars, 1, context),
       {
@@ -568,7 +601,7 @@ export function horizontalBarOption(
       inverse: true,
       axisLabel: ROW_AXIS_LABEL,
     },
-    tooltip: axisTooltip("shadow", unit),
+    tooltip: axisTooltip("shadow", unit, undefined, categoryCodes(ranked)),
     series: [
       {
         id: "ranking",
@@ -587,6 +620,205 @@ export function horizontalBarOption(
         labelLayout: { hideOverlap: true },
       },
     ],
+  };
+}
+
+/**
+ * Barras VERTICALES, una por entrada, con la cifra encima — el espejo de `horizontalBarOption`.
+ *
+ * Existe porque es la forma en la que la firma dibuja su anexo de gastos a mano, y esa forma no es
+ * un capricho suyo: con las categorías abajo el ojo recorre la fila de cifras de un barrido, que es
+ * lo que se hace al cotejar contra la hoja. El precio es el rótulo — «EMPLEADOS M.O.I. /
+ * ADMISIONES / CAJA / INFORMACION» no cabe bajo una columna—, y se paga PARTIÉNDOLO en varias
+ * líneas (`overflow: "break"`) en vez de girándolo: un eje de rótulos en diagonal obliga a inclinar
+ * la cabeza para leer diecisiete nombres, y su propio Excel los parte igual.
+ *
+ * `interval: 0` es lo que obliga a dibujarlos TODOS. Sin él, ECharts adelgaza el eje cuando no
+ * caben y se salta uno de cada dos: quedarían diecisiete barras con nueve nombres, y las ocho sin
+ * rotular no se podrían identificar por nada — que es peor que un rótulo apretado.
+ */
+export function verticalBarOption(
+  entries: AmountEntry[],
+  context: EntryOptionContext & { labelWidth?: number },
+): ChartOption {
+  const ranked = [...entries].sort((a, b) => b.value - a.value);
+  const unit = context.unit;
+
+  return {
+    ...chrome(1),
+    grid: COLUMN_GRID,
+    xAxis: {
+      ...categoryAxis(ranked.map((entry) => entry.label)),
+      axisLabel: {
+        color: CHART_INK.muted,
+        fontSize: 10,
+        width: context.labelWidth ?? COLUMN_LABEL_WIDTH,
+        overflow: "break",
+        // Todos, sin adelgazar: una barra sin nombre no se puede identificar por nada más.
+        interval: 0,
+        hideOverlap: false,
+      },
+    },
+    yAxis: valueAxis(unit),
+    // Con el CÓDIGO de cuenta en la cabecera: el eje solo cabe el rótulo, y truncado, así que el
+    // tooltip es donde el contador identifica la fila de su plan. Se lee de `ranked` y no de
+    // `entries` porque el orden dibujado es el ordenado, y `byCategory` va por índice.
+    tooltip: axisTooltip("shadow", unit, undefined, categoryCodes(ranked)),
+    series: [
+      {
+        id: "distribucion",
+        type: "bar",
+        name: "Monto",
+        data: ranked.map((entry) => ({
+          value: entry.value,
+          itemStyle: {
+            color: context.colorOf(entry.code),
+            borderRadius: [CHART_MARK.radius, CHART_MARK.radius, 0, 0],
+          },
+        })),
+        barMaxWidth: CHART_MARK.barMaxWidth,
+        emphasis: { focus: "series" },
+        // La cifra encima de su barra, como en la hoja del contador: es lo que se coteja, y la
+        // columna más pequeña de un anexo real mide dos píxeles y sin su número no dice nada.
+        label: directLabel(true, unit, "top"),
+        labelLayout: { hideOverlap: true },
+      },
+    ],
+  };
+}
+
+/**
+ * Una cuenta contra los TOTALES que la contienen, como PARTE DE UN TODO: una fila por total, la
+ * barra llena hasta lo que esa cuenta pesa y el resto en un relleno recesivo hasta el 100 %.
+ *
+ * Es la forma que responde «qué parte ocupa», y la elección está en el RESTO: sin él una barra al
+ * 27,4 % sobre un eje que se auto-escala se lee como una cifra cualquiera, y hay que ir a mirar el
+ * eje para saber contra qué. Con el resto dibujado, el todo está a la vista y la lectura es
+ * inmediata — el eje deja de hacer falta y por eso va fijo a 100.
+ *
+ * Cada barra lleva su MONTO y debajo su porcentaje, con el mismo `rich` de dos renglones que usan
+ * las cuentas anidadas: el monto es la cifra que se coteja contra la hoja y el porcentaje la
+ * lectura que la fila añade. Van JUSTO A LA DERECHA del relleno y no dentro, y eso se probó al
+ * revés primero: dentro, `$307,005.37` no cabe en una barra del 27 % y sale recortado, y el umbral
+ * que decidiera cuándo entra y cuándo no dependería del ancho del texto, que no se puede medir sin
+ * un canvas. A la derecha caen sobre el relleno recesivo, que es claro, así que se leen en tinta
+ * normal y no hay caso que resolver.
+ *
+ * El resto NO se rotula: su porcentaje es el complemento del que ya está escrito, y decir «72,6 %»
+ * al lado de «27,4 %» es la misma cifra dos veces compitiendo con la que importa.
+ */
+export interface ShareOfTotalRow {
+  id: string;
+  /** Contra qué se mide: «Del total de costos y gastos». */
+  label: string;
+  value: number;
+  /** El todo. `null` deja la fila fuera: no hay contra qué medir, que no es lo mismo que 0 %. */
+  total: number | null;
+}
+
+export function shareOfTotalOption(
+  rows: readonly ShareOfTotalRow[],
+  context: { colorOf: (id: string) => string },
+): ChartOption {
+  const drawn = rows.filter((row): row is ShareOfTotalRow & { total: number } => {
+    return row.total !== null && row.total !== 0;
+  });
+  const shares = drawn.map((row) => (row.value / row.total) * 100);
+
+  return {
+    animationDuration: 320,
+    textStyle: { fontFamily: CHART_FONT },
+    grid: SHARE_ROW_GRID,
+    xAxis: {
+      ...valueAxis("porcentaje"),
+      // Fijo a 100: el eje de una parte-de-un-todo no se auto-escala, o el mismo relleno diría
+      // cosas distintas en dos filas y la comparación entre ellas dejaría de ser posible.
+      min: 0,
+      max: 100,
+      axisLabel: { show: false },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      ...categoryAxis(drawn.map((row) => row.label)),
+      inverse: true,
+      axisLine: { show: false },
+      axisLabel: { color: CHART_INK.muted, fontSize: 11.5, width: SHARE_LABEL_WIDTH },
+    },
+    tooltip: axisTooltip("shadow", "porcentaje"),
+    series: [
+      {
+        id: "parte",
+        type: "bar",
+        name: "Esta cuenta",
+        stack: "todo",
+        data: drawn.map((row, index) => ({
+          value: shares[index],
+          itemStyle: {
+            color: context.colorOf(row.id),
+            borderRadius: [CHART_MARK.radius, 0, 0, CHART_MARK.radius],
+          },
+        })),
+        barMaxWidth: 30,
+        label: {
+          show: true,
+          position: "right",
+          color: CHART_INK.strong,
+          fontSize: 11,
+          formatter: (param) => {
+            const row = drawn[param.dataIndex];
+            const share = shares[param.dataIndex];
+            return `{monto|${formatChartValue(row.value)}}\n{${SHARE_RICH_KEY}|${formatPercent(share)}}`;
+          },
+          rich: {
+            monto: { color: CHART_INK.strong, fontSize: 11, lineHeight: 14 },
+            // Más tenue que el monto, la misma jerarquía que en las cuentas anidadas: el porcentaje
+            // es la anotación sobre la barra, no la cifra de la barra.
+            [SHARE_RICH_KEY]: { color: CHART_INK.muted, fontSize: 10, lineHeight: 12 },
+          },
+        },
+        labelLayout: { hideOverlap: true },
+      },
+      {
+        id: "resto",
+        type: "bar",
+        name: "Resto",
+        stack: "todo",
+        // Recesivo y SILENCIOSO: existe para que se vea el todo, no para ser leído — resaltarlo al
+        // pasar por encima invitaría a compararlo con la parte, y no es una entidad.
+        silent: true,
+        data: drawn.map((_, index) => ({
+          value: 100 - shares[index],
+          itemStyle: {
+            color: CHART_BAND,
+            borderRadius: [0, CHART_MARK.radius, CHART_MARK.radius, 0],
+          },
+        })),
+        barMaxWidth: 30,
+        label: { show: false },
+      },
+    ],
+  };
+}
+
+/** La gemela en tabla: el monto, su parte y el todo contra el que se mide. */
+export function shareOfTotalTable(
+  rows: readonly ShareOfTotalRow[],
+  context: { colorOf: (id: string) => string },
+): ChartTable {
+  return {
+    columns: ["Monto", "% del total", "Total"],
+    rows: rows
+      .filter((row): row is ShareOfTotalRow & { total: number } => row.total !== null)
+      .map((row) => ({
+        id: row.id,
+        label: row.label,
+        color: context.colorOf(row.id),
+        values: [
+          formatChartValue(row.value),
+          row.total === 0 ? null : formatPercent((row.value / row.total) * 100),
+          formatChartValue(row.total),
+        ],
+      })),
   };
 }
 
@@ -620,7 +852,7 @@ export function variationBarOption(
       inverse: true,
       axisLabel: ROW_AXIS_LABEL,
     },
-    tooltip: axisTooltip("shadow", context.unit),
+    tooltip: axisTooltip("shadow", context.unit, undefined, categoryCodes(ranked)),
     series: [
       {
         id: "variacion",
@@ -675,7 +907,13 @@ export function pieOption(result: PieResult, context: PieOptionContext): ChartOp
           return "";
         }
         const share = param.percent === undefined ? "" : ` · ${formatPercent(param.percent)}`;
-        return `${param.name}<br/>${param.marker ?? ""} ${formatChartValue(param.value, context.unit)}${share}`;
+        // La porción es la cuenta, así que el código va en su nombre — y «Otros», que es el
+        // pliegue de la cola y no una cuenta, se queda sin él por `accountCodeOf`.
+        const name = withCode(
+          param.name,
+          accountCodeOf(result.slices[param.dataIndex]?.code ?? ""),
+        );
+        return `${name}<br/>${param.marker ?? ""} ${formatChartValue(param.value, context.unit)}${share}`;
       },
     },
     legend: legendFor(result.slices.length),
@@ -730,7 +968,7 @@ export function paretoOption(result: ParetoResult, context: EntryOptionContext):
       inverse: true,
       axisLabel: ROW_AXIS_LABEL,
     },
-    tooltip: axisTooltip("shadow", context.unit),
+    tooltip: axisTooltip("shadow", context.unit, undefined, categoryCodes(result.entries)),
     series: [
       {
         id: "pareto",
@@ -1055,6 +1293,7 @@ export function seriesTable(series: Series[], context: SeriesOptionContext): Cha
     rows: series.map((entry) => ({
       id: seriesKeyId(entry.key),
       label: entry.label,
+      ...sublabelFor(entry.key.code),
       color: context.colorOf(entry.key),
       values: entry.points.map((point) =>
         point.value === null ? null : formatChartValue(point.value, context.unit),
@@ -1076,6 +1315,7 @@ export function entryTable(
       .map((entry) => ({
         id: entry.code,
         label: entry.label,
+        ...sublabelFor(entry.code),
         color: context.colorOf(entry.code),
         values: [formatChartValue(entry.value, context.unit)],
       })),
@@ -1100,11 +1340,44 @@ const CATEGORY_ROW_GRID = {
   outerBoundsMode: "none",
 } as const;
 
+/**
+ * El canal de la fila de «parte de un todo». Mucho más estrecho que el del ranking porque su rótulo
+ * no es un nombre de cuenta sino contra qué se mide —dos filas, texto corto y conocido—, y aquí
+ * cada píxel cuenta: esto vive en el panel lateral, que son 440 px, y entre el canal y el hueco de
+ * la cifra se le puede comer a la barra todo el ancho que tiene para decir algo.
+ */
+const SHARE_LABEL_WIDTH = 106;
+const SHARE_ROW_GRID = {
+  left: SHARE_LABEL_WIDTH + 14,
+  // El monto y su porcentaje se escriben a la derecha del relleno, así que la barra no puede
+  // llegar al borde: sin este hueco, la fila más llena imprimiría su cifra fuera de la tarjeta.
+  right: 104,
+  top: 10,
+  bottom: 10,
+  outerBoundsMode: "none",
+} as const;
+
 const ROW_AXIS_LABEL = {
   color: CHART_INK.muted,
   fontSize: 11.5,
   width: ROW_LABEL_WIDTH,
   overflow: "truncate",
+} as const;
+
+/**
+ * El ancho que se le da a cada rótulo bajo su columna antes de partirlo en líneas, y el hueco que
+ * la retícula le reserva abajo. Son fijos por lo mismo que el canal de `CATEGORY_ROW_GRID`: medir
+ * el texto real exigiría un canvas, así que se reserva una cota y se parte contra ella.
+ */
+const COLUMN_LABEL_WIDTH = 74;
+const COLUMN_GRID = {
+  left: 8,
+  right: 16,
+  top: 28,
+  // Cuatro líneas de rótulo a 10 px, que es lo que pide el nombre más largo de un anexo real.
+  bottom: 62,
+  outerBoundsMode: "same",
+  outerBoundsContain: "axisLabel",
 } as const;
 
 const TOOLTIP_CHROME: Omit<ChartTooltip, "trigger" | "formatter"> = {
@@ -1175,9 +1448,78 @@ function valueAxis(unit: ChartUnit = "moneda"): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      formatter: (value) => formatChartValue(Number(value), unit),
+      formatter: (value) => formatAxisValue(Number(value), unit),
     },
   };
+}
+
+/**
+ * El código de cuenta con el que se nombra algo del plan, o `undefined` cuando lo dibujado no es
+ * una cuenta.
+ *
+ * Es una línea porque una sola cosa puede estar mal: `OTHERS_CODE` es el pliegue de la cola —el
+ * de la tarta y el de la pila—, y escribirlo afirmaría que el contador tiene una cuenta llamada
+ * «otros». Lo demás que llega aquí ya sale del árbol (`SeriesKey.code`, `AmountEntry.code`), así
+ * que no hay nada que validar contra la fuente.
+ */
+function accountCodeOf(code: string): string | undefined {
+  return code === OTHERS_CODE || code.length === 0 ? undefined : code;
+}
+
+/**
+ * El nombre precedido de su código, que es el orden del plan de cuentas y el de la tabla de
+ * Datos, donde la columna del código va a la izquierda del nombre.
+ */
+function withCode(label: string, code: string | undefined): string {
+  return code === undefined ? label : `${code} · ${label}`;
+}
+
+/**
+ * Dónde cae el código dentro de un tooltip, que no es lo mismo en las dos formas de tarjeta.
+ *
+ * Cuando la cuenta ES la serie —la evolución, la comparación, la pila— hay una fila por serie y
+ * el código va en la suya. Cuando la cuenta es la CATEGORÍA del eje —el ranking, la variación, el
+ * pareto—, la serie se llama «Monto» y el nombre de la cuenta es la primera línea del tooltip,
+ * así que es ahí donde tiene que ir. Un mismo formateador y dos sitios; ningún builder pasa los
+ * dos, porque ningún gráfico es de las dos formas a la vez.
+ */
+interface TooltipCodes {
+  /** Por `seriesId`. */
+  bySeries?: ReadonlyMap<string, string>;
+  /** Por índice de categoría, en el orden en que se dibujan. */
+  byCategory?: readonly (string | undefined)[];
+}
+
+/**
+ * El código como `sublabel` de una fila de la tabla gemela — ausente cuando no hay cuenta que
+ * nombrar. Va debajo del nombre y no pegado a él porque en la tabla sí hay sitio para los dos,
+ * la misma regla con la que Sueldos por Áreas cuelga el cargo bajo el empleado.
+ */
+function sublabelFor(code: string): { sublabel?: string } {
+  const account = accountCodeOf(code);
+  return account === undefined ? {} : { sublabel: account };
+}
+
+/** Los pares `(id de serie, código)` de una tanda, con el id que cada serie lleva al dibujarse. */
+function seriesCodes(series: readonly Series[]): [string, string][] {
+  return series.map((entry) => [seriesKeyId(entry.key), entry.key.code]);
+}
+
+/** El mapa del tooltip, sin las series que no nombran una cuenta. */
+function tooltipCodes(pairs: readonly (readonly [string, string])[]): TooltipCodes {
+  const bySeries = new Map<string, string>();
+  for (const [id, code] of pairs) {
+    const code_ = accountCodeOf(code);
+    if (code_ !== undefined) {
+      bySeries.set(id, code_);
+    }
+  }
+  return { bySeries };
+}
+
+/** Lo mismo para un eje de categorías, donde el índice del dato ES el puesto en el eje. */
+function categoryCodes(entries: readonly { code: string }[]): TooltipCodes {
+  return { byCategory: entries.map((entry) => accountCodeOf(entry.code)) };
 }
 
 /**
@@ -1188,11 +1530,17 @@ function valueAxis(unit: ChartUnit = "moneda"): ChartAxis {
  * Es el único sitio donde el porcentaje sale NOMBRANDO su base («28.4 % de Ingresos»): en la
  * barra esa frase no cabe en doce columnas, y aquí sobra el ancho. Sale siempre que exista,
  * también cuando el eje estaba demasiado apretado para imprimirlo encima de la barra.
+ *
+ * Y es donde sale el CÓDIGO de la cuenta, que en el gráfico no está en ningún otro sitio: en el
+ * eje se comería el canal de rótulos —150 px en las de barras horizontales— y truncaría los
+ * nombres, así que se paga al pasar el ratón, que es cuando se pregunta por una cuenta concreta
+ * para cotejarla contra el plan.
  */
 function axisTooltip(
   pointer: "shadow" | "cross",
   unit: ChartUnit = "moneda",
   context?: SeriesOptionContext,
+  codes: TooltipCodes = {},
 ): ChartTooltip {
   return {
     trigger: "axis",
@@ -1211,9 +1559,16 @@ function axisTooltip(
           share && value !== null && value !== undefined
             ? ` · ${formatPercent(value)} de ${share.baseLabel}`
             : "";
-        return `${param.marker ?? ""} ${param.seriesName ?? ""}: ${formatChartValue(param.value as number, unit)}${suffix}`;
+        const name = withCode(
+          param.seriesName ?? "",
+          param.seriesId === undefined ? undefined : codes.bySeries?.get(param.seriesId),
+        );
+        return `${param.marker ?? ""} ${name}: ${formatChartValue(param.value as number, unit)}${suffix}`;
       });
-      return [covered[0].name, ...rows].join("<br/>");
+      // La primera línea es el PERIODO en las de series y la CUENTA en las de categorías: solo la
+      // segunda lleva código, y por eso `byCategory` se lee aquí y no en las filas.
+      const head = withCode(covered[0].name, codes.byCategory?.[covered[0].dataIndex]);
+      return [head, ...rows].join("<br/>");
     },
   };
 }

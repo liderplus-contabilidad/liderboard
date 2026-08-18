@@ -1,0 +1,2337 @@
+<title>Manual Técnico LiderPlus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:wght@500;600&display=swap"
+/>
+
+<style>
+  :root {
+    --ground: #f2f5f8;
+    --surface: #ffffff;
+    --surface-2: #f7f9fb;
+    --surface-3: #eef2f6;
+    --border: #dde4ec;
+    --border-soft: #e9eef4;
+    --ink: #1e293b;
+    --ink-soft: #334155;
+    --muted: #64748b;
+    --faint: #94a3b8;
+    --accent: #1e3a5f;
+    --accent-soft: rgba(30, 58, 95, 0.08);
+    --accent-line: #1e3a5f;
+    --income: #d7e4bd;
+    --cost: #b7dee8;
+    --other: #fcd5b5;
+    --income-ink: #4a5a2e;
+    --cost-ink: #1f5a68;
+    --other-ink: #7a4a22;
+    --warn: #d97706;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #10161d;
+      --surface: #18212b;
+      --surface-2: #1d2833;
+      --surface-3: #232f3c;
+      --border: #2d3a48;
+      --border-soft: #26313d;
+      --ink: #e3eaf2;
+      --ink-soft: #c6d2df;
+      --muted: #94a4b6;
+      --faint: #6d7f92;
+      --accent: #8fb4dd;
+      --accent-soft: rgba(143, 180, 221, 0.12);
+      --accent-line: #8fb4dd;
+      --income: #3d4a2c;
+      --cost: #244852;
+      --other: #533a22;
+      --income-ink: #d3e2b6;
+      --cost-ink: #b0dbe6;
+      --other-ink: #f4cba6;
+      --warn: #f0a63a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #10161d;
+    --surface: #18212b;
+    --surface-2: #1d2833;
+    --surface-3: #232f3c;
+    --border: #2d3a48;
+    --border-soft: #26313d;
+    --ink: #e3eaf2;
+    --ink-soft: #c6d2df;
+    --muted: #94a4b6;
+    --faint: #6d7f92;
+    --accent: #8fb4dd;
+    --accent-soft: rgba(143, 180, 221, 0.12);
+    --accent-line: #8fb4dd;
+    --income: #3d4a2c;
+    --cost: #244852;
+    --other: #533a22;
+    --income-ink: #d3e2b6;
+    --cost-ink: #b0dbe6;
+    --other-ink: #f4cba6;
+    --warn: #f0a63a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family:
+      "IBM Plex Sans",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 48px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px 96px;
+  }
+
+  @media (max-width: 900px) {
+    .shell {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+      padding: 0 20px 64px;
+    }
+    nav.toc {
+      position: static !important;
+      padding-top: 0 !important;
+      margin-bottom: 32px;
+    }
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────── */
+  header.masthead {
+    grid-column: 1 / -1;
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    font-size: 17px;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    margin-top: 28px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta-strip b {
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  /* ── TOC ──────────────────────────────────────────────────── */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding-top: 8px;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  nav.toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  nav.toc a {
+    display: flex;
+    gap: 10px;
+    padding: 6px 10px 6px 8px;
+    border-radius: 7px;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+  }
+  nav.toc a:hover {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+  nav.toc a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  nav.toc .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--faint);
+    padding-top: 2px;
+  }
+
+  /* ── Sections ─────────────────────────────────────────────── */
+  main {
+    min-width: 0;
+  }
+
+  section {
+    margin-bottom: 64px;
+    scroll-margin-top: 24px;
+  }
+
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-size: 27px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0;
+  }
+
+  h3 {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    margin: 34px 0 10px;
+    color: var(--ink);
+  }
+
+  .section-note {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 26px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-soft);
+    max-width: 68ch;
+  }
+
+  p {
+    max-width: 68ch;
+    margin: 0 0 14px;
+  }
+  ul,
+  ol.body-list {
+    max-width: 68ch;
+    margin: 0 0 14px;
+    padding-left: 20px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  li::marker {
+    color: var(--faint);
+  }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.875em;
+    background: var(--surface-3);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--ink-soft);
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ── Cards & tables ───────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 13px 18px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .card-head h4 {
+    margin: 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .card-head span {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .scroller {
+    overflow-x: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 10px 18px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td.mono,
+  th.mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  td.k {
+    color: var(--ink);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  td.t {
+    color: var(--muted);
+    font-size: 12.5px;
+    white-space: nowrap;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  .pk,
+  .fk,
+  .ix,
+  .uq {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    vertical-align: 1px;
+    margin-left: 6px;
+  }
+  .pk {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-soft);
+  }
+  .fk {
+    background: var(--surface-3);
+    color: var(--muted);
+  }
+  .ix {
+    background: transparent;
+    color: var(--faint);
+    border: 1px solid var(--border);
+  }
+  .uq {
+    background: var(--other);
+    color: var(--other-ink);
+  }
+
+  /* ── Figures ──────────────────────────────────────────────── */
+  figure {
+    margin: 0 0 22px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  figure .fig-body {
+    padding: 22px 18px 8px;
+    overflow-x: auto;
+  }
+  figure svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 620px;
+  }
+  figcaption {
+    padding: 11px 18px;
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface-2);
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  /* ER diagram primitives */
+  .er-box {
+    fill: var(--surface-2);
+    stroke: var(--border);
+    stroke-width: 1.2;
+  }
+  .er-box-head {
+    fill: var(--surface-3);
+  }
+  .er-title {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    fill: var(--ink);
+  }
+  .er-field {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    fill: var(--muted);
+  }
+  .er-key {
+    fill: var(--accent);
+    font-weight: 600;
+  }
+  .er-line {
+    stroke: var(--faint);
+    stroke-width: 1.3;
+    fill: none;
+  }
+  .er-card {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    fill: var(--faint);
+  }
+  .er-rule {
+    stroke: var(--border-soft);
+    stroke-width: 1;
+  }
+
+  /* Layer diagram */
+  .layers {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .layer {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-line);
+    border-radius: 11px;
+    padding: 14px 18px;
+  }
+  .layer .lname {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .layer .lname em {
+    display: block;
+    font-style: normal;
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--faint);
+    letter-spacing: 0.3px;
+    margin-top: 3px;
+  }
+  .layer p {
+    margin: 0;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    max-width: none;
+  }
+  .layer.pure {
+    border-left-color: var(--income);
+  }
+  .layer.view {
+    border-left-color: var(--cost);
+  }
+  .layer.store {
+    border-left-color: var(--other);
+  }
+
+  /* Module chips */
+  .modules {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .mod {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 15px 17px;
+  }
+  .mod .tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  .mod.income .tag {
+    background: var(--income);
+    color: var(--income-ink);
+  }
+  .mod.cost .tag {
+    background: var(--cost);
+    color: var(--cost-ink);
+  }
+  .mod.other .tag {
+    background: var(--other);
+    color: var(--other-ink);
+  }
+  .mod h4 {
+    margin: 0 0 4px;
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+  .mod p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    max-width: none;
+  }
+
+  /* Callout */
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    border-radius: 11px;
+    padding: 14px 18px;
+    margin-bottom: 22px;
+  }
+  .callout p {
+    margin: 0;
+    font-size: 13.5px;
+  }
+  .callout .label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--warn);
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding-top: 22px;
+    font-size: 12.5px;
+    color: var(--faint);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  a {
+    color: var(--accent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <p class="eyebrow">LiderPlus · Lider Plusboard</p>
+    <h1>Manual Técnico</h1>
+    <p class="lede">
+      Arquitectura, stack tecnológico y modelo de datos del tablero financiero que la firma usa para
+      cerrar estados de resultados, ocupación hotelera y rol de pagos. Documento de referencia para
+      quien mantiene o extiende el código.
+    </p>
+    <div class="meta-strip">
+      <span><b>Versión</b> 0.1.0</span>
+      <span><b>Actualizado</b> 18 ago 2026</span>
+      <span><b>Rama</b> main</span>
+      <span><b>Repositorio</b> liderplboard</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contenido">
+    <ol>
+      <li>
+        <a href="#panorama"><span class="num">01</span> Panorama</a>
+      </li>
+      <li>
+        <a href="#arquitectura"><span class="num">02</span> Arquitectura</a>
+      </li>
+      <li>
+        <a href="#tecnologias"><span class="num">03</span> Tecnologías</a>
+      </li>
+      <li>
+        <a href="#datos"><span class="num">04</span> Modelo de datos</a>
+      </li>
+      <li>
+        <a href="#diccionario"><span class="num">05</span> Diccionario de datos</a>
+      </li>
+      <li>
+        <a href="#migraciones"><span class="num">06</span> Versionado y migraciones</a>
+      </li>
+      <li>
+        <a href="#calidad"><span class="num">07</span> Pruebas y verificación</a>
+      </li>
+    </ol>
+  </nav>
+
+  <main>
+    <!-- ══ 01 ══════════════════════════════════════════════════ -->
+    <section id="panorama">
+      <h2><span class="num">01</span> Panorama</h2>
+      <p class="section-note">
+        Qué es el sistema, para quién y bajo qué decisión fundacional está construido.
+      </p>
+
+      <p>
+        <strong>LiderPlus</strong> es una aplicación web de escritorio para una firma contable
+        ecuatoriana. Toma los libros de Excel que los sistemas contables y los hoteles ya producen,
+        los interpreta y los convierte en estados de resultados navegables, análisis gráficos,
+        informes imprimibles y roles de pago calculados. La interfaz está en español; el código
+        (identificadores, rutas) en inglés.
+      </p>
+
+      <div class="modules">
+        <div class="mod income">
+          <span class="tag">/profit-loss</span>
+          <h4>Pérdidas y Ganancias</h4>
+          <p>
+            Estados de resultados por cliente, centro de costo y año. Datos, Gráficos, Análisis
+            vertical e informe imprimible.
+          </p>
+        </div>
+        <div class="mod cost">
+          <span class="tag">/occupancy</span>
+          <h4>Ocupaciones</h4>
+          <p>
+            Ocupación hotelera diaria por hotel, sucursal y año. Indicadores ADR, RevPAR, PAX y
+            canales de venta.
+          </p>
+        </div>
+        <div class="mod other">
+          <span class="tag">/payroll</span>
+          <h4>Rol de Pagos</h4>
+          <p>
+            Nómina mensual calculada: 20 columnas del rol, asiento contable, comprobante en PDF y
+            evolución de sueldos por área.
+          </p>
+        </div>
+      </div>
+
+      <h3>La decisión fundacional: sin servidor</h3>
+      <p>
+        No hay backend, ni API, ni base de datos remota. La aplicación es 100 % cliente: se sirve
+        como sitio estático y
+        <strong>todos los datos viven en IndexedDB dentro del navegador del usuario</strong>. Esto
+        tiene tres consecuencias que gobiernan el resto del diseño:
+      </p>
+      <ul>
+        <li>
+          <strong>La información contable nunca sale del equipo.</strong> No hay superficie de red
+          que auditar ni datos de clientes en tránsito.
+        </li>
+        <li>
+          <strong>El esquema evoluciona por migraciones de Dexie</strong>, ejecutadas en el
+          navegador de cada usuario y sin posibilidad de rollback: toda migración es aditiva.
+        </li>
+        <li>
+          <strong>El navegador es la única copia.</strong> El respaldo del usuario es la descarga a
+          Excel, que por eso vuelve a entrar sin pérdida en todos los módulos.
+        </li>
+      </ul>
+    </section>
+
+    <!-- ══ 02 ══════════════════════════════════════════════════ -->
+    <section id="arquitectura">
+      <h2><span class="num">02</span> Arquitectura</h2>
+      <p class="section-note">
+        Next.js App Router con una separación estricta entre lógica pura y presentación.
+      </p>
+
+      <h3>Capas</h3>
+      <div class="layers">
+        <div class="layer">
+          <div class="lname">app/<em>Rutas</em></div>
+          <p>
+            <code>app/(dashboard)/</code> es un grupo de rutas cuyo <code>layout.tsx</code> monta el
+            shell persistente (sidebar + header + main) y los tres proveedores de datos. Cada módulo
+            es una página estática en <code>app/(dashboard)/&lt;slug&gt;/page.tsx</code>.
+          </p>
+        </div>
+        <div class="layer view">
+          <div class="lname">components/<em>Presentación</em></div>
+          <p>
+            Server Components por defecto; <code>"use client"</code> solo donde hace falta estado o
+            interactividad. <code>components/ui/</code> son primitivas reutilizables;
+            <code>components/&lt;módulo&gt;/</code>, composiciones específicas. Los componentes
+            montan, no calculan.
+          </p>
+        </div>
+        <div class="layer pure">
+          <div class="lname">lib/<em>Capa pura</em></div>
+          <p>
+            Parseo, derivación, motores de cálculo, exportación y tipos. Sin React, sin DOM, sin
+            IndexedDB en las funciones puras. Es la única capa cubierta por pruebas
+            (<code>lib/**/*.test.ts</code>) y donde debe vivir toda lógica que valga la pena probar.
+          </p>
+        </div>
+        <div class="layer store">
+          <div class="lname">lib/*/db.ts<em>Persistencia</em></div>
+          <p>
+            Una clase Dexie por módulo. Es la <strong>única puerta a las tablas</strong>: ninguna
+            vista consulta IndexedDB directamente, porque una consulta sin acotar mezclaría en
+            silencio los datos de dos empresas y nada aguas abajo podría detectarlo.
+          </p>
+        </div>
+      </div>
+
+      <h3>Reglas estructurales</h3>
+      <ul>
+        <li>
+          <strong>El registro de módulos es la única fuente de verdad.</strong>
+          <code>lib/modules.ts</code> exporta el arreglo <code>MODULES</code>; el sidebar y el
+          breadcrumb del header derivan de él. Agregar un módulo es una entrada más su página.
+        </li>
+        <li>
+          <strong>Los proveedores viven en el layout</strong>, no en las páginas: el header lee del
+          mismo estado que el contenido (el selector de cliente/hotel), y el layout persiste entre
+          navegaciones del App Router.
+        </li>
+        <li>
+          <strong>La carga de Excel es un registro de estrategias.</strong>
+          <code>lib/profit-loss/upload/registry.ts</code> recorre una lista ordenada y gana la
+          primera que reconoce el archivo. Cada estrategia (MicroPlus, Dingoo, mensual por centros,
+          mensual simple, libro propio de la app) posee su forma de hoja, su convención de códigos y
+          su regla de signo, sin tocar el núcleo.
+        </li>
+        <li>
+          <strong>Lo derivado no se persiste.</strong> Consolidados, totales de período, resúmenes
+          de nómina y el asiento contable se recalculan en cada render. Una copia guardada quedaría
+          desactualizada y la pantalla diría una cosa y los datos otra.
+        </li>
+        <li>
+          <strong>El original nunca se muta.</strong> En P&amp;G los valores del archivo son
+          inmutables y las ediciones del usuario viven como superposición (<code>edits</code>).
+        </li>
+      </ul>
+
+      <h3>Flujo de datos</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 820 190"
+            role="img"
+            aria-label="Flujo: archivo Excel, parseo, fusión, IndexedDB, derivación, vistas y exportación"
+          >
+            <defs>
+              <marker
+                id="ar"
+                viewBox="0 0 10 10"
+                refX="9"
+                refY="5"
+                markerWidth="7"
+                markerHeight="7"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
+              </marker>
+            </defs>
+            <g class="er-line" style="color: var(--faint)">
+              <line x1="140" y1="60" x2="184" y2="60" marker-end="url(#ar)" />
+              <line x1="284" y1="60" x2="328" y2="60" marker-end="url(#ar)" />
+              <line x1="428" y1="60" x2="472" y2="60" marker-end="url(#ar)" />
+              <line x1="572" y1="60" x2="616" y2="60" marker-end="url(#ar)" />
+              <path d="M 520 88 L 520 140 L 200 140" marker-end="url(#ar)" />
+              <path d="M 716 88 L 716 140 L 600 140" marker-end="url(#ar)" />
+            </g>
+
+            <rect x="20" y="34" width="120" height="52" rx="9" class="er-box" />
+            <text x="80" y="57" text-anchor="middle" class="er-title">Excel</text>
+            <text x="80" y="73" text-anchor="middle" class="er-field">del contador</text>
+
+            <rect x="184" y="34" width="100" height="52" rx="9" class="er-box" />
+            <text x="234" y="57" text-anchor="middle" class="er-title">parse</text>
+            <text x="234" y="73" text-anchor="middle" class="er-field">strategy</text>
+
+            <rect x="328" y="34" width="100" height="52" rx="9" class="er-box" />
+            <text x="378" y="57" text-anchor="middle" class="er-title">merge</text>
+            <text x="378" y="73" text-anchor="middle" class="er-field">por mes</text>
+
+            <rect x="472" y="34" width="100" height="52" rx="9" class="er-box er-box-head" />
+            <text x="522" y="57" text-anchor="middle" class="er-title er-key">IndexedDB</text>
+            <text x="522" y="73" text-anchor="middle" class="er-field">Dexie</text>
+
+            <rect x="616" y="34" width="100" height="52" rx="9" class="er-box" />
+            <text x="666" y="57" text-anchor="middle" class="er-title">derive</text>
+            <text x="666" y="73" text-anchor="middle" class="er-field">+ analytics</text>
+
+            <rect x="740" y="34" width="60" height="52" rx="9" class="er-box" />
+            <text x="770" y="57" text-anchor="middle" class="er-title">UI</text>
+            <text x="770" y="73" text-anchor="middle" class="er-field">React</text>
+            <line x1="716" y1="60" x2="740" y2="60" class="er-line" />
+
+            <rect x="120" y="118" width="80" height="44" rx="9" class="er-box" />
+            <text x="160" y="138" text-anchor="middle" class="er-title" style="font-size: 11px">
+              xlsx
+            </text>
+            <text x="160" y="152" text-anchor="middle" class="er-field">lectura</text>
+
+            <rect x="600" y="118" width="200" height="44" rx="9" class="er-box" />
+            <text x="700" y="138" text-anchor="middle" class="er-title" style="font-size: 11px">
+              exceljs · pdf-lib
+            </text>
+            <text x="700" y="152" text-anchor="middle" class="er-field">
+              descarga que vuelve a entrar
+            </text>
+          </svg>
+        </div>
+        <figcaption>
+          El archivo entra por una estrategia de parseo, se fusiona mes a mes contra lo ya guardado
+          y se persiste crudo. Todo lo que se ve en pantalla —totales, indicadores, consolidados, el
+          rol completo— se deriva en tiempo de render.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ══ 03 ══════════════════════════════════════════════════ -->
+    <section id="tecnologias">
+      <h2><span class="num">03</span> Tecnologías</h2>
+      <p class="section-note">
+        Stack en producción, con la razón de cada elección donde no es evidente.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Dependencias de ejecución</h4>
+          <span>package.json</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Paquete</th>
+                <th class="mono">Versión</th>
+                <th>Rol</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">next</td>
+                <td class="t">16.2.10</td>
+                <td>
+                  App Router, Server Components, build estático y servidor de desarrollo con
+                  Turbopack.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">react · react-dom</td>
+                <td class="t">19.2.4</td>
+                <td>Capa de vista.</td>
+              </tr>
+              <tr>
+                <td class="k">typescript</td>
+                <td class="t">^5</td>
+                <td>Modo <code>strict</code>; alias <code>@/*</code> a la raíz del repo.</td>
+              </tr>
+              <tr>
+                <td class="k">dexie</td>
+                <td class="t">^4.4.4</td>
+                <td>
+                  Envoltorio tipado sobre IndexedDB: esquema versionado, índices compuestos,
+                  transacciones y migraciones.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">dexie-react-hooks</td>
+                <td class="t">^4.4.0</td>
+                <td>
+                  <code>useLiveQuery</code>: la UI se re-renderiza sola cuando cambia una tabla.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">xlsx (SheetJS)</td>
+                <td class="t">0.20.3</td>
+                <td>
+                  <strong>Lectura</strong> de libros. Lee tanto <code>.xls</code> (BIFF) como
+                  <code>.xlsx</code>, que es lo que exigen los exportes de los sistemas contables.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">exceljs</td>
+                <td class="t">^4.4.0</td>
+                <td>
+                  <strong>Escritura</strong> de libros con formato, logos y hoja de metadatos
+                  oculta. Importado en dinámico.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">pdf-lib</td>
+                <td class="t">^1.17.1</td>
+                <td>
+                  Comprobante de pago en PDF con tipografía Helvetica base-14 (cero bytes
+                  embebidos). Importado en dinámico.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">echarts</td>
+                <td class="t">^6.1.0</td>
+                <td>
+                  Gráficos, con importación parcial desde <code>echarts/core</code> y renderizador
+                  SVG.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">tailwindcss</td>
+                <td class="t">^4</td>
+                <td>
+                  CSS-first: no hay <code>tailwind.config.js</code>; el tema vive en un bloque
+                  <code>@theme</code> en <code>app/globals.css</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">lucide-react</td>
+                <td class="t">^1.25.0</td>
+                <td>Iconografía.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Herramientas de desarrollo</h4>
+          <span>pnpm 11.15.0 · Node LTS</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Herramienta</th>
+                <th class="mono">Comando</th>
+                <th>Nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">oxlint</td>
+                <td class="t">pnpm lint</td>
+                <td>
+                  Linter (no ESLint). Configuración en <code>.oxlintrc.json</code>; solo la
+                  categoría <code>correctness</code> es error.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">oxfmt</td>
+                <td class="t">pnpm fmt</td>
+                <td>
+                  Formateador (no Prettier). <code>pnpm fmt:check</code> es la compuerta de CI.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">vitest</td>
+                <td class="t">pnpm test</td>
+                <td>
+                  Entorno <code>node</code>, limitado a <code>lib/**/*.test.ts</code>. No hay
+                  pruebas de componentes ni jsdom.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">fake-indexeddb</td>
+                <td class="t">—</td>
+                <td>
+                  Permite probar la capa <code>db.ts</code> y sus migraciones fuera del navegador.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">husky · lint-staged</td>
+                <td class="t">pre-commit</td>
+                <td>
+                  <code>oxlint --fix</code> + <code>oxfmt</code> sobre los archivos en el índice.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="label">Advertencia de cadena de herramientas</span>
+        <p>
+          El proyecto usa <strong>oxc</strong>, no ESLint/Prettier: ejecutar <code>eslint</code> o
+          <code>prettier</code> falla porque no están instalados. ECharts mide texto en canvas,
+          donde una variable CSS no resuelve; <code>components/ui/chart.tsx</code> lee la familia
+          generada desde <code>:root</code> y la sustituye antes de <code>setOption</code>.
+        </p>
+      </div>
+    </section>
+
+    <!-- ══ 04 ══════════════════════════════════════════════════ -->
+    <section id="datos">
+      <h2><span class="num">04</span> Modelo de datos</h2>
+      <p class="section-note">
+        Tres bases IndexedDB independientes, una por módulo. No comparten tablas ni claves: un
+        cliente de P&amp;G y un cliente de Rol de Pagos son entidades distintas aunque se llamen
+        igual.
+      </p>
+
+      <div class="card">
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Base</th>
+                <th class="mono">Versión</th>
+                <th>Tablas</th>
+                <th>Partición</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">liderboard-pyg</td>
+                <td class="t">7</td>
+                <td class="t">clients · datasets · edits · meta · active</td>
+                <td><code>clientId</code></td>
+              </tr>
+              <tr>
+                <td class="k">liderboard-occupancy</td>
+                <td class="t">5</td>
+                <td class="t">hotels · centerYears · active</td>
+                <td><code>hotelId</code></td>
+              </tr>
+              <tr>
+                <td class="k">liderboard-payroll</td>
+                <td class="t">2</td>
+                <td class="t">clients · periods · employees · active</td>
+                <td><code>clientId</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p>
+        Cada base tiene una tabla <code>active</code> de una sola fila (clave literal
+        <code>"active"</code>) que recuerda qué entidad está abierta, de modo que sobreviva a
+        recargar la página. La partición por entidad es la mitigación del único riesgo real del
+        diseño: varias empresas compartiendo las mismas tablas.
+      </p>
+
+      <h3>Diagrama ER — Pérdidas y Ganancias</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 830 470"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-pyg"
+          >
+            <!-- lines -->
+            <g class="er-line">
+              <path d="M 135 118 L 135 178" />
+              <path d="M 245 250 L 305 250" />
+              <path d="M 135 322 L 135 372" />
+              <path d="M 535 250 L 595 250" />
+            </g>
+            <text x="146" y="152" class="er-card">abre</text>
+            <text x="275" y="242" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="146" y="352" class="er-card">1 : 1</text>
+            <text x="565" y="242" text-anchor="middle" class="er-card">1 : N</text>
+
+            <!-- active -->
+            <rect x="30" y="40" width="210" height="78" rx="10" class="er-box" />
+            <rect x="30" y="40" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="58" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="68" x2="240" y2="68" class="er-rule" />
+            <text x="44" y="59" class="er-title">active</text>
+            <text x="44" y="87" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              key : "active"
+            </text>
+            <text x="44" y="105" class="er-field">clientId : string | null</text>
+
+            <!-- clients -->
+            <rect x="30" y="178" width="210" height="144" rx="10" class="er-box" />
+            <rect x="30" y="178" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="196" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="206" x2="240" y2="206" class="er-rule" />
+            <text x="44" y="197" class="er-title">clients</text>
+            <text x="44" y="225" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="44" y="243" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              name : string
+            </text>
+            <text x="44" y="261" class="er-field">logo? : EntityLogo</text>
+            <text x="44" y="279" class="er-field">centerLogos? : Record&lt;&gt;</text>
+            <text x="44" y="303" class="er-field" style="font-size: 10px">
+              etiqueta del usuario,
+            </text>
+            <text x="44" y="315" class="er-field" style="font-size: 10px">
+              nunca la razón social
+            </text>
+
+            <!-- meta -->
+            <rect x="30" y="372" width="210" height="78" rx="10" class="er-box" />
+            <rect x="30" y="372" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="390" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="400" x2="240" y2="400" class="er-rule" />
+            <text x="44" y="391" class="er-title">meta</text>
+            <text x="44" y="419" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              key = clientId
+            </text>
+            <text x="44" y="437" class="er-field">loadedMonthsByYear …</text>
+
+            <!-- datasets -->
+            <rect x="305" y="150" width="230" height="200" rx="10" class="er-box" />
+            <rect x="305" y="150" width="230" height="28" rx="10" class="er-box er-box-head" />
+            <rect
+              x="305"
+              y="168"
+              width="230"
+              height="10"
+              class="er-box er-box-head"
+              stroke="none"
+            />
+            <line x1="305" y1="178" x2="535" y2="178" class="er-rule" />
+            <text x="319" y="169" class="er-title">datasets</text>
+            <text x="319" y="197" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="319" y="215" class="er-field">
+              <tspan class="er-key">FK</tspan>
+              clientId
+            </text>
+            <text x="319" y="233" class="er-field">year : number</text>
+            <text x="319" y="251" class="er-field">role : single|center|…</text>
+            <text x="319" y="269" class="er-field">centerId? : slug</text>
+            <text x="319" y="287" class="er-field">accounts : AccountRow[]</text>
+            <text x="319" y="311" class="er-field" style="font-size: 10px">IX [clientId+role]</text>
+            <text x="319" y="325" class="er-field" style="font-size: 10px">IX [clientId+year]</text>
+            <text x="319" y="339" class="er-field" style="font-size: 10px">
+              un dataset = centro-año
+            </text>
+
+            <!-- edits -->
+            <rect x="595" y="178" width="210" height="144" rx="10" class="er-box" />
+            <rect x="595" y="178" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect
+              x="595"
+              y="196"
+              width="210"
+              height="10"
+              class="er-box er-box-head"
+              stroke="none"
+            />
+            <line x1="595" y1="206" x2="805" y2="206" class="er-rule" />
+            <text x="609" y="197" class="er-title">edits</text>
+            <text x="609" y="225" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : auto ++
+            </text>
+            <text x="609" y="243" class="er-field">
+              <tspan class="er-key">FK</tspan>
+              datasetId
+            </text>
+            <text x="609" y="261" class="er-field">code · monthIndex</text>
+            <text x="609" y="279" class="er-field">value? · comment?</text>
+            <text x="609" y="303" class="er-field" style="font-size: 10px">
+              UQ [datasetId+code+monthIndex]
+            </text>
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-pyg</code> v7. Un cliente tiene N datasets (centro × año) y exactamente
+          una fila de metadatos que declara su cobertura mensual. Las ediciones cuelgan del dataset
+          —no del cliente— y su índice único impide dos ajustes sobre la misma celda.
+        </figcaption>
+      </figure>
+
+      <h3>Diagrama ER — Ocupaciones</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 830 330"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-occupancy"
+          >
+            <g class="er-line">
+              <path d="M 135 118 L 135 168" />
+              <path d="M 245 230 L 305 230" />
+            </g>
+            <text x="146" y="148" class="er-card">abre</text>
+            <text x="275" y="222" text-anchor="middle" class="er-card">1 : N</text>
+
+            <rect x="30" y="40" width="210" height="78" rx="10" class="er-box" />
+            <rect x="30" y="40" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="58" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="68" x2="240" y2="68" class="er-rule" />
+            <text x="44" y="59" class="er-title">active</text>
+            <text x="44" y="87" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              key : "active"
+            </text>
+            <text x="44" y="105" class="er-field">hotelId : string | null</text>
+
+            <rect x="30" y="168" width="210" height="126" rx="10" class="er-box" />
+            <rect x="30" y="168" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="186" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="196" x2="240" y2="196" class="er-rule" />
+            <text x="44" y="187" class="er-title">hotels</text>
+            <text x="44" y="215" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="44" y="233" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              name : string
+            </text>
+            <text x="44" y="251" class="er-field">activeCenterId? : slug</text>
+            <text x="44" y="269" class="er-field">activeYear? : number</text>
+            <text x="44" y="287" class="er-field">logo? · centerLogos?</text>
+
+            <rect x="305" y="150" width="260" height="162" rx="10" class="er-box" />
+            <rect x="305" y="150" width="260" height="28" rx="10" class="er-box er-box-head" />
+            <rect
+              x="305"
+              y="168"
+              width="260"
+              height="10"
+              class="er-box er-box-head"
+              stroke="none"
+            />
+            <line x1="305" y1="178" x2="565" y2="178" class="er-rule" />
+            <text x="319" y="169" class="er-title">centerYears</text>
+            <text x="319" y="197" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              [hotelId + centerId + year]
+            </text>
+            <text x="319" y="215" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              hotelId
+            </text>
+            <text x="319" y="233" class="er-field">hotelName : declarado por el archivo</text>
+            <text x="319" y="251" class="er-field">channels : ChannelRow[]</text>
+            <text x="319" y="269" class="er-field">months : OccupancyMonth[12]</text>
+            <text x="319" y="293" class="er-field" style="font-size: 10px">
+              un registro = hotel · sucursal · año
+            </text>
+
+            <rect
+              x="605"
+              y="150"
+              width="200"
+              height="162"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="605"
+              y="150"
+              width="200"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="605" y1="178" x2="805" y2="178" class="er-rule" />
+            <text x="619" y="169" class="er-title">Consolidado</text>
+            <text x="619" y="197" class="er-field">derivado, nunca guardado</text>
+            <text x="619" y="215" class="er-field">suma de sucursales del año</text>
+            <text x="619" y="233" class="er-field">solo insumos crudos</text>
+            <text x="619" y="257" class="er-field" style="font-size: 10px">consolidate.ts</text>
+            <line x1="565" y1="230" x2="605" y2="230" class="er-line" stroke-dasharray="4 3" />
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-occupancy</code> v5. La clave primaria compuesta permite que dos hoteles
+          tengan cada uno su sucursal <code>principal</code> de 2025 sin colisionar. El registro
+          guarda <strong>solo insumos crudos</strong>: ADR, ocupación, RevPAR, PAX y todo total se
+          recalculan.
+        </figcaption>
+      </figure>
+
+      <h3>Diagrama ER — Rol de Pagos</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 830 340"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-payroll"
+          >
+            <g class="er-line">
+              <path d="M 135 118 L 135 168" />
+              <path d="M 245 236 L 305 236" />
+              <path d="M 545 236 L 605 236" />
+            </g>
+            <text x="146" y="148" class="er-card">abre</text>
+            <text x="275" y="228" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="575" y="228" text-anchor="middle" class="er-card">1 : N</text>
+
+            <rect x="30" y="40" width="210" height="78" rx="10" class="er-box" />
+            <rect x="30" y="40" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="58" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="68" x2="240" y2="68" class="er-rule" />
+            <text x="44" y="59" class="er-title">active</text>
+            <text x="44" y="87" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              key : "active"
+            </text>
+            <text x="44" y="105" class="er-field">clientId : string | null</text>
+
+            <rect x="30" y="168" width="210" height="104" rx="10" class="er-box" />
+            <rect x="30" y="168" width="210" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="30" y="186" width="210" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="30" y1="196" x2="240" y2="196" class="er-rule" />
+            <text x="44" y="187" class="er-title">clients</text>
+            <text x="44" y="215" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="44" y="233" class="er-field">name : string</text>
+            <text x="44" y="251" class="er-field">logo? : EntityLogo</text>
+
+            <rect x="305" y="150" width="240" height="172" rx="10" class="er-box" />
+            <rect x="305" y="150" width="240" height="28" rx="10" class="er-box er-box-head" />
+            <rect
+              x="305"
+              y="168"
+              width="240"
+              height="10"
+              class="er-box er-box-head"
+              stroke="none"
+            />
+            <line x1="305" y1="178" x2="545" y2="178" class="er-rule" />
+            <text x="319" y="169" class="er-title">periods</text>
+            <text x="319" y="197" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="319" y="215" class="er-field">
+              <tspan class="er-key">FK</tspan>
+              clientId
+            </text>
+            <text x="319" y="233" class="er-field">year · monthIndex (0–11)</text>
+            <text x="319" y="251" class="er-field">kind : "ordinario"</text>
+            <text x="319" y="269" class="er-field">extraConcepts? : […]</text>
+            <text x="319" y="299" class="er-field" style="font-size: 10px">
+              UQ [clientId+year+monthIndex]
+            </text>
+            <text x="319" y="313" class="er-field" style="font-size: 10px">
+              sin totales: todo se deriva
+            </text>
+
+            <rect x="605" y="150" width="200" height="172" rx="10" class="er-box" />
+            <rect x="605" y="150" width="200" height="28" rx="10" class="er-box er-box-head" />
+            <rect
+              x="605"
+              y="168"
+              width="200"
+              height="10"
+              class="er-box er-box-head"
+              stroke="none"
+            />
+            <line x1="605" y1="178" x2="805" y2="178" class="er-rule" />
+            <text x="619" y="169" class="er-title">employees</text>
+            <text x="619" y="197" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="619" y="215" class="er-field">
+              <tspan class="er-key">FK</tspan>
+              periodId
+            </text>
+            <text x="619" y="233" class="er-field">ficha estable del mes</text>
+            <text x="619" y="251" class="er-field">capture? : lo del mes</text>
+            <text x="619" y="281" class="er-field" style="font-size: 10px">
+              20 columnas del rol:
+            </text>
+            <text x="619" y="295" class="er-field" style="font-size: 10px">
+              derivadas por el motor
+            </text>
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-payroll</code> v2. El índice único impide que un cliente tenga dos veces
+          el mismo (año, mes): Dexie rechaza el segundo <code>add</code> en vez de sobrescribir. Un
+          empleado es una fila por período, porque su ficha (área, cargo, sueldo) puede cambiar mes
+          a mes y la histórica debe conservarse.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ══ 05 ══════════════════════════════════════════════════ -->
+    <section id="diccionario">
+      <h2><span class="num">05</span> Diccionario de datos</h2>
+      <p class="section-note">
+        Campos persistidos, tabla por tabla. Los tipos son los de TypeScript;
+        <code>?</code> marca campo opcional. Todo importe está en USD (Ecuador).
+      </p>
+
+      <h3>liderboard-pyg</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>clients</h4>
+          <span>El cliente contable · <code>id</code>, índice <code>name</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string (uuid)</td>
+                <td>Identificador estable; particiona todas las demás tablas.</td>
+              </tr>
+              <tr>
+                <td class="k">name <span class="ix">IX</span></td>
+                <td class="t">string</td>
+                <td>
+                  Etiqueta elegida por el usuario, máx. 60 caracteres, única ignorando mayúsculas y
+                  acentos. <strong>No es la razón social del archivo</strong> y nunca se compara con
+                  ella.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">logo?</td>
+                <td class="t">EntityLogo</td>
+                <td>
+                  Logo subido por el usuario: <code>{ dataUrl, mime, width, height }</code>. Máx. 2
+                  MB en origen. No indexado.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">centerLogos?</td>
+                <td class="t">Record&lt;string, EntityLogo&gt;</td>
+                <td>
+                  Logos por <code>centerId</code>. Cuelgan del cliente porque un centro no es una
+                  fila guardada, sino un slug derivado de los datasets.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>datasets</h4>
+          <span>Un centro de costo × un año · <code>id</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>Identificador del dataset.</td>
+              </tr>
+              <tr>
+                <td class="k">clientId <span class="fk">FK</span></td>
+                <td class="t">string</td>
+                <td>
+                  Dueño. Lo estampa <code>db.ts</code> al escribir, nunca el archivo: a qué cliente
+                  pertenece un libro lo decide cuál está abierto.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">year</td>
+                <td class="t">number</td>
+                <td>
+                  Ejercicio. Es la mitad de la clave lógica del dataset; toda estrategia de carga lo
+                  declara.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">role</td>
+                <td class="t">"single" | "center" | "sin-centro"</td>
+                <td>
+                  Cómo participa en el espacio de trabajo: estado único, centro de costo, o el
+                  residual del sistema contable.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">centerId?</td>
+                <td class="t">string</td>
+                <td>Slug estable del centro; alimenta el selector. Solo en roles de centro.</td>
+              </tr>
+              <tr>
+                <td class="k">centerColor? · order?</td>
+                <td class="t">string · number</td>
+                <td>Color del punto y posición en el selector.</td>
+              </tr>
+              <tr>
+                <td class="k">costCenterName?</td>
+                <td class="t">string</td>
+                <td>Nombre del centro tal como lo declara el archivo. Metadato.</td>
+              </tr>
+              <tr>
+                <td class="k">companyName</td>
+                <td class="t">string</td>
+                <td>
+                  Razón social leída del archivo. Parte de la identidad del espacio de trabajo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">fileName · uploadedAt</td>
+                <td class="t">string · number</td>
+                <td>Procedencia y marca de tiempo (epoch ms).</td>
+              </tr>
+              <tr>
+                <td class="k">periodLabel</td>
+                <td class="t">string</td>
+                <td>
+                  Etiqueta legible, p. ej. <code>Ene–Dic 2026</code>; <code>—</code> si el archivo
+                  no declara rango.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">baseFrequency</td>
+                <td class="t">Frequency</td>
+                <td>
+                  Frecuencia que provee el archivo. La UI puede agregar hacia arriba, nunca hacia
+                  abajo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">accounts</td>
+                <td class="t">AccountRow[]</td>
+                <td>
+                  Plan de cuentas plano en orden de archivo, padres incluidos. Cada fila:
+                  <code>{ code, name, values: number[12] }</code>. <strong>Inmutable</strong>: es la
+                  verdad del archivo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">resultFromFile</td>
+                <td class="t">number[]</td>
+                <td>
+                  La fila «Utilidad o Pérdida» del propio archivo. Solo para validación y cuadre.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">warnings</td>
+                <td class="t">string[]</td>
+                <td>Avisos de parseo y cuadre, en español, listos para pantalla.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>edits</h4>
+          <span>Superposición de ediciones · <code>++id</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">number (auto)</td>
+                <td>Autoincremental.</td>
+              </tr>
+              <tr>
+                <td class="k">datasetId <span class="fk">FK</span></td>
+                <td class="t">string</td>
+                <td>Dataset editado. Se borra en cascada con el cliente.</td>
+              </tr>
+              <tr>
+                <td class="k">code</td>
+                <td class="t">string</td>
+                <td>Código de cuenta.</td>
+              </tr>
+              <tr>
+                <td class="k">monthIndex</td>
+                <td class="t">number</td>
+                <td>Columna en la frecuencia base (0–11 para mensual).</td>
+              </tr>
+              <tr>
+                <td class="k">value?</td>
+                <td class="t">number | null</td>
+                <td>
+                  Ajuste de valor. Solo cuentas de movimiento (hojas); <code>null</code> vacía la
+                  celda. Un valor idéntico al del archivo no se guarda: no sería un ajuste.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">comment?</td>
+                <td class="t">string</td>
+                <td>Comentario del usuario. Cualquier cuenta puede llevarlo, padres incluidos.</td>
+              </tr>
+              <tr>
+                <td class="k">updatedAt</td>
+                <td class="t">number</td>
+                <td>Epoch ms.</td>
+              </tr>
+              <tr>
+                <td colspan="3" style="color: var(--muted)">
+                  <span class="uq">UQ</span> <code>[datasetId+code+monthIndex]</code> — una celda no
+                  puede tener dos ediciones.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>meta</h4>
+          <span>Metadatos por cliente · <code>key</code> = clientId</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">key <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>
+                  El <code>clientId</code>. Antes de la v7 era el singleton
+                  <code>"workspace"</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">companyName</td>
+                <td class="t">string</td>
+                <td>Razón social del espacio de trabajo.</td>
+              </tr>
+              <tr>
+                <td class="k">sourceSystemId</td>
+                <td class="t">string</td>
+                <td>
+                  Sistema contable de origen: el <code>id</code> de la estrategia de carga. Decide
+                  si la app puede volver a escribir ese formato.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">activeCenterId</td>
+                <td class="t">string</td>
+                <td>Centro abierto en el selector.</td>
+              </tr>
+              <tr>
+                <td class="k">loadedMonthsByYear</td>
+                <td class="t">Record&lt;number, number[]&gt;</td>
+                <td>
+                  <strong>Cobertura declarada</strong>: qué meses se cargaron, por año. Un mes
+                  cargado en cero y uno nunca cargado producen los mismos ceros; solo este registro
+                  los distingue, y el motor lee el segundo como <code>null</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">warnings</td>
+                <td class="t">string[]</td>
+                <td>Avisos de cuadre acumulados del espacio de trabajo.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3>liderboard-occupancy</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>hotels</h4>
+          <span>El hotel · <code>id</code>, índice <code>name</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string (uuid)</td>
+                <td>Partición de <code>centerYears</code>.</td>
+              </tr>
+              <tr>
+                <td class="k">name <span class="ix">IX</span></td>
+                <td class="t">string</td>
+                <td>
+                  Etiqueta del usuario; mismas reglas de nombre que el cliente de P&amp;G
+                  (<code>lib/workspaces.ts</code>). No se compara con ningún archivo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">activeCenterId?</td>
+                <td class="t">string</td>
+                <td>Sucursal abierta. Vive en el hotel, no en el espacio.</td>
+              </tr>
+              <tr>
+                <td class="k">activeYear?</td>
+                <td class="t">number</td>
+                <td>Año abierto.</td>
+              </tr>
+              <tr>
+                <td class="k">logo? · centerLogos?</td>
+                <td class="t">EntityLogo · Record&lt;&gt;</td>
+                <td>Logos del hotel y de sus sucursales.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>centerYears</h4>
+          <span>Hotel × sucursal × año · <code>[hotelId+centerId+year]</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">hotelId <span class="pk">PK</span> <span class="ix">IX</span></td>
+                <td class="t">string</td>
+                <td>Dueño, estampado al escribir.</td>
+              </tr>
+              <tr>
+                <td class="k">centerId <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>
+                  Slug de la sucursal. <code>"principal"</code> es el reservado para un archivo sin
+                  línea de centro de costo; <code>"consolidado"</code> está reservado y ningún
+                  registro puede usarlo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">year <span class="pk">PK</span></td>
+                <td class="t">number</td>
+                <td>Ejercicio.</td>
+              </tr>
+              <tr>
+                <td class="k">centerName</td>
+                <td class="t">string</td>
+                <td>Nombre de la sucursal; cae al del hotel para <code>principal</code>.</td>
+              </tr>
+              <tr>
+                <td class="k">hotelName</td>
+                <td class="t">string</td>
+                <td>
+                  Nombre que <strong>declara el libro</strong>. Es la identidad contra la que se
+                  compara un archivo nuevo, no la etiqueta del usuario.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">channels</td>
+                <td class="t">ChannelRow[]</td>
+                <td>
+                  Catálogo de canales de venta en orden de visualización:
+                  <code>{ id: slug, name }</code>. El usuario es dueño de él tras la importación;
+                  renombrar conserva los datos.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">months</td>
+                <td class="t">OccupancyMonth[12]</td>
+                <td>Siempre 12 entradas. Ver desglose abajo.</td>
+              </tr>
+              <tr>
+                <td class="k">warnings · updatedAt</td>
+                <td class="t">string[] · number</td>
+                <td>Avisos de parseo y última escritura.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>OccupancyMonth</h4>
+          <span>Estructura embebida en <code>centerYears.months</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">index</td>
+                <td class="t">number</td>
+                <td>0–11.</td>
+              </tr>
+              <tr>
+                <td class="k">days</td>
+                <td class="t">number</td>
+                <td>Del calendario real del año, nunca el conteo que declare el archivo.</td>
+              </tr>
+              <tr>
+                <td class="k">nights</td>
+                <td class="t">number | null</td>
+                <td>
+                  «NÚMERO DE NOCHES» del libro. Informativo y editable; no dimensiona la rejilla.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">fromFile</td>
+                <td class="t">boolean</td>
+                <td><code>false</code> = mes creado vacío, nunca proveniente de un libro.</td>
+              </tr>
+              <tr>
+                <td class="k">inputs</td>
+                <td class="t">MonthInputs</td>
+                <td>
+                  <strong>Los únicos insumos crudos</strong>, un arreglo por día:
+                  <code>available</code>, <code>revenue</code>, <code>sold</code>,
+                  <code>complimentary</code>, <code>cancellations</code>, <code>noShows</code>,
+                  <code>noShowsOta</code>, más <code>channels</code> (por canal),
+                  <code>rooms</code> (simples/dobles/triples) y <code>pax</code> (<code>null</code>
+                  = usar la fórmula 1·2·3).
+                </td>
+              </tr>
+              <tr>
+                <td class="k">imported?</td>
+                <td class="t">ImportedValues</td>
+                <td>
+                  Todas las filas del libro tal cual llegaron, indicadores y TOTAL incluidos, para
+                  mostrarlas verbatim.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">edited</td>
+                <td class="t">boolean</td>
+                <td>
+                  <code>false</code> = aún se muestra <code>imported</code> verbatim. La primera
+                  edición en cualquier celda voltea el mes entero a calculado, de golpe: un mes
+                  nunca mezcla cifras importadas y recalculadas.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3>liderboard-payroll</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>periods</h4>
+          <span>Cliente × año × mes · <code>id</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string (uuid)</td>
+                <td>Identificador del período.</td>
+              </tr>
+              <tr>
+                <td class="k">clientId <span class="fk">FK</span> <span class="ix">IX</span></td>
+                <td class="t">string</td>
+                <td>Dueño.</td>
+              </tr>
+              <tr>
+                <td class="k">year · monthIndex</td>
+                <td class="t">number · number (0–11)</td>
+                <td>El mes que cierra.</td>
+              </tr>
+              <tr>
+                <td class="k">kind</td>
+                <td class="t">"ordinario"</td>
+                <td>Único tipo por ahora; el tipo deja sitio a décimos y liquidaciones.</td>
+              </tr>
+              <tr>
+                <td class="k">extraConcepts?</td>
+                <td class="t">PayrollExtraConcept[]</td>
+                <td>
+                  Conceptos de ingreso que <em>este</em> período declara además de los trece del
+                  libro: <code>{ id, label, kind: "aportable" | "noAportable" }</code>. El rótulo
+                  vive en el período porque un concepto extra es una <strong>columna</strong> del
+                  rol, compartida por toda la nómina.
+                </td>
+              </tr>
+              <tr>
+                <td colspan="3" style="color: var(--muted)">
+                  <span class="uq">UQ</span> <code>[clientId+year+monthIndex]</code> — un cliente no
+                  puede tener dos veces el mismo mes. <strong>Ningún total se guarda aquí</strong>:
+                  los cuatro KPIs del período y el conteo de la nómina se derivan siempre.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>employees</h4>
+          <span
+            >La ficha del empleado en un período · <code>id</code>, índice
+            <code>periodId</code></span
+          >
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Col.</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td class="t">—</td>
+                <td>Identificador de la fila.</td>
+              </tr>
+              <tr>
+                <td class="k">periodId <span class="fk">FK</span></td>
+                <td class="t">string</td>
+                <td class="t">—</td>
+                <td>Período al que pertenece.</td>
+              </tr>
+              <tr>
+                <td class="k">name</td>
+                <td class="t">string</td>
+                <td class="t">B</td>
+                <td>Nombre del empleado.</td>
+              </tr>
+              <tr>
+                <td class="k">role</td>
+                <td class="t">string</td>
+                <td class="t">C</td>
+                <td>Cargo.</td>
+              </tr>
+              <tr>
+                <td class="k">area</td>
+                <td class="t">string</td>
+                <td class="t">—</td>
+                <td>Bloque del rol: ADMINISTRACIÓN, HOSPEDAJE, COCINA, RESTAURANTE, VENTAS.</td>
+              </tr>
+              <tr>
+                <td class="k">baseSalary</td>
+                <td class="t">number</td>
+                <td class="t">D</td>
+                <td>Sueldo base mensual.</td>
+              </tr>
+              <tr>
+                <td class="k">days</td>
+                <td class="t">number</td>
+                <td class="t">E</td>
+                <td>Días pagados del mes. Es del mes, con default 30.</td>
+              </tr>
+              <tr>
+                <td class="k">contractType</td>
+                <td class="t">"CT" | "TP"</td>
+                <td class="t">BB</td>
+                <td>Tiempo completo o parcial. Parte a la mitad el décimo cuarto.</td>
+              </tr>
+              <tr>
+                <td class="k">idCard</td>
+                <td class="t">string</td>
+                <td class="t">BD</td>
+                <td>Cédula. Es la identidad del empleado a lo largo de los meses.</td>
+              </tr>
+              <tr>
+                <td class="k">hireDate</td>
+                <td class="t">string | null</td>
+                <td class="t">BC</td>
+                <td>Fecha de ingreso, ISO.</td>
+              </tr>
+              <tr>
+                <td class="k">sectorCode</td>
+                <td class="t">string</td>
+                <td class="t">BF</td>
+                <td>Código sectorial.</td>
+              </tr>
+              <tr>
+                <td class="k">hasReserveFund</td>
+                <td class="t">boolean</td>
+                <td class="t">BA</td>
+                <td>¿Tiene derecho a fondo de reserva? Cambia con la antigüedad, no con el mes.</td>
+              </tr>
+              <tr>
+                <td class="k">accumulatesReserveFund</td>
+                <td class="t">boolean</td>
+                <td class="t">AZ</td>
+                <td>¿Lo acumula en el IESS en vez de cobrarlo mensual? Elección del empleado.</td>
+              </tr>
+              <tr>
+                <td class="k">capture?</td>
+                <td class="t">PayrollMonthlyCapture</td>
+                <td class="t">—</td>
+                <td>Lo capturado del mes. Ausente = captura vacía. Ver abajo.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>PayrollMonthlyCapture</h4>
+          <span>Estructura embebida en <code>employees.capture</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Col.</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">overtimeHours50/100/25</td>
+                <td class="t">number</td>
+                <td class="t">G H I</td>
+                <td>Cantidades de horas extras por clase.</td>
+              </tr>
+              <tr>
+                <td class="k">approvedOvertime</td>
+                <td class="t">number | null</td>
+                <td class="t">M</td>
+                <td>
+                  Importe de horas extras reconocido, tecleado. <code>null</code> = todo lo
+                  trabajado; <code>0</code> = nada. Es una decisión discrecional, no un cálculo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">vacationPay</td>
+                <td class="t">number</td>
+                <td class="t">P</td>
+                <td>Vacaciones pagadas.</td>
+              </tr>
+              <tr>
+                <td class="k">privateInsurance</td>
+                <td class="t">number</td>
+                <td class="t">Q</td>
+                <td>Seguro privado.</td>
+              </tr>
+              <tr>
+                <td class="k">allowances</td>
+                <td class="t">number</td>
+                <td class="t">R</td>
+                <td>Viáticos.</td>
+              </tr>
+              <tr>
+                <td class="k">fixedCommission · variableCommission</td>
+                <td class="t">number</td>
+                <td class="t">S T</td>
+                <td>Comisiones, ya calculadas fuera de la app.</td>
+              </tr>
+              <tr>
+                <td class="k">bonus</td>
+                <td class="t">number</td>
+                <td class="t">V</td>
+                <td>Bono.</td>
+              </tr>
+              <tr>
+                <td class="k">extraAmounts?</td>
+                <td class="t">Record&lt;string, number&gt;</td>
+                <td class="t">—</td>
+                <td>
+                  Importe de cada concepto extra que declara el período, por <code>id</code>. Solo
+                  el importe: el rótulo vive en el período.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">deductions</td>
+                <td class="t">CapturedDeductions</td>
+                <td class="t">Y–AN</td>
+                <td>
+                  Los doce egresos con nombre: préstamos IESS, licencia sin sueldo, anticipo de
+                  sueldo, préstamos empresariales, impuesto a la renta, almuerzos, multas, consumo
+                  en locales, contribución solidaria, otros, descuento por tiempo parcial y
+                  descuento por permiso médico. <strong>El aporte al IESS (X) no está aquí</strong>:
+                  lo deriva el motor.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">provisionsThirteenth/Fourteenth</td>
+                <td class="t">boolean</td>
+                <td class="t">AS AT</td>
+                <td>Si el mes provisiona los décimos.</td>
+              </tr>
+              <tr>
+                <td class="k">paid</td>
+                <td class="t">number | null</td>
+                <td class="t">BZ</td>
+                <td>
+                  Lo efectivamente pagado. <code>null</code> mientras nadie lo declare, y eso
+                  <strong>no es cero</strong>: sin él el empleado no está ni conciliado ni con
+                  diferencia. Es el único insumo de la conciliación.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="label">Lo que no se persiste</span>
+        <p>
+          Las 20 columnas del rol, los cuatro totales del período, el asiento contable de 25
+          cuentas, los consolidados de P&amp;G y Ocupaciones, y todo indicador hotelero (ADR,
+          ocupación, RevPAR, PAX) son <strong>derivados en cada render</strong>. Los parámetros del
+          cálculo de nómina (SBU, tasas del IESS, multiplicadores de hora extra) hoy son la
+          constante <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para guardarse junto al
+          período cuando cambien por año, pero todavía no tienen columna.
+        </p>
+      </div>
+    </section>
+
+    <!-- ══ 06 ══════════════════════════════════════════════════ -->
+    <section id="migraciones">
+      <h2><span class="num">06</span> Versionado y migraciones</h2>
+      <p class="section-note">
+        Dexie no tiene downgrade y la base vive en el navegador del usuario: una migración
+        defectuosa no se puede revertir.
+      </p>
+
+      <p>
+        De ahí la regla que gobierna todas: <strong>toda migración es aditiva</strong>. Nada se
+        borra en el mismo paso que se crea. Cuando cambia la clave primaria de una tabla —Dexie no
+        puede cambiarla en sitio— se hace en dos versiones: una copia hacia la tabla nueva mientras
+        la vieja sigue siendo legible, y otra posterior la elimina cuando ya nadie la lee.
+      </p>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>Historial de esquema</h4>
+          <span>Los cambios estructurales</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Base</th>
+                <th class="mono">v</th>
+                <th>Cambio</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">pyg</td>
+                <td class="t">1–6</td>
+                <td>
+                  Espacio de trabajo singleton: de un estado único a centros de costo, y de un solo
+                  año al dataset centro-año.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">pyg</td>
+                <td class="t">7</td>
+                <td>
+                  Varios clientes. <code>clients</code> nueva, <code>datasets.clientId</code>,
+                  <code>meta</code> pasa de la fila <code>"workspace"</code> a una por cliente, y
+                  <code>active</code> recuerda cuál está abierto. El espacio existente se convierte
+                  en el primer cliente, con el nombre de su razón social o <code>Cliente 1</code>.
+                  Una base que nunca cargó nada no recibe ningún cliente.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">occupancy</td>
+                <td class="t">1→2→3</td>
+                <td>
+                  De <code>years</code> (clave <code>year</code>) a <code>datasets</code> (clave
+                  <code>[centerId+year]</code>): copia en v2, borrado en v3.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">occupancy</td>
+                <td class="t">4→5</td>
+                <td>
+                  Varios hoteles: <code>centerYears</code> con clave
+                  <code>[hotelId+centerId+year]</code> se llena en v4 mientras
+                  <code>datasets</code> sigue legible, y v5 elimina <code>datasets</code> y
+                  <code>meta</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">payroll</td>
+                <td class="t">1→2</td>
+                <td>
+                  Se agrega <code>employees</code>. Puramente aditiva: nada de la v1 se re-declara.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p>
+        Las migraciones se prueban: <code>lib/profit-loss/db.migration.test.ts</code> y
+        <code>lib/occupancy/db.test.ts</code> las ejecutan sobre <code>fake-indexeddb</code>.
+      </p>
+    </section>
+
+    <!-- ══ 07 ══════════════════════════════════════════════════ -->
+    <section id="calidad">
+      <h2><span class="num">07</span> Pruebas y verificación</h2>
+      <p class="section-note">
+        Qué cubre la suite, con qué técnica y qué compuertas debe pasar un cambio.
+      </p>
+
+      <h3>Estrategia de pruebas</h3>
+      <p>
+        Vitest cubre <strong>solo la capa pura</strong>. No hay pruebas de componentes ni jsdom: la
+        regla es que si un componente acumula lógica que merece prueba, esa lógica se mueve a
+        <code>lib/</code>. Dos técnicas cargan el peso de la corrección:
+      </p>
+      <ul>
+        <li>
+          <strong>Pruebas golden contra el archivo real.</strong>
+          <code>lib/payroll/engine/golden.test.ts</code> reproduce las 20 columnas de los seis
+          empleados de marzo 2026 con igualdad exacta contra el libro del contador, y el mismo
+          fixture verifica el asiento contable y la exportación a Excel columna por letra.
+        </li>
+        <li>
+          <strong>Pruebas de ida y vuelta.</strong> Todo archivo que la app descarga vuelve a entrar
+          sin pérdida (<code>round-trip.test.ts</code>), incluidos comentarios y ajustes que viajan
+          en una hoja de metadatos oculta. Es lo que hace de la descarga un respaldo legítimo.
+        </li>
+      </ul>
+
+      <h3>Integración continua</h3>
+      <p>
+        <code>.github/workflows/ci.yml</code> ejecuta cuatro trabajos independientes en cada PR y en
+        cada push a <code>main</code>: <code>pnpm lint</code>, <code>pnpm fmt:check</code>,
+        <code>pnpm build</code> (que además verifica tipos) y <code>pnpm test</code>. Un hook de
+        pre-commit corre <code>lint-staged</code> sobre los archivos en el índice.
+      </p>
+    </section>
+
+    <footer>Manual técnico · liderboard 0.1.0</footer>
+  </main>
+</div>

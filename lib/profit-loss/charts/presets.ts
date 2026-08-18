@@ -6,7 +6,7 @@
  * no second path into the engine — which is the point, because a second path is where the two
  * would start to disagree.
  */
-import { CHART_MAX_SERIES } from "@/lib/charts/palette";
+import { CHART_MAX_SERIES, CHART_RANKING_MAX } from "@/lib/charts/palette";
 import type { AmountEntry } from "../analytics/structure";
 import type { AnalyticsSource, PeriodRef, SeriesBundle, SeriesQuery } from "../analytics/types";
 import { NON_OPERATIONAL_ROOT } from "../segment";
@@ -34,6 +34,17 @@ export function leavesOfAny(source: AnalyticsSource | undefined, ancestors: stri
 
 /** How many bars a ranking card shows before it says how many it left out. */
 export const RANKING_SIZE = 8;
+
+/**
+ * El «Ranking de gastos» de Gráficos es el único que llega a quince, y el número no es suyo: son
+ * los pasos de `CHART_RANKING_RAMP`, la escala ordinal con la que se pinta, igual que
+ * `CHART_COMPOSITION_MAX` fija el corte de la tarta. Atarlo a la rampa es lo que garantiza que
+ * ninguna barra dibujada se quede sin tono.
+ *
+ * Las demás siguen en `RANKING_SIZE`: las de Análisis se pintan con las ranuras de IDENTIDAD, que
+ * son ocho, y ahí una novena barra sí caería en el neutro.
+ */
+export const EXPENSE_RANKING_SIZE = CHART_RANKING_MAX;
 
 /**
  * No cap at all — for the cards that have to see the WHOLE set before they can reduce it.

@@ -25,10 +25,16 @@ import { usePygData } from "./pyg-data-provider";
  * enseña a no leer ninguno de los dos.
  */
 export function PresetFilter() {
-  const { filters, selectPreset } = usePygData();
+  const { filters, selectPreset, sourceSystemId } = usePygData();
   const { context } = usePygAnalytics();
 
-  const presets = useMemo(() => availablePresets(activeSource(context)), [context]);
+  const source = activeSource(context);
+  // Qué vistas se ofrecen depende del PLAN y del SISTEMA del que salió el archivo: hay lecturas
+  // que solo son legibles sobre un plan de cierta profundidad, y eso no está en el árbol.
+  const presets = useMemo(
+    () => availablePresets({ source, systemId: sourceSystemId }),
+    [source, sourceSystemId],
+  );
   if (presets.length === 0) {
     return null;
   }
@@ -42,7 +48,15 @@ export function PresetFilter() {
           <button
             key={preset.id}
             type="button"
-            onClick={() => selectPreset(preset.id)}
+            // Lo que la vista declara de sí misma viaja al proveedor desde aquí: él no importa de
+            // `charts/`, y quién siembra qué es de la vista, igual que `isAvailable`.
+            onClick={() =>
+              selectPreset(preset.id, {
+                seeds: preset.seeds,
+                frequency: preset.frequency,
+                codes: preset.seedCodes?.(source),
+              })
+            }
             aria-pressed={active}
             title={preset.description}
             className={cn(

@@ -112,6 +112,21 @@ const EMPTY_MONTHS: number[] = [];
 const EMPTY_WARNINGS: string[] = [];
 const CONSOLIDADO_COLOR = "#334155";
 
+/**
+ * Lo que una vista predeterminada declara de sí misma y este proveedor necesita para encenderla:
+ * qué marcas siembra y con qué granularidad se lee.
+ *
+ * Es un ESPEJO de `PresetView` sin el catálogo, y esa duplicación es deliberada: el catálogo vive
+ * en `charts/`, de donde este archivo no importa —lo que mantiene la capa de presentación fuera del
+ * estado del módulo—, así que el botón de la barra, que sí lo conoce, es quien pasa esto.
+ */
+export interface PresetSeeding {
+  seeds?: { centers?: boolean; periods?: boolean };
+  frequency?: Frequency;
+  /** Las cuentas que la vista deja marcadas; presentes solo si sus categorías SON del plan. */
+  codes?: string[];
+}
+
 export interface MonthlyBatchOutcome {
   datasets: ParsedDataset[];
   /** The workspace's coverage after the batch, per year. */
@@ -291,7 +306,13 @@ interface PygDataValue {
   toggleYear: (year: number) => void;
   togglePeriod: (period: PeriodSlot) => void;
   /** Elige (o quita, si ya estaba) una vista predeterminada; elegirla borra las marcas de cuenta. */
-  selectPreset: (id: string) => void;
+  /**
+   * `view` es lo que la vista DECLARA de sí misma (`preset-views.ts`), y llega como argumento en
+   * vez de leerse aquí a propósito: este proveedor no importa de `charts/` — es lo que mantiene la
+   * capa de presentación fuera del estado del módulo—, así que quien ya conoce el catálogo, el
+   * botón de la barra, es quien se lo pasa.
+   */
+  selectPreset: (id: string, view?: PresetSeeding) => void;
   clearPreset: () => void;
   /** Each dropdown's own "Quitar selección" footer button. */
   clearCodes: () => void;
@@ -351,6 +372,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [openClientId],
   );
   const [frequency, setFrequencyState] = useState<Frequency>("mensual");
+  // Si la vista predeterminada abierta es DUEÑA de las marcas de cuenta. Se recuerda en vez de
+  // deducirse porque quien lo sabe es el catálogo, que vive en `charts/` y de aquí no se importa;
+  // es lo que decide si desmarcar un rubro ACOTA el reparto o apaga la vista entera.
+  const [presetOwnsCodes, setPresetOwnsCodes] = useState(false);
   const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [hideZeroRows, setHideZeroRows] = useState(false);
@@ -587,6 +612,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [allowed],
   );
 
+  // Desmarcar una cuenta APAGA la vista predeterminada abierta —son dos respuestas a «qué dibujo»—
+  // salvo cuando la vista es la dueña de esas marcas: en el anexo de gastos los rubros SON cuentas,
+  // así que quitar uno acota el reparto en vez de contradecirlo, y apagar la vista entera sería lo
+  // contrario de para lo que están las marcas.
   const toggleCode = useCallback(
     (code: string) => {
       setRawFilters(
@@ -594,10 +623,11 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
           filters,
           code,
           options.map((option) => option.code),
+          { keepPreset: presetOwnsCodes },
         ),
       );
     },
-    [filters, options],
+    [filters, options, presetOwnsCodes],
   );
 
   const toggleCenter = useCallback(
@@ -644,25 +674,43 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // Y siembra también los PERIODOS cubiertos de la granularidad abierta, por el mismo motivo: los
   // meses que dibuja se quitan y se ponen desde «Periodo». Un mes que el archivo nunca trajo no se
   // marca — sería una columna vacía pidiendo sitio.
+  // QUÉ siembra cada vista y con qué granularidad se lee lo declara la vista (`preset-views.ts`),
+  // no este callback: lo que hay que marcar depende de lo que se dibuja, la misma razón por la que
+  // `isAvailable` vive allí. «Ventas» reparte por establecimiento y mes y por eso los marca; el
+  // anexo de gastos es una columna por rubro y no tiene nada que repartir, así que no siembra.
   const selectPreset = useCallback(
-    (id: string) => {
+    (id: string, view: PresetSeeding = {}) => {
+      const turningOn = filters.preset !== id;
+      // La granularidad se aplica al ENCENDER y no se deshace al apagar: «Ver por» está a la vista
+      // y se vuelve de un clic, al revés que las marcas, que dejarían chips que el usuario no puso.
+      if (turningOn && view?.frequency) {
+        setFrequency(view.frequency);
+      }
+      // La cobertura se lee en la granularidad que la vista va a usar, no en la que estaba puesta:
+      // sembrar los doce meses justo antes de saltar a anual marcaría periodos que nadie dibuja.
+      const next = turningOn ? (view?.frequency ?? frequency) : frequency;
       const covered = aggregateCoverage(
         new Set(loadedMonthsByYear[chartYear] ?? EMPTY_MONTHS),
         "mensual",
-        frequency,
+        next,
       );
+      // Las cuentas que la vista dibuja quedan MARCADAS, para que se vea cuáles entran y se quite
+      // un rubro desmarcándolo. Solo las trae una vista cuyas categorías son cuentas del plan.
+      const seededCodes = turningOn ? (view.codes ?? []) : [];
+      setPresetOwnsCodes(seededCodes.length > 0);
       setRawFilters(
         withPresetSelected(
           filters,
           id,
-          isConsolidated
-            ? []
-            : views.filter((view) => view.role === "center").map((view) => view.id),
-          periodSlots(frequency).filter((slot) => covered.has(slot.index)),
+          view?.seeds?.centers && !isConsolidated
+            ? views.filter((view) => view.role === "center").map((view) => view.id)
+            : [],
+          view?.seeds?.periods ? periodSlots(next).filter((slot) => covered.has(slot.index)) : [],
+          seededCodes,
         ),
       );
     },
-    [filters, views, isConsolidated, loadedMonthsByYear, chartYear, frequency],
+    [filters, views, isConsolidated, loadedMonthsByYear, chartYear, frequency, setFrequency],
   );
   const clearPreset = useCallback(() => setRawFilters(withPresetCleared(filters)), [filters]);
 

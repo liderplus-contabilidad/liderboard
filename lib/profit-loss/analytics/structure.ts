@@ -168,7 +168,12 @@ export interface PieOptions {
   maxSlices?: number;
 }
 
-const OTHERS_CODE = "otros";
+/**
+ * El código del pliegue de la cola. NO es una cuenta del plan: se exporta para que quien
+ * imprima códigos —el tooltip y la tabla gemela— pueda callarse en esta fila en vez de afirmar
+ * que existe una cuenta llamada «otros».
+ */
+export const OTHERS_CODE = "otros";
 
 /**
  * The two rules a pie breaks without: group the tail into «Otros», and drop the entries that

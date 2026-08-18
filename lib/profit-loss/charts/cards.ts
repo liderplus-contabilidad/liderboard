@@ -18,13 +18,23 @@
 import {
   CHART_COMPOSITION_MAX,
   CHART_MAX_SERIES,
+  CHART_SECTION,
+  colorForSliceSlot,
   colorForCompositionSlot,
   colorForEntity,
+  colorForRankingSlot,
 } from "@/lib/charts/palette";
-import type { ChartCardSpec, ChartTable } from "@/lib/charts/types";
+import type { ChartCardSpec, ChartTable, ChartTableRow } from "@/lib/charts/types";
+import { formatCurrency } from "@/lib/format";
 import { periodLabel, periodRangeLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
-import { toPareto, toPieSlices, type AmountEntry, type ParetoResult } from "../analytics/structure";
+import {
+  OTHERS_CODE,
+  toPareto,
+  toPieSlices,
+  type AmountEntry,
+  type ParetoResult,
+} from "../analytics/structure";
 import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
@@ -38,7 +48,14 @@ import {
   sumBusinessLines,
   type BusinessLineSet,
 } from "./business-lines";
-import { BUSINESS_LINES_PRESET } from "./preset-views";
+import { BUSINESS_LINES_PRESET, EXPENSE_DISTRIBUTION_PRESET } from "./preset-views";
+import {
+  ANNEX_MAX_SLICES,
+  buildExpenseDistribution,
+  describeExpenseDistribution,
+  shareOf,
+  type ExpenseDistribution,
+} from "./expense-distribution";
 import {
   distributionColor,
   distributionShares,
@@ -49,7 +66,9 @@ import {
   categoryBarOption,
   categoryTable,
   entryTable,
+  formatChartValue,
   horizontalBarOption,
+  verticalBarOption,
   paretoOption,
   pieOption,
   seriesOptionFor,
@@ -68,6 +87,7 @@ import {
   coveredPeriods,
   excludedNote,
   expenseRootsOf,
+  EXPENSE_RANKING_SIZE,
   intersectWithMarked,
   lastCoveredIndex,
   leavesOf,
@@ -92,6 +112,21 @@ import { buildWaterfall } from "./waterfall";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
+/**
+ * El alto de una tarta, y por qué lo declaran las DOS que hay en vez de escribirlo cada una.
+ *
+ * A una tarta el ancho no le sirve de nada: el radio de ECharts es un porcentaje de la dimensión
+ * MENOR del lienzo, y en una tarjeta a ancho completo la menor es siempre el alto. Con los 280 px
+ * de antes el círculo salía de unos 218 px de diámetro dentro de una tarjeta de mil y pico de
+ * ancho — un sello en medio de una franja vacía, y con las porciones pequeñas convertidas en
+ * astillas donde el rótulo con su línea guía no cabía. Subirlo es lo ÚNICO que la agranda.
+ *
+ * 420 es el alto que ya usa la barra vertical del anexo, así que las dos tarjetas de esa vista
+ * quedan a la misma altura; y las dos tartas de la app comparten el número para que la misma
+ * figura no se lea de dos tamaños según la pestaña.
+ */
+const PIE_HEIGHT = 420;
+
 /** One of the closing figures above the cards. The VALUE is a number: formatting is the view's. */
 export interface CardTile {
   id: string;
@@ -108,6 +143,13 @@ export interface GraficosCards {
   periodName: string;
   tiles: CardTile[];
   cards: ChartCardSpec[];
+  /**
+   * El reparto del anexo en CRUDO, y `null` fuera de esa vista. Sale además de las tarjetas porque
+   * clicar una barra abre el peso de ESE rubro, y para dibujarlo hacen falta sus números y los dos
+   * totales — no las cadenas ya formateadas que lleva la tabla. El índice de una barra es su
+   * posición aquí: las dos listas están ordenadas de mayor a menor por el mismo sitio.
+   */
+  annex: ExpenseDistribution | null;
 }
 
 export interface AnalisisCards {
@@ -143,6 +185,32 @@ export function entryColor(codes: string[]): (code: string) => string {
 export function compositionColor(codes: string[]): (code: string) => string {
   const slotByCode = new Map(codes.map((code, index) => [code, index]));
   return (code) => colorForCompositionSlot(slotByCode.get(code) ?? -1);
+}
+
+/**
+ * El color de una barra del ranking por su PUESTO, no por su código.
+ *
+ * `entryColor` no sirve aquí por la misma razón por la que no sirve en la tarta, y con una
+ * consecuencia peor: reparte las ocho ranuras de `CHART_PALETTE`, así que de la novena barra en
+ * adelante devolvía `CHART_NEUTRAL` — siete barras grises idénticas al fondo de una lista de
+ * quince, que es justo donde el lector va a mirar para saber cuál es la siguiente que recortar.
+ * La lista llega ya rankeada y cortada, así que el índice ES el puesto. La gemela en tabla lo
+ * consume TAMBIÉN, que es lo que mantiene el punto de color de cada fila igual al de su barra.
+ */
+export function rankingColorOf(codes: string[]): (code: string) => string {
+  const slotByCode = new Map(codes.map((code, index) => [code, index]));
+  return (code) => colorForRankingSlot(slotByCode.get(code) ?? -1);
+}
+
+/**
+ * El tono de una porción del anexo por su LUGAR en el reparto — la misma figura que
+ * `compositionColor`, con la secuencia larga que le permite nombrar diecisiete rubros en vez de
+ * seis. No pasa por `colorForEntity` por lo de siempre: aquí el color no distingue entidades que
+ * vayan y vengan, ordena un reparto que llega entero y ya ordenado.
+ */
+export function annexSliceColor(codes: string[]): (code: string) => string {
+  const slotByCode = new Map(codes.map((code, index) => [code, index]));
+  return (code) => colorForSliceSlot(slotByCode.get(code) ?? -1);
 }
 
 /** The change of each account against the previous period, signed. */
@@ -311,6 +379,124 @@ function businessLineCard(
 }
 
 /**
+ * Las dos tarjetas del ANEXO DE GASTOS, que es lo que la vista «Costos y gastos» pone en pantalla.
+ *
+ * Son dos porque son dos lecturas del MISMO reparto y ninguna sustituye a la otra: las barras dicen
+ * cuánto —se leen en dólares y se cotejan contra el libro—, y la dona dice qué parte del total es
+ * cada una. El anexo del contador las lleva las dos, una debajo de la otra, por eso mismo.
+ *
+ * **La tabla gemela de las barras ES el anexo entero**: código, valor, % del gasto y % del ingreso,
+ * las diecisiete filas sin recortar y con su fila de TOTAL. Ese es el sitio donde una cuenta que el
+ * gráfico plegó sigue teniendo su cifra, y es lo que hace que recortar el gráfico no pierda nada —
+ * la misma división de trabajo que `payroll/salaries` ya usa, donde la gráfica acota el elenco y la
+ * tabla lista a todos.
+ */
+function expenseDistributionCards(
+  distribution: ExpenseDistribution,
+  periodName: string,
+  warnings: string[],
+  emptyNote: string | undefined,
+): [ChartCardSpec, ChartCardSpec] {
+  // UNA sola reducción para las dos tarjetas: las barras y la dona dibujan exactamente la misma
+  // lista, plegada en «Otros» a partir del rubro quince. Antes cada una cortaba por su cuenta —las
+  // barras por la escala del ranking, la dona por la suya— y podían enseñar distinto número de
+  // rubros del mismo reparto, que es la clase de desacuerdo que nadie lee como un error.
+  // Ordenar antes de cortar es lo que hace que el que se pliega sea siempre el más pequeño.
+  const slices = toPieSlices(distribution.categories, { maxSlices: ANNEX_MAX_SLICES });
+  const drawn = slices.slices;
+  const grouped = drawn.some((slice) => slice.code === OTHERS_CODE)
+    ? distribution.categories.length - (ANNEX_MAX_SLICES - 1)
+    : 0;
+  // UN SOLO color para las diecisiete barras, y es el que la app ya tiene para este bloque: el
+  // celeste con el que Datos pinta la raíz 5, muestreado del propio libro del contador. Aquí el
+  // color no distingue nada —cada barra lleva su rubro rotulado en el eje y su cifra al lado—, así
+  // que repartir diecisiete tonos gastaría el canal de identidad en re-decir lo que la longitud de
+  // la barra ya dice. Es además la regla que `CHART_SECTION` declara: cuando lo dibujado es un
+  // BLOQUE del estado, el color dice de qué bloque habla, y un celeste quiere decir «costos y
+  // gastos» en Datos, en el informe y aquí.
+  const colorOf = () => CHART_SECTION.cost;
+  const sliceColor = annexSliceColor(drawn.map((slice) => slice.code));
+  const note =
+    emptyNote ??
+    describeExpenseDistribution(distribution, {
+      grouped,
+      // Con centavos, al revés que el eje: aquí la cifra no se mira, se COTEJA contra el libro.
+      format: (value) => formatCurrency(value, { cents: true }),
+    });
+
+  return [
+    {
+      id: "evolucion",
+      title: "Distribución de costos y gastos",
+      subtitle: `${distribution.categories.length} ${distribution.categories.length === 1 ? "rubro" : "rubros"} · ${periodName}`,
+      option: drawn.length > 0 ? verticalBarOption(drawn, { colorOf }) : null,
+      table: drawn.length > 0 ? expenseAnnexTable(distribution) : EMPTY_TABLE,
+      warnings,
+      ...withNote(note),
+      // Menos que las quince filas del ranking —una columna ocupa lo ancho, no lo alto—, pero con
+      // sitio para las cuatro líneas del rótulo más largo y la cifra encima de la barra.
+      height: 420,
+    },
+    {
+      id: "ranking",
+      title: "Distribución de costos y gastos %",
+      subtitle: `Peso de cada rubro · ${periodName}`,
+      option: drawn.length > 0 ? pieOption(slices, { colorOf: sliceColor, donut: true }) : null,
+      table: drawn.length > 0 ? entryTable(drawn, { colorOf: sliceColor }) : EMPTY_TABLE,
+      warnings,
+      // Lo que la tarta no puede dibujar —una nota de crédito negativa— se nombra, que es la regla
+      // que `excludedNote` ya aplica a la composición de ingresos.
+      ...withNote(emptyNote ?? excludedNote(slices.excluded)),
+      height: PIE_HEIGHT,
+    },
+  ];
+}
+
+/**
+ * El ANEXO como tabla: una fila por rubro con su código, y las dos columnas de porcentaje que el
+ * archivo del contador imprime al lado del valor.
+ *
+ * El código va de `sublabel` y no pegado al nombre porque en una tabla hay sitio para los dos,
+ * la misma decisión que toma `categoryTable` con el establecimiento. Las filas NO llevan punto de
+ * color, que es lo que `ChartTableRow.color` documenta para una fila que no es una serie: aquí las
+ * diecisiete barras comparten relleno, así que un punto por fila prometería una distinción que no
+ * existe. La fila de TOTAL cierra con
+ * `emphasis`: sin ella un total se lee como un rubro más de la lista, y aquí es justo la cifra
+ * contra la que se coteja todo lo de arriba.
+ */
+function expenseAnnexTable(distribution: ExpenseDistribution): ChartTable {
+  const pct = (value: number | null) =>
+    value === null ? null : formatChartValue(value, "porcentaje");
+  const rows: ChartTableRow[] = distribution.categories.map((category) => ({
+    id: category.code,
+    label: category.label,
+    sublabel: category.code,
+    values: [
+      formatCurrency(category.value, { cents: true }),
+      pct(category.shareOfExpenses),
+      pct(category.shareOfRevenue),
+    ],
+  }));
+
+  if (distribution.totalExpenses !== null) {
+    rows.push({
+      id: "__total__",
+      label: "Total costos y gastos",
+      emphasis: true,
+      values: [
+        formatCurrency(distribution.totalExpenses, { cents: true }),
+        // El 100 % es del reparto entero aunque se estén mirando tres rubros: el denominador es el
+        // rollup del motor, así que la columna suma menos y esta celda sigue diciendo la verdad.
+        pct(shareOf(distribution.totalExpenses, distribution.totalExpenses)),
+        pct(distribution.expensesOverRevenue),
+      ],
+    });
+  }
+
+  return { columns: ["Valor", "% del gasto", "% del ingreso"], rows };
+}
+
+/**
  * Una cuenta sumada sobre TODAS las series que la traen, que con varios centros en juego son
  * varias. `sumOver` devuelve la primera, y con eso el cuadre de la nota hablaría de un solo
  * establecimiento mientras las barras hablan de cinco.
@@ -464,8 +650,15 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
   const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = runQuery(compositionQuery(rankingCodes, context, { periods: periodRefs }));
-  const ranking = topEntries(amountsOver(expenses));
-  const rankingColor = entryColor(ranking.entries.map((entry) => entry.code));
+  const ranking = topEntries(amountsOver(expenses), EXPENSE_RANKING_SIZE);
+  const rankingColor = rankingColorOf(ranking.entries.map((entry) => entry.code));
+  // El ANEXO: el mismo universo del ranking, pero entero y con sus dos denominadores. Reusa esa
+  // tanda en vez de pedir la suya — dos consultas para el mismo reparto podrían acabar cuadrando
+  // contra tramos distintos, que es justo lo que la nota afirma que no pasa.
+  const annex =
+    filters.preset === EXPENSE_DISTRIBUTION_PRESET
+      ? buildExpenseDistribution(amountsOver(expenses), { expenses: expense, revenue })
+      : null;
   const rankingEmptyNote =
     expenseLeaves.length > 0 && rankingCodes.length === 0
       ? "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos."
@@ -484,9 +677,48 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   const steps = waterfall?.steps ?? [];
   const range = periodRangeLabel(waterfall?.periods ?? []);
 
+  // La vista del anexo ocupa DOS ranuras de la lista: la primera, que es la que toda vista
+  // predeterminada sustituye, y la del ranking — porque el ranking pregunta lo mismo sobre el
+  // mismo universo, y dejar las dos imprimiría la misma lista dos veces. La composición de
+  // ingresos se queda donde está a propósito: el segundo denominador del anexo es el ingreso, así
+  // que tenerlo en pantalla es el contexto de la columna «% del ingreso».
+  const [annexBars, annexPie] = annex
+    ? expenseDistributionCards(annex, periodName, expenses.warnings, rankingEmptyNote)
+    : [null, null];
+
+  // Las dos que cierran la lista se declaran aparte porque el anexo las INTERCAMBIA: son la misma
+  // tarjeta en los dos casos, así que sacarlas del literal es lo que evita escribirlas dos veces.
+  const composicionCard: ChartCardSpec = {
+    id: "composicion",
+    title: "Composición de los ingresos",
+    subtitle: periodName,
+    option:
+      slices.slices.length > 0 ? pieOption(slices, { colorOf: sliceColor, donut: true }) : null,
+    table:
+      slices.slices.length > 0 ? entryTable(slices.slices, { colorOf: sliceColor }) : EMPTY_TABLE,
+    warnings: composition.warnings,
+    ...withNote(compositionEmptyNote ?? excludedNote(slices.excluded)),
+    height: PIE_HEIGHT,
+  };
+  const cascadaCard: ChartCardSpec = {
+    id: "cascada",
+    title: "Del ingreso a la utilidad",
+    subtitle: range ? `Suma de ${range}` : "Sin movimiento",
+    option: steps.length > 0 ? waterfallOption(steps) : null,
+    table: steps.length > 0 ? waterfallTable(steps) : EMPTY_TABLE,
+    ...(waterfall ? { warnings: waterfall.warnings } : {}),
+    ...withNote(
+      waterfall && waterfall.grouped > 0
+        ? `«Otros gastos» agrupa ${waterfall.grouped} grupos más pequeños.`
+        : undefined,
+    ),
+    height: 340,
+  };
+
   return {
     periods,
     periodName,
+    annex,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },
       { id: "gastos", label: "Costos y Gastos", value: expense },
@@ -498,58 +730,60 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
       },
     ],
     cards: [
-      lineSet && lineBundle
-        ? businessLineCard(
-            lineSet,
-            lineBundle,
-            periodName,
-            lineCenters.map((id) => ({ id, label: centerLabels.get(id) ?? id })),
-            omittedCenters.map((center) => center.name),
-          )
-        : {
-            id: "evolucion",
-            title: filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos",
-            subtitle: `${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`,
-            option:
-              evolution.series.length > 0
-                ? seriesOptionFor("barras", evolution.series, evolutionContext)
-                : null,
-            table: seriesTableFor("barras", evolution.series, evolutionContext),
-            warnings: evolution.warnings,
-            ...withNote(describeShares(shares)),
-            height: 300,
-          },
-      {
-        id: "distribucion",
-        title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
-        subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
-        option:
-          distribution.series.length > 0 && parentTotal
-            ? stackedTotalOption(distribution.series, parentTotal, distributionContext)
-            : null,
-        table:
-          distribution.series.length > 0 && parentTotal
-            ? stackedTotalTable(distribution.series, parentTotal, distributionContext)
-            : EMPTY_TABLE,
-        warnings: children.warnings,
-        ...withNote(distributionNote || undefined),
-        height: 320,
-      },
-      {
-        id: "composicion",
-        title: "Composición de los ingresos",
-        subtitle: periodName,
-        option:
-          slices.slices.length > 0 ? pieOption(slices, { colorOf: sliceColor, donut: true }) : null,
-        table:
-          slices.slices.length > 0
-            ? entryTable(slices.slices, { colorOf: sliceColor })
-            : EMPTY_TABLE,
-        warnings: composition.warnings,
-        ...withNote(compositionEmptyNote ?? excludedNote(slices.excluded)),
-        height: 280,
-      },
-      {
+      annexBars ??
+        (lineSet && lineBundle
+          ? businessLineCard(
+              lineSet,
+              lineBundle,
+              periodName,
+              lineCenters.map((id) => ({ id, label: centerLabels.get(id) ?? id })),
+              omittedCenters.map((center) => center.name),
+            )
+          : {
+              id: "evolucion",
+              title: filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos",
+              subtitle: `${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`,
+              option:
+                evolution.series.length > 0
+                  ? seriesOptionFor("barras", evolution.series, evolutionContext)
+                  : null,
+              table: seriesTableFor("barras", evolution.series, evolutionContext),
+              warnings: evolution.warnings,
+              ...withNote(describeShares(shares)),
+              height: 300,
+            }),
+      // «Distribución» se RINDE bajo el anexo. Reparte UNA cuenta entre sus hijas, y allí resuelve
+      // Ingresos —quince cuentas marcadas no son «exactamente una»—, así que bajo un anexo de
+      // GASTOS quedaba una tarjeta repartiendo ingresos que no tiene nada que ver con lo que se
+      // está leyendo. Se va entera en vez de reapuntarse a los gastos porque la pila por periodo ya
+      // la dan las otras dos: el reparto lo dicen la dona y las barras, y en anual no hay evolución
+      // que apilar. Es la misma regla con la que un módulo entero desaparece de la barra cuando no
+      // tiene nada que decir, y por eso la lista puede traer cuatro tarjetas en vez de cinco.
+      ...(annex
+        ? []
+        : [
+            {
+              id: "distribucion",
+              title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
+              subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
+              option:
+                distribution.series.length > 0 && parentTotal
+                  ? stackedTotalOption(distribution.series, parentTotal, distributionContext)
+                  : null,
+              table:
+                distribution.series.length > 0 && parentTotal
+                  ? stackedTotalTable(distribution.series, parentTotal, distributionContext)
+                  : EMPTY_TABLE,
+              warnings: children.warnings,
+              ...withNote(distributionNote || undefined),
+              height: 320,
+            } satisfies ChartCardSpec,
+          ]),
+      // El ranking va ANTES de la composición: son las dos lecturas del tramo, y la de gastos es
+      // la que el lector busca primero —de dónde se va el dinero— mientras que la tarta reparte
+      // unos ingresos cuyo total ya declaran las cifras de arriba. El informe impreso hereda este
+      // orden porque lee esta misma lista.
+      annexPie ?? {
         id: "ranking",
         title: "Ranking de gastos",
         subtitle: `De mayor a menor · ${periodName}`,
@@ -568,22 +802,18 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
               ? `Se muestran las ${ranking.entries.length} cuentas más grandes; ${ranking.hidden} quedaron fuera.`
               : undefined),
         ),
-        height: 280,
+        // Quince filas piden el alto de quince filas: a 280 px cada barra cae a 17 px y el rótulo
+        // de la cuenta deja de caber al lado de su monto. Es la misma densidad de antes (~34 px
+        // por fila), no una tarjeta más grande.
+        height: 520,
       },
-      {
-        id: "cascada",
-        title: "Del ingreso a la utilidad",
-        subtitle: range ? `Suma de ${range}` : "Sin movimiento",
-        option: steps.length > 0 ? waterfallOption(steps) : null,
-        table: steps.length > 0 ? waterfallTable(steps) : EMPTY_TABLE,
-        ...(waterfall ? { warnings: waterfall.warnings } : {}),
-        ...withNote(
-          waterfall && waterfall.grouped > 0
-            ? `«Otros gastos» agrupa ${waterfall.grouped} grupos más pequeños.`
-            : undefined,
-        ),
-        height: 340,
-      },
+      // Bajo el anexo la CASCADA se adelanta a la composición de ingresos, y el motivo es qué
+      // responde cada una a esa pregunta: la cascada va del ingreso al resultado pasando por los
+      // gastos, así que es la continuación natural del reparto que se acaba de leer, mientras que
+      // la tarta de ingresos sigue ahí solo como el contexto de la columna «% del ingreso». Fuera
+      // del anexo el orden es el de siempre — la composición acompaña al reparto de arriba y la
+      // cascada cierra con la historia completa.
+      ...(annex ? [cascadaCard, composicionCard] : [composicionCard, cascadaCard]),
     ],
   };
 }

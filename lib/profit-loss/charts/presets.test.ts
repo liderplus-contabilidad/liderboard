@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHART_MAX_SERIES } from "@/lib/charts/palette";
+import { CHART_MAX_SERIES, CHART_RANKING_MAX } from "@/lib/charts/palette";
 import { makeSource } from "../analytics/fixtures";
 import { MAX_SERIES, buildSeries } from "../analytics/series";
 import type { AnalyticsSource } from "../analytics/types";
@@ -10,10 +10,12 @@ import {
   coveredPeriods,
   compositionQuery,
   excludedNote,
+  EXPENSE_RANKING_SIZE,
   intersectWithMarked,
   lastCoveredIndex,
   leavesOf,
   presetQuery,
+  RANKING_SIZE,
   sumOver,
   topByMagnitude,
   topEntries,
@@ -220,6 +222,30 @@ describe("ranking", () => {
 
     expect(ranked.entries.map((entry) => entry.code)).toEqual(["5.1.5.9", "5.1.5.7"]);
     expect(ranked.hidden).toBe(1);
+  });
+
+  /**
+   * El corte del «Ranking de gastos» son los pasos de su escala, no un número suelto: si la rampa
+   * y el corte se separan, la barra sobrante cae en el neutro y nadie lo ve hasta que un cliente
+   * tiene ese gasto número dieciséis. Las demás siguen en ocho porque se pintan con las ranuras
+   * de identidad, que son ocho.
+   */
+  it("el ranking de gastos corta donde acaba su rampa, y las demás siguen en ocho", () => {
+    expect(EXPENSE_RANKING_SIZE).toBe(CHART_RANKING_MAX);
+    expect(EXPENSE_RANKING_SIZE).toBe(15);
+    expect(RANKING_SIZE).toBe(CHART_MAX_SERIES);
+
+    const entries = Array.from({ length: 20 }, (_, index) => ({
+      code: `5.1.5.${index}`,
+      label: `Gasto ${index}`,
+      value: (index + 1) * 100,
+    }));
+    const ranked = topEntries(entries, EXPENSE_RANKING_SIZE);
+
+    expect(ranked.entries).toHaveLength(15);
+    expect(ranked.hidden).toBe(5);
+    // Y sigue ordenando antes de cortar: el mayor es el primero, no el primero del archivo.
+    expect(ranked.entries[0].value).toBe(2000);
   });
 
   it("drops the accounts that did not move, and does not count them as hidden", () => {

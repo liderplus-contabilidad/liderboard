@@ -344,7 +344,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
               <StatTile
                 key={tile.id}
                 label={tile.label}
-                value={tile.value === null ? null : formatCurrency(tile.value)}
+                value={tile.value === null ? null : formatCurrency(tile.value, { cents: true })}
                 hint={graficos.periodName}
                 sign={tile.sign}
               />
