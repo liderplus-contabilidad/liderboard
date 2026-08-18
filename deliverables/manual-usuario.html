@@ -554,7 +554,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 17 ago 2026</span>
+      <span><b>Actualizado</b> 18 ago 2026</span>
       <span><b>Módulos</b> P&amp;G · Ocupaciones · Rol de Pagos</span>
     </div>
   </header>
@@ -994,7 +994,10 @@
           te dice que la utilidad de enero ya no coincide con la del archivo — no es un error, es la
           constancia de que tú cambiaste algo. Y a la derecha, la <b>ficha</b> que abre el enlace
           <em class="ui">ficha</em> de cada fila: total del año, meses con movimiento, promedio, mes
-          más alto y peso sobre su cuenta padre.
+          más alto, peso sobre su cuenta padre y —lo nuevo—
+          <b>qué porcentaje es del total de costos y gastos y del total de ingresos</b>. No es lo
+          mismo que el peso sobre el padre: una cuenta puede pesar mucho dentro de su rama y
+          poquísimo dentro del estado.
         </figcaption>
       </figure>
 
@@ -1116,7 +1119,7 @@
           las cuentas hijas mes a mes con el porcentaje dentro de cada barra, y la línea negra es el
           <b>total real</b> — no el borde de la pila, porque los descuentos restan.
           <b>Composición de los ingresos</b> reparte el tramo entero. <b>Ranking de gastos</b> los
-          ordena de mayor a menor y dice al pie cuántas cuentas quedaron fuera.
+          ordena de mayor a menor —hasta quince— y dice al pie cuántas cuentas quedaron fuera.
         </figcaption>
       </figure>
 
@@ -1164,13 +1167,45 @@
       </figure>
 
       <div class="callout warn">
-        <span class="label">Es excluyente con marcar cuentas</span>
+        <span class="label">«Ventas» es excluyente con marcar cuentas</span>
         <p>
-          Encender una vista predeterminada borra las cuentas que tuvieras marcadas, y marcar una
-          cuenta apaga la vista. Son dos formas distintas de decidir qué se dibuja, y no pueden
-          estar las dos a la vez.
+          Encenderla borra las cuentas que tuvieras marcadas, y marcar una cuenta la apaga. Es
+          porque sus categorías —hospedaje, bar— no son cuentas del plan, así que son dos formas
+          distintas de decidir qué se dibuja y no pueden convivir.
+          <b>«Costos y gastos» sí convive</b>, porque ahí cada barra sí es una cuenta.
         </p>
       </div>
+
+      <h4>Vistas predeterminadas: «Costos y gastos»</h4>
+      <p>
+        La segunda vista es el <b>anexo de gastos</b>: en qué se reparten los costos y gastos del
+        período. Se ofrece solo en los estados de <b>MicroPlus</b>, cuyo plan da un número de rubros
+        que se puede leer; otros formatos bajan a más de cien cuentas y ahí ni la tarta ni las
+        barras reparten nada.
+      </p>
+      <p>Al encenderla, de un clic:</p>
+      <ul>
+        <li>
+          Cambia <em class="ui">Ver por</em> a <b>Año</b> y deja marcadas en
+          <em class="ui">Cuenta contable</em> las cuentas que dibuja —las más específicas de cada
+          rama—, así que ves cuáles entran y <b>quitas un rubro desmarcándolo</b>.
+        </li>
+        <li>
+          Sustituye la primera tarjeta por <b>barras verticales</b>, una por rubro y con su monto
+          encima, todas del mismo color. Su <em class="ui">Ver como tabla</em> es el anexo entero:
+          código, valor, <b>% del gasto</b> y <b>% del ingreso</b>, con su fila de total.
+        </li>
+        <li>
+          Y la del ranking por la <b>dona de porcentajes</b> del mismo reparto. Las dos dibujan
+          quince rubros y pliegan el resto en «Otros»; la tabla no pliega nada.
+        </li>
+      </ul>
+      <p>
+        Marcar meses en <em class="ui">Periodo</em> <b>los suma</b>: «Ene, Feb, Mar» da el anexo de
+        ese trimestre, no tres barras por rubro. Y al <b>pulsar una barra</b> se abre una ventana
+        con ese rubro medido contra los dos totales —cuánto es del gasto y cuánto del ingreso—, que
+        es la respuesta a «¿cuánto de lo que vendí se me fue en honorarios?».
+      </p>
 
       <h3>Análisis</h3>
 
