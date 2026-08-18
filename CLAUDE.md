@@ -735,6 +735,122 @@ la misma regla que `center-filter.tsx` en modo estado único, y se exigen DOS o 
 no es una comparación. Datos, Análisis, las otras cuatro tarjetas y el informe imprimible no cambian
 ni una línea.
 
+**Su segunda vista, «Costos y gastos», es el ANEXO DE GASTOS que la firma llevaba en un libro
+aparte**, y es la prueba de que el catálogo de predeterminados es un punto de extensión de verdad:
+una entrada en `preset-views.ts` más su rama en `cards.ts`, sin tocar la barra ni `filters.ts`. Se
+consideró primero como marcas —las 17 categorías del anexo SON cuentas del plan, así que marcarlas
+las produce— y se descartó por lo único que importaba: marcar diecisiete cuentas a mano no es
+llegar. **Y al revés que «Ventas», no necesita vocabulario ninguno.** Aquella busca sus categorías
+por rótulo y por eso solo se ofrece a un plan de hotelería; las de aquí están a distinta profundidad
+según la rama (`5.2.02` junto a `5.3.03.01`) justamente porque son las cuentas de MOVIMIENTO del
+árbol de gastos, que es lo que `leavesOfAny` ya devuelve — regla estructural y no de dominio, sin
+una lista que mantener por cliente. **Pero se ofrece SOLO en MicroPlus**, y eso es una restricción de
+LEGIBILIDAD y no de que el cálculo falle: el reparto se hace sobre las cuentas de movimiento, y ahí
+cada plan da un número muy distinto — el de MicroPlus se queda en unas decenas, que es un anexo,
+mientras que otros formatos bajan mucho más y devuelven más de cien rubros, donde una tarta no
+reparte nada y las barras son una alfombra; con esos planes la pregunta hay que hacerla un nivel más
+arriba, y ese nivel no es el mismo en todos. Por eso `isAvailable` pasó a recibir un `PresetContext`
+(`{source, systemId}`) en vez de la fuente a secas: hay vistas que dependen del PLAN —«Ventas» mira
+los rótulos del árbol— y otras del SISTEMA del que salió el archivo, que es un dato del workspace y
+no del árbol; el consolidado entre clientes, cuyo `systemId` es `null` porque une planes de varios
+sistemas, tampoco la recibe. El precio, escrito en su entrada, es que un plan nuevo tan legible como
+el de MicroPlus no la hereda solo y hay que añadirlo ahí — se prefirió a un tope de cuentas porque es
+lo que la firma pidió. `lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
+pequeña porque el motor ya existía: reusa la MISMA tanda del ranking en vez de pedir la suya —dos
+consultas para el mismo reparto podrían acabar cuadrando contra tramos distintos, que es justo lo
+que la nota afirma que no pasa—. **Lo que la define son sus DOS denominadores**: el total del gasto,
+que es el 100 % del reparto, y el total del INGRESO, porque «¿cuánto de lo que vendí se me fue en
+honorarios médicos?» es la pregunta con la que se abre el anexo y un solo denominador no la
+responde. `shareOf` es la única definición de «porcentaje sobre un total» de esa cara del módulo y
+la comparten las dos columnas y la ficha, así que un rubro y su fila no pueden decir cifras
+distintas; un total `null` o `0` da `null` y jamás `0 %`. El denominador es el ROLLUP del motor y no
+la suma de lo que haya en pantalla, de modo que con cuentas marcadas la columna suma menos de 100 %
+— que es lo correcto, y es lo que dice que se está mirando un trozo.
+
+**Y SIEMBRA sus propias cuentas**, que es lo que la separa de «Ventas»: al encenderse deja marcadas
+en «Cuenta contable» las mismas que dibuja (`PresetView.seedCodes`), así que se ve cuáles entran y se
+quita un rubro desmarcándolo. Eso obligó a abrir una excepción a la exclusividad entre marcas y
+vistas: normalmente marcar una cuenta apaga el predeterminado —son dos respuestas a «qué dibujo» y
+nada las arbitra—, pero eso vale cuando la vista dibuja algo que NO es un conjunto de cuentas; aquí
+los rubros SON cuentas del plan, así que la marca y la vista dicen lo mismo y desmarcar ACOTA el
+reparto en vez de contradecirlo (`withCodeToggled`, opción `keepPreset`). Quien sabe cuál es cuál es
+el catálogo, que vive en `charts/`, y `PygDataProvider` no importa de ahí — así que lo que cada vista
+declara (`seeds`, `seedCodes`, `frequency`) viaja al proveedor como ARGUMENTO desde el botón de la
+barra, que sí lo conoce, y el proveedor solo recuerda si las marcas son suyas. La vista se lee además
+en **ANUAL** y también lo declara ella: el anexo es una columna por rubro sobre el tramo entero, y en
+mensual saldrían seis barras por rubro, que es su evolución y no su reparto; se aplica al encender y
+no se deshace al apagar, porque «Ver por» está a la vista y se vuelve de un clic, al revés que las
+marcas, que dejarían chips que el usuario no puso. No siembra centros ni periodos — el anexo no
+reparte por eso, y marcar los centros abriría una columna por establecimiento de algo que se lee como
+un total.
+
+La vista ocupa DOS ranuras de la lista: la primera, que es la que toda vista sustituye, y la del
+**ranking**, porque pregunta lo mismo sobre el mismo universo y dejar las dos imprimiría la lista dos
+veces. **La CASCADA se adelanta a la composición de ingresos**, porque es la que continúa la
+lectura: va del ingreso al resultado pasando por los gastos, que es justo el reparto que se acaba de
+leer, mientras que la tarta de ingresos se queda detrás como contexto de la columna «% del ingreso».
+Fuera del anexo el orden es el de siempre, así que las dos se declaran aparte del literal y la lista
+las intercambia — son la misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
+con quince marcadas resuelve Ingresos: bajo un anexo de GASTOS quedaba una tarjeta repartiendo
+ingresos sin relación con lo que se está leyendo. Se va entera en vez de reapuntarse a los gastos
+porque su lectura ya la dan las otras dos —el reparto lo dicen la dona y las barras, y en anual no
+hay evolución que apilar—, y por eso la lista puede traer CUATRO tarjetas en vez de cinco.
+
+**Las barras son VERTICALES** (`verticalBarOption`, espejo del horizontal) porque es como la firma
+dibuja su anexo a mano, y esa forma no es capricho: con las categorías abajo el ojo recorre la fila
+de cifras de un barrido, que es lo que se hace al cotejar contra la hoja. El precio es el rótulo
+—«EMPLEADOS M.O.I. / ADMISIONES / CAJA / INFORMACION» no cabe bajo una columna— y se paga
+PARTIÉNDOLO en líneas, no girándolo, que obligaría a inclinar la cabeza diecisiete veces; `interval:
+0` es lo que obliga a dibujarlos TODOS, porque sin él ECharts adelgaza el eje y se salta uno de cada
+dos, y una barra sin nombre no se identifica por nada. **Y van todas del MISMO color**,
+`CHART_SECTION.cost` —el celeste con el que Datos pinta la raíz 5—, que es la cuarta vez que el color
+deja de seguir a la entidad y aquí por el motivo más simple: con cada barra rotulada y con su cifra
+encima, el color no distingue nada, así que repartir diecisiete tonos gastaría el canal de identidad
+en re-decir lo que la longitud ya dice. Por lo mismo las filas de la tabla no llevan punto de color:
+diecisiete puntos iguales prometerían una distinción que no existe. **Las dos tarjetas cortan en el
+MISMO sitio y por una sola reducción**: quince rubros (`ANNEX_MAX_SLICES`) con la cola plegada en
+«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la dona por la
+suya— y podían enseñar distinto número de rubros del mismo reparto, que es la clase de desacuerdo que
+nadie lee como un error. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
+mismo tono, así que por ahí no hay tope, y la dona tiene tonos para más; lo que no da para más es la
+lectura — un plan de gastos puede traer 133 cuentas de movimiento, y ahí las porciones caen bajo el
+0,1 %, donde no se ven ni se pueden rotular. La nota dice cuántos agrupó «Otros» y dónde están
+enteros, porque si no ese pliegue se lee como una cuenta más del plan. Pero **la tabla gemela no corta**: ES el anexo entero —código de `sublabel`, valor, % del gasto, % del ingreso
+y una fila de TOTAL con `emphasis`—, que es el sitio donde un rubro plegado conserva su cifra. Los
+tests transcriben el archivo real del Hospital General Privado Durán y reproducen los porcentajes
+que él imprime (27 %, 15 %, 14 %, …) y el 77,7 % de gasto sobre ingreso, que es la única evidencia
+externa de que las dos columnas significan lo que su cabecera promete. **Lo que la app NO reproduce
+de ese archivo** es su fila repetida: `5.5.01.01` aparece dos veces —«Empleados Familia Durán» y
+«Empleados Administración»—, un corte a mano de UNA cuenta que su propio gráfico de barras vuelve a
+fundir; aquí un código es una fila, y ese corte es del plan de cuentas o de una segmentación, no de
+esta tarjeta.
+
+**Y «seleccionar un gasto X» ya era un gesto que existía**: la ficha de cuenta. Gana
+`shareOfExpenses` y `shareOfRevenue`, que NO sustituyen a `shareOfContainer` sino que responden otra
+pregunta — aquel divide por el padre INMEDIATO («Honorarios Médicos es el 43 % de Gastos
+Operacionales»), que dice dónde está dentro de su rama, y estos por las raíces del estado («el 27 %
+de todo el gasto y el 21 % de lo que se facturó»). Una cuenta hundida tres niveles pesa muchísimo en
+su padre y poquísimo en el estado, así que leer solo el primero engaña. Los totales los pide QUIEN
+LLAMA (`AccountDetailInput.totals`, opcional) en vez de derivarse dentro, porque salen de otra
+consulta al motor y hacerla ahí abriría la puerta a cuadrar contra un tramo distinto del que la
+ficha dibuja; sin ellos las dos cifras son `null` y el panel no las escribe, que es lo que deja
+intacta a la ficha de un ingreso.
+
+**Y la ficha las DIBUJA, no solo las escribe** (`shareOfTotalOption`/`shareOfTotalTable`): una tarjeta
+«Peso en el estado» con una fila por total —la barra llena hasta lo que la cuenta pesa y el resto en
+un relleno recesivo hasta el 100 %—, porque un 27,4 % y un 21,3 % en una lista no dicen de un vistazo
+cuál es grande y dos barras contra el mismo todo sí. La decisión está en el RESTO: sin él una barra
+sobre un eje que se auto-escala obliga a ir a mirar el eje para saber contra qué, así que el eje va
+FIJO a 100 y deja de hacer falta —además de que sin fijarlo el mismo relleno diría cosas distintas en
+las dos filas—. El monto y su porcentaje van JUSTO A LA DERECHA del relleno y no dentro, y eso se
+probó al revés: dentro, `$307,005.37` no cabe en una barra del 27 % y sale recortado, y el umbral que
+decidiera cuándo entra dependería del ancho del texto, que no se puede medir sin un canvas. El resto
+no se rotula —su porcentaje es el complemento del que ya está escrito—, y el color de cada fila lo
+pone el BLOQUE contra el que se mide (`CHART_SECTION`: celeste los gastos, verde los ingresos), que
+es exactamente lo que esa excepción existe para decir. Los rótulos son cortos («Sobre los gastos») y
+el canal 106 px porque esto vive en el panel lateral, que son 440 px: entre el canal y el hueco de la
+cifra se le come a la barra todo el ancho que tiene para decir algo.
+
 **El eje va girado —las CATEGORÍAS en la X— y esa es la decisión de la tarjeta.** Con los meses en
 el eje, las cinco categorías que no son hospedaje comparten grupo con una barra cien veces mayor:
 quedan aplastadas contra él, sin rótulo propio y sin sitio para su cifra. Ninguna escala arregla esa
@@ -1112,11 +1228,53 @@ UI are:
   `CHART_COMPOSITION_MAX` es además el corte que `toPieSlices` recibe, en vez de un 6 suelto, para
   que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin tono. Medido: banda
   PASS, croma PASS, CVD ΔE 15.0, visión normal ΔE 16.2.
+- **`CHART_RANKING_TAIL_RAMP` es la COLA del «Ranking de gastos», que pasó de 8 barras a 15.** Las
+  ocho primeras se pintan como siempre, con `CHART_PALETTE`: ahí el color sigue haciendo su trabajo
+  y la tarjeta no cambia de aspecto. El problema empieza en la NOVENA, donde `colorForEntity`
+  devuelve `CHART_NEUTRAL` — las siete últimas salían del mismo gris, siete barras iguales y siete
+  puntos iguales en la gemela en tabla, justo al fondo de la lista, que es donde se mira para saber
+  qué recortar. La cola no se arregla con siete hues nuevos: un noveno tono de identidad es lo que
+  la paleta prohíbe, y quince tonos separables no existen. Se arregla dándole a la cola lo que la
+  cola ES —un tramo ORDENADO y no siete entidades—, así que ahí el color sigue al PUESTO, la cuarta
+  vez que deja de seguir a la entidad. Son siete pasos de una sola gama **verde lima** (pedida por
+  la firma) de oscuro a claro, y dos cosas la dejan convivir con las ocho de arriba: **un solo hue**
+  (128°, solo cambia el tono), que es justo lo que la distingue de un set de identidad y lo que la
+  hace leerse como tramo, y que sea **APAGADA** — cada paso por debajo del croma de TODAS las
+  ranuras (0.08–0.118 contra un mínimo de 0.162). Son las barras más pequeñas: un verde vivo las
+  habría puesto por delante de las ocho, al revés de lo que la lista dice. El croma es también lo
+  que la separa de los dos verdes de identidad y del oliva de `--color-section-income` (h 124), el
+  vecino más cercano y el que merece decirse: en Datos el verde significa «ingresos» y aquí es la
+  cola de un ranking de GASTOS — convive porque nunca coinciden en pantalla (esa lectura de bloque
+  solo la hace `CHART_SECTION`, y solo comparando raíces) y porque la cola es visiblemente más
+  apagada. **El extremo claro lo fija una medición**: para en L 0.756 (2.13:1, el piso de 2:1 que
+  una escala ordinal exige de su paso claro) porque ese paso le toca a la barra MÁS CORTA de las
+  quince y seguir aclarando la borraba del papel — y el verde llega antes a ese piso que un azul,
+  porque pesa 0.7152 en la luminancia contra 0.0722. Medido: **monotonía en luminosidad PASS**
+  (0.496 → 0.756) — la banda, el piso de croma y la separación CVD/visión normal entre vecinos NO
+  se cumplen y no deben cumplirse, porque son los checks de un set CATEGÓRICO y el propio validador
+  los declara fuera de alcance para una rampa.
+  `CHART_RANKING_MAX` se DERIVA (8 + 7) y `EXPENSE_RANKING_SIZE` es ese número, no un 15 suelto,
+  así que ninguna barra dibujada puede quedarse sin tono; el resto de rankings sigue en
+  `RANKING_SIZE` (8), que es lo que da la paleta con la que se pintan. La tarjeta subió a 520 px
+  —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **antes** de «Composición
+  de los ingresos» (de dónde se va el dinero se lee primero) y las cinco de Gráficos quedaron al
+  MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se lee
+  como que algo no cargó, y el ranking además necesita el ancho completo porque a media pantalla
+  los 150 px fijos del canal de rótulos truncan casi todos los nombres de cuenta.
 
 **Reusable side panel.** `components/ui/side-panel.tsx` is a right-anchored, non-modal drawer
 (no scrim, Escape/outside-click to close, focus in on open and back to the opener on close). It's
 what the PyG account ficha mounts on; reuse it for any future lateral detail view rather than
 building another.
+
+**Y su hermana, `components/ui/modal.tsx`**, una ventana CENTRADA sobre el `<dialog>` nativo (top
+layer, trampa de foco y Escape los pone el navegador). Se elige entre las dos por la FORMA de lo que
+muestran, no por gusto: el cajón existe para un detalle que se lee JUNTO a lo que lo abrió —la ficha
+de una cuenta contra su fila de la tabla—, y por eso no lleva velo; la ventana interrumpe, se pone en
+medio y apaga el fondo, que es lo correcto cuando lo que se abre se lee SOLO y se cierra enseguida.
+El peso de un rubro al pulsar su barra del anexo entra por aquí, y además porque un cajón lateral
+caería justo encima de las barras y taparía la que se acaba de pulsar. `ConfirmDialog` es anterior a
+este archivo y repite sus mecánicas; cuando alguien lo toque, conviene plegarlo aquí.
 
 ## Design source
 

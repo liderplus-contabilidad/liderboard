@@ -18,6 +18,8 @@ import type { Series, SeriesKey } from "../analytics/types";
 import {
   barOption,
   categoryBarOption,
+  formatAxisValue,
+  formatChartValue,
   comboOption,
   entryTable,
   horizontalBarOption,
@@ -36,6 +38,9 @@ import {
   variationBarOption,
   waterfallOption,
   waterfallTable,
+  shareOfTotalOption,
+  verticalBarOption,
+  shareOfTotalTable,
 } from "./option";
 import { RESULT_CODE, type WaterfallStep } from "./waterfall";
 
@@ -64,6 +69,7 @@ function tooltipOf(option: ChartOption, params: Partial<ChartParam>[]): string {
     dataIndex: 0,
     value: null,
     seriesName: option.series[index]?.name,
+    seriesId: option.series[index]?.id,
     marker: "•",
     ...param,
   })) as ChartParam[];
@@ -261,7 +267,7 @@ describe("un solo eje por gráfica", () => {
       "{share|25.0 %}",
     );
     expect(option.series[2].label?.formatter?.({ value: 2000, name: "Ene", dataIndex: 0 })).toBe(
-      formatCurrency(2000),
+      formatCurrency(2000, { cents: true }),
     );
   });
 
@@ -276,7 +282,7 @@ describe("un solo eje por gráfica", () => {
     );
 
     expect(option.series[0].label?.formatter?.({ value: 1500, name: "Ene", dataIndex: 0 })).toBe(
-      `${formatCurrency(1500)}\n{share|75.0 %}`,
+      `${formatCurrency(1500, { cents: true })}\n{share|75.0 %}`,
     );
   });
 
@@ -438,8 +444,8 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
   it("pone el porcentaje bajo el monto de la hija y deja al padre con su monto", () => {
     const option = barOption(pair(3), { ...CONTEXT, shares: sharesOf([28.4, 29.1, 27.8]) });
 
-    expect(labelOf(option, 0)).toBe("$25,229");
-    expect(labelOf(option, 1)).toBe("$7,161\n{share|28.4 %}");
+    expect(labelOf(option, 0)).toBe("$25,229.00");
+    expect(labelOf(option, 1)).toBe("$7,161.00\n{share|28.4 %}");
   });
 
   it("apaga el monto pero conserva el porcentaje cuando el eje se aprieta", () => {
@@ -454,7 +460,7 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
   it("deja el monto solo cuando el porcentaje de ese periodo no se pudo calcular", () => {
     const option = barOption(pair(3), { ...CONTEXT, shares: sharesOf([28.4, null, 27.8]) });
 
-    expect(labelOf(option, 1, 1)).toBe("$7,161");
+    expect(labelOf(option, 1, 1)).toBe("$7,161.00");
   });
 
   it("escribe el porcentaje en tinta más tenue y nunca en el color de la serie", () => {
@@ -473,14 +479,14 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
       { seriesId: CHILD_ID, value: 7_161 },
     ]);
 
-    expect(rows).toContain("Ingresos: $25,229<br/>");
-    expect(rows).toContain("Ventas: $7,161 · 28.4 % de Ingresos");
+    expect(rows).toContain("Ingresos: $25,229.00<br/>");
+    expect(rows).toContain("Ventas: $7,161.00 · 28.4 % de Ingresos");
   });
 
   it("no cambia ni una etiqueta cuando no hay ningún porcentaje que anotar", () => {
     const plain = barOption(pair(3), CONTEXT);
 
-    expect(labelOf(plain, 1)).toBe("$7,161");
+    expect(labelOf(plain, 1)).toBe("$7,161.00");
     expect(plain.series[1].label?.rich).toBeUndefined();
     expect(tooltipOf(plain, [{ seriesId: CHILD_ID, value: 7_161 }])).not.toContain("%");
   });
@@ -512,9 +518,11 @@ describe("el signo de una variación", () => {
   it("carries an arrow and the signed value, so color is not the only cue", () => {
     const label = variationBarOption(entries).series[0].label;
 
-    expect(label?.formatter?.({ value: 1200, name: "Publicidad", dataIndex: 0 })).toBe("▲ $1,200");
+    expect(label?.formatter?.({ value: 1200, name: "Publicidad", dataIndex: 0 })).toBe(
+      "▲ $1,200.00",
+    );
     expect(label?.formatter?.({ value: -450, name: "Mantenimiento", dataIndex: 1 })).toBe(
-      "▼ -$450",
+      "▼ -$450.00",
     );
   });
 
@@ -545,7 +553,10 @@ describe("la forma que la transformación admite", () => {
       "20.0 %",
       "30.0 %",
     ]);
-    expect(seriesTableFor("barras", series, context).rows[0].values).toEqual(["$200", "$300"]);
+    expect(seriesTableFor("barras", series, context).rows[0].values).toEqual([
+      "$200.00",
+      "$300.00",
+    ]);
   });
 });
 
@@ -559,7 +570,7 @@ describe("la gemela en tabla", () => {
 
     expect(table.columns).toEqual(["Ene", "Feb"]);
     expect(table.rows.map((row) => row.label)).toEqual(["Ventas Restaurante", "Ventas Eventos"]);
-    expect(table.rows[0].values).toEqual(["$1,000", "$1,200"]);
+    expect(table.rows[0].values).toEqual(["$1,000.00", "$1,200.00"]);
     expect(table.rows[0].id).toBe("4.1.1.2|cultura-manor|2026");
   });
 
@@ -569,7 +580,7 @@ describe("la gemela en tabla", () => {
       periods: PERIODS.slice(0, 2),
     });
 
-    expect(table.rows[0].values).toEqual(["$1,000", null]);
+    expect(table.rows[0].values).toEqual(["$1,000.00", null]);
   });
 
   it("shows the transformation, not the amounts behind it", () => {
@@ -811,5 +822,292 @@ describe("el eje girado", () => {
     const option = categoryBarOption(columns, series, { colorOf: () => "#000" });
     expect(Array.isArray(option.xAxis)).toBe(false);
     expect(option.series[0].markArea).toBeUndefined();
+  });
+});
+
+describe("el código de cuenta, al pasar el ratón", () => {
+  const series = [
+    makeSeries([1000, null], { code: "4.1.1.2", label: "Ventas Restaurante" }),
+    makeSeries([500, null], { code: "4.1.1.3", label: "Ventas Eventos" }),
+  ];
+
+  it("antepone el código al nombre de cada serie, en su fila", () => {
+    const html = tooltipOf(barOption(series, CONTEXT), [{ value: 1000 }, { value: 500 }]);
+
+    expect(html).toContain("4.1.1.2 · Ventas Restaurante: $1,000");
+    expect(html).toContain("4.1.1.3 · Ventas Eventos: $500");
+    // La primera línea es el PERIODO y no una cuenta: ahí el código no pinta nada.
+    expect(html.startsWith("Ene")).toBe(true);
+  });
+
+  it("lo dice también en la línea, donde la lectura es la misma", () => {
+    const html = tooltipOf(lineOption(series, CONTEXT), [{ value: 1000 }, { value: 500 }]);
+
+    expect(html).toContain("4.1.1.2 · Ventas Restaurante");
+  });
+
+  it("lo dice en cada segmento de la pila y en la línea de su total", () => {
+    const total = makeSeries([1500, null], { code: "4.1.1", label: "Ventas Alojamiento" });
+    const option = stackedTotalOption(series, total, CONTEXT);
+    const html = tooltipOf(option, [{ value: 1000 }, { value: 500 }, { value: 1500 }]);
+
+    expect(html).toContain("4.1.1.2 · Ventas Restaurante");
+    expect(html).toContain("4.1.1 · Ventas Alojamiento");
+  });
+
+  /**
+   * En las de barras horizontales la cuenta NO es la serie —la serie es «Monto»— sino la
+   * categoría del eje, que el tooltip escribe como primera línea. Ahí es donde tiene que ir.
+   */
+  it("en el ranking va en la primera línea, que es donde está el nombre de la cuenta", () => {
+    const entries: AmountEntry[] = [
+      { code: "5.1.5.1", label: "Sueldos y Salarios", value: 9000 },
+      { code: "5.1.5.12", label: "Arrendamiento Operativo", value: 8000 },
+    ];
+    const option = horizontalBarOption(entries, ENTRY_CONTEXT);
+    const html = tooltipOf(option, [{ value: 9000, name: "Sueldos y Salarios", dataIndex: 0 }]);
+
+    expect(html.startsWith("5.1.5.1 · Sueldos y Salarios")).toBe(true);
+    expect(html).toContain("$9,000");
+    // Y sigue el orden del eje, no el del archivo: la segunda fila es la segunda categoría.
+    expect(
+      tooltipOf(option, [{ value: 8000, name: "Arrendamiento Operativo", dataIndex: 1 }]),
+    ).toContain("5.1.5.12 · Arrendamiento Operativo");
+  });
+
+  it("lo dice igual en la variación y en el pareto", () => {
+    const entries: AmountEntry[] = [{ code: "5.1.5.1", label: "Sueldos", value: -400 }];
+    expect(
+      tooltipOf(variationBarOption(entries), [{ value: -400, name: "Sueldos", dataIndex: 0 }]),
+    ).toContain("5.1.5.1 · Sueldos");
+
+    const pareto = toPareto([{ code: "5.1.5.1", label: "Sueldos", value: 400 }]);
+    expect(
+      tooltipOf(paretoOption(pareto, ENTRY_CONTEXT), [
+        { value: 400, name: "Sueldos", dataIndex: 0 },
+      ]),
+    ).toContain("5.1.5.1 · Sueldos");
+  });
+
+  it("lo dice en la tarta, y «Otros» NO lo dice porque no es una cuenta", () => {
+    const result = toPieSlices(
+      [
+        { code: "4.1.1.2", label: "Restaurante", value: 750 },
+        { code: "4.1.1.3", label: "Eventos", value: 250 },
+        { code: "4.1.1.4", label: "Bar", value: 100 },
+      ],
+      { maxSlices: 2 },
+    );
+    const option = pieOption(result, ENTRY_CONTEXT);
+    const slice = (dataIndex: number) =>
+      option.tooltip?.formatter?.({
+        name: result.slices[dataIndex].label,
+        value: result.slices[dataIndex].value,
+        percent: 50,
+        dataIndex,
+        marker: "•",
+      }) ?? "";
+
+    expect(slice(0)).toContain("4.1.1.2 · Restaurante");
+    expect(result.slices[1].label).toBe("Otros");
+    expect(slice(1)).toContain("Otros");
+    expect(slice(1)).not.toContain("·  Otros");
+    expect(slice(1).startsWith("Otros")).toBe(true);
+  });
+
+  /**
+   * Las dos formas que NO son cuentas. Una línea de negocio agrupa varias cuentas de ramas
+   * distintas y un escalón de la cascada es un bloque del estado: ninguna tiene UN código, y
+   * escribir el de una de sus partes afirmaría algo falso.
+   */
+  it("no lo inventa donde la serie no es una cuenta", () => {
+    const category = categoryBarOption(
+      ["Hospedaje", "Restaurante"],
+      [{ id: "ene", label: "Ene", values: [10, 5] }],
+      { colorOf: () => "#000" },
+    );
+    expect(tooltipOf(category, [{ value: 10, name: "Hospedaje" }])).not.toContain("·");
+
+    const steps: WaterfallStep[] = [
+      { kind: "total", code: "4", label: "Ingresos", value: 100, start: 0, end: 100 },
+    ];
+    expect(tooltipOf(waterfallOption(steps), [{ dataIndex: 0 }])).not.toContain("4 · Ingresos");
+  });
+
+  it("cuelga el código bajo el nombre en la tabla gemela, donde hay sitio para los dos", () => {
+    const rows = seriesTable(series, CONTEXT).rows;
+    expect(rows.map((row) => row.sublabel)).toEqual(["4.1.1.2", "4.1.1.3"]);
+
+    const entries: AmountEntry[] = [{ code: "5.1.5.1", label: "Sueldos", value: 9000 }];
+    expect(entryTable(entries, ENTRY_CONTEXT).rows[0].sublabel).toBe("5.1.5.1");
+  });
+
+  it("y la fila de «Otros» se queda sin él, como su porción", () => {
+    const result = toPieSlices(
+      [
+        { code: "4.1.1.2", label: "Restaurante", value: 750 },
+        { code: "4.1.1.3", label: "Eventos", value: 250 },
+        { code: "4.1.1.4", label: "Bar", value: 100 },
+      ],
+      { maxSlices: 2 },
+    );
+    const rows = entryTable(result.slices, ENTRY_CONTEXT).rows;
+
+    expect(rows.find((row) => row.label === "Otros")?.sublabel).toBeUndefined();
+  });
+});
+
+describe("los importes se escriben como en Datos", () => {
+  const series = [makeSeries([204_045.51, null], { code: "4.1.1.2", label: "Restaurante" })];
+
+  /**
+   * Dos decimales SIEMPRE, con el mismo `formatCurrency({ cents: true })` que la tabla de Datos:
+   * el contador coteja la barra contra su hoja, y `$204,045` contra `204.045,51` obliga a
+   * preguntarse si la diferencia son centavos o un error de carga.
+   */
+  it("dice los centavos en la etiqueta, en el tooltip y en la tabla gemela", () => {
+    const option = barOption(series, CONTEXT);
+
+    expect(formatChartValue(204_045.51)).toBe("$204,045.51");
+    expect(option.series[0].label?.formatter?.({ value: 204_045.51, dataIndex: 0 })).toContain(
+      "$204,045.51",
+    );
+    expect(tooltipOf(option, [{ value: 204_045.51 }])).toContain("$204,045.51");
+    expect(seriesTable(series, CONTEXT).rows[0].values[0]).toBe("$204,045.51");
+  });
+
+  /**
+   * El EJE no: sus marcas son una escala y no una cifra que nadie coteja, y seis rótulos de
+   * «$204,045.51» se comen el ancho que le queda al dibujo. Es la misma regla que Ocupaciones ya
+   * escribió para `formatMetric` — «right for an axis, wrong for a figure someone compares
+   * against their own spreadsheet» —, y por eso Datos, que no tiene eje, no tiene este caso.
+   */
+  it("pero no en las marcas del eje, que son una escala y no una cifra", () => {
+    const option = barOption(series, CONTEXT);
+
+    expect(formatAxisValue(204_045.51)).toBe("$204,046");
+    expect(option.yAxis?.axisLabel?.formatter?.(204_045.51)).toBe("$204,046");
+  });
+
+  it("el porcentaje y el índice no cambian: sus decimales son los suyos", () => {
+    expect(formatChartValue(28.4, "porcentaje")).toBe("28.4 %");
+    expect(formatChartValue(112.35, "indice")).toBe("112.4");
+    expect(formatAxisValue(28.4, "porcentaje")).toBe("28.4 %");
+  });
+
+  it("la tarta y las barras horizontales los dicen igual", () => {
+    const entries: AmountEntry[] = [{ code: "5.1.5.1", label: "Sueldos", value: 9_357.33 }];
+    expect(entryTable(entries, ENTRY_CONTEXT).rows[0].values[0]).toBe("$9,357.33");
+    expect(
+      tooltipOf(horizontalBarOption(entries, ENTRY_CONTEXT), [
+        { value: 9_357.33, name: "Sueldos", dataIndex: 0 },
+      ]),
+    ).toContain("$9,357.33");
+
+    const pie = toPieSlices([{ code: "5.1.5.1", label: "Sueldos", value: 9_357.33 }]);
+    expect(
+      pieOption(pie, ENTRY_CONTEXT).tooltip?.formatter?.({
+        name: "Sueldos",
+        value: 9_357.33,
+        percent: 100,
+        dataIndex: 0,
+        marker: "•",
+      }),
+    ).toContain("$9,357.33");
+  });
+});
+
+describe("shareOfTotalOption · una cuenta como parte de un todo", () => {
+  const ROWS = [
+    { id: "gastos", label: "Del total de costos y gastos", value: 307_005.37, total: 1_120_438.68 },
+    { id: "ingresos", label: "Del total de ingresos", value: 307_005.37, total: 1_441_884.42 },
+  ];
+  const colorOf = (id: string) => (id === "ingresos" ? "#8fb03c" : "#3ba3c2");
+
+  it("dibuja la parte y el RESTO, que es lo que pone el todo a la vista", () => {
+    const option = shareOfTotalOption(ROWS, { colorOf });
+
+    expect(option.series.map((series) => series.id)).toEqual(["parte", "resto"]);
+    // Apiladas: juntas son el 100 % de cada fila.
+    expect(option.series[0].stack).toBe(option.series[1].stack);
+  });
+
+  it("el eje va FIJO a 100, o el mismo relleno diría cosas distintas en dos filas", () => {
+    const option = shareOfTotalOption(ROWS, { colorOf });
+    const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis;
+
+    expect(xAxis?.min).toBe(0);
+    expect(xAxis?.max).toBe(100);
+  });
+
+  it("cada fila es su porcentaje contra SU propio total", () => {
+    const option = shareOfTotalOption(ROWS, { colorOf });
+    const parte = option.series[0].data.map((d) => (d as { value: number }).value);
+    const resto = option.series[1].data.map((d) => (d as { value: number }).value);
+
+    expect(parte[0]).toBeCloseTo(27.4, 1);
+    expect(parte[1]).toBeCloseTo(21.3, 1);
+    // El resto completa el 100 en las dos, que es lo que la hace leerse como un reparto.
+    expect(parte[0] + resto[0]).toBeCloseTo(100, 6);
+    expect(parte[1] + resto[1]).toBeCloseTo(100, 6);
+  });
+
+  it("el color lo pone el BLOQUE contra el que se mide, no la cuenta", () => {
+    const option = shareOfTotalOption(ROWS, { colorOf });
+    const colors = option.series[0].data.map(
+      (d) => (d as { itemStyle?: { color?: string } }).itemStyle?.color,
+    );
+
+    expect(colors).toEqual(["#3ba3c2", "#8fb03c"]);
+  });
+
+  it("el resto es SILENCIOSO: existe para verse el todo, no para compararse con la parte", () => {
+    expect(shareOfTotalOption(ROWS, { colorOf }).series[1].silent).toBe(true);
+  });
+
+  it("una fila sin total se va: no hay contra qué medir, que no es lo mismo que 0 %", () => {
+    const option = shareOfTotalOption([ROWS[0], { ...ROWS[1], total: null }], { colorOf });
+    const yAxis = option.yAxis;
+
+    expect(yAxis?.data).toEqual(["Del total de costos y gastos"]);
+    expect(option.series[0].data).toHaveLength(1);
+  });
+
+  it("un total en cero tampoco divide", () => {
+    const option = shareOfTotalOption([{ ...ROWS[0], total: 0 }], { colorOf });
+
+    expect(option.series[0].data).toHaveLength(0);
+  });
+
+  it("la gemela en tabla dice el monto, la parte y el todo", () => {
+    const table = shareOfTotalTable(ROWS, { colorOf });
+
+    expect(table.columns).toEqual(["Monto", "% del total", "Total"]);
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows[0].values[1]).toBe("27.4 %");
+    expect(table.rows[1].values[1]).toBe("21.3 %");
+  });
+});
+
+describe("el código de cuenta llega al tooltip de las barras verticales", () => {
+  it("lo pasa por categoría y en el ORDEN dibujado, que es el ordenado", () => {
+    // El eje trunca los nombres largos, así que el tooltip es donde el contador identifica la fila
+    // contra su plan. `byCategory` va por índice: leerlo de la lista sin ordenar pondría el código
+    // de una cuenta bajo el nombre de otra.
+    const option = verticalBarOption(
+      [
+        { code: "5.2.01.02", label: "Costo Alimentación", value: 7_881.11 },
+        { code: "5.3.03.01", label: "Honorarios Médicos", value: 307_005.37 },
+      ],
+      { colorOf: () => "#3ba3c2" },
+    );
+    const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis;
+
+    expect(xAxis?.data).toEqual(["Honorarios Médicos", "Costo Alimentación"]);
+    expect(option.tooltip?.formatter).toBeTypeOf("function");
+    const head = option.tooltip?.formatter?.([
+      { name: "Honorarios Médicos", value: 307_005.37, dataIndex: 0 },
+    ] as never);
+    expect(head).toContain("5.3.03.01 · Honorarios Médicos");
   });
 });

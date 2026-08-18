@@ -62,13 +62,17 @@ export interface SeriesOptionContext {
   colorAt?: (index: number) => string;
 }
 
-/** Past this an amount no longer needs its cents, and they crowd an axis label. */
+/** Past this an amount no longer needs its cents on an AXIS, where they crowd the label. */
 const CENTS_FIT_BELOW = 1000;
 
 /**
- * The one formatter every axis, label, tooltip and table cell goes through. A ratio arrives as a
- * fraction and `formatPercent` speaks in points, so the ×100 lives here; an ADR of $82.89 keeps
- * its cents because rounding to $83 loses exactly the precision the figure exists for.
+ * The one formatter every label, tooltip and table cell goes through. A ratio arrives as a
+ * fraction and `formatPercent` speaks in points, so the ×100 lives here.
+ *
+ * Los importes llevan SIEMPRE sus centavos, como la tabla de Datos de PyG y como
+ * `formatMonthlyFigure` aquí mismo: la cifra de un gráfico se coteja contra la hoja del contador,
+ * y un ADR redondeado a `$83` pierde justo la precisión por la que ese indicador existe. El eje es
+ * la única excepción y la escribe `formatAxisMetric`.
  */
 export function formatMetric(value: number | null, unit: MetricUnit): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -78,10 +82,22 @@ export function formatMetric(value: number | null, unit: MetricUnit): string | n
     case "percent":
       return formatPercent(value * 100);
     case "currency":
-      return formatCurrency(value, { cents: Math.abs(value) < CENTS_FIT_BELOW });
+      return formatCurrency(value, { cents: true });
     default:
       return formatNumber(Math.round(value * 100) / 100);
   }
+}
+
+/**
+ * Lo mismo para las marcas del EJE, que es donde un importe grande suelta los centavos: no es una
+ * cifra que nadie coteje sino la escala contra la que se estima el alto de una barra, y seis
+ * rótulos de «$115,302.40» se comen el ancho que le queda al dibujo.
+ */
+export function formatAxisMetric(value: number | null, unit: MetricUnit): string | null {
+  if (value === null || !Number.isFinite(value) || unit !== "currency") {
+    return formatMetric(value, unit);
+  }
+  return formatCurrency(value, { cents: Math.abs(value) < CENTS_FIT_BELOW });
 }
 
 function legendFor(seriesCount: number): ChartLegend {
@@ -137,7 +153,7 @@ function valueAxis(unit: MetricUnit): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      formatter: (value) => formatMetric(Number(value), unit) ?? "",
+      formatter: (value) => formatAxisMetric(Number(value), unit) ?? "",
     },
   };
 }
@@ -193,8 +209,8 @@ export const MONTHLY_COLUMNS: readonly MonthlyColumn[] = [
 
 /**
  * One rule for every figure of the reporte: money and indicators with two fixed decimals, and an em
- * dash where there is no data. `formatMetric` drops the cents past a thousand — right for an axis
- * label, wrong for a figure someone compares against their own spreadsheet cell by cell.
+ * dash where there is no data. Sigue existiendo aparte de `formatMetric` por los decimales del
+ * PORCENTAJE —dos aquí, uno allí— y por la raya: los importes de los dos ya coinciden.
  */
 export function formatMonthlyFigure(value: number | null, unit: MetricUnit): string {
   if (value === null || !Number.isFinite(value)) {

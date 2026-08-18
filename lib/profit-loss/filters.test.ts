@@ -287,3 +287,40 @@ describe("saneamiento de los filtros", () => {
     expect(sanitized.codes).toEqual([LAVANDERIA]);
   });
 });
+
+describe("una vista que SIEMBRA sus propias cuentas", () => {
+  const RUBROS = ["5.1.1", "5.1.2", "5.2.1"];
+
+  it("deja marcadas las cuentas que dibuja, para que se vea cuáles entran", () => {
+    const next = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
+
+    expect(next.preset).toBe("anexo");
+    expect(next.codes).toEqual(RUBROS);
+  });
+
+  it("desmarcar un rubro ACOTA el reparto en vez de apagar la vista", () => {
+    // Sin `keepPreset`, quitar una cuenta apagaría la vista entera — lo contrario de para lo que
+    // están las marcas. Solo lo puede pedir una vista cuyas categorías SON cuentas del plan.
+    const conVista = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
+    const next = withCodeToggled(conVista, "5.1.2", RUBROS, { keepPreset: true });
+
+    expect(next.preset).toBe("anexo");
+    expect(next.codes).toEqual(["5.1.1", "5.2.1"]);
+  });
+
+  it("sin esa salida sigue siendo excluyente, que es la regla de «Ventas»", () => {
+    const conVista = withPresetSelected(emptyFilters(), "lineas", [], [], []);
+    const next = withCodeToggled(conVista, "4.1", ["4.1"]);
+
+    expect(next.preset).toBeNull();
+    expect(next.codes).toEqual(["4.1"]);
+  });
+
+  it("apagarla limpia sus marcas: eran suyas y no las puso el usuario", () => {
+    const conVista = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
+    const apagada = withPresetSelected(conVista, "anexo", [], [], RUBROS);
+
+    expect(apagada.preset).toBeNull();
+    expect(apagada.codes).toEqual([]);
+  });
+});

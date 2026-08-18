@@ -298,6 +298,117 @@ export function colorForCompositionSlot(index: number): string {
   return CHART_COMPOSITION_PALETTE[index] ?? CHART_NEUTRAL;
 }
 
+/**
+ * LA COLA del «Ranking de gastos»: los siete puestos que siguen a las ocho ranuras de identidad,
+ * en una sola gama —VERDE LIMA, pedido por la firma— de oscuro a claro.
+ *
+ * El ranking es la única tarjeta que dibuja quince barras, y las ocho primeras se pintan como
+ * siempre, con `CHART_PALETTE`, porque ahí el color sigue haciendo su trabajo de siempre. El
+ * problema empieza en la novena: `colorForEntity` devuelve `CHART_NEUTRAL` de ahí en adelante, así
+ * que las siete últimas salían del MISMO gris —siete barras iguales y siete puntos iguales en la
+ * gemela en tabla— justo al fondo de la lista, que es donde se mira para saber qué recortar.
+ *
+ * La cola no se arregla con siete hues nuevos: un noveno tono de identidad es exactamente lo que
+ * la paleta prohíbe, y quince tonos separables no existen. Se arregla dándole a la cola lo que la
+ * cola es —un tramo ORDENADO, no siete entidades—, así que aquí el color sigue al PUESTO y no a la
+ * cuenta, la misma figura de `CHART_DISTRIBUTION_RAMP` y `CHART_COMPOSITION_PALETTE`.
+ *
+ * **Un solo hue (128°) y APAGADO**, y las dos cosas son lo que la deja convivir con las ocho de
+ * arriba. Un solo hue porque «una gama» es justo lo que la distingue de un set de identidad: los
+ * siete pasos son el mismo verde a distinta luminosidad, así que se leen como un tramo y no como
+ * siete asuntos. Y apagado porque son las barras MÁS PEQUEÑAS: cada paso queda por debajo del
+ * croma de TODAS las ranuras de identidad (0.08–0.118 contra un mínimo de 0.162), de modo que la
+ * cola nunca le grita más fuerte que la cuenta que más pesa. Un verde vivo la habría puesto por
+ * delante de las ocho, que es exactamente al revés de lo que la lista dice.
+ *
+ * El croma es también lo que la separa de los DOS verdes de identidad —`#00c98a` (h 162) y
+ * `#0b7a12` (h 143)— y del verde oliva de la sección de ingresos: comparten familia, no
+ * saturación. Ese oliva (`--color-section-income`, h 124) es el vecino más cercano y merece
+ * decirse en voz alta: en Datos el verde significa «ingresos», mientras que aquí es la cola de un
+ * ranking de GASTOS. Convive porque nunca coinciden en pantalla —esa lectura de bloque solo la
+ * hace `CHART_SECTION`, y solo cuando lo comparado son las raíces del estado— y porque la cola es
+ * visiblemente más apagada que él.
+ *
+ * El extremo claro lo fija una medición y no el gusto: para en L 0.756 (2.13:1 contra la
+ * superficie) porque una escala ordinal exige que su paso claro siga siendo un relleno visible, y
+ * aquí ese paso le toca a la barra MÁS CORTA de las quince; seguir aclarando la borraba del papel.
+ * El verde llega antes a ese piso que un azul —pesa 0.7152 en la luminancia contra 0.0722—, así
+ * que el techo de la gama es más bajo que el de un mismo recorrido en otra familia.
+ *
+ * Lo que dice el validador de esta gama, para que nadie lo re-derive: **monotonía en luminosidad
+ * PASS** (L 0.496 → 0.756, estrictamente creciente — lo ÚNICO que se le exige a una escala
+ * secuencial) y los siete dentro del gamut sRGB. La banda de luminosidad, el piso de croma y la
+ * separación CVD/visión normal entre vecinos NO se cumplen y no deben cumplirse: son los checks de
+ * un set CATEGÓRICO, donde el color es lo único que distingue dos series, y el propio validador
+ * los declara fuera de alcance para una rampa. Aquí ninguna lectura depende de distinguir dos
+ * pasos — el orden lo dicen la posición de la fila y la longitud de la barra, cada fila lleva su
+ * cuenta rotulada y su monto al lado, y la tarjeta tiene su gemela en tabla.
+ */
+export const CHART_RANKING_TAIL_RAMP = [
+  "#4e6e16",
+  "#5b7a2c",
+  "#69863e",
+  "#769350",
+  "#84a061",
+  "#92ad72",
+  "#a1ba83",
+] as const;
+
+/**
+ * Cuántas barras dibuja el ranking: las ocho de identidad más los pasos de la gama de la cola. Se
+ * DERIVA en vez de declararse para que ninguna barra dibujada pueda quedarse sin tono — el mismo
+ * papel que `CHART_COMPOSITION_MAX` hace con el corte de la tarta.
+ */
+export const CHART_RANKING_MAX = CHART_PALETTE.length + CHART_RANKING_TAIL_RAMP.length;
+
+/**
+ * El tono de una barra del ranking por su PUESTO: las ocho primeras del set de identidad, las
+ * siete siguientes de la gama de la cola. Una decimosexta cae en el neutro, como todo lo demás en
+ * este archivo — pero no llega, porque el corte del ranking es `CHART_RANKING_MAX`.
+ */
+export function colorForRankingSlot(index: number): string {
+  if (index < 0) {
+    return CHART_NEUTRAL;
+  }
+  return index < CHART_PALETTE.length
+    ? CHART_PALETTE[index]
+    : (CHART_RANKING_TAIL_RAMP[index - CHART_PALETTE.length] ?? CHART_NEUTRAL);
+}
+
+/**
+ * La secuencia de la DONA DEL ANEXO, que es la única tarta de la app que no pliega su cola.
+ *
+ * «Composición de los ingresos» reparte seis porciones y cierra en «Otros» porque su pregunta es de
+ * qué se compone el total: la séptima cuenta más grande no cambia esa respuesta. El anexo de gastos
+ * hace la contraria — es una LISTA de rubros que tiene que aparecer entera, porque el contador la
+ * coteja fila por fila contra su hoja—, y ahí «Otros · 16,6 %» esconde justo lo que se venía a leer.
+ *
+ * Son los seis tonos cálidos de la composición seguidos de los doce decorativos del periodo, y ese
+ * orden importa: las porciones grandes conservan el aspecto que la tarta ya tenía, y la cola —que es
+ * la que aparece de más— toma el set que existe para «una serie con muchas marcas». Reusarlo aquí es
+ * legal por el MISMO motivo que allí, escrito en `CHART_PERIOD_PALETTE`: cada porción lleva su nombre
+ * y su porcentaje en la etiqueta y otra vez en la leyenda, así que el color no es la lectura — evita
+ * que diecisiete porciones sean una sola mancha, nada más.
+ *
+ * **Lo que NO arregla, y hay que saberlo:** una tarta de diecisiete porciones con cuatro por debajo
+ * del 1 % no es legible por muchos tonos que tenga, y es el propio archivo de la firma el que lo
+ * enseña. Lo que sostiene esta tarjeta no es el color sino los dos relieves de siempre — la etiqueta
+ * que `hideOverlap` deja caer cuando no cabe, y la GEMELA EN TABLA, que lista los diecisiete con su
+ * cifra. La dona da la forma; la tabla da el dato.
+ */
+export const CHART_SLICE_SEQUENCE = [
+  ...CHART_COMPOSITION_PALETTE,
+  ...CHART_PERIOD_PALETTE,
+] as const;
+
+/** Cuántas porciones puede nombrar una tarta sin repetir tono. La decimonovena cae en el neutro. */
+export const CHART_SLICE_MAX = CHART_SLICE_SEQUENCE.length;
+
+/** El tono por el LUGAR en el reparto, como en la composición: aquí tampoco sigue a la entidad. */
+export function colorForSliceSlot(index: number): string {
+  return index < 0 ? CHART_NEUTRAL : (CHART_SLICE_SEQUENCE[index] ?? CHART_NEUTRAL);
+}
+
 /** The scale is handed in, not derived per grid: two grids must mean the same by the same tone. */
 function rampStep(ramp: readonly string[], value: number | null, min: number, max: number): string {
   if (value === null || !Number.isFinite(value)) {

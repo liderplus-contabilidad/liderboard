@@ -3,6 +3,12 @@
 import { useMemo, type ReactNode } from "react";
 import { SidePanel } from "@/components/ui/side-panel";
 import { periodNoun, buildAccountDetail } from "@/lib/profit-loss/charts/account-detail";
+import {
+  expenseRootsOf,
+  presetQuery,
+  REVENUE_ROOT,
+  sumOver,
+} from "@/lib/profit-loss/charts/presets";
 import { barOption, seriesTable } from "@/lib/profit-loss/charts/option";
 import { codeColorResolver } from "@/lib/profit-loss/charts/selection";
 import { formatCurrency, formatPercent } from "@/lib/format";
@@ -42,9 +48,33 @@ export function AccountDetailPanel({ code, onClose }: { code: string; onClose: (
   );
 
   const source = sources.find((candidate) => candidate.centerId === context.activeCenterId);
+
+  // Los dos totales del estado sobre el MISMO tramo que la serie de arriba, para el peso de la
+  // cuenta sobre el gasto y sobre el ingreso. Van en su propia consulta porque son raíces y no la
+  // cuenta abierta, y por el mismo camino que todo lo demás — el rollup del motor y nunca la suma
+  // de lo que haya en pantalla, que es la regla que ya sigue el peso sobre el padre.
+  const totals = useMemo(() => {
+    if (!source) {
+      return undefined;
+    }
+    const roots = expenseRootsOf(source);
+    const bundle = runQuery(presetQuery([REVENUE_ROOT, ...roots], context));
+    const parts = roots.map((root) => sumOver(bundle, root));
+    return {
+      revenue: sumOver(bundle, REVENUE_ROOT),
+      // Un estado segmentado tiene DOS raíces de gasto; sin cobertura en ninguna sigue siendo
+      // `null`, que es distinto de un gasto de cero.
+      expenses: parts.every((value) => value === null)
+        ? null
+        : parts.reduce((sum: number, value) => sum + (value ?? 0), 0),
+    };
+  }, [runQuery, source, context]);
+
   const series = bundle.series[0];
   const detail =
-    series && source ? buildAccountDetail({ series, source, frequency: context.frequency }) : null;
+    series && source
+      ? buildAccountDetail({ series, source, frequency: context.frequency, totals })
+      : null;
 
   // One account is one entity, so it takes the first palette slot through the same resolver
   // every other card uses — the ficha never names a color of its own.
@@ -124,6 +154,22 @@ export function AccountDetailPanel({ code, onClose }: { code: string; onClose: (
             {detail.shareOfContainer !== null && (
               <Metric label={`% de ${detail.containerLabel}`}>
                 {formatPercent(detail.shareOfContainer)}
+              </Metric>
+            )}
+
+            {/* Los dos pesos sobre el ESTADO, no sobre el padre. Van después del peso en el padre
+                porque se leen en ese orden —dentro de su rama, luego dentro del negocio— y solo
+                aparecen cuando su denominador da base: un `–` aquí no distinguiría «no pesa» de
+                «no hay contra qué medirlo». */}
+            {detail.shareOfExpenses !== null && (
+              <Metric label="% del total de costos y gastos">
+                {formatPercent(detail.shareOfExpenses)}
+              </Metric>
+            )}
+
+            {detail.shareOfRevenue !== null && (
+              <Metric label="% del total de ingresos">
+                {formatPercent(detail.shareOfRevenue)}
               </Metric>
             )}
 

@@ -8,6 +8,7 @@ import type { OccupancyDataset } from "../types";
 import { buildHeatmaps } from "./heatmap";
 import {
   channelOption,
+  formatAxisMetric,
   formatMetric,
   formatMonthlyFigure,
   MONTHLY_COLUMNS,
@@ -228,9 +229,17 @@ describe("formatMetric", () => {
     expect(formatMetric(0.2984, "percent")).toBe("29.8 %");
   });
 
-  it("el dinero conserva los centavos mientras quepan", () => {
+  it("el dinero conserva SIEMPRE sus centavos, como la tabla contra la que se coteja", () => {
     expect(formatMetric(82.89, "currency")).toBe("$82.89");
-    expect(formatMetric(115302.4, "currency")).toBe("$115,302");
+    expect(formatMetric(115302.4, "currency")).toBe("$115,302.40");
+  });
+
+  it("y los suelta solo en el eje, donde la cifra no se coteja sino que se estima", () => {
+    expect(formatAxisMetric(82.89, "currency")).toBe("$82.89");
+    expect(formatAxisMetric(115302.4, "currency")).toBe("$115,302");
+    // El porcentaje y el conteo no tienen dos formas: el eje los escribe como todo lo demás.
+    expect(formatAxisMetric(0.2984, "percent")).toBe("29.8 %");
+    expect(formatAxisMetric(null, "currency")).toBeNull();
   });
 
   it("un conteo no arrastra decimales espurios", () => {

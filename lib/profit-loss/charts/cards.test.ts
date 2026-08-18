@@ -1,18 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { CHART_COMPOSITION_PALETTE, CHART_PALETTE } from "@/lib/charts/palette";
+import {
+  CHART_COMPOSITION_PALETTE,
+  CHART_NEUTRAL,
+  CHART_PALETTE,
+  CHART_SECTION,
+  CHART_SLICE_MAX,
+  CHART_RANKING_MAX,
+} from "@/lib/charts/palette";
 import {
   CENTRO_PRINCIPAL_SOURCE,
   CENTRO_VACIO_SOURCE,
   CULTURA_MANOR_SEGMENTADO_SOURCE,
   CULTURA_MANOR_SOURCE,
 } from "../analytics/fixtures";
+import type { ChartCardSpec } from "@/lib/charts/types";
 import type { AnalyticsSource } from "../analytics/types";
+import { OTHERS_CODE } from "../analytics/structure";
+import { ANNEX_MAX_SLICES } from "./expense-distribution";
 import { emptyFilters, type PygFilters } from "../filters";
+import { formatCurrency } from "@/lib/format";
 import type { Frequency } from "../types";
 import { buildSeries } from "../analytics/series";
-import { buildAnalisisCards, buildGraficosCards } from "./cards";
-import { BUSINESS_LINES_PRESET } from "./preset-views";
+import { buildAnalisisCards, buildGraficosCards, rankingColorOf } from "./cards";
+import {
+  availablePresets,
+  BUSINESS_LINES_PRESET,
+  EXPENSE_DISTRIBUTION_PRESET,
+  PRESET_VIEWS,
+} from "./preset-views";
 import { expenseRootsOf, presetQuery, sumOver } from "./presets";
+import { DINGOO_SYSTEM, MICROPLUS_SYSTEM } from "../upload/systems";
 import { activeSource, type SelectionContext } from "./selection";
 
 /**
@@ -104,8 +121,8 @@ describe("el contrato de la lista", () => {
     expect(cards.map((card) => card.id)).toEqual([
       "evolucion",
       "distribucion",
-      "composicion",
       "ranking",
+      "composicion",
       "cascada",
     ]);
   });
@@ -123,8 +140,8 @@ describe("el contrato de la lista", () => {
     expect(graficos.cards.map((card) => [card.title, card.height])).toEqual([
       ["Ingresos contra Costos y Gastos", 300],
       ["Distribución de Ventas", 320],
-      ["Composición de los ingresos", 280],
-      ["Ranking de gastos", 280],
+      ["Ranking de gastos", 520],
+      ["Composición de los ingresos", 420],
       ["Del ingreso a la utilidad", 340],
     ]);
     expect(analisis.cards.map((card) => [card.title, card.height])).toEqual([
@@ -169,7 +186,7 @@ describe("el periodo del que hablan las tarjetas", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[2].subtitle).toBe("Ene–Jul");
+    expect(graficos.cards[3].subtitle).toBe("Ene–Jul");
     for (const card of [...graficos.cards.slice(0, 4), analisis.cards[0], analisis.cards[2]]) {
       expect(card.subtitle).toContain("Ene–Jul");
     }
@@ -255,9 +272,9 @@ describe("lo que marcan los filtros", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.1.1.1", "5.1.5"] }));
 
     // La composición queda con la única hoja de ingresos marcada…
-    expect(cards[2].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
+    expect(cards[3].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
     // …y el ranking con las cuatro que cuelgan de 5.1.5, sin el sueldo, que cuelga de 5.1.1.
-    expect(cards[3].table.rows.map((row) => row.id)).toEqual([
+    expect(cards[2].table.rows.map((row) => row.id)).toEqual([
       "5.1.5.12",
       "5.1.5.3",
       "5.1.5.7",
@@ -268,8 +285,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un gasto vacía la composición de ingresos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["5.1.5"] }));
 
-    expect(cards[2].option).toBeNull();
-    expect(cards[2].note).toBe(
+    expect(cards[3].option).toBeNull();
+    expect(cards[3].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos.",
     );
   });
@@ -277,8 +294,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un ingreso vacía el ranking de gastos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.2"] }));
 
-    expect(cards[3].option).toBeNull();
-    expect(cards[3].note).toBe(
+    expect(cards[2].option).toBeNull();
+    expect(cards[2].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos.",
     );
   });
@@ -324,7 +341,7 @@ describe("lo que marcan los filtros", () => {
       "4|cultura-manor|2026",
       "4.1.1|cultura-manor|2026",
     ]);
-    expect(cards[0].table.rows[1].values[0]).toBe("$24,465");
+    expect(cards[0].table.rows[1].values[0]).toBe("$24,465.00");
   });
 
   it("varios centros marcados cruzan cada cuenta con cada centro", () => {
@@ -352,7 +369,7 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
    */
   it("el ranking de gastos pinta la segunda barra con el segundo slot", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const rows = cards[3].table.rows;
+    const rows = cards[2].table.rows;
 
     expect(rows.map((row) => row.id)).toEqual([
       "5.1.1.1.1",
@@ -365,6 +382,25 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
     expect(rows[1].color).toBe(CHART_PALETTE[1]);
     // Lo que saldría si el color se hubiera resuelto en orden de archivo.
     expect(rows[1].color).not.toBe(CHART_PALETTE[4]);
+  });
+
+  /**
+   * La COLA del ranking —de la novena barra en adelante— no repite el neutro. El fixture solo
+   * llega a cinco gastos, así que lo que se prueba aquí es el resolver que la tarjeta usa, con la
+   * lista de quince que un plan real sí produce: las ocho primeras conservan sus ranuras y las
+   * siete siguientes salen todas distintas. La gemela en tabla lee el MISMO resolver, que es lo
+   * que ata cada punto de color a su barra.
+   */
+  it("de la novena barra en adelante la cola varía, en vez de repetir el neutro", () => {
+    const codes = Array.from({ length: CHART_RANKING_MAX }, (_, i) => `5.1.5.${i}`);
+    const colorOf = rankingColorOf(codes);
+    const colors = codes.map(colorOf);
+
+    expect(colors.slice(0, CHART_PALETTE.length)).toEqual([...CHART_PALETTE]);
+    const tail = colors.slice(CHART_PALETTE.length);
+    expect(tail).toHaveLength(7);
+    expect(new Set(tail).size).toBe(7);
+    expect(tail).not.toContain(CHART_NEUTRAL);
   });
 
   /**
@@ -494,8 +530,8 @@ describe("lo que cada tarjeta dice de sí misma", () => {
   it("una tarjeta sin nota no lleva el campo", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
-    // Cinco gastos y el corte está en ocho: no hay nada que declarar fuera de la lista.
-    expect(cards[3].note).toBeUndefined();
+    // Cinco gastos y el corte está en quince: no hay nada que declarar fuera de la lista.
+    expect(cards[2].note).toBeUndefined();
   });
 });
 
@@ -659,7 +695,7 @@ describe("la distribución de una cuenta", () => {
     // 24.465 + 1.271 − 507 = 25.229: la hija negativa se apila hacia abajo, así que el neto no
     // está en ningún borde de la pila y la línea es la única que lo dice.
     expect(total?.emphasis).toBe(true);
-    expect(total?.values[0]).toBe("$25,229");
+    expect(total?.values[0]).toBe("$25,229.00");
     expect(card.option?.series.at(-1)?.type).toBe("line");
   });
 
@@ -689,5 +725,442 @@ describe("la distribución de una cuenta", () => {
 
     expect(card.option).toBeNull();
     expect(card.table.rows).toEqual([]);
+  });
+});
+
+/* --------------------------------------------------------------- el código de cada cuenta */
+
+/**
+ * La costura de extremo a extremo del código de cuenta: la regla vive en `option.ts` y se prueba
+ * allí, pero lo que puede romperse aquí es que una tarjeta deje de pasar por esos builders —una
+ * tabla armada a mano, un `entryTable` propio— y pierda el código sin que ningún test de cifras
+ * lo note. Se busca por `id` y no por índice porque el orden de las tarjetas es de la lista.
+ */
+describe("el código de cuenta llega a las tarjetas", () => {
+  interface Row {
+    id: string;
+    label: string;
+    sublabel?: string;
+  }
+
+  const rowsOf = (cards: readonly ChartCardSpec[], id: string): Row[] =>
+    (cards.find((card) => card.id === id)?.table.rows ?? []) as Row[];
+
+  it("cada fila que ES una cuenta lo cuelga bajo su nombre, en Gráficos y en Análisis", () => {
+    const graficos = buildGraficosCards(MANOR, emptyFilters());
+    const analisis = buildAnalisisCards(MANOR, emptyFilters());
+
+    for (const [cards, id] of [
+      [graficos.cards, "evolucion"],
+      [graficos.cards, "ranking"],
+      [graficos.cards, "composicion"],
+      [analisis.cards, "gastos-sobre-ingresos"],
+      // La variación no entra: los meses del fixture repiten el mismo importe, así que ninguna
+      // cuenta se mueve y la tarjeta sale vacía. Sale del MISMO `entryTable` que estas dos, y
+      // `option.test.ts` la prueba directamente sobre sus propias entradas.
+      [analisis.cards, "pareto"],
+    ] as const) {
+      const rows = rowsOf(cards, id);
+      expect([id, rows.length > 0]).toEqual([id, true]);
+
+      for (const row of rows) {
+        // «Otros» es el pliegue de la cola, no una cuenta: es la única fila que se queda sin él.
+        if (row.label === "Otros") {
+          expect(row.sublabel).toBeUndefined();
+          continue;
+        }
+        // El id de una fila es el código a secas (las tablas de montos) o `código|centro|año`
+        // (las de series); en las dos, el código es lo que abre el id.
+        expect(row.sublabel).toBeDefined();
+        expect(row.id.startsWith(row.sublabel as string)).toBe(true);
+      }
+    }
+  });
+
+  it("la cascada no lo lleva: sus escalones son bloques del estado y no cuentas", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+    const rows = rowsOf(cards, "cascada");
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.sublabel === undefined)).toBe(true);
+  });
+});
+
+/* ------------------------------------- la vista predeterminada de costos y gastos */
+
+describe("la vista predeterminada de costos y gastos", () => {
+  const conAnexo = () =>
+    buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }));
+
+  it("solo se ofrece en MicroPlus, donde el plan da un anexo legible", () => {
+    // No es que el cálculo falle en otros: es que reparte sobre las cuentas de movimiento, y otros
+    // planes bajan mucho más y devuelven más de cien rubros — una tarta que no reparte nada.
+    const source = activeSource(SIN_HOTEL);
+    const conMicroplus = availablePresets({ source, systemId: MICROPLUS_SYSTEM });
+    const conOtro = availablePresets({ source, systemId: DINGOO_SYSTEM });
+
+    expect(conMicroplus.map((preset) => preset.id)).toContain(EXPENSE_DISTRIBUTION_PRESET);
+    expect(conOtro.map((preset) => preset.id)).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
+  });
+
+  it("sin sistema —el consolidado entre clientes— tampoco se ofrece", () => {
+    // Allí los planes de varios clientes se UNEN, así que «las cuentas más específicas» son de
+    // varios sistemas a la vez y el anexo dejaría de ser el anexo de nadie.
+    const ids = availablePresets({ source: activeSource(MANOR), systemId: null }).map((p) => p.id);
+
+    expect(ids).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
+  });
+
+  it("«Ventas» sigue dependiendo del PLAN y no del sistema", () => {
+    // Las dos condiciones son distintas a propósito: una mira los rótulos del árbol, la otra el
+    // formato del que salió el archivo.
+    const sinHotel = availablePresets({
+      source: activeSource(SIN_HOTEL),
+      systemId: MICROPLUS_SYSTEM,
+    });
+    const conHotel = availablePresets({ source: activeSource(MANOR), systemId: DINGOO_SYSTEM });
+
+    expect(sinHotel.map((preset) => preset.id)).not.toContain(BUSINESS_LINES_PRESET);
+    expect(conHotel.map((preset) => preset.id)).toContain(BUSINESS_LINES_PRESET);
+  });
+
+  it("ocupa dos ranuras y RINDE la de «Distribución», que hablaba de ingresos", () => {
+    const { cards } = conAnexo();
+
+    expect(cards.map((card) => [card.id, card.title])).toEqual([
+      ["evolucion", "Distribución de costos y gastos"],
+      ["ranking", "Distribución de costos y gastos %"],
+      // La cascada se ADELANTA: va del ingreso al resultado pasando por los gastos, así que es la
+      // continuación del reparto que se acaba de leer. La composición de ingresos se queda detrás,
+      // como contexto de la columna «% del ingreso».
+      ["cascada", "Del ingreso a la utilidad"],
+      ["composicion", "Composición de los ingresos"],
+    ]);
+    // «Distribución» reparte UNA cuenta y con quince marcadas resolvía Ingresos: bajo un anexo de
+    // gastos era una tarjeta repartiendo ingresos que no tiene que ver con lo que se está leyendo.
+    expect(cards.map((card) => card.id)).not.toContain("distribucion");
+  });
+
+  it("apagada, la lista vuelve a ser exactamente la de siempre", () => {
+    // Incluidas las dos del final en su orden de siempre: fuera del anexo la composición acompaña
+    // al reparto de arriba y la cascada cierra con la historia completa.
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+
+    expect(cards.map((card) => card.title)).toEqual([
+      "Ingresos contra Costos y Gastos",
+      "Distribución de Ventas",
+      "Ranking de gastos",
+      "Composición de los ingresos",
+      "Del ingreso a la utilidad",
+    ]);
+  });
+
+  it("la tabla gemela ES el anexo: código, valor y las DOS columnas de porcentaje", () => {
+    const { cards } = conAnexo();
+    const anexo = cards[0].table;
+
+    expect(anexo.columns).toEqual(["Valor", "% del gasto", "% del ingreso"]);
+    // El código va aparte del nombre: en una tabla hay sitio para los dos.
+    expect(anexo.rows[0].sublabel).toBe("5.1.1.1.1");
+    expect(anexo.rows[0].values).toHaveLength(3);
+  });
+
+  it("cierra con una fila de TOTAL destacada, que es contra lo que se coteja", () => {
+    const { cards, tiles } = conAnexo();
+    const rows = cards[0].table.rows;
+    const total = rows.at(-1);
+
+    expect(total?.id).toBe("__total__");
+    expect(total?.emphasis).toBe(true);
+    // La misma cifra que la baldosa de «Costos y Gastos»: una sola definición del total.
+    expect(total?.values[0]).toBe(formatCurrency(tiles[1].value as number, { cents: true }));
+    expect(total?.values[1]).toBe("100.0 %");
+  });
+
+  it("los porcentajes de la columna del gasto suman 100", () => {
+    const { cards } = conAnexo();
+    const rubros = cards[0].table.rows.filter((row) => row.id !== "__total__");
+    const sum = rubros.reduce(
+      (total, row) => total + Number.parseFloat(row.values[1] as string),
+      0,
+    );
+
+    expect(sum).toBeCloseTo(100, 1);
+  });
+
+  it("la segunda columna mide contra el ingreso, así que da menos que la primera", () => {
+    // En el fixture el gasto es menor que el ingreso, luego todo rubro pesa menos sobre el ingreso.
+    const { cards } = conAnexo();
+    const rubros = cards[0].table.rows.filter((row) => row.id !== "__total__");
+
+    for (const row of rubros) {
+      const sobreGasto = Number.parseFloat(row.values[1] as string);
+      const sobreIngreso = Number.parseFloat(row.values[2] as string);
+      expect(sobreIngreso).toBeLessThan(sobreGasto);
+    }
+  });
+
+  it("la nota cuadra el reparto contra el ingreso, con centavos", () => {
+    const { cards } = conAnexo();
+
+    expect(cards[0].note).toContain("rubros suman");
+    expect(cards[0].note).toContain("% de los ingresos del tramo");
+  });
+
+  it("la dona NO pliega la cola: el anexo es una lista que sale entera", () => {
+    // «Otros · 16,6 %» esconde justo lo que se viene a leer aquí, al revés que en la composición de
+    // ingresos, donde la séptima cuenta no cambia la respuesta a «de qué se compone el total».
+    const { cards } = conAnexo();
+    const dona = cards[1];
+    const barras = cards[0].table.rows.filter((row) => row.id !== "__total__");
+
+    expect(dona.option?.series[0].type).toBe("pie");
+    expect(dona.table.rows.map((row) => row.id)).not.toContain(OTHERS_CODE);
+    expect(dona.table.rows).toHaveLength(barras.length);
+  });
+
+  it("cada porción toma un tono propio, hasta donde llega la secuencia", () => {
+    const { cards } = conAnexo();
+    const data = cards[1].option?.series[0].data ?? [];
+    const colors = data.map((d) => (d as { itemStyle?: { color?: string } }).itemStyle?.color);
+
+    expect(new Set(colors).size).toBe(colors.length);
+    expect(colors).not.toContain(CHART_NEUTRAL);
+    // La secuencia da para más rubros de los que un anexo real trae.
+    expect(CHART_SLICE_MAX).toBeGreaterThanOrEqual(17);
+  });
+
+  it("las dos tarjetas hablan del MISMO reparto", () => {
+    const { cards } = conAnexo();
+    const barras = cards[0].table.rows.filter((row) => row.id !== "__total__");
+    const dona = cards[1].table.rows;
+
+    expect(dona[0].id).toBe(barras[0].id);
+  });
+
+  it("sin un solo gasto cubierto no dibuja ninguna de las dos y dice por qué", () => {
+    const { cards } = buildGraficosCards(
+      VACIO,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+
+    expect(cards[0].option).toBeNull();
+    expect(cards[1].option).toBeNull();
+    expect(cards[0].table.rows).toEqual([]);
+  });
+});
+
+describe("el anexo se dibuja como la hoja del contador", () => {
+  const conAnexo = () =>
+    buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }));
+
+  it("son barras VERTICALES: los rubros en el eje X, con su cifra encima", () => {
+    const { cards } = conAnexo();
+    const option = cards[0].option;
+    const xAxis = option?.xAxis;
+
+    expect(Array.isArray(xAxis) ? xAxis[0].type : xAxis?.type).toBe("category");
+    expect(option?.yAxis?.type).toBe("value");
+    expect(option?.series[0].label?.show).toBe(true);
+    expect(option?.series[0].label?.position).toBe("top");
+  });
+
+  it("dibuja TODOS los rótulos aunque no quepan: los parte en vez de saltarse uno de cada dos", () => {
+    // Sin `interval: 0` quedarían diecisiete barras con nueve nombres, y las ocho sin rotular no se
+    // podrían identificar por nada más. Partir el texto es el precio, y su Excel lo paga igual.
+    const { cards } = conAnexo();
+    const xAxis = cards[0].option?.xAxis;
+    const axis = Array.isArray(xAxis) ? xAxis[0] : xAxis;
+
+    expect(axis?.axisLabel?.interval).toBe(0);
+    expect(axis?.axisLabel?.overflow).toBe("break");
+  });
+
+  it("las barras van TODAS del mismo color, y es el del bloque de gastos", () => {
+    // Aquí el color no distingue nada —cada barra lleva su rubro rotulado y su cifra—, así que
+    // repartir tonos gastaría el canal de identidad en re-decir lo que la longitud ya dice.
+    const { cards } = conAnexo();
+    const data = cards[0].option?.series[0].data ?? [];
+    const colors = new Set(
+      data.map((datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color),
+    );
+
+    expect(colors.size).toBe(1);
+    expect([...colors][0]).toBe(CHART_SECTION.cost);
+  });
+
+  it("la tabla NO lleva punto de color: diecisiete puntos iguales no distinguen nada", () => {
+    const { cards } = conAnexo();
+
+    for (const row of cards[0].table.rows) {
+      expect(row.color).toBeUndefined();
+    }
+  });
+
+  it("la vista declara que se lee en ANUAL y que no siembra marcas", () => {
+    // Su anexo es «del 01 de enero al 30 de junio» en UNA columna por rubro; en mensual saldrían
+    // seis barras por rubro, que es su evolución y no su reparto.
+    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
+    const ventas = PRESET_VIEWS.find((preset) => preset.id === BUSINESS_LINES_PRESET);
+
+    expect(anexo?.frequency).toBe("anual");
+    expect(anexo?.seeds).toBeUndefined();
+    // «Ventas» sí reparte por establecimiento y mes, y por eso los marca: son dos vistas distintas
+    // y cada una declara lo suyo, en vez de un `if` en el proveedor.
+    expect(ventas?.seeds).toEqual({ centers: true, periods: true });
+    expect(ventas?.frequency).toBeUndefined();
+  });
+
+  it("en anual cada rubro es UNA columna, que es el gráfico de la muestra", () => {
+    const anual = ctx([CULTURA_MANOR_SOURCE], "cultura-manor", { frequency: "anual" });
+    const { cards } = buildGraficosCards(
+      anual,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const xAxis = cards[0].option?.xAxis;
+    const axis = Array.isArray(xAxis) ? xAxis[0] : xAxis;
+    const rubros = cards[0].table.rows.filter((row) => row.id !== "__total__");
+
+    expect(axis?.data).toHaveLength(rubros.length);
+    expect(cards[0].option?.series).toHaveLength(1);
+  });
+});
+
+describe("las cuentas que la vista del anexo siembra", () => {
+  it("son las MISMAS que dibuja: las de movimiento del árbol de gastos", () => {
+    const source = activeSource(MANOR);
+    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
+    const sembradas = anexo?.seedCodes?.(source) ?? [];
+    const { cards } = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const dibujadas = cards[0].table.rows.filter((row) => row.id !== "__total__").map((r) => r.id);
+
+    // Lo dibujado es un subconjunto de lo sembrado: solo se cae lo que no se movió en el tramo.
+    expect(sembradas.length).toBeGreaterThan(0);
+    for (const code of dibujadas) {
+      expect(sembradas).toContain(code);
+    }
+  });
+
+  it("«Ventas» NO puede sembrar cuentas: sus categorías no son cuentas del plan", () => {
+    const ventas = PRESET_VIEWS.find((preset) => preset.id === BUSINESS_LINES_PRESET);
+
+    expect(ventas?.seedCodes).toBeUndefined();
+  });
+
+  it("desmarcar un rubro lo quita del reparto y del cuadre a la vez", () => {
+    const source = activeSource(MANOR);
+    const todas =
+      PRESET_VIEWS.find((p) => p.id === EXPENSE_DISTRIBUTION_PRESET)?.seedCodes?.(source) ?? [];
+    const sinUna = todas.filter((code) => code !== "5.1.1.1.1");
+    const { cards } = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET, codes: sinUna }),
+    );
+    const dibujadas = cards[0].table.rows.filter((row) => row.id !== "__total__").map((r) => r.id);
+
+    expect(dibujadas).not.toContain("5.1.1.1.1");
+    // El total NO se recalcula sobre lo que queda: sigue siendo el rollup del motor, así que la
+    // columna del % suma menos de 100 y eso es lo que dice que se está mirando un trozo.
+    const suma = cards[0].table.rows
+      .filter((row) => row.id !== "__total__")
+      .reduce((total, row) => total + Number.parseFloat(row.values[1] as string), 0);
+    expect(suma).toBeLessThan(100);
+  });
+});
+
+describe("el reparto en crudo, para la ventana que abre una barra", () => {
+  it("sale junto a las tarjetas, porque una barra clicada necesita NÚMEROS, no cadenas", () => {
+    const { annex, cards } = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const rubros = cards[0].table.rows.filter((row) => row.id !== "__total__");
+
+    expect(annex).not.toBeNull();
+    expect(annex?.totalExpenses).not.toBeNull();
+    expect(typeof annex?.categories[0].value).toBe("number");
+    // El índice de una barra ES la posición aquí: las dos listas van de mayor a menor por el mismo
+    // sitio, y si dejaran de estarlo la ventana hablaría de un rubro distinto del que se pulsó.
+    expect(annex?.categories.map((category) => category.code).slice(0, rubros.length)).toEqual(
+      rubros.map((row) => row.id),
+    );
+  });
+
+  it("es null fuera de la vista: nada que abrir donde no hay reparto", () => {
+    expect(buildGraficosCards(MANOR, emptyFilters()).annex).toBeNull();
+  });
+});
+
+describe("el corte del anexo es el MISMO en las dos tarjetas", () => {
+  /** Un plan con más rubros de los que caben, para ver el pliegue de verdad. */
+  const MUCHOS = ctx(
+    [
+      {
+        ...CULTURA_MANOR_SOURCE,
+        valuesByCode: new Map([
+          ...CULTURA_MANOR_SOURCE.valuesByCode,
+          ...Array.from({ length: 20 }, (_, i): [string, number[]] => [
+            `5.1.9.${i + 1}`,
+            Array.from({ length: 12 }, () => (20 - i) * 100),
+          ]),
+        ]),
+        namesByCode: new Map([
+          ...CULTURA_MANOR_SOURCE.namesByCode,
+          ...Array.from({ length: 20 }, (_, i): [string, string] => [
+            `5.1.9.${i + 1}`,
+            `Gasto ${i + 1}`,
+          ]),
+        ]),
+        parentByCode: new Map([
+          ...CULTURA_MANOR_SOURCE.parentByCode,
+          ...Array.from({ length: 20 }, (_, i): [string, string] => [`5.1.9.${i + 1}`, "5.1"]),
+        ]),
+      },
+    ],
+    "cultura-manor",
+  );
+
+  const conMuchos = () =>
+    buildGraficosCards(MUCHOS, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }));
+
+  it("barras y dona dibujan quince y la última es «Otros»", () => {
+    const { cards } = conMuchos();
+    const barras = cards[0].option?.series[0].data ?? [];
+    const dona = cards[1].table.rows;
+
+    expect(barras).toHaveLength(ANNEX_MAX_SLICES);
+    expect(dona).toHaveLength(ANNEX_MAX_SLICES);
+    // «Otros» no va al final: la tabla ordena por monto y el pliegue suma más que varios rubros
+    // sueltos, así que cae donde su cifra lo pone. Lo que importa es que ESTÉ.
+    expect(dona.map((row) => row.id)).toContain(OTHERS_CODE);
+  });
+
+  it("las dos listan EXACTAMENTE los mismos rubros, «Otros» incluido", () => {
+    // Es lo que antes no se cumplía: cada tarjeta cortaba por su cuenta y podían enseñar distinto
+    // número de rubros del mismo reparto, un desacuerdo que nadie lee como un error.
+    const { cards } = conMuchos();
+    const ejeX = cards[0].option?.xAxis;
+    const barras = (Array.isArray(ejeX) ? ejeX[0] : ejeX)?.data ?? [];
+    const dona = cards[1].table.rows.map((row) => row.label);
+
+    expect(barras).toEqual(dona);
+  });
+
+  it("la nota dice cuántos agrupó y que la tabla los lista uno a uno", () => {
+    const { cards } = conMuchos();
+
+    expect(cards[0].note).toContain("«Otros» agrupa");
+    expect(cards[0].note).toContain("la tabla lista uno a uno");
+  });
+
+  it("la TABLA del anexo no corta: siguen ahí todos con su cifra", () => {
+    const { cards } = conMuchos();
+    const rubros = cards[0].table.rows.filter((row) => row.id !== "__total__");
+
+    expect(rubros.length).toBeGreaterThan(ANNEX_MAX_SLICES);
+    expect(rubros.map((row) => row.id)).not.toContain(OTHERS_CODE);
   });
 });

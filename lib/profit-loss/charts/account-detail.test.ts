@@ -193,3 +193,55 @@ describe("buildAccountDetail · frecuencias", () => {
     expect(detail.total).toBe(25229);
   });
 });
+
+/* --------------------------------------------- los dos pesos sobre el estado */
+
+describe("el peso de la cuenta sobre el ESTADO, no sobre su padre", () => {
+  const totals = { expenses: 1_000, revenue: 4_000 };
+  const conTotales = (values: (number | null)[]) =>
+    buildAccountDetail({
+      series: makeSeries(values),
+      source: CULTURA_MANOR_SOURCE,
+      frequency: "mensual",
+      totals,
+    });
+
+  it("divide por las RAÍCES y no por el padre inmediato", () => {
+    // 200 sobre 1.000 de gasto y sobre 4.000 de ingreso. Son dos preguntas distintas de la del
+    // padre, y por eso conviven en la ficha en vez de sustituirla.
+    const detail = conTotales(covered([200]));
+
+    expect(detail.total).toBe(200);
+    expect(detail.shareOfExpenses).toBeCloseTo(20, 6);
+    expect(detail.shareOfRevenue).toBeCloseTo(5, 6);
+  });
+
+  it("sin totales no inventa las cifras: quedan en null y el panel no las escribe", () => {
+    // Es lo que deja intacta a toda llamada que no las pide, la ficha de un ingreso incluida.
+    const detail = detailOf(covered([200]));
+
+    expect(detail.shareOfExpenses).toBeNull();
+    expect(detail.shareOfRevenue).toBeNull();
+  });
+
+  it("un denominador sin cobertura da null, jamás 0 %", () => {
+    const detail = buildAccountDetail({
+      series: makeSeries(covered([200])),
+      source: CULTURA_MANOR_SOURCE,
+      frequency: "mensual",
+      totals: { expenses: null, revenue: 0 },
+    });
+
+    expect(detail.shareOfExpenses).toBeNull();
+    expect(detail.shareOfRevenue).toBeNull();
+  });
+
+  it("suma sobre lo CUBIERTO, así que un mes sin cargar no diluye el peso", () => {
+    // La regla del motor llega hasta aquí: cinco meses cargados de 100 pesan 500 sobre el total
+    // del mismo tramo, no 500 sobre un año que nadie reportó.
+    const detail = conTotales(covered([100, 100, 100, 100, 100]));
+
+    expect(detail.coveredPeriods).toBe(5);
+    expect(detail.shareOfExpenses).toBeCloseTo(50, 6);
+  });
+});

@@ -122,6 +122,8 @@ function valueAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
+      // La ÚNICA cifra sin centavos del módulo: un eje es la escala contra la que se estima el
+      // alto de una barra, y seis rótulos de «$12,345.67» se comen el ancho del dibujo.
       formatter: (value) => formatCurrency(Number(value)),
     },
   };
@@ -198,10 +200,12 @@ function buildOption(grid: SalariesGrid, rows: readonly SalariesRow[]): ChartOpt
         position: "top" as const,
         color: CHART_INK.muted,
         fontSize: 11,
+        // Con centavos, como el tooltip y la tabla: la cifra sobre la barra se coteja contra la
+        // hoja del contador. Solo el eje los suelta, porque ahí la cifra se estima, no se compara.
         formatter: (param: ChartParam) =>
           param.value === null || param.value === undefined
             ? ""
-            : formatCurrency(Number(param.value)),
+            : formatCurrency(Number(param.value), { cents: true }),
       },
       labelLayout: { hideOverlap: true },
     })),

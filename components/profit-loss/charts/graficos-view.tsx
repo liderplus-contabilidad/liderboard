@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SpecCard } from "@/components/ui/chart-card";
 import { StatTile } from "@/components/ui/stat-tile";
 import { formatCurrency } from "@/lib/format";
@@ -8,6 +8,7 @@ import { buildGraficosCards } from "@/lib/profit-loss/charts/cards";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
+import { ExpenseSharePanel } from "./expense-share-panel";
 
 /**
  * Gráficos answers *how much and of what*: amounts per period, comparisons between accounts
@@ -26,10 +27,18 @@ import { PygEmptyState } from "../pyg-empty-state";
 export function GraficosView() {
   const { dataset, filters } = usePygData();
   const { context } = usePygAnalytics();
-  const { periodName, tiles, cards } = useMemo(
+  const { periodName, tiles, cards, annex } = useMemo(
     () => buildGraficosCards(context, filters),
     [context, filters],
   );
+
+  /**
+   * El rubro cuyo peso se está mirando, por su posición en el reparto. Es un ÍNDICE y no un código
+   * porque es lo que el gráfico entrega al clicar, y resolverlo aquí contra la misma lista que lo
+   * dibujó es lo que impide que la ventana hable de un rubro distinto del que se pulsó.
+   */
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const openCategory = openIndex === null ? undefined : annex?.categories[openIndex];
 
   if (!dataset) {
     return <PygEmptyState />;
@@ -42,26 +51,38 @@ export function GraficosView() {
           <StatTile
             key={tile.id}
             label={tile.label}
-            value={tile.value === null ? null : formatCurrency(tile.value)}
+            value={tile.value === null ? null : formatCurrency(tile.value, { cents: true })}
             hint={periodName}
             sign={tile.sign}
           />
         ))}
       </div>
 
-      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone — las dos del eje
-          temporal a lo ancho, las dos del tramo en retícula, y la cascada cerrando con la
-          historia completa. La distribución va a lo ancho porque apila hasta seis cuentas sobre
-          doce columnas: a media pantalla la leyenda se come el gráfico. */}
-      <SpecCard spec={cards[0]} />
-      <SpecCard spec={cards[1]} />
+      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone, y las cinco van al
+          MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se
+          lee como que algo no cargó. El ranking además lo NECESITA — con quince cuentas el canal
+          de rótulos son 150 px fijos, y a media pantalla se truncan casi todos los nombres.
 
-      <div className="grid grid-cols-2 gap-4">
-        <SpecCard spec={cards[2]} />
-        <SpecCard spec={cards[3]} />
-      </div>
+          La ÚNICA que responde al clic es la del anexo, y solo mientras esa vista está puesta: en
+          las demás una barra no tiene un «dentro» al que entrar, y un gráfico que a veces reacciona
+          y a veces no enseña a no pulsarlo. */}
+      {cards.map((card, index) => (
+        <SpecCard
+          key={card.id}
+          spec={card}
+          {...(annex && index === 0 ? { onSelect: setOpenIndex } : {})}
+        />
+      ))}
 
-      <SpecCard spec={cards[4]} />
+      {annex && openCategory && (
+        <ExpenseSharePanel
+          category={openCategory}
+          totalExpenses={annex.totalExpenses}
+          totalRevenue={annex.totalRevenue}
+          periodName={periodName}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
     </div>
   );
 }
