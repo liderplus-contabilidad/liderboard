@@ -23,10 +23,11 @@
  */
 import { sameToTheCentavo } from "@/lib/payroll/amounts";
 import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "@/lib/payroll/types";
-import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
+import { readGrid, readWorkbook } from "@/lib/excel/workbook";
 import { PayrollParseError } from "./errors";
 import {
   excelSerialToISODate,
+  findCompany,
   findPeriod,
   locateColumns,
   missingColumnLabels,
@@ -40,16 +41,6 @@ const CONTRACT_TYPES = new Set(["CT", "TP"]);
 const DEFAULT_CONTRACT_TYPE = "CT";
 /** Lo que `FR` y `AC FR` escriben cuando la respuesta es que sí. */
 const YES = "S";
-
-function cellText(cell: Cell): string {
-  if (typeof cell === "string") {
-    return cell.trim();
-  }
-  if (typeof cell === "number" && Number.isFinite(cell)) {
-    return String(cell);
-  }
-  return "";
-}
 
 /**
  * `FR` y `AC FR` valen lo que el libro pregunta de ellas: `IF(FR="S", …, 0)`. Solo una `S` enciende
@@ -84,12 +75,8 @@ function deduceApprovedOvertime(row: RolGeneralEmployeeRow): number | null {
   return sameToTheCentavo(row.overtimeTotal, worked) ? null : row.overtimeTotal;
 }
 
-/**
- * Lo capturado del mes de un empleado. Las dos provisiones de décimos se deducen igual que `M` y
- * por el mismo motivo: el libro las apaga con un `*0`, así que un importe distinto de cero es la
- * única huella que queda de que ese mes SÍ provisiona. En el archivo real están en cero las seis
- * veces, que es lo coherente con mensualizarlos ya en `N` y `O`.
- */
+/** Lo capturado del mes de un empleado. Las dos provisiones de décimos NO están aquí: son de la
+ *  ficha (ver `toProvisions`). */
 function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
   return {
     overtimeHours50: row.overtimeHours50,
@@ -116,10 +103,28 @@ function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
       partTimeDeduction: row.partTimeDeduction,
       medicalLeaveDeduction: row.medicalLeaveDeduction,
     },
-    provisionsThirteenth: row.thirteenthProvisionRaw !== 0,
-    provisionsFourteenth: row.fourteenthProvisionRaw !== 0,
     // `BZ` entra como un capturado más: es un valor TECLEADO, y la pantalla lo deja corregir.
     paid: row.paid,
+  };
+}
+
+/**
+ * Las dos banderas de provisión de décimos, que van a la FICHA y no a la captura porque son una
+ * elección del empleado (ver `PayrollEmployeeLine`). Que vivan en la ficha no impide leerlas de
+ * cada archivo: un período guarda su propia ficha, así que el archivo de marzo declara las de
+ * marzo.
+ *
+ * Se deducen igual que `M` y por el mismo motivo: el libro las apaga con un `*0`, así que un
+ * importe distinto de cero es la única huella que queda de que ese mes SÍ provisiona. En el
+ * archivo real están en cero las seis veces, que es lo coherente con mensualizarlos ya en `N` y
+ * `O`.
+ */
+function toProvisions(
+  row: RolGeneralEmployeeRow,
+): Pick<ParsedPayrollEmployeeLine, "provisionsThirteenth" | "provisionsFourteenth"> {
+  return {
+    provisionsThirteenth: row.thirteenthProvisionRaw !== 0,
+    provisionsFourteenth: row.fourteenthProvisionRaw !== 0,
   };
 }
 
@@ -136,8 +141,10 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
     throw new PayrollParseError("invalid-file");
   }
 
-  const company = cellText(grid[0]?.[1] ?? null);
   const columns = locateColumns(grid);
+  // Por su SITIO en el preámbulo, no por `B1`: el rol que esta app genera abre con la banda del logo
+  // y, bajo el nombre, con las líneas del membrete.
+  const company = findCompany(grid, columns.headerRow);
   // Por su FORMA, no por su celda: el rol que esta app genera lleva membrete, y unas filas de logo
   // por encima del preámbulo movían el `B2` fijo que se leía antes.
   const period = findPeriod(grid, columns.headerRow);
@@ -174,6 +181,7 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
       sectorCode: row.sectorCode,
       hasReserveFund: readsAsYes(row.hasReserveFundRaw),
       accumulatesReserveFund: readsAsYes(row.accumulatesReserveFundRaw),
+      ...toProvisions(row),
       days: row.days,
       capture: toCapture(row),
     };

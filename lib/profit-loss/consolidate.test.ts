@@ -602,6 +602,67 @@ describe("consolidateClients", () => {
       expect(acotado.warnings).toEqual([]);
     });
 
+    it("las piezas que SUMÓ salen cliente por cliente, con las de estado único incluidas", () => {
+      // Lo que la descarga escribe hoja por hoja: cada centro que entró en la suma y el estado
+      // entero de quien no tiene centros. La invariante es que el Consolidado sea su suma.
+      const result = consolidateClients([dingoo, manor, singleClient("MicroPlus", 7)]);
+
+      expect(result.summedDatasets.map((d) => [d.clientId, d.dataset.costCenterName])).toEqual([
+        ["dingoo", "RESTAURANTE"],
+        ["dingoo", "HOTEL"],
+        ["manor", "Restaurante"],
+        ["microplus", undefined],
+      ]);
+      // El rótulo del cliente es el que puso el usuario, no la razón social del archivo.
+      expect(result.summedDatasets.map((d) => d.dataset.companyName)).toEqual([
+        "Dingoo",
+        "Dingoo",
+        "Manor",
+        "MicroPlus",
+      ]);
+      // Y suman exactamente el total: 10 + 5 + 3 + 7.
+      const piezas = result.summedDatasets.reduce(
+        (total, { dataset: d }) => total + (valueOf(d.accounts, "4.1", 0) ?? 0),
+        0,
+      );
+      expect(piezas).toBe(valueOf(result.datasets[0].accounts, "4.1", 0));
+      expect(piezas).toBe(25);
+    });
+
+    it("marcar centros acota también las piezas, no solo el total", () => {
+      const result = consolidateClients(
+        [dingoo, manor, singleClient("MicroPlus", 7)],
+        [consolidatedCenterId("dingoo", "hotel"), consolidatedCenterId("manor", "restaurante")],
+      );
+
+      // MicroPlus no tiene centros con los que entrar, así que tampoco tiene hoja que escribir.
+      expect(result.summedDatasets.map((d) => d.dataset.centerId)).toEqual([
+        consolidatedCenterId("dingoo", "hotel"),
+        consolidatedCenterId("manor", "restaurante"),
+      ]);
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(8);
+    });
+
+    it("las piezas llevan los ajustes ya aplicados, como el total", () => {
+      const ajustado = client(
+        "Dingoo",
+        [
+          dataset("dingoo-2026", "dingoo", 2026, accountsOf(10), {
+            role: "center",
+            centerId: "restaurante",
+            costCenterName: "RESTAURANTE",
+            order: 0,
+          }),
+        ],
+        { 2026: [0] },
+        [{ datasetId: "dingoo-2026", code: "4.1", monthIndex: 0, value: 40, updatedAt: 0 }],
+      );
+      const result = consolidateClients([ajustado, manor]);
+
+      expect(valueOf(result.summedDatasets[0].dataset.accounts, "4.1", 0)).toBe(40);
+      expect(valueOf(result.datasets[0].accounts, "4.1", 0)).toBe(43);
+    });
+
     it("cada par conserva su ranura de color a través de los años", () => {
       const result = consolidateClients([
         centersClient(

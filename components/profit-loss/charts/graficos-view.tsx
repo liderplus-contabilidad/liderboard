@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
+import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { StatTile } from "@/components/ui/stat-tile";
+import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { buildGraficosCards } from "@/lib/profit-loss/charts/cards";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
+import { BusinessLineLegend } from "./business-line-legend";
 import { ExpenseSharePanel } from "./expense-share-panel";
 
 /**
@@ -25,12 +30,43 @@ import { ExpenseSharePanel } from "./expense-share-panel";
  * it cannot come back into this file.
  */
 export function GraficosView() {
-  const { dataset, filters } = usePygData();
+  const { dataset, filters, frequency } = usePygData();
   const { context } = usePygAnalytics();
-  const { periodName, tiles, cards, annex } = useMemo(
-    () => buildGraficosCards(context, filters),
-    [context, filters],
+  /**
+   * Los meses del eje en los que el estado no movió nada —los que el archivo nunca trajo y los que
+   * trajo en cero, que en pantalla son la misma columna vacía—. Es estado local de esta pantalla y no un
+   * `PygFilters`: lo leen las cinco tarjetas de aquí y ninguna de Datos ni de Análisis, así que no
+   * se guarda, no produce chip y el informe imprimible —que llama a `buildGraficosCards` por su
+   * cuenta— sigue sacando el eje completo.
+   */
+  const [hideEmptyPeriods, setHideEmptyPeriods] = useState(false);
+  /**
+   * Las líneas de negocio apagadas en la leyenda de su tarjeta. Es estado local por lo mismo que el
+   * interruptor de arriba: lo lee UNA tarjeta y ninguna de Datos ni de Análisis, así que no se
+   * guarda, no produce chip y el informe imprimible —que llama a `buildGraficosCards` por su
+   * cuenta— sigue sacando todas. Una marca de un plan que ya no está abierto se ignora al leer, así
+   * que cambiar de cliente no deja nada colgando.
+   */
+  const [hiddenLines, setHiddenLines] = useState<readonly string[]>([]);
+  const { periodName, tiles, cards, annex, emptyPeriods, lines } = useMemo(
+    () => buildGraficosCards(context, filters, { hideEmptyPeriods, hiddenLines }),
+    [context, filters, hideEmptyPeriods, hiddenLines],
   );
+  const toggleLine = useCallback((id: string) => {
+    setHiddenLines((current) =>
+      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+    );
+  }, []);
+  // Solo asoma en MENSUAL —un trimestre cubierto agrega tres meses y no es «un mes en 0»— y solo si
+  // hay alguno que ocultar: un control que no puede hacer nada enseña a no leer el de al lado.
+  // `emptyPeriods` se cuenta sobre el eje sin podar, así que el botón no se esfuma al pulsarlo.
+  const canHideEmptyPeriods = frequency === "mensual" && emptyPeriods > 0;
+
+  // Qué tarjetas están plegadas, y el «todos» que las mueve de una vez. Es estado local de esta
+  // pantalla, como los dos interruptores de arriba: no se guarda, no produce chip y el informe
+  // imprimible sigue sacando todas las tarjetas enteras.
+  const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
+  const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
   /**
    * El rubro cuyo peso se está mirando, por su posición en el reparto. Es un ÍNDICE y no un código
@@ -58,6 +94,43 @@ export function GraficosView() {
         ))}
       </div>
 
+      {/* Los dos interruptores de lectura de esta pestaña. Van aquí y no en la barra de filtros
+          porque los leen las tarjetas de ESTA pestaña y ninguna de las otras dos: en la barra
+          serían controles muertos en Datos y en Análisis. El de plegar va a la IZQUIERDA, sobre la
+          esquina de las tarjetas donde están las flechas que mueve; el de meses en 0 se queda a la
+          derecha con el aspecto del de la tarjeta de Datos, para que se lean como el mismo gesto. */}
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={toggleAll}
+          icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+          className="font-medium"
+        >
+          {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
+        </Button>
+
+        {canHideEmptyPeriods && (
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-pressed={hideEmptyPeriods}
+            onClick={() => setHideEmptyPeriods((current) => !current)}
+            icon={hideEmptyPeriods ? <Eye size={14} /> : <EyeOff size={14} />}
+            className={cn(
+              "font-medium",
+              hideEmptyPeriods && "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+            )}
+          >
+            {/* Encendido lleva la CUENTA de lo que quitó: aquí no hay pie de tabla donde ponerla,
+                así que sin ella el eje se encogería sin decir cuánto. */}
+            {hideEmptyPeriods
+              ? `Mostrar ${emptyPeriods} ${emptyPeriods === 1 ? "mes" : "meses"} en 0`
+              : "Ocultar meses en 0"}
+          </Button>
+        )}
+      </div>
+
       {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone, y las cinco van al
           MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se
           lee como que algo no cargó. El ranking además lo NECESITA — con quince cuentas el canal
@@ -66,11 +139,22 @@ export function GraficosView() {
           La ÚNICA que responde al clic es la del anexo, y solo mientras esa vista está puesta: en
           las demás una barra no tiene un «dentro» al que entrar, y un gráfico que a veces reacciona
           y a veces no enseña a no pulsarlo. */}
+      {/* La leyenda de líneas cuelga de la PRIMERA tarjeta, la única que las dibuja, y se rinde
+          fuera de esa vista: `lines` llega vacío y no hay nada que ofrecer. */}
       {cards.map((card, index) => (
         <SpecCard
           key={card.id}
           spec={card}
+          collapsed={isCollapsed(card.id)}
+          onToggleCollapsed={() => toggle(card.id)}
           {...(annex && index === 0 ? { onSelect: setOpenIndex } : {})}
+          {...(index === 0 && lines.length > 0
+            ? {
+                footerSlot: (
+                  <BusinessLineLegend lines={lines} hidden={hiddenLines} onToggle={toggleLine} />
+                ),
+              }
+            : {})}
         />
       ))}
 

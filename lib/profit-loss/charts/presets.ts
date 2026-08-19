@@ -175,6 +175,36 @@ export function coveredPeriods(bundle: SeriesBundle): PeriodRef[] {
 }
 
 /**
+ * Los periodos en los que el bundle se MOVIÓ — los cubiertos menos los que valen cero en todas sus
+ * series. Es el gemelo de `coveredPeriods` y la diferencia entre los dos es justo lo que el botón
+ * «Ocultar meses en 0» de Gráficos quita del eje.
+ *
+ * Se juzga contra el EJE, que es el de la frecuencia —las doce columnas del año salvo que «Periodo»
+ * lo acote— y no contra la cobertura: un archivo que llega hasta julio dibuja Ago–Dic vacías aunque
+ * el rótulo diga «Ene–Jul», y son justo esas las que estorban en pantalla. Cae además el mes que sí
+ * se cargó y no movió nada, que solo existe cuando la cobertura viene DECLARADA por el workspace
+ * (`loadedMonthsByYear`).
+ *
+ * Los dos casos se van juntos y para el motor siguen siendo cosas distintas —un `null` nunca es un
+ * `0`, y el rótulo y las cifras lo leen por `coveredPeriods`—: esta función no decide qué está
+ * cargado sino qué columnas se dibujan, y ahí las dos son una columna vacía.
+ *
+ * Se juzga el bundle ENTERO y no una serie, la misma regla que `computeCoverage`: la pregunta es si
+ * el negocio se movió en ese periodo, no si lo hizo una cuenta. Por eso quien la llama le pasa el
+ * estado completo (Ingresos + las raíces de gasto) — con una sola cuenta marcada, un mes parado
+ * PARA ELLA seguiría siendo un mes del ejercicio, y borrarlo del eje de todas las tarjetas a la vez
+ * afirmaría que no pasó nada.
+ */
+export function movingPeriods(bundle: SeriesBundle): PeriodRef[] {
+  return bundle.periods.filter((_, index) =>
+    bundle.series.some((series) => {
+      const value = series.points[index]?.value;
+      return value !== null && value !== undefined && value !== 0;
+    }),
+  );
+}
+
+/**
  * Each series summed over the periods the bundle carries, dropping the ones with no coverage in
  * ANY of them. A covered period valued at 0 contributes its zero; a never-loaded one contributes
  * nothing — which is the difference between a total of zero and no total at all.

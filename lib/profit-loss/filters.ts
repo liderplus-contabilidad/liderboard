@@ -61,10 +61,10 @@ function toggled<T>(current: readonly T[], value: T, universe: readonly T[]): T[
  * la misma pregunta: «Ventas» dibuja categorías que no son cuentas del plan, así que nada podría
  * arbitrar entre lo que ella reparte y lo que unas marcas piden.
  *
- * `keepPreset` es la excepción, y la habilita la vista que SIEMBRA sus propias cuentas: en el anexo
- * de gastos los rubros SON cuentas del plan, así que la marca y la vista dicen lo mismo y
- * desmarcar una es acotar el reparto, no contradecirlo. Sin esta salida, quitar un rubro apagaría
- * la vista entera — que es justo lo contrario de para lo que están las marcas.
+ * `keepPreset` es la excepción, y la declara la vista cuyos rubros SON cuentas del plan: en el
+ * anexo de gastos la marca y la vista dicen lo mismo, así que marcar una acota el reparto en vez
+ * de contradecirlo. Sin esta salida, acotar el anexo apagaría la vista entera — que es justo lo
+ * contrario de para lo que están las marcas.
  */
 export function withCodeToggled(
   filters: PygFilters,
@@ -81,31 +81,30 @@ export function withCodeToggled(
 
 /**
  * Elige una vista predeterminada — y elegir la que ya está puesta la quita, que es como se sale de
- * ella sin un «ninguna» que no dice nada. Al entrar borra las marcas de cuenta, la otra mitad de
- * esa exclusividad.
+ * ella sin un «ninguna» que no dice nada.
  *
- * Y SIEMBRA lo que la vista reparte —los centros, los periodos y, cuando sus categorías SON
- * cuentas del plan, las cuentas mismas— en vez de repartirlo por su cuenta: lo que dibuja queda
- * marcado en los desplegables de siempre, así que se ve qué entra y se quita desde donde el usuario
- * ya sabe buscar. Al salir se limpian: eran marcas que puso la vista, y dejar chips detrás de un
- * interruptor apagado es basura que el usuario no puso.
+ * Y SIEMBRA lo que la vista reparte —los centros y los periodos— en vez de repartirlo por su
+ * cuenta: lo que dibuja queda marcado en los desplegables de siempre, así que se ve qué entra y se
+ * quita desde donde el usuario ya sabe buscar. Al salir se limpian: eran marcas que puso la vista,
+ * y dejar chips detrás de un interruptor apagado es basura que el usuario no puso.
  *
- * Sembrar CUENTAS es lo que convierte la exclusividad de arriba en una excepción para esa vista —
- * ver `withCodeToggled`—: borrarlas al entrar y volver a ponerlas en la misma llamada sería una
- * contradicción, así que cuando la vista las trae, manda la siembra.
+ * Las CUENTAS se borran siempre al entrar y ninguna vista las siembra. El anexo de gastos lo hizo
+ * —sus rubros son cuentas del plan, así que marcarlas era «ver cuáles entran»—, y no salía: son
+ * todas las de movimiento del árbol de gastos, más de cien en un plan real, o sea más de cien chips
+ * en la tira. Que se pueda acotar por cuenta sin apagar la vista sobrevive aparte, en el
+ * `keepPreset` de `withCodeToggled`, que ahora la vista declara en vez de heredarlo de la siembra.
  */
 export function withPresetSelected(
   filters: PygFilters,
   id: string,
   seedCenterIds: readonly string[] = [],
   seedPeriods: readonly PeriodSlot[] = [],
-  seedCodes: readonly string[] = [],
 ): PygFilters {
   const next = filters.preset === id ? null : id;
   return {
     ...filters,
     preset: next,
-    codes: next === null ? [] : [...seedCodes],
+    codes: [],
     centerIds: next === null ? [] : [...seedCenterIds],
     periods: next === null ? [] : [...seedPeriods],
   };

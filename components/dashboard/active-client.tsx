@@ -16,6 +16,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CenterLogoRow, LogoPicker } from "@/components/ui/logo-picker";
 import { cn } from "@/lib/cn";
 import {
+  COMPANY_FIELDS,
+  firstMissingCompanyField,
+  type CompanyDraft,
+  type CompanyField,
+} from "@/lib/company-profile";
+import {
   matchesSearch,
   type CenterLogos,
   type CenterOption,
@@ -505,6 +511,9 @@ export function ClientNameDialog({
   logo,
   centers,
   centerLogos,
+  company,
+  onCompanyChange,
+  companyError,
   error,
   busy,
   onChange,
@@ -525,6 +534,15 @@ export function ClientNameDialog({
    */
   centers?: readonly CenterOption[];
   centerLogos?: CenterLogos | undefined;
+  /**
+   * Los datos de la empresa que este workspace imprime en su membrete. Entran por la misma puerta
+   * que `centers`: sin ellos el diálogo queda EXACTAMENTE como estaba, que es lo que deja intactos a
+   * los módulos que no piden perfil. Hoy solo lo pasa Rol de Pagos.
+   */
+  company?: CompanyDraft;
+  onCompanyChange?: (field: CompanyField, value: string) => void;
+  /** El rechazo del perfil al enviar —un RUC que no tiene trece dígitos—, ya en castellano. */
+  companyError?: string | null;
   error: string | null;
   busy?: boolean;
   onChange: (value: string) => void;
@@ -553,6 +571,11 @@ export function ClientNameDialog({
       ? { subject: labels.centerSubject, plural: labels.centerPlural }
       : null;
 
+  // El primer obligatorio que falta apaga «Guardar» y DICE cuál es. Un botón apagado sin motivo
+  // manda a repasar ocho campos a ojo, que es justo lo que este mensaje evita. El RUC no entra
+  // aquí: mientras se teclea está siempre a medias, así que se juzga al enviar.
+  const missingCompany = company && onCompanyChange ? firstMissingCompanyField(company) : null;
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-6">
       <form
@@ -560,7 +583,13 @@ export function ClientNameDialog({
           event.preventDefault();
           onSubmit();
         }}
-        className="w-full max-w-[440px] rounded-[13px] border border-border bg-surface p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]"
+        className={cn(
+          // Con la sección de empresa el modal es más ancho —seis campos en 440 px salen en una
+          // columna altísima— y puede scrollear: el botón que lo cierra no puede quedar fuera de
+          // la pantalla por cuántos campos pide.
+          "w-full max-h-[calc(100vh-56px)] overflow-y-auto rounded-[13px] border border-border bg-surface p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]",
+          company && onCompanyChange ? "max-w-[560px]" : "max-w-[440px]",
+        )}
       >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-brand-soft">
@@ -605,6 +634,53 @@ export function ClientNameDialog({
             hint={`Opcional. Acompaña al nombre del ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
           />
         </div>
+
+        {/*
+          Los datos de la empresa son el MEMBRETE: lo que el papel de la firma imprime bajo el logo.
+          Van aquí y no en una pantalla propia porque son la otra mitad de lo mismo que el nombre y
+          el logo —la identidad de este workspace— y separarlos obligaría a recordar cuál se edita
+          dónde. La sección no existe si el módulo no la pide.
+        */}
+        {company && onCompanyChange && (
+          <div className="mt-4 flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+                Datos de la empresa
+              </span>
+              <span className="text-[11px] text-faintest">para el membrete</span>
+            </div>
+            <p className="text-[11.5px] text-faint">
+              Encabezan las pantallas del módulo, el comprobante en PDF y el Excel del período.
+            </p>
+            <div className="mt-0.5 grid grid-cols-2 gap-x-2.5 gap-y-2">
+              {COMPANY_FIELDS.map((field) => (
+                <label
+                  key={field.id}
+                  className={cn("flex flex-col gap-1", field.wide && "col-span-2")}
+                >
+                  <span className="text-[11px] font-medium text-ink-soft">
+                    {field.label}
+                    {!field.required && (
+                      <span className="ml-1 font-normal text-faintest">opcional</span>
+                    )}
+                  </span>
+                  <input
+                    value={company[field.id]}
+                    disabled={busy}
+                    placeholder={field.placeholder}
+                    onChange={(event) => onCompanyChange(field.id, event.target.value)}
+                    className="h-[34px] rounded-[9px] border border-border bg-surface px-2.5 text-[12.5px] text-ink outline-none placeholder:text-faintest focus:border-brand"
+                  />
+                </label>
+              ))}
+            </div>
+            {companyError ? (
+              <span className="text-[11.5px] text-negative">{companyError}</span>
+            ) : (
+              missingCompany && <span className="text-[11.5px] text-faint">{missingCompany}</span>
+            )}
+          </div>
+        )}
 
         {/*
           Los logos de los centros van DEBAJO del principal y en el mismo diálogo porque son la
@@ -654,7 +730,7 @@ export function ClientNameDialog({
           <Button variant="secondary" size="sm" disabled={busy} onClick={onCancel}>
             Cancelar
           </Button>
-          <Button type="submit" size="sm" disabled={busy}>
+          <Button type="submit" size="sm" disabled={busy || missingCompany !== null}>
             {creating ? `Crear ${labels.subject}` : "Guardar"}
           </Button>
         </div>

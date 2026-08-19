@@ -86,6 +86,40 @@ export function findPeriod(grid: readonly Cell[][], headerRow: number | null): P
   return null;
 }
 
+/** La columna donde el libro escribe la empresa y, bajo ella, el membrete: `B`, la misma de los
+ *  nombres de área y de empleado. */
+const COMPANY_COLUMN = 1;
+
+/**
+ * LA EMPRESA, POR SU SITIO EN EL PREÁMBULO Y NO POR SU CELDA — la hermana de `findPeriod`, y por la
+ * misma razón.
+ *
+ * Se leía en `B1` fijo, y eso dejó de ser cierto en cuanto la app empezó a generar este formato: su
+ * banda de logo abre unas filas por encima del preámbulo, así que `B1` es una fila en blanco de esa
+ * banda y el archivo descargado volvía a entrar SIN empresa. Con el membrete completo el preámbulo
+ * crece más todavía.
+ *
+ * Se barre la columna `B` por encima de la cabecera `EMPLEADO` y se toma la PRIMERA celda con texto
+ * que no sea el período. Es el nombre del cliente, porque el membrete va debajo de él. Se exige que
+ * la celda sea TEXTO —no un número convertido— porque el archivo real trae en su primera fila una
+ * lista de índices de búsqueda, y un `5` no es la razón social de nadie.
+ */
+export function findCompany(grid: readonly Cell[][], headerRow: number | null): string {
+  const end = headerRow ?? grid.length;
+  for (let row = 0; row < end; row++) {
+    const cell = grid[row]?.[COMPANY_COLUMN];
+    if (typeof cell !== "string") {
+      continue;
+    }
+    const text = cell.trim();
+    if (text.length === 0 || parsePeriodText(text)) {
+      continue;
+    }
+    return text;
+  }
+  return "";
+}
+
 /** Excel's day-0 in the (non-1904) epoch every desktop workbook uses: `1899-12-30`, already
  * absorbing the classic "1900 was a leap year" bug SheetJS's `raw: true` doesn't correct for. A
  * date cell arrives as this serial, not as text, because `readGrid` never passes `cellDates`. */

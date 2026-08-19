@@ -4,7 +4,7 @@
  * Es `buildPayslipDocument` en bucle, y existe como función propia porque lo pide MÁS DE UNA
  * pantalla: la del período (`/payroll/[periodId]`) y la fila del historial, que baja el mismo PDF
  * sin abrir el período. Escrito a mano en las dos, «los comprobantes de este período» tendría dos
- * definiciones capaces de separarse —el orden, el `Codigo:`, el logo del cliente— y nada lo
+ * definiciones capaces de separarse —el orden, el `Codigo:`, el logo y el membrete del cliente— y nada lo
  * delataría: los dos PDF se abren por separado y cada uno parece correcto.
  *
  * Recibe las LÍNEAS y no un rol ya calculado, así que un consumidor no necesita el motor para pedir
@@ -15,6 +15,7 @@
  * Es puro: no lee la base ni escribe nada. Quién trae las líneas y quién baja el archivo es de la
  * capa de arriba.
  */
+import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll, emptyCapture } from "../employee-input";
 import type { PayrollParameters } from "../engine/parameters";
@@ -28,6 +29,7 @@ export function buildPeriodPayslips({
   parameters,
   clientName,
   clientLogo,
+  clientCompany,
 }: {
   period: PayrollPeriod;
   /** La nómina en el orden en que se lee la tabla: es el que numera el `Codigo:`. */
@@ -35,17 +37,18 @@ export function buildPeriodPayslips({
   parameters: PayrollParameters;
   clientName: string;
   clientLogo?: EntityLogo;
+  clientCompany?: CompanyProfile;
 }): PayslipDocument[] {
   return lines.map((line, index) =>
     buildPayslipDocument({
       line,
-      computed: computeLinePayroll(line, parameters, period.extraConcepts ?? []),
-      ...(period.extraConcepts?.length ? { extraConcepts: period.extraConcepts } : {}),
+      computed: computeLinePayroll(line, parameters),
       capture: line.capture ?? emptyCapture(),
       year: period.year,
       monthIndex: period.monthIndex,
       clientName,
       ...(clientLogo ? { clientLogo } : {}),
+      ...(clientCompany ? { clientCompany } : {}),
       // `Codigo:` es la POSICIÓN en la nómina, 1…N, no el `id` de la ficha: la columna `A` del
       // libro es un contador por orden que salta las cabeceras de área.
       position: index + 1,

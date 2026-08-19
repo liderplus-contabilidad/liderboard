@@ -28,6 +28,15 @@ export interface PayslipDocument {
   company: string;
   /** El logo del cliente, si subió uno. Encabeza el comprobante a la izquierda de `company`. */
   logo?: EntityLogo;
+  /**
+   * El membrete bajo el nombre: razón social, ubicación, teléfonos y correo, YA compuestos por
+   * `letterheadLines`. Llegan como líneas y no como campos por lo mismo que los importes llegan
+   * formateados — este documento es texto plano, y componer aquí una dirección abriría una segunda
+   * versión de cómo se escribe, capaz de separarse de la de la pantalla y la del Excel.
+   *
+   * Vacío cuando el cliente no tiene perfil, y entonces el encabezado queda como estaba.
+   */
+  companyLines: readonly string[];
   /** `ROL DE PAGOS` */
   title: string;
   /** `MES: MARZO 2026` */

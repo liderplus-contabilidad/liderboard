@@ -137,6 +137,9 @@ function axisTooltip(): ChartTooltip {
     borderWidth: 1,
     padding: [8, 10],
     textStyle: { color: CHART_INK.strong, fontSize: 12 },
+    // Dentro de la TARJETA y no de la ventana — ver `ChartTooltip.confine`. Aquí pesa igual que en
+    // PyG: los renglones son nombres de empleado con su cargo, así que la caja es ancha.
+    confine: true,
     trigger: "axis",
     axisPointer: { type: "shadow", lineStyle: { color: CHART_LINES.axis, width: 1 } },
     formatter: (params) => {

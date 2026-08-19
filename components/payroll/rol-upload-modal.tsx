@@ -4,7 +4,7 @@ import { AlertTriangle, FileSpreadsheet, Loader2, Upload, X } from "lucide-react
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
-import { NO_EXTRA_CONCEPTS, computeLinePayroll } from "@/lib/payroll/employee-input";
+import { computeLinePayroll } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { computePeriodFinancials } from "@/lib/payroll/period-detail";
 import { periodLongLabel } from "@/lib/payroll/periods";
@@ -126,9 +126,7 @@ export function RolUploadModal({ period, periods, currentCount, onClose }: RolUp
     ? computePeriodFinancials(
         // Sin conceptos extra: el archivo del contador no declara ninguno, y los que el PERÍODO
         // tenga declarados no llegan con la carga sino con la ficha que ya está guardada.
-        staged.lines.map((line) =>
-          computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, NO_EXTRA_CONCEPTS),
-        ),
+        staged.lines.map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
       )
     : undefined;
   const canConfirm = staged !== null && staged.rejection === null && !saving;

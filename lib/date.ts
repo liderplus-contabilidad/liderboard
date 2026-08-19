@@ -67,6 +67,19 @@ export function formatDayMonthYear(iso: string | null): string | null {
 }
 
 /**
+ * «30 de julio de 2026, 14:22» — la lectura local de una fecha-hora, la que coteja el contador.
+ * La usan los dos informes imprimibles (PyG y Sueldos por Áreas) para sellar «Generado el…», así
+ * que vive aquí en vez de escribirse dos veces y arriesgarse a decir la fecha de dos maneras.
+ */
+export function formatTimestampEs(date: Date): string {
+  const day = date.getDate();
+  const month = MONTHS_FULL_ES[date.getMonth()]?.toLowerCase() ?? String(date.getMonth() + 1);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${day} de ${month} de ${date.getFullYear()}, ${hours}:${minutes}`;
+}
+
+/**
  * Los dos extremos de un mes, ya formateados: `monthBounds(2026, 2)` → `01/03/2026` y
  * `31/03/2026`. `monthIndex` es 0–11, como en el resto de la app.
  *

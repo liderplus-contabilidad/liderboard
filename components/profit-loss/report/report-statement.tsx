@@ -4,7 +4,7 @@ import type { EntityLogo } from "@/lib/logos";
 import { columnHeaderLabel } from "@/lib/profit-loss/datos-columns";
 import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import { sharePct, variationPct } from "@/lib/profit-loss/report/accumulate";
-import type { StatementFit } from "@/lib/profit-loss/report/page-fit";
+import type { StatementFit } from "@/lib/report/page-fit";
 import type { DatosGrid, DatosRow } from "@/lib/profit-loss/datos-types";
 import { flattenSorted } from "../datos-utils";
 

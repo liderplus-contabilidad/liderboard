@@ -18,7 +18,7 @@ import {
   matchesEmployeeSearch,
 } from "@/lib/payroll/period-detail";
 import { adjacentPeriod } from "@/lib/payroll/periods";
-import type { PayrollEmployeeLine, PayrollExtraConcept } from "@/lib/payroll/types";
+import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 import { DeletePeriodDialog } from "../delete-period-dialog";
 import { usePayrollData } from "../payroll-data-provider";
 import { EmployeeTable } from "./employee-table";
@@ -32,7 +32,6 @@ import { PeriodParameters } from "./period-parameters";
 const EMPTY_LINES: PayrollEmployeeLine[] = [];
 /** Estable entre renders: un `[]` nuevo cada vez invalidaría los `useMemo` que lo llevan en las
  *  dependencias, y con ellos el rol entero de la pantalla. */
-const EMPTY_EXTRA_CONCEPTS: readonly PayrollExtraConcept[] = [];
 
 type DetailTab = "empleados" | "asiento";
 
@@ -77,14 +76,13 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   // aquí — KPIs, tabla y comprobantes —, que es lo que garantiza que las tres cosas digan lo mismo.
   // Los conceptos extra son del PERÍODO —una columna del rol, no una decisión de cada empleado—,
   // así que viajan aparte de la ficha y llegan a las tres lecturas de abajo por el mismo camino.
-  const extraConcepts = period?.extraConcepts ?? EMPTY_EXTRA_CONCEPTS;
   const rows = useMemo(
     () =>
       lines.map((line) => ({
         line,
-        computed: computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, extraConcepts),
+        computed: computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS),
       })),
-    [lines, extraConcepts],
+    [lines],
   );
   const computations = useMemo(() => rows.map((row) => row.computed), [rows]);
   const financials = useMemo(() => computePeriodFinancials(computations), [computations]);
@@ -99,8 +97,8 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   // `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-deps` no
   // está para atraparlo.
   const journalEntry = useMemo(
-    () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS, extraConcepts)),
-    [lines, extraConcepts],
+    () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS)),
+    [lines],
   );
 
   /**
@@ -123,13 +121,14 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           parameters: DEFAULT_PAYROLL_PARAMETERS,
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
+          ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         }),
         payslipBatchFilename(period.year, period.monthIndex),
       );
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, lines, period]);
+  }, [activeClient?.name, activeClient?.logo, activeClient?.company, lines, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -190,9 +189,9 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
               period={period}
               periods={periods}
               lines={lines}
-              extraConcepts={extraConcepts}
               clientName={activeClient?.name ?? ""}
               {...(activeClient?.logo ? { clientLogo: activeClient.logo } : {})}
+              {...(activeClient?.company ? { clientCompany: activeClient.company } : {})}
             />
           ) : null
         }

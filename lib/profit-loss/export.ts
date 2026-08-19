@@ -120,6 +120,12 @@ interface StatementSheet {
   /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
   loadedMonths?: number[];
   /**
+   * El logo de la IZQUIERDA de esta hoja en concreto, cuando no es el mismo en todo el libro. Un
+   * libro de un cliente lo tiene único y lo pasa una vez; el consolidado entre clientes no tiene
+   * ninguno propio —son varias empresas— y cada hoja se lleva el de la suya.
+   */
+  logo?: EntityLogo;
+  /**
    * El logo del centro al que pertenece esta hoja, si el usuario le subió uno. La hoja Consolidado
    * no lleva: no es un centro, y `centerLogoOf` lo responde por sí solo sin caso propio aquí.
    */
@@ -149,7 +155,7 @@ function writeStatementSheets(
   const omit = hideEmpty ? emptyAccountCodes(grids) : NO_OMISSIONS;
   const months = hideEmpty ? movingMonths(grids) : null;
   sheets.forEach((sheet, index) =>
-    writeStatementSheet(wb, sheet, grids[index], omit, months, logo),
+    writeStatementSheet(wb, sheet, grids[index], omit, months, sheet.logo ?? logo),
   );
 }
 
@@ -776,10 +782,17 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
 }
 
 /**
- * El consolidado entre clientes, una hoja por año — deliberadamente **sin** la hoja de metadatos
- * oculta.
+ * El consolidado entre clientes: por año ascendente, la hoja del total y detrás **una por cada
+ * pieza que lo sumó** —cada (cliente · centro) que entró y el estado entero de cada cliente de
+ * estado único—. Es el equivalente entre empresas del «Excel completo», y por el mismo motivo:
+ * quien recibe la suma pregunta enseguida de dónde sale, y una sola hoja no lo dice.
  *
- * Esa hoja es lo que hace que un libro de la app vuelva a entrar reconstruyendo su workspace. Aquí
+ * Las piezas llegan HECHAS (`ConsolidatedWorkspace.summedDatasets`) en vez de recomponerse aquí:
+ * cuáles entraron lo decidió el filtro al sumar, y volver a decidirlo es exactamente cómo el
+ * archivo acaba con hojas que no cuadran con su propio total.
+ *
+ * Deliberadamente **sin** la hoja de metadatos oculta, y añadir hojas no cambia esa regla: esa
+ * hoja es lo que hace que un libro de la app vuelva a entrar reconstruyendo su workspace. Aquí
  * es exactamente lo que no debe pasar: este archivo es la suma de varias empresas, y re-subirlo a
  * un cliente lo reemplazaría por cuentas que no son suyas, con la razón social de otra. Sin
  * metadatos, `app-workbook.ts` no lo reclama y el archivo se queda donde sirve — en el correo del
@@ -788,26 +801,77 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
  * Los ajustes ya vienen aplicados en las cuentas (`consolidate.ts` los pliega antes de sumar), así
  * que no hay `edits` que pasar.
  */
-export function buildConsolidatedWorkbook(
-  datasets: readonly PygDataset[],
-  loadedMonthsByYear: Record<number, number[]>,
+export interface ConsolidatedInput {
+  /** El total, uno por año. El orden lo pone esta función, no el que llame. */
+  datasets: readonly PygDataset[];
+  /**
+   * Las piezas que ese total sumó (`ConsolidatedWorkspace.summedDatasets`): una hoja cada una,
+   * detrás de la del año al que pertenece. Sin ellas el archivo es el de siempre — una hoja por
+   * año—, que es lo que sigue pasando cuando ningún cliente lleva centros.
+   */
+  details?: readonly ConsolidatedDetail[];
+  loadedMonthsByYear: Record<number, number[]>;
   /** «Ocultar ceros» — lo que ningún cliente movió, cuenta o mes, no llega al archivo. */
-  hideEmpty = false,
-): ExcelJS.Workbook {
+  hideEmpty?: boolean;
+  /** Los logos de los CLIENTES, por su id: el de la izquierda en la hoja de cada pieza suya. */
+  clientLogos?: Record<string, EntityLogo>;
+  /** Los de los centros, por el id COMPUESTO `<clientId>::<centerId>` que las piezas llevan. */
+  centerLogos?: CenterLogos;
+}
+
+/** Una pieza de la suma y de qué cliente salió — el espejo de `SummedDetail` en `consolidate.ts`. */
+export interface ConsolidatedDetail {
+  clientId: string;
+  dataset: PygDataset;
+}
+
+export function buildConsolidatedWorkbook(input: ConsolidatedInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const used = new Set<string>();
-  const ordered = [...datasets].sort((a, b) => a.year - b.year);
-  writeStatementSheets(
-    wb,
-    ordered.map((dataset) => ({
-      name: uniqueSheetName(sheetTitle("Consolidado", dataset.year, ordered.length > 1), used),
+  const ordered = [...input.datasets].sort((a, b) => a.year - b.year);
+  const multiYear = ordered.length > 1;
+  const details = input.details ?? [];
+  const sheets: StatementSheet[] = [];
+
+  for (const dataset of ordered) {
+    const loadedMonths = input.loadedMonthsByYear[dataset.year] ?? [];
+    sheets.push({
+      name: uniqueSheetName(sheetTitle("Consolidado", dataset.year, multiYear), used),
       dataset,
       edits: [],
-      loadedMonths: loadedMonthsByYear[dataset.year] ?? [],
-    })),
-    hideEmpty,
-  );
+      loadedMonths,
+    });
+    // Detrás de su año y no todas al final: un estado se lee contra el total del que forma parte,
+    // y con dos años el archivo quedaría con las hojas de 2025 debajo del Consolidado de 2026.
+    for (const detail of details.filter((entry) => entry.dataset.year === dataset.year)) {
+      sheets.push({
+        name: uniqueSheetName(
+          sheetTitle(detailTitle(detail.dataset), dataset.year, multiYear),
+          used,
+        ),
+        dataset: detail.dataset,
+        edits: [],
+        loadedMonths,
+        logo: input.clientLogos?.[detail.clientId],
+        centerLogo: centerLogoOf(input.centerLogos, detail.dataset.centerId),
+      });
+    }
+  }
+
+  // El libro entero es el juicio de «ocultar ceros», piezas incluidas: así todas las hojas
+  // conservan el mismo plan de cuentas y las mismas columnas, y se pueden leer en paralelo.
+  writeStatementSheets(wb, sheets, input.hideEmpty ?? false);
   return wb;
+}
+
+/**
+ * Cómo se llama la hoja de una pieza: «Restaurante · Dingoo» para un centro —el mismo rótulo con
+ * el que el chip y la leyenda lo nombran, porque el mismo centro existe en varias empresas— y el
+ * cliente a secas para uno de estado único, que no tiene centro que nombrar.
+ */
+function detailTitle(dataset: PygDataset): string {
+  const client = dataset.companyName || "Cliente";
+  return dataset.costCenterName ? `${dataset.costCenterName} · ${client}` : client;
 }
 
 /** `PyG-<años>-consolidado-clientes.xlsx` — fuera del patrón mensual, como «completo». */

@@ -7,12 +7,11 @@ import { computePeriodFinancials } from "./period-detail";
 import type { PayrollEmployeeLine } from "./types";
 import {
   addEmployee,
-  addExtraConcept,
+  deleteEmployee,
   createClient,
   createPeriod,
   db,
   deleteClient,
-  deleteExtraConcept,
   deletePeriod,
   describeClientContents,
   employeesForPeriods,
@@ -22,10 +21,8 @@ import {
   listClients,
   listClientSummaries,
   listEmployees,
-  listExtraConcepts,
   listPeriods,
   periodFinancials,
-  renameExtraConcept,
   updateClient,
   updateEmployee,
   rosterCounts,
@@ -34,6 +31,18 @@ import {
 
 /** The cliente every scoped case runs inside; a second one appears only where isolation is the point. */
 let clientId = "";
+
+/** Un perfil de empresa completo, el del archivo real del cliente. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+  email: "nomina@delicmar.com",
+};
 
 /** Una ficha completa, para no repetir sus nueve campos en cada test de nómina. */
 function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
@@ -50,6 +59,8 @@ function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmpl
     sectorCode: "S001",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 12,
     ...overrides,
   };
@@ -106,6 +117,36 @@ describe("clientes", () => {
 
   it("a cliente created with no logo stores no empty field either", async () => {
     expect("logo" in ((await getClient(clientId)) ?? {})).toBe(false);
+  });
+
+  it("guarda el perfil de empresa y lo edita sin tocar los períodos", async () => {
+    const conPerfil = await createClient("Delicmar", undefined, COMPANY);
+    expect((await getClient(conPerfil.id))?.company).toEqual(COMPANY);
+
+    await createPeriod(conPerfil.id, 2026, 2);
+    await updateClient(conPerfil.id, "Delicmar", null, {
+      ...COMPANY,
+      address: "OTRA CALLE",
+    });
+
+    expect((await getClient(conPerfil.id))?.company?.address).toBe("OTRA CALLE");
+    expect((await listPeriods(conPerfil.id)).length).toBe(1);
+  });
+
+  // Un cliente guardado antes de que el perfil existiera es el caso normal, no el raro: la app
+  // tiene que leerlo sin error y el membrete imprimir lo que haya.
+  it("un cliente sin perfil no guarda un campo vacío y se lee igual", async () => {
+    const client = await getClient(clientId);
+    expect(client?.company).toBeUndefined();
+    expect("company" in (client ?? {})).toBe(false);
+  });
+
+  // Renombrar desde un módulo que no pide perfil (PyG, Ocupaciones) NO puede borrar el que hay:
+  // `undefined` significa «esta llamada no habla del perfil», no «quítalo».
+  it("renombrar sin hablar del perfil lo conserva", async () => {
+    const conPerfil = await createClient("Delicmar", undefined, COMPANY);
+    await updateClient(conPerfil.id, "Delicmar S.A.S.", null);
+    expect((await getClient(conPerfil.id))?.company).toEqual(COMPANY);
   });
 
   it("summarizes what each cliente holds, for the selector's subline", async () => {
@@ -409,7 +450,7 @@ describe("periodFinancials", () => {
     // acotado y el agrupado por período, no la aritmética del motor —esa la fija `golden.test.ts`.
     expect(financials.get(p1.id)).toEqual(
       computePeriodFinancials(
-        [ana, luis].map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, [])),
+        [ana, luis].map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
       ),
     );
     expect(financials.has(p2.id)).toBe(false);
@@ -475,6 +516,169 @@ describe("migración v1 → v2 (aditiva)", () => {
     await db.periods.clear();
     await db.employees.clear();
     await db.active.clear();
+  });
+});
+
+describe("updateEmployee · el parche de FICHA", () => {
+  // Es la garantía que hace segura la edición: alguien arregla una cédula y lo capturado —las
+  // horas, los descuentos, lo pagado— sigue exactamente donde estaba.
+  it("corrige la identidad sin tocar la captura del mes", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const capture = { ...emptyCapture(), bonus: 40, paid: 561.89 };
+    const stored = await addEmployee(period.id, {
+      ...employeeLine({ name: "Ana Torrez", idCard: "0102030499" }),
+      capture,
+    });
+
+    await updateEmployee(stored.id, { name: "Ana Torres", idCard: "0102030405" });
+
+    const [line] = await listEmployees(period.id);
+    expect(line.name).toBe("Ana Torres");
+    expect(line.idCard).toBe("0102030405");
+    expect(line.capture).toEqual(capture);
+  });
+
+  it("escribe las dos provisiones, y el motor las recoge", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const stored = await addEmployee(period.id, employeeLine());
+
+    await updateEmployee(stored.id, { provisionsThirteenth: true });
+
+    const [line] = await listEmployees(period.id);
+    expect(
+      computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS).thirteenthProvision,
+    ).toBeGreaterThan(0);
+  });
+
+  it("alcanza SOLO al empleado de su período: el mismo de otro mes no se toca", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    const febrero = await createPeriod(clientId, 2026, 1);
+    const enMarzo = await addEmployee(marzo.id, employeeLine({ role: "Recepcionista" }));
+    await addEmployee(febrero.id, employeeLine({ role: "Recepcionista" }));
+
+    await updateEmployee(enMarzo.id, { role: "Cajera" });
+
+    expect((await listEmployees(marzo.id))[0].role).toBe("Cajera");
+    expect((await listEmployees(febrero.id))[0].role).toBe("Recepcionista");
+  });
+});
+
+describe("deleteEmployee", () => {
+  it("quita solo a ese empleado y deja la nómina del período intacta", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const uno = await addEmployee(period.id, employeeLine({ name: "Ana Torres" }));
+    await addEmployee(period.id, employeeLine({ name: "Luis Vera" }));
+
+    await deleteEmployee(uno.id);
+
+    expect((await listEmployees(period.id)).map((l) => l.name)).toEqual(["Luis Vera"]);
+  });
+
+  it("no toca la nómina de otro período", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    const febrero = await createPeriod(clientId, 2026, 1);
+    const enMarzo = await addEmployee(marzo.id, employeeLine());
+    await addEmployee(febrero.id, employeeLine());
+
+    await deleteEmployee(enMarzo.id);
+
+    expect(await listEmployees(marzo.id)).toHaveLength(0);
+    expect(await listEmployees(febrero.id)).toHaveLength(1);
+  });
+
+  it("un id que no existe no rompe nada", async () => {
+    await expect(deleteEmployee(crypto.randomUUID())).resolves.toBeUndefined();
+  });
+});
+
+describe("migración v3 → v4: las provisiones suben de la captura a la ficha", () => {
+  /** La ficha como la v3 la guardaba: SIN las dos banderas, que vivían dentro de la captura.
+   *  Quitarlas del factory es lo que hace que estos tests fallen si la migración desaparece. */
+  function v3Line(overrides: Partial<PayrollEmployeeLine> = {}): Record<string, unknown> {
+    const {
+      provisionsThirteenth: _t,
+      provisionsFourteenth: _f,
+      capture: _c,
+      ...ficha
+    } = employeeLine(overrides);
+    return ficha;
+  }
+
+  /** Una base tal como la v3 la dejaba, con las dos banderas DENTRO de la captura. */
+  async function seedV3(lines: readonly Record<string, unknown>[]): Promise<void> {
+    db.close();
+    await Dexie.delete("liderboard-payroll");
+
+    const legacy = new Dexie("liderboard-payroll");
+    legacy.version(1).stores({
+      clients: "id",
+      periods: "id, clientId, &[clientId+year+monthIndex]",
+      active: "key",
+    });
+    legacy.version(2).stores({ employees: "id, periodId" });
+    legacy.version(3).stores({});
+    await legacy.open();
+    await legacy.table("employees").bulkAdd(lines as never[]);
+    legacy.close();
+  }
+
+  async function reseed(): Promise<void> {
+    await db.clients.clear();
+    await db.periods.clear();
+    await db.employees.clear();
+    await db.active.clear();
+  }
+
+  it("una bandera encendida sobrevive, y sale de la captura", async () => {
+    await seedV3([
+      {
+        ...v3Line({ id: "e1", periodId: "p1" }),
+        capture: { ...emptyCapture(), provisionsThirteenth: true, provisionsFourteenth: false },
+      },
+    ]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    expect(migrated.provisionsThirteenth).toBe(true);
+    expect(migrated.provisionsFourteenth).toBe(false);
+    expect(migrated.capture).not.toHaveProperty("provisionsThirteenth");
+    expect(migrated.capture).not.toHaveProperty("provisionsFourteenth");
+
+    await reseed();
+  });
+
+  it("y el motor la lee desde ahí: el costo empresa sigue llevando su provisión", async () => {
+    // Es lo que hace que la migración importe. Sin ella la bandera se leería como apagada y el
+    // único síntoma sería un costo total más bajo, que nadie compara contra el mes anterior.
+    await seedV3([
+      {
+        ...v3Line({ id: "e1", periodId: "p1" }),
+        capture: { ...emptyCapture(), provisionsThirteenth: true, provisionsFourteenth: false },
+      },
+    ]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    const computed = computeLinePayroll(migrated, DEFAULT_PAYROLL_PARAMETERS);
+    expect(computed.thirteenthProvision).toBeGreaterThan(0);
+    expect(computed.fourteenthProvision).toBe(0);
+
+    await reseed();
+  });
+
+  it("un empleado SIN captura llega con las dos apagadas, no con `undefined`", async () => {
+    await seedV3([v3Line({ id: "e2", periodId: "p1" })]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    expect(migrated.provisionsThirteenth).toBe(false);
+    expect(migrated.provisionsFourteenth).toBe(false);
+    expect(migrated.capture).toBeUndefined();
+
+    await reseed();
   });
 });
 
@@ -645,124 +849,106 @@ describe("addEmployee", () => {
   });
 });
 
-describe("conceptos de ingreso extra", () => {
-  it("un período nace sin ninguno", async () => {
-    const period = await createPeriod(clientId, 2026, 6);
-    expect(await listExtraConcepts(period.id)).toEqual([]);
+describe("las filas de bono", () => {
+  const bono = (id: string, label: string, amount: number) => ({
+    id,
+    label,
+    kind: "noAportable" as const,
+    amount,
   });
 
-  it("declara uno y lo guarda en el PERÍODO, no en ninguna ficha", async () => {
+  it("viven en la CAPTURA del empleado, no en el período", async () => {
     const period = await createPeriod(clientId, 2026, 6);
     await addEmployee(period.id, employeeLine({ periodId: period.id }));
-
-    const result = await addExtraConcept(period.id, "Movilización", "noAportable");
-    expect(result.ok).toBe(true);
-
-    expect(await listExtraConcepts(period.id)).toMatchObject([
-      { label: "Movilización", kind: "noAportable" },
-    ]);
     const [line] = await listEmployees(period.id);
-    expect(line.capture?.extraAmounts ?? {}).toEqual({});
-  });
 
-  it("rechaza un rótulo repetido ignorando mayúsculas y acentos", async () => {
-    const period = await createPeriod(clientId, 2026, 6);
-    await addExtraConcept(period.id, "Movilización", "noAportable");
-
-    const clash = await addExtraConcept(period.id, "MOVILIZACION", "aportable");
-    expect(clash.ok).toBe(false);
-    expect(await listExtraConcepts(period.id)).toHaveLength(1);
-  });
-
-  it("renombrar NO mueve el importe: la captura referencia el id", async () => {
-    const period = await createPeriod(clientId, 2026, 6);
-    const added = await addExtraConcept(period.id, "Movilización", "noAportable");
-    if (!added.ok) throw new Error("no se declaró el concepto");
-
-    const line = employeeLine({ periodId: period.id });
-    await addEmployee(period.id, line);
-    const [stored] = await listEmployees(period.id);
-    await updateEmployee(stored.id, {
-      capture: { ...emptyCapture(), extraAmounts: { [added.concept.id]: 45 } },
+    await updateEmployee(line.id, {
+      capture: { ...emptyCapture(), extras: [bono("x1", "Movilización", 45)] },
     });
 
-    await renameExtraConcept(period.id, added.concept.id, "MOVILIZACION NO APORTABLE");
-
-    expect(await listExtraConcepts(period.id)).toMatchObject([
-      { id: added.concept.id, label: "MOVILIZACION NO APORTABLE", kind: "noAportable" },
-    ]);
     const [after] = await listEmployees(period.id);
-    expect(after.capture?.extraAmounts).toEqual({ [added.concept.id]: 45 });
+    expect(after.capture?.extras).toEqual([bono("x1", "Movilización", 45)]);
+    // El período no guarda nada de esto: por eso su rol se calcula sin leerlo.
+    expect(await listPeriods(clientId)).toMatchObject([{ id: period.id }]);
+    expect((await listPeriods(clientId))[0]).not.toHaveProperty("extraConcepts");
   });
 
-  it("renombrar un período no toca el de otro", async () => {
-    const marzo = await createPeriod(clientId, 2026, 2);
-    const abril = await createPeriod(clientId, 2026, 3);
-    const enMarzo = await addExtraConcept(marzo.id, "Movilización", "aportable");
-    const enAbril = await addExtraConcept(abril.id, "Movilización", "aportable");
-    if (!enAbril.ok || !enMarzo.ok) throw new Error("no se declararon los conceptos");
-
-    await renameExtraConcept(abril.id, enAbril.concept.id, "Transporte");
-
-    expect((await listExtraConcepts(marzo.id))[0].label).toBe("Movilización");
-    expect((await listExtraConcepts(abril.id))[0].label).toBe("Transporte");
-  });
-
-  it("borrarlo limpia sus importes de TODAS las capturas del período", async () => {
+  it("dos empleados pueden declarar filas distintas en el mismo mes", async () => {
     const period = await createPeriod(clientId, 2026, 6);
-    const uno = await addExtraConcept(period.id, "Movilización", "aportable");
-    const otro = await addExtraConcept(period.id, "Alimentación", "noAportable");
-    if (!uno.ok || !otro.ok) throw new Error("no se declararon los conceptos");
-
     await importRoster(period.id, [employeeLine({ name: "Ana" }), employeeLine({ name: "Luis" })]);
-    for (const line of await listEmployees(period.id)) {
-      await updateEmployee(line.id, {
-        capture: {
-          ...emptyCapture(),
-          extraAmounts: { [uno.concept.id]: 30, [otro.concept.id]: 20 },
-        },
-      });
-    }
+    const [ana, luis] = await listEmployees(period.id);
 
-    await deleteExtraConcept(period.id, uno.concept.id);
+    await updateEmployee(ana.id, {
+      capture: { ...emptyCapture(), extras: [bono("x1", "Movilización", 45)] },
+    });
+    await updateEmployee(luis.id, {
+      capture: { ...emptyCapture(), extras: [bono("x1", "Alimentación", 30)] },
+    });
 
-    expect(await listExtraConcepts(period.id)).toMatchObject([{ id: otro.concept.id }]);
-    for (const line of await listEmployees(period.id)) {
-      expect(line.capture?.extraAmounts).toEqual({ [otro.concept.id]: 20 });
-    }
+    const stored = await listEmployees(period.id);
+    expect(stored.map((line) => line.capture?.extras?.[0]?.label).sort()).toEqual([
+      "Alimentación",
+      "Movilización",
+    ]);
   });
 
   it("copiar la nómina arrastra las DECLARACIONES y ningún importe", async () => {
     const marzo = await createPeriod(clientId, 2026, 2);
-    const added = await addExtraConcept(marzo.id, "Movilización", "aportable");
-    if (!added.ok) throw new Error("no se declaró el concepto");
     await addEmployee(marzo.id, employeeLine({ periodId: marzo.id }));
     const [enMarzo] = await listEmployees(marzo.id);
     await updateEmployee(enMarzo.id, {
-      capture: { ...emptyCapture(), extraAmounts: { [added.concept.id]: 45 } },
+      capture: {
+        ...emptyCapture(),
+        labels: { "E-11": "Uniformes" },
+        extras: [bono("x1", "Movilización", 45)],
+      },
     });
 
     const abril = await createPeriod(clientId, 2026, 3, { copyFrom: marzo.id });
-
-    // La columna es la MISMA de un mes a otro: conserva su id.
-    expect(await listExtraConcepts(abril.id)).toEqual([added.concept]);
     const [enAbril] = await listEmployees(abril.id);
-    expect(enAbril.capture).toBeUndefined();
+
+    // La fila es la MISMA de un mes a otro —conserva su id, su rótulo y su clase— y llega en cero.
+    expect(enAbril.capture?.extras).toEqual([bono("x1", "Movilización", 0)]);
+    // El rótulo de una fila del CATÁLOGO no viaja: su fila tampoco, porque su importe no viaja.
+    expect(enAbril.capture?.labels).toBeUndefined();
   });
 
-  it("los totales del período INCLUYEN los conceptos extra", async () => {
+  it("sin filas de bono la copia sigue dejando la captura AUSENTE", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    await addEmployee(marzo.id, employeeLine({ periodId: marzo.id }));
+    const abril = await createPeriod(clientId, 2026, 3, { copyFrom: marzo.id });
+    expect((await listEmployees(abril.id))[0].capture).toBeUndefined();
+  });
+
+  it("los totales del período INCLUYEN las filas de bono", async () => {
     const period = await createPeriod(clientId, 2026, 6);
     await addEmployee(period.id, employeeLine({ periodId: period.id, days: 30 }));
     const sin = (await periodFinancials([period.id])).get(period.id)!;
 
-    const added = await addExtraConcept(period.id, "Movilización", "noAportable");
-    if (!added.ok) throw new Error("no se declaró el concepto");
     const [line] = await listEmployees(period.id);
     await updateEmployee(line.id, {
-      capture: { ...emptyCapture(), extraAmounts: { [added.concept.id]: 50 } },
+      capture: { ...emptyCapture(), extras: [bono("x1", "Movilización", 50)] },
     });
 
     const con = (await periodFinancials([period.id])).get(period.id)!;
     expect(con.gross - sin.gross).toBeCloseTo(50, 8);
+  });
+});
+
+describe("el rótulo propio de una fila del catálogo", () => {
+  it("se guarda en la captura, por código, y es de ESE empleado", async () => {
+    const period = await createPeriod(clientId, 2026, 6);
+    await importRoster(period.id, [employeeLine({ name: "Ana" }), employeeLine({ name: "Luis" })]);
+    const [ana, luis] = await listEmployees(period.id);
+
+    await updateEmployee(ana.id, {
+      capture: { ...emptyCapture(), labels: { "E-11": "Uniformes" } },
+    });
+
+    const stored = await listEmployees(period.id);
+    expect(stored.find((line) => line.id === ana.id)?.capture?.labels).toEqual({
+      "E-11": "Uniformes",
+    });
+    expect(stored.find((line) => line.id === luis.id)?.capture?.labels).toBeUndefined();
   });
 });

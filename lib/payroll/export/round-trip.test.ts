@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import type { EntityLogo } from "@/lib/logos";
 import { emptyCapture } from "../employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
-import type { ParsedPayrollEmployeeLine, PayrollExtraConcept } from "../types";
+import type { ParsedPayrollEmployeeLine } from "../types";
 import { parseRolGeneral } from "../upload/rol-general";
 import type { RolExportInput } from "./rol-grid";
 import { buildRolWorkbook } from "./workbook";
@@ -42,6 +42,8 @@ function employee(
     sectorCode: "1608551004134",
     hasReserveFund: true,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     capture: {
       ...emptyCapture(),
@@ -55,26 +57,37 @@ function employee(
   };
 }
 
+/** El perfil de empresa del archivo real del cliente: tres líneas bajo el nombre. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+};
+
 function input(
   lines: readonly ParsedPayrollEmployeeLine[],
-  extraConcepts: readonly PayrollExtraConcept[] = [],
+  company?: typeof COMPANY,
 ): RolExportInput {
   return {
     clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+    ...(company ? { company } : {}),
     year: 2026,
     monthIndex: 2,
     lines,
     parameters: DEFAULT_PAYROLL_PARAMETERS,
-    extraConcepts,
   };
 }
 
 async function roundTrip(
   lines: readonly ParsedPayrollEmployeeLine[],
   logo?: EntityLogo,
-  extraConcepts: readonly PayrollExtraConcept[] = [],
+  company?: typeof COMPANY,
 ) {
-  const buffer = await buildRolWorkbook(input(lines, extraConcepts), logo ?? null);
+  const buffer = await buildRolWorkbook(input(lines, company), logo ?? null);
   return parseRolGeneral(buffer);
 }
 
@@ -153,15 +166,59 @@ describe("el rol descargado vuelve a entrar", () => {
     expect(parsed.lines).toHaveLength(1);
   });
 
-  it("los conceptos extra NO vuelven — la limitación declarada", async () => {
+  it("las filas de bono NO vuelven — la limitación declarada", async () => {
     // El lector todavía no busca `OTROS INGRESOS`, así que su importe se pierde y el total baja.
     // Está escrito aquí para que deje de ser cierto el día que alguien le enseñe esa columna.
     const line = employee("ALFA", {
-      capture: { ...emptyCapture(), extraAmounts: { mov: 50 } },
+      capture: {
+        ...emptyCapture(),
+        extras: [{ id: "mov", label: "MOVILIZACION", kind: "aportable", amount: 50 }],
+      },
     });
-    const parsed = await roundTrip([line], undefined, [
-      { id: "mov", label: "MOVILIZACION", kind: "aportable" },
-    ]);
-    expect(parsed.lines[0].capture?.extraAmounts).toBeUndefined();
+    const parsed = await roundTrip([line]);
+    expect(parsed.lines[0].capture?.extras ?? []).toEqual([]);
+  });
+
+  it("un RÓTULO PROPIO tampoco vuelve, pero su importe sí — la cabecera es la del libro", async () => {
+    // La hoja `GENERAL` conserva `AH → OTROS` verbatim: una columna tiene UNA cabecera, y la letra
+    // es el contrato contra el que el contador coteja. El nombre vive en pantalla y en el papel.
+    const line = employee("ALFA", {
+      capture: {
+        ...emptyCapture(),
+        labels: { "E-11": "Uniformes" },
+        deductions: { ...emptyCapture().deductions, otherDeductions: 36 },
+      },
+    });
+    const parsed = await roundTrip([line]);
+    expect(parsed.lines[0].capture?.deductions.otherDeductions).toBe(36);
+    expect(parsed.lines[0].capture?.labels).toBeUndefined();
+  });
+});
+
+describe("con el membrete completo", () => {
+  const LINES = [employee("MORALES MENA SILVIA JIMENA"), employee("ALFA", { area: "COCINA" })];
+
+  // El caso que junta las dos cosas que mueven el preámbulo: la banda del logo por encima y las
+  // líneas del membrete por debajo del nombre. Es lo que baja el usuario de verdad.
+  it("recupera el período, la empresa y la nómina entera", async () => {
+    const parsed = await roundTrip(LINES, LOGO, COMPANY);
+    expect(parsed.company).toBe("HOTEL BOUTIQUE CULTURA MANOR");
+    expect(parsed.year).toBe(2026);
+    expect(parsed.monthIndex).toBe(2);
+    expect(parsed.lines.map((line) => line.name)).toEqual(["MORALES MENA SILVIA JIMENA", "ALFA"]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("lee las mismas fichas y capturas que sin membrete", async () => {
+    const conMembrete = await roundTrip(LINES, LOGO, COMPANY);
+    const sinMembrete = await roundTrip(LINES);
+    expect(conMembrete.lines).toEqual(sinMembrete.lines);
+  });
+
+  // Ninguna línea del membrete puede colarse como un área: las áreas viven bajo la cabecera y esto
+  // está por encima.
+  it("ninguna línea del membrete se lee como un área ni como un empleado", async () => {
+    const parsed = await roundTrip(LINES, LOGO, COMPANY);
+    expect(parsed.lines.map((line) => line.area)).toEqual(["HOSPEDAJE", "COCINA"]);
   });
 });

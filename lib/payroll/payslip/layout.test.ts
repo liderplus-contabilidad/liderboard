@@ -36,6 +36,8 @@ const LINE: PayrollEmployeeLine = {
   sectorCode: "",
   hasReserveFund: false,
   accumulatesReserveFund: false,
+  provisionsThirteenth: false,
+  provisionsFourteenth: false,
   days: 30,
   capture: { ...emptyCapture(), deductions: { ...emptyCapture().deductions, salaryAdvance: 200 } },
 };
@@ -72,16 +74,42 @@ const FULL: Partial<PayrollEmployeeLine> = {
   },
 };
 
-function documentFor(overrides: Partial<PayrollEmployeeLine> = {}): PayslipDocument {
+/** El perfil del archivo real del cliente: la línea de ubicación pasa de setenta caracteres, que es
+ *  lo que decide si el membrete cabe. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+  email: "nomina@delicmar.com",
+};
+
+/** Un logo apaisado cualquiera: lo que importa de él son sus proporciones, no sus bytes. */
+const LOGO = {
+  dataUrl: "data:image/png;base64,SGk=",
+  mime: "image/png" as const,
+  width: 320,
+  height: 120,
+};
+
+function documentFor(
+  overrides: Partial<PayrollEmployeeLine> = {},
+  extras: { company?: typeof COMPANY; logo?: typeof LOGO } = {},
+): PayslipDocument {
   const line = { ...LINE, ...overrides };
   const capture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,
     clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+    ...(extras.company ? { clientCompany: extras.company } : {}),
+    ...(extras.logo ? { clientLogo: extras.logo } : {}),
     position: 6,
   });
 }
@@ -302,5 +330,77 @@ describe("el membrete del cliente", () => {
     const mark = images[0]!;
     // La primera regla es la raya que cierra el encabezado.
     expect(mark.y + mark.height).toBeLessThanOrEqual(rules[0]!.y);
+  });
+});
+
+describe("el membrete del cliente", () => {
+  it("imprime las cuatro líneas bajo el nombre y ninguna se sale de la hoja", () => {
+    const layout = layoutPayslip(documentFor(FULL, { company: COMPANY }), measure);
+    expect(layout.overflow).toBe(false);
+
+    for (const line of [
+      "DELICMAR S.A.S. · RUC 1891234567001",
+      "0991045439 - 0958780660",
+      "nomina@delicmar.com",
+    ]) {
+      expect(
+        layout.boxes.some((box) => box.text === line),
+        line,
+      ).toBe(true);
+    }
+
+    for (const box of layout.boxes) {
+      const width = measure(box.text, box.size, box.bold);
+      const left = box.align === "right" ? box.x - width : box.x;
+      expect(left, box.text).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft - 0.5);
+      expect(left + width, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
+      expect(box.y + box.size, box.text).toBeLessThanOrEqual(PAGE_HEIGHT);
+    }
+  });
+
+  // La línea que decide el diseño: la ubicación del archivo real son setenta y pico caracteres, y
+  // entra ENTERA. Una dirección truncada no lleva a ninguna parte.
+  it("la ubicación entra entera", () => {
+    const { boxes } = layoutPayslip(documentFor(FULL, { company: COMPANY }), measure);
+    const location = boxes.find((box) => box.text.startsWith("TUNGURAHUA"));
+    expect(location, "la línea de ubicación tiene que estar").toBeDefined();
+    expect(location!.text).toBe(
+      "TUNGURAHUA / AMBATO / AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+    );
+  });
+
+  // Y una más larga BAJA DE CUERPO antes que truncarse, que es lo que hace que la de arriba no
+  // dependa de haber medido bien una sola dirección.
+  it("una ubicación más larga baja de cuerpo en vez de truncarse", () => {
+    const largo = {
+      ...COMPANY,
+      address: "AVENIDA DE LOS SHYRIS Y REPUBLICA DEL SALVADOR, TORRES DEL NORTE",
+    };
+    const { boxes } = layoutPayslip(documentFor(FULL, { company: largo, logo: LOGO }), measure);
+    const location = boxes.find((box) => box.text.startsWith("TUNGURAHUA"));
+    expect(location!.text).not.toContain("…");
+    expect(location!.size).toBeLessThan(8);
+  });
+
+  it("el logo se centra contra el bloque entero del encabezado, no contra la primera línea", () => {
+    const conMembrete = layoutPayslip(documentFor(FULL, { company: COMPANY, logo: LOGO }), measure);
+    const sinMembrete = layoutPayslip(documentFor(FULL, { logo: LOGO }), measure);
+
+    const centro = (layout: typeof conMembrete) => {
+      const image = layout.images[0];
+      expect(image, "el logo tiene que dibujarse").toBeDefined();
+      return image!.y + image!.height / 2;
+    };
+
+    // Con membrete el encabezado es más alto, así que su centro cae más abajo. Colgado de la
+    // primera línea, los dos centros coincidirían.
+    expect(centro(conMembrete)).toBeGreaterThan(centro(sinMembrete) + 8);
+  });
+
+  // La regresión que importa: un cliente sin perfil tiene que imprimir el comprobante de siempre.
+  // 78 = margen superior (44) + el bloque de dos líneas de antes (15 + 9) + su aire (10).
+  it("sin perfil, el encabezado mide lo que medía", () => {
+    const layout = layoutPayslip(documentFor(FULL), measure);
+    expect(layout.rules[0]?.y).toBe(78);
   });
 });

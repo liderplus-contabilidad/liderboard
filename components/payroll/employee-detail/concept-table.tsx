@@ -7,7 +7,6 @@ import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { Dropdown, DropdownPanel, useDropdown } from "@/components/ui/dropdown";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { NumericInput } from "@/components/ui/numeric-input";
-import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatCurrencyOrDash } from "@/lib/format";
 import {
@@ -18,12 +17,9 @@ import {
   type ExtraCapBreach,
 } from "@/lib/payroll/extra-income";
 import {
-  DEDUCTION_CONCEPTS,
-  INCOME_CONCEPTS,
   addableDeductionConcepts,
   addableIncomeConcepts,
   capturedHoursField,
-  swapOptionsFor,
   visibleDeductionConcepts,
   visibleIncomeConcepts,
   deductionAmount,
@@ -32,21 +28,14 @@ import {
   type IncomeConcept,
   type OvertimeHoursField,
 } from "@/lib/payroll/concepts";
+import { isRenameable, labelFor } from "@/lib/payroll/row-labels";
 import type { PayrollEmployeeComputation } from "@/lib/payroll/engine/types";
 import type {
-  PayrollExtraConcept,
   PayrollExtraConceptKind,
+  PayrollExtraRow,
   PayrollMonthlyCapture,
 } from "@/lib/payroll/types";
 
-/**
- * Los dos botones de «Agregar …» se rinden APAGADOS con su motivo, en vez de omitirse: el catálogo
- * de `lib/payroll/concepts.ts` es cerrado y la tabla ya lo recorre entero, así que hoy no hay nada
- * que agregar — pero el del libro no lo está del todo. Las cuatro columnas de egreso `AJ`–`AM` que
- * el rol suma y nadie rotuló (§11.4) son exactamente lo que este botón encendería el día que
- * tengan nombre, así que el control no es decorado: es una función pendiente, la misma lectura que
- * los dos botones apagados de la cabecera.
- */
 /** Un conjunto vacío estable: recrearlo en cada render rompería los `useMemo` de abajo. */
 const EMPTY_ADDED: ReadonlySet<string> = new Set();
 
@@ -54,13 +43,14 @@ const EMPTY_ADDED: ReadonlySet<string> = new Set();
  *  objeto y no en cinco props sueltas para que la tabla de egresos, que no los tiene, no cargue
  *  con ellas. */
 export interface ExtraConceptControls {
-  concepts: readonly PayrollExtraConcept[];
+  /** Las filas de bono de ESTE empleado, con su rótulo, su clase y su importe dentro. */
+  rows: readonly PayrollExtraRow[];
   /** Los topes superados, ya calculados por la capa pura. Vacío es «todo dentro». */
   breaches: readonly ExtraCapBreach[];
   onAdd: (kind: PayrollExtraConceptKind) => void;
-  onRename: (conceptId: string, label: string) => void;
-  onRemove: (conceptId: string) => void;
-  onAmountChange: (conceptId: string, value: number) => void;
+  onRename: (rowId: string, label: string) => void;
+  onRemove: (rowId: string) => void;
+  onAmountChange: (rowId: string, value: number) => void;
   /** El último rechazo de un nombre (repetido, vacío, demasiado largo), para poder decirlo. */
   error: string | null;
 }
@@ -81,10 +71,13 @@ interface ConceptTableBaseProps {
    * aquí — sin esta memoria, la fila que se acaba de crear desaparecería antes de teclearla.
    */
   added?: ReadonlySet<string>;
-  /** Añade un concepto capturado que todavía no se ve. */
+  /** Añade el concepto capturado que se eligió en el menú. */
   onAdd: (code: string) => void;
-  /** Cambia una fila capturada por otro concepto, llevándose su importe. */
-  onSwap: (from: string, to: string) => void;
+  /**
+   * Le pone a una fila del catálogo el nombre que este empleado quiere. Un nombre VACÍO la
+   * devuelve al rótulo del libro.
+   */
+  onRename: (code: string, label: string) => void;
   /**
    * Quita una fila CAPTURADA del rol de este empleado: vacía lo tecleado y la esconde.
    *
@@ -145,7 +138,7 @@ function IncomeTable({
   onAmountChange,
   onHoursChange,
   onAdd,
-  onSwap,
+  onRename,
   onRemove,
   extra,
 }: Extract<ConceptTableProps, { kind: "ingresos" }>) {
@@ -173,7 +166,7 @@ function IncomeTable({
       total={total}
       showQuantity
       addLabel="Agregar ingreso"
-      addableCode={addableIncomeConcepts(capture, added)[0]?.code ?? null}
+      addable={addableIncomeConcepts(capture, added)}
       onAdd={onAdd}
       onAddExtra={extra && !readOnly ? extra.onAdd : undefined}
       footnote={
@@ -184,11 +177,10 @@ function IncomeTable({
       }
       appended={
         extra
-          ? extra.concepts.map((concept) => (
+          ? extra.rows.map((row) => (
               <ExtraConceptRow
-                key={concept.id}
-                concept={concept}
-                amount={capture.extraAmounts?.[concept.id] ?? 0}
+                key={row.id}
+                row={row}
                 disabled={readOnly}
                 onRename={extra.onRename}
                 onRemove={extra.onRemove}
@@ -207,16 +199,9 @@ function IncomeTable({
             index={index}
             code={concept.code}
             tone="ingreso"
-            label={concept.label}
-            options={
-              // Las horas extras llevan desplegable IGUAL que un capturado: son elegibles (su
-              // cantidad se teclea), y sin él una fila añadida desde «Agregar ingreso» quedaría
-              // clavada en el concepto con el que nació.
-              concept.kind === "capturado" || hoursField
-                ? swapOptionsFor(concept.code, INCOME_CONCEPTS, capture, added)
-                : undefined
-            }
-            onSwap={onSwap}
+            label={labelFor(concept, capture)}
+            renameable={isRenameable(concept)}
+            onRename={onRename}
             amount={incomeAmount(concept, computed, capture)}
             amountEditable={concept.kind === "capturado"}
             hours={hoursField ? capture[hoursField] : null}
@@ -242,7 +227,7 @@ function DeductionTable({
   readOnly = false,
   onAmountChange,
   onAdd,
-  onSwap,
+  onRename,
   onRemove,
 }: Extract<ConceptTableProps, { kind: "egresos" }>) {
   const concepts = useMemo(() => visibleDeductionConcepts(capture, added), [capture, added]);
@@ -259,7 +244,7 @@ function DeductionTable({
       total={total}
       showQuantity
       addLabel="Agregar deducción"
-      addableCode={addableDeductionConcepts(capture, added)[0]?.code ?? null}
+      addable={addableDeductionConcepts(capture, added)}
       onAdd={onAdd}
     >
       {concepts.map((concept, index) => (
@@ -268,13 +253,9 @@ function DeductionTable({
           index={index}
           code={concept.code}
           tone="egreso"
-          label={concept.label}
-          options={
-            concept.kind === "capturado"
-              ? swapOptionsFor(concept.code, DEDUCTION_CONCEPTS, capture, added)
-              : undefined
-          }
-          onSwap={onSwap}
+          label={labelFor(concept, capture)}
+          renameable={isRenameable(concept)}
+          onRename={onRename}
           amount={deductionAmount(concept, computed, capture)}
           amountEditable={concept.kind === "capturado"}
           hours={null}
@@ -309,7 +290,7 @@ function ConceptSection({
   total,
   showQuantity,
   addLabel,
-  addableCode,
+  addable,
   onAdd,
   onAddExtra,
   footnote,
@@ -321,13 +302,13 @@ function ConceptSection({
   total: number;
   showQuantity: boolean;
   addLabel: string;
-  /** El primer concepto libre, o `null` cuando ya están todos puestos. */
-  addableCode: string | null;
+  /** Los conceptos del catálogo que este empleado todavía no usa. Vacío = están todos puestos. */
+  addable: readonly { code: string; label: string }[];
   onAdd: (code: string) => void;
-  /** Declara un concepto NUEVO del período. Ausente donde no los hay (egresos, solo lectura). */
+  /** Declara una fila de BONO. Ausente donde no las hay (egresos, solo lectura). */
   onAddExtra?: (kind: PayrollExtraConceptKind) => void;
   footnote?: ReactNode;
-  /** Filas que van DESPUÉS del catálogo: los conceptos que el período declara por su cuenta. */
+  /** Filas que van DESPUÉS del catálogo: las de bono que este empleado declara. */
   appended?: ReactNode;
   children: ReactNode;
 }) {
@@ -401,7 +382,7 @@ function ConceptSection({
       </DataGrid>
 
       {footnote}
-      <AddConceptButton label={addLabel} code={addableCode} onAdd={onAdd} onAddExtra={onAddExtra} />
+      <AddConceptButton label={addLabel} addable={addable} onAdd={onAdd} onAddExtra={onAddExtra} />
     </section>
   );
 }
@@ -420,11 +401,11 @@ interface ConceptRowProps {
   hours: number | null;
   showQuantity: boolean;
   disabled: boolean;
-  /** Lo que ofrece el desplegable de esta fila; ausente en los calculados, que no se eligen. */
-  options?: readonly { code: string; label: string }[];
+  /** Si esta fila admite nombre propio: solo las que teclean su importe. */
+  renameable: boolean;
   onAmount: (index: number, value: number) => void;
   onHours: (index: number, value: number) => void;
-  onSwap?: (from: string, to: string) => void;
+  onRename: (code: string, label: string) => void;
   /** Ausente en los calculados: no hay fila que quitar cuando la app la deriva. */
   onRemove?: (code: string) => void;
 }
@@ -446,10 +427,10 @@ function ConceptRowComponent({
   hours,
   showQuantity,
   disabled,
-  options,
+  renameable,
   onAmount,
   onHours,
-  onSwap,
+  onRename,
   onRemove,
 }: ConceptRowProps) {
   return (
@@ -460,17 +441,15 @@ function ConceptRowComponent({
         <ConceptCode code={code} tone={tone} />
       </Cell>
       <Cell>
-        {/* Un concepto CAPTURADO se elige, no se impone: la fila que crea «Agregar …» nace con el
-            primero libre y aquí se cambia por el que toque. Un calculado va en texto plano porque
-            no hay nada que elegir — la app lo deriva. */}
-        {options && options.length > 1 ? (
-          <Select
-            size="sm"
-            aria-label={`Concepto de la fila ${code}`}
-            value={code}
+        {/* El concepto se eligió al AGREGAR la fila, así que aquí no queda nada que elegir y la
+            celda es el nombre. Un calculado va en texto plano: su rótulo es del libro —o una tasa
+            de ley— y no lo escribe nadie. */}
+        {renameable ? (
+          <RowNameField
+            value={label}
             disabled={disabled}
-            options={options.map((option) => ({ value: option.code, label: option.label }))}
-            onChange={(event) => onSwap?.(code, event.target.value)}
+            ariaLabel={`Nombre de la fila ${code}`}
+            onCommit={(next) => onRename(code, next)}
           />
         ) : (
           <span className="text-ink">{label}</span>
@@ -657,74 +636,64 @@ function AddConceptTrigger({ label }: { label: string }) {
   );
 }
 
+/**
+ * SIEMPRE un menú, en las dos tablas.
+ *
+ * Antes metía el primer concepto libre sin preguntar y la fila nacía con un desplegable para
+ * corregirlo. Eligiendo aquí, ese desplegable se queda sin trabajo y la celda del rótulo queda
+ * libre para escribir el nombre — que es lo que hace que TODAS las filas se lean igual, incluida
+ * la de bono, que era la única con esa forma.
+ *
+ * Que las dos tablas usen el mismo gesto no es simetría por gusto: se leen una al lado de la otra,
+ * y que una eligiera y la otra impusiera diría que hacen cosas distintas.
+ */
 function AddConceptButton({
   label,
-  code,
+  addable,
   onAdd,
   onAddExtra,
 }: {
   label: string;
-  code: string | null;
+  addable: readonly { code: string; label: string }[];
   onAdd: (code: string) => void;
   onAddExtra?: (kind: PayrollExtraConceptKind) => void;
 }) {
-  // Sin conceptos libres NI la posibilidad de declarar uno nuevo no se rinde: un botón que no
-  // puede hacer nada estorba.
-  if (!code && !onAddExtra) {
+  // Sin conceptos libres NI la posibilidad de declarar un bono no se rinde: un botón que no puede
+  // hacer nada estorba.
+  if (addable.length === 0 && !onAddExtra) {
     return null;
   }
 
-  // Sin conceptos que declarar sigue siendo el botón de siempre: añade el PRIMER concepto libre
-  // del catálogo, igual que el rol del contador, porque la fila nace con un desplegable para
-  // cambiarla y elegir antes de verla sería un paso de más.
-  if (!onAddExtra) {
-    return (
-      <button type="button" onClick={() => onAdd(code as string)} className={DASHED_ADD_BUTTON}>
-        <Plus size={15} />
-        {label}
-      </button>
-    );
-  }
-
-  // Con conceptos declarables SÍ hay que elegir antes, y por eso aquí sí es un menú: un bono
-  // aportable y uno no aportable no se distinguen mirando la fila —el rótulo lo escribe el
-  // usuario—, así que la clase tiene que decidirse al crearla y no se puede cambiar después
-  // moviendo un desplegable, que es lo que hace el catálogo.
-  //
-  // El trigger es el MISMO botón discontinuo, no el de `DropdownTrigger`: aquel es el control de
-  // barra de filtros, con su altura y su borde propios, y aquí las dos tablas se leen en paralelo
-  // — que una lleve un botón de barra y la otra el discontinuo diría que hacen cosas distintas.
-  // `useDropdown` existe justamente para esto.
   return (
     <Dropdown className="w-full">
       <AddConceptTrigger label={label} />
-      <DropdownPanel width={260}>
-        <div className="flex flex-col gap-0.5">
-          {code && (
+      <DropdownPanel width={300}>
+        {/* UNA sola lista, y los bonos dentro de ella. Estuvieron apartados bajo una línea fija al
+            pie del panel, y eso fallaba de las dos maneras: el usuario tenía que mirar en dos
+            sitios lo que es una única pregunta —qué fila agrego—, y el bloque fijo se quedaba
+            encima de la lista al hacer scroll, tapando el concepto que quedara debajo. */}
+        <div className="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto">
+          {addable.map((concept) => (
             <AddMenuItem
-              title="Concepto del rol"
-              hint="El siguiente del catálogo del libro"
-              onSelect={() => onAdd(code)}
-            />
-          )}
-          {(["aportable", "noAportable"] as const).map((kind) => (
-            <AddMenuItem
-              key={kind}
-              title={EXTRA_CONCEPT_KIND_LABEL[kind]}
-              hint={
-                kind === "aportable"
-                  ? "Aporta al IESS y entra en décimos y provisiones"
-                  : "Solo suma al total: no aporta ni es ingreso gravado"
-              }
-              onSelect={() => onAddExtra(kind)}
+              key={concept.code}
+              title={concept.label}
+              hint={concept.code}
+              onSelect={() => onAdd(concept.code)}
             />
           ))}
+          {onAddExtra &&
+            (["aportable", "noAportable"] as const).map((kind) => (
+              <AddMenuItem
+                key={kind}
+                title={EXTRA_CONCEPT_KIND_LABEL[kind]}
+                // Donde un concepto del libro pone su código va, aquí, lo único que separa a los
+                // dos bonos: la clase se elige aquí porque después no se puede leer en la fila —el
+                // rótulo lo escribe el usuario—. Corto para que ocupe un renglón como los demás.
+                hint={kind === "aportable" ? "Aporta al IESS" : "No aporta al IESS"}
+                onSelect={() => onAddExtra(kind)}
+              />
+            ))}
         </div>
-        {/* El nombre es del PERÍODO y no de este empleado. Decirlo aquí, donde se crea, es lo que
-            evita que alguien lo renombre creyendo que solo cambia su propia fila. */}
-        <p className="mt-2 border-t border-border-soft pt-2 text-[11.5px] leading-snug text-faint">
-          Un bono es una columna del rol: su nombre lo comparten todos los empleados de este mes.
-        </p>
       </DropdownPanel>
     </Dropdown>
   );
@@ -756,34 +725,68 @@ function AddMenuItem({
 }
 
 /**
- * Una fila de concepto declarado por el período: la clase en la píldora, el nombre EDITABLE en la
- * columna Concepto y su importe en Cantidad.
+ * El campo del nombre de una fila — el mismo para una del catálogo y una de bono, porque después
+ * de este cambio son la misma cosa: una fila con rótulo propio.
  *
- * El nombre va en un campo de texto y no en un desplegable porque no hay nada que elegir: es libre.
- * Y la CLASE va en la píldora y no se cambia: cambiarla movería el importe entre bases y con él el
- * aporte al IESS y los décimos de todos los empleados que ya tienen cifra en esa columna, sin que
- * nada en esta fila lo enseñe. Para cambiarla se borra el concepto y se declara el otro.
+ * Borrador local: el rótulo se persiste al SALIR del campo, no en cada tecla — escribir
+ * «Movilización» dispararía trece escrituras y trece relecturas de Dexie.
+ */
+function RowNameField({
+  value,
+  disabled,
+  ariaLabel,
+  onCommit,
+}: {
+  value: string;
+  disabled: boolean;
+  ariaLabel: string;
+  onCommit: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      maxLength={MAX_EXTRA_CONCEPT_LABEL_LENGTH}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+      className={cn(
+        "min-w-0 flex-1 rounded-[7px] border px-2 py-1 text-[12.5px] text-ink transition-colors",
+        disabled
+          ? "border-transparent bg-transparent"
+          : "border-transparent bg-transparent hover:border-chip-border focus:border-brand focus:bg-surface focus:outline-none",
+      )}
+    />
+  );
+}
+
+/**
+ * Una fila de BONO: la clase en la píldora, el nombre EDITABLE en la columna Concepto y su importe
+ * en Cantidad. Es la misma forma que una fila del catálogo — píldora, nombre, importe, valor,
+ * papelera —, que es justamente lo que este cambio buscaba.
+ *
+ * La CLASE va en la píldora y no se cambia: cambiarla movería el importe entre bases y con él el
+ * aporte al IESS y los décimos, sin que nada en esta fila lo enseñe. Para cambiarla se quita la
+ * fila y se agrega la de la otra clase.
  */
 function ExtraConceptRowComponent({
-  concept,
-  amount,
+  row,
   disabled,
   onRename,
   onRemove,
   onAmount,
 }: {
-  concept: PayrollExtraConcept;
-  amount: number;
+  row: PayrollExtraRow;
   disabled: boolean;
-  onRename: (conceptId: string, label: string) => void;
-  onRemove: (conceptId: string) => void;
-  onAmount: (conceptId: string, value: number) => void;
+  onRename: (rowId: string, label: string) => void;
+  onRemove: (rowId: string) => void;
+  onAmount: (rowId: string, value: number) => void;
 }) {
-  // Borrador local: el rótulo se persiste al SALIR del campo, no en cada tecla — escribir
-  // «Movilización» dispararía trece escrituras y trece relecturas de Dexie.
-  const [draft, setDraft] = useState(concept.label);
-  useEffect(() => setDraft(concept.label), [concept.label]);
-
   return (
     <GridRow className="group">
       <Cell>
@@ -795,49 +798,36 @@ function ExtraConceptRowComponent({
       </Cell>
       <Cell>
         <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={draft}
+          <RowNameField
+            value={row.label}
             disabled={disabled}
-            aria-label={`Nombre del ${EXTRA_CONCEPT_KIND_LABEL[concept.kind].toLowerCase()}`}
-            maxLength={MAX_EXTRA_CONCEPT_LABEL_LENGTH}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => draft !== concept.label && onRename(concept.id, draft)}
-            onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-            className={cn(
-              "min-w-0 flex-1 rounded-[7px] border px-2 py-1 text-[12.5px] text-ink transition-colors",
-              disabled
-                ? "border-transparent bg-transparent"
-                : "border-transparent bg-transparent hover:border-chip-border focus:border-brand focus:bg-surface focus:outline-none",
-            )}
+            ariaLabel={`Nombre del ${EXTRA_CONCEPT_KIND_LABEL[row.kind].toLowerCase()}`}
+            onCommit={(next) => onRename(row.id, next)}
           />
           {/* En versalitas y no en píldora: una segunda píldora en la misma fila competiría con
               la del código, y esto no es un código sino una propiedad del concepto. */}
           <span className="shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.5px] text-faint">
-            {EXTRA_CONCEPT_KIND_SHORT[concept.kind]}
+            {EXTRA_CONCEPT_KIND_SHORT[row.kind]}
           </span>
         </div>
       </Cell>
       <NumberFieldCell
-        value={amount === 0 ? null : amount}
+        value={row.amount === 0 ? null : row.amount}
         disabled={disabled}
-        ariaLabel={`Importe de ${concept.label}`}
+        ariaLabel={`Importe de ${row.label}`}
         format="plain"
         unit="$"
-        onCommit={(value) => onAmount(concept.id, value)}
+        onCommit={(value) => onAmount(row.id, value)}
       />
       <Cell numeric className="bg-surface-calc">
-        <span className="font-mono text-muted">{formatCurrencyOrDash(amount)}</span>
+        <span className="font-mono text-muted">{formatCurrencyOrDash(row.amount)}</span>
       </Cell>
       <Cell>
         {!disabled && (
-          // Dice «del período» y no «del rol» a propósito: esto BORRA la columna, y con ella los
-          // importes que otros empleados tengan en ella. La papelera de una fila del catálogo, que
-          // se ve igual, solo vacía la de este empleado.
           <RowAction
-            label={`Quitar ${concept.label} del período`}
-            title="Quitar del período — se borra la columna y los importes de todos los empleados"
-            onClick={() => onRemove(concept.id)}
+            label={`Quitar ${row.label}`}
+            title="Quitar del rol de este empleado"
+            onClick={() => onRemove(row.id)}
           />
         )}
       </Cell>

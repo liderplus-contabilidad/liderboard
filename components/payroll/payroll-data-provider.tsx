@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/workspaces";
 import * as payrollDb from "@/lib/payroll/db";
 import {
@@ -31,9 +32,14 @@ interface PayrollDataValue {
   clients: payrollDb.PayrollClientSummary[];
   activeClientId: string | null;
   activeClient: payrollDb.PayrollClientSummary | undefined;
-  createClient: (name: string) => Promise<string>;
-  /** Cambia la ETIQUETA — nombre y logo — y nada más. */
-  updateClient: (clientId: string, name: string, logo: EntityLogo | null) => Promise<void>;
+  createClient: (name: string, logo?: EntityLogo, company?: CompanyProfile) => Promise<string>;
+  /** Cambia la ETIQUETA — nombre, logo y datos de la empresa — y nada más. */
+  updateClient: (
+    clientId: string,
+    name: string,
+    logo: EntityLogo | null,
+    company?: CompanyProfile,
+  ) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
   /** Every período of the active cliente, unfiltered — the count `PayrollEmptyState` reads to
@@ -137,14 +143,17 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     [visiblePeriods, rosterByPeriod, financialsByPeriod],
   );
 
-  const createClient = useCallback(async (name: string) => {
-    const client = await payrollDb.createClient(name);
-    return client.id;
-  }, []);
+  const createClient = useCallback(
+    async (name: string, logo?: EntityLogo, company?: CompanyProfile) => {
+      const client = await payrollDb.createClient(name, logo, company);
+      return client.id;
+    },
+    [],
+  );
 
   const updateClient = useCallback(
-    (clientId: string, name: string, logo: EntityLogo | null) =>
-      payrollDb.updateClient(clientId, name, logo),
+    (clientId: string, name: string, logo: EntityLogo | null, company?: CompanyProfile) =>
+      payrollDb.updateClient(clientId, name, logo, company),
     [],
   );
 

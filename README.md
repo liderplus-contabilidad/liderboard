@@ -882,3 +882,106 @@ bajo su tabla—.
 - **Dos decimales fijos** en las tarjetas (`formatMonthlyFigure`), sin el umbral por magnitud que usa
   el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
   escala.
+
+## La ficha del empleado (Rol de Pagos)
+
+La ficha de un empleado —nombre, cédula, cargo, área, tipo de contrato, fecha de ingreso, código
+sectorial, fondo de reserva y la provisión de décimos— **se edita desde su propio detalle**, con
+«Editar ficha» en el encabezado, y se puede dar de baja con «Eliminar empleado». Antes no había
+ninguna pantalla que la corrigiera: una cédula mal tecleada solo se arreglaba borrando el período o
+volviendo a cargar el Excel.
+
+- **Un formulario, dos modos.** El mismo diálogo da de alta y edita, porque un campo que exista en
+  uno y falte en el otro es el fallo que nadie ve. El alta pide además sueldo base y días; la
+  edición no los ofrece: esos dos se corrigen en línea en la pantalla del mes, donde se ve moverse
+  el líquido, y una segunda puerta sería un sitio más donde decir otra cosa.
+- **Solo cambia el período abierto.** Cada período guarda su propia copia de la nómina, igual que el
+  contador tiene una hoja `GENERAL` por mes, así que corregir marzo no reescribe febrero — y la
+  corrección viaja hacia adelante sola cuando se copia la nómina al mes siguiente. El diálogo y la
+  confirmación de borrado lo dicen, porque es lo único que alguien podría suponer al revés.
+- **La provisión de décimos es de la ficha, no del mes.** Cobrar el décimo tercero y el cuarto
+  mensualizados o acumularlos es una elección del empleado, la misma clase de decisión que el fondo
+  de reserva. Estaba guardada con lo del mes, así que copiar la nómina la perdía y había que volver
+  a marcarla cada mes, persona por persona. Encendida suma al **costo total empresa** sin tocar el
+  líquido; apagada es lo normal, porque los décimos ya se mensualizan en el rol y provisionarlos
+  otra vez los contaría dos veces. Se lee en la rejilla del período, con su importe.
+- **El importe aprobado de horas extras es dinero, no horas.** Es lo único del mes que esa tarjeta
+  ajusta, así que se llama «Horas extras» y el campo lleva la marca `$` pegada — la misma
+  convención que las celdas de la tabla de conceptos, donde una `h` marca las horas y un `$` el
+  importe. En blanco se reconoce todo lo trabajado; `0` no reconoce nada. Salió del alta: allí no se
+  capturan las horas que ese importe recorta.
+
+## Nombre propio de una fila del rol (Rol de Pagos)
+
+Toda fila del rol cuyo **importe se teclea** admite el nombre que quien captura le quiera poner, por
+empleado y por mes: `E-11 Otros` se puede llamar «Uniformes», y así lo imprime el comprobante que esa
+persona firma.
+
+- **Por qué existe.** `Otros` es la columna `AH` del libro del contador, un comodín que significa
+  cosas distintas en empleados distintos. El comprobante imprimía el nombre de la COLUMNA en vez del
+  nombre del descuento: la cifra estaba bien y no decía de qué era.
+- **Qué filas.** Las que se teclean: `P Q R S T V` en ingresos y los doce egresos con nombre. Las que
+  la app deriva, no — el rótulo de «Horas extras 50%» es una tasa de ley, no un nombre.
+- **Dónde vive.** En la captura del mes de ese empleado, junto al importe que rotula. Dos empleados
+  pueden llamar distinto a la misma fila; el nombre no se copia al mes siguiente, igual que el
+  importe.
+- **Los bonos son filas de esa misma clase.** Se agregan desde el mismo menú de «Agregar ingreso» y
+  desde su misma lista —**«Bono aportable»** o **«Bono no aportable»**, al final—, tantas veces como
+  haga falta, y se nombran ahí mismo. La clase no se pregunta aparte: la dice cuál se eligió, y queda
+  escrita en la fila. Un bono aportable entra en las bases del IESS y en los décimos; uno no
+  aportable solo suma al total.
+- **Elegir al agregar.** Los dos botones abren un menú con los conceptos que ese empleado todavía no
+  usa, y la fila nace siendo el que se eligió — por eso la columna «Concepto» quedó libre para el
+  nombre y todas las filas se leen igual. Para cambiar de concepto se quita la fila y se agrega la
+  correcta.
+- **En el Excel no viaja.** La hoja `GENERAL` conserva las cabeceras del libro (`AH` sigue diciendo
+  `OTROS`): una columna tiene una cabecera y la letra es lo que el contador coteja. Los importes
+  vuelven completos al re-subir el archivo; los nombres no, y el `ⓘ` de la descarga lo dice.
+- **Renombrar no reclasifica.** Ni mueve un importe, ni cambia la aportabilidad, ni cambia la cuenta
+  del asiento: «Uniformes» no estrena cuenta contable.
+
+## Membrete del cliente (Rol de Pagos)
+
+Un cliente de Rol de Pagos guarda, junto a su nombre y su logo, los **datos de la empresa** con los
+que la firma encabeza su papel: razón social, RUC, provincia, cantón, parroquia, dirección,
+teléfonos y correo. Se piden en el mismo diálogo que crea o edita el cliente —los seis primeros son
+obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaciones no los ven.
+
+- **Una sola definición del bloque.** `lib/company-profile.ts` (puro + testeado) compone las líneas
+  —`DELICMAR S.A.S. · RUC 1891234567001`, `TUNGURAHUA / AMBATO / AMBATO / …`, los teléfonos, el
+  correo— y las tres superficies las reciben ya hechas, así que ninguna puede escribir la dirección
+  a su manera. Un campo opcional ausente no deja línea ni separador.
+- **No se dibuja en ninguna pantalla.** El membrete es para el papel: en pantalla, quién es el
+  cliente ya lo dicen el selector del header y la ficha del empleador, y repetirlo solo gasta el
+  alto que las cifras necesitan.
+- **Dónde se imprime.** En el comprobante en PDF, bajo el nombre del cliente, y en el preámbulo de
+  la hoja `GENERAL` del Excel del período. El archivo sigue volviendo a entrar a la app: el lector
+  localiza el período por su forma y la empresa por ser la primera celda con texto de la columna
+  `B` sobre la cabecera, sin coordenadas fijas.
+- **Un cliente sin esos datos no bloquea nada**: descarga igual, con el logo y el nombre. Qué falta
+  lo dice el diálogo del cliente, que es donde se llena.
+
+## Informes imprimibles (PyG y Sueldos por Áreas)
+
+Dos módulos ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros: pedir
+un informe no es seleccionar nada) que abre una vista previa a ancho de página y deja que el
+navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación de PDF en código.
+
+- **Mecanismo compartido** (`components/ui/report-layer.tsx`): `ReportLayer` monta el portal sobre
+  `document.body`, la capa de impresión (clase `.report-layer`, la que `@media print` aísla en
+  `globals.css` — atada a la clase y no a un id, para que un segundo informe no imprima la app
+  entera detrás del otro), el cierre con Escape, el título del documento (de donde el navegador
+  toma el nombre sugerido del PDF) y la barra «Guardar PDF» / «Cerrar»; `ReportSheet` dibuja la
+  hoja A4, vertical o apaisada a su ancho real. Los gráficos se miden bien porque la vista previa
+  los monta **visibles y a su ancho real** — uno oculto se mide contra un ancho de cero.
+- **PyG** (`components/profit-loss/report/`): portada con cliente, sistema de origen y todos los
+  filtros aplicados (incluidos los que nadie marcó), resumen del periodo, gráficos y análisis,
+  análisis vertical, el estado de resultados completo (una tabla por centro y año, apaisada si no
+  cabe en vertical) y el anexo de centros de costo.
+- **Sueldos por Áreas** (`components/payroll/salaries/report/`): cabecera compacta —cliente, rango
+  de periodos, cuántas áreas y fecha de generación— seguida del **consolidado por área** y **una
+  sección por área**, cada una con su tabla y su gráfica impresas JUNTAS (sin el interruptor «Ver
+  como tabla/gráfica» de la pantalla). El informe **ignora** la marca de Área de la barra —saca
+  siempre el consolidado y todas las áreas— y **honra** Año y Mes, que acotan las columnas de cada
+  tabla. Un área sin ninguna ficha en el rango visible no imprime una página vacía, y el botón está
+  deshabilitado mientras el cliente activo no tenga ningún período con nómina.

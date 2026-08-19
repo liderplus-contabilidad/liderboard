@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyCapture } from "./employee-input";
 import { copyRoster } from "./roster";
 import type { PayrollEmployeeLine } from "./types";
 
@@ -16,6 +17,8 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     sectorCode: "S001",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 15, // un ingreso a mitad de mes: NO debe sobrevivir a la copia
     ...overrides,
   };
@@ -48,7 +51,7 @@ describe("copyRoster", () => {
     expect(copied).not.toHaveProperty("periodId");
   });
 
-  it("no arrastra nada de lo que es del mes: la ficha copiada solo tiene sus 11 campos", () => {
+  it("no arrastra nada de lo que es del mes: la ficha copiada solo tiene sus 13 campos", () => {
     // Este test es la frontera de la copia escrita como lista cerrada, a propósito: cualquier
     // campo nuevo de `PayrollEmployeeLine` obliga a decidir aquí, explícitamente, si es de la
     // ficha o del mes. Sin él, un campo del MES entraría en la copia sin que nada lo delate y
@@ -65,6 +68,8 @@ describe("copyRoster", () => {
         "hireDate",
         "idCard",
         "name",
+        "provisionsFourteenth",
+        "provisionsThirteenth",
         "role",
         "sectorCode",
       ].sort(),
@@ -101,8 +106,6 @@ describe("copyRoster", () => {
             partTimeDeduction: 0,
             medicalLeaveDeduction: 0,
           },
-          provisionsThirteenth: false,
-          provisionsFourteenth: false,
           paid: null,
         },
       }),
@@ -116,6 +119,25 @@ describe("copyRoster", () => {
     expect(copied.accumulatesReserveFund).toBe(true);
   });
 
+  /**
+   * El motivo por el que las dos provisiones se mudaron de la captura a la ficha: viviendo en la
+   * captura, abril nacía sin ellas y había que volver a marcarlas empleado por empleado — y
+   * olvidarse un mes dejaba de provisionar sin que nada avisara.
+   */
+  it("SÍ copia las dos banderas de provisión de décimos, que también son de la ficha", () => {
+    const [copied] = copyRoster([line({ provisionsThirteenth: true, provisionsFourteenth: true })]);
+    expect(copied.provisionsThirteenth).toBe(true);
+    expect(copied.provisionsFourteenth).toBe(true);
+  });
+
+  it("las copia con su valor, no encendidas: una apagada sigue apagada", () => {
+    const [copied] = copyRoster([
+      line({ provisionsThirteenth: true, provisionsFourteenth: false }),
+    ]);
+    expect(copied.provisionsThirteenth).toBe(true);
+    expect(copied.provisionsFourteenth).toBe(false);
+  });
+
   it("copia varias líneas manteniendo el orden", () => {
     const result = copyRoster([line({ name: "Ana Torres" }), line({ name: "Luis Vera" })]);
     expect(result.map((l) => l.name)).toEqual(["Ana Torres", "Luis Vera"]);
@@ -123,5 +145,62 @@ describe("copyRoster", () => {
 
   it("una fuente vacía copia vacío", () => {
     expect(copyRoster([])).toEqual([]);
+  });
+
+  /**
+   * La EXCEPCIÓN a «lo de la captura no viaja»: una fila de bono es FORMA del rol —la columna que
+   * esa empresa nombra `MOVILIZACION NO APORTABLE` y repite cada mes—, y lo que no viaja es lo que
+   * cada empleado cobró en ella.
+   */
+  it("arrastra las filas de bono con su rótulo y su clase, y el importe en CERO", () => {
+    const [copied] = copyRoster([
+      line({
+        capture: {
+          ...emptyCapture(),
+          extras: [
+            { id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 50 },
+            { id: "x2", label: "ALIMENTACION", kind: "noAportable", amount: 30 },
+          ],
+        },
+      }),
+    ]);
+    expect(copied.capture?.extras).toEqual([
+      { id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 0 },
+      { id: "x2", label: "ALIMENTACION", kind: "noAportable", amount: 0 },
+    ]);
+  });
+
+  it("no arrastra nada MÁS de la captura de quien traía bonos", () => {
+    const [copied] = copyRoster([
+      line({
+        capture: {
+          ...emptyCapture(),
+          overtimeHours50: 5.5,
+          bonus: 26,
+          paid: 457.69,
+          extras: [{ id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 50 }],
+        },
+      }),
+    ]);
+    expect(copied.capture?.overtimeHours50).toBe(0);
+    expect(copied.capture?.bonus).toBe(0);
+    expect(copied.capture?.paid).toBeNull();
+  });
+
+  /**
+   * La asimetría que conviene tener escrita: una fila del catálogo existe en el libro con o sin
+   * cifra y solo se VE si tiene una, así que arrastrar su nombre sin su importe pondría el rótulo
+   * de marzo esperando a la cifra de abril.
+   */
+  it("NO arrastra el rótulo propio de una fila del catálogo", () => {
+    const [copied] = copyRoster([
+      line({ capture: { ...emptyCapture(), labels: { "E-11": "Uniformes" } } }),
+    ]);
+    expect("capture" in copied).toBe(false);
+  });
+
+  it("sin filas de bono la captura sigue AUSENTE, no vacía", () => {
+    const [copied] = copyRoster([line({ capture: { ...emptyCapture(), bonus: 26 } })]);
+    expect("capture" in copied).toBe(false);
   });
 });

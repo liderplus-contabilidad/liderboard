@@ -1,57 +1,60 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { monthBounds, formatDayMonthYear } from "@/lib/date";
 import {
   DEDUCTION_CONCEPTS,
   INCOME_CONCEPTS,
   capturedHoursField,
-  deductionSwapPatch,
-  incomeSwapPatch,
+  visibleDeductionConcepts,
+  visibleIncomeConcepts,
   type DeductionConcept,
   type IncomeConcept,
   type OvertimeHoursField,
 } from "@/lib/payroll/concepts";
+import { deleteEmployee, listEmployees, updateEmployee } from "@/lib/payroll/db";
 import {
-  addExtraConcept,
-  deleteExtraConcept,
-  listEmployees,
-  renameExtraConcept,
-  updateEmployee,
-  type ExtraConceptResult,
-} from "@/lib/payroll/db";
-import {
-  EXTRA_CONCEPT_KIND_LABEL,
   extraCapBreaches,
+  newExtraRow,
+  removeExtraRow,
+  renameExtraRow,
+  setExtraRowAmount,
   sumExtraIncome,
 } from "@/lib/payroll/extra-income";
+import {
+  rowLabelUniverse,
+  validateRowLabel,
+  withRowLabel,
+  withoutRowLabel,
+} from "@/lib/payroll/row-labels";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
 import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
 import { downloadPayslips, payslipFilename } from "@/lib/payroll/payslip/download";
 import { reconciliationStatusOf } from "@/lib/payroll/period-detail";
+import { periodLongLabel } from "@/lib/payroll/periods";
 import type {
   PayrollEmployeeLine,
-  PayrollExtraConcept,
   PayrollExtraConceptKind,
   PayrollMonthlyCapture,
 } from "@/lib/payroll/types";
+import { EmployeeFormModal } from "../employee-form-modal";
 import { usePayrollData } from "../payroll-data-provider";
 import { PeriodNotFound } from "../period-detail/period-not-found";
 import { ConceptTable } from "./concept-table";
 import { EmployeeDetailCard, EmployeeDetailSection } from "./employee-detail-card";
 import { EmployeeDetailHeader } from "./employee-detail-header";
 import { EmployeeIdentityCards } from "./employee-identity-cards";
-import { EmployeeMonthAdjustments, type ProvisionFlag } from "./employee-month-adjustments";
+import { EmployeeOvertimeApproval } from "./employee-overtime-approval";
 import { EmployeePeriodFields } from "./employee-period-fields";
 import { EmployeeTotals } from "./employee-totals";
 
 const EMPTY_LINES: PayrollEmployeeLine[] = [];
 /** Constante estable: recrearla en cada render invalidaría los `useMemo` de las tablas. */
 const EMPTY_ADDED: ReadonlySet<string> = new Set();
-/** Lo mismo para los conceptos que el período no declara: entra en las dependencias del rol. */
-const EMPTY_EXTRA_CONCEPTS: readonly PayrollExtraConcept[] = [];
 
 /**
  * La pantalla de un empleado: `/payroll/[periodId]/[employeeId]`.
@@ -89,18 +92,27 @@ export function EmployeeDetailView({
   const [added, setAdded] = useState<ReadonlySet<string>>(EMPTY_ADDED);
   useEffect(() => setAdded(EMPTY_ADDED), [employeeId]);
 
+  /** Los dos diálogos de esta pantalla. Se cierran al cambiar de empleado con las flechas: uno
+   *  abierto sobre otra ficha editaría a quien no se estaba mirando. */
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => {
+    setEditing(false);
+    setDeleting(false);
+  }, [employeeId]);
+  const router = useRouter();
+
   const period = periods.find((candidate) => candidate.id === periodId) ?? null;
   const index = lines.findIndex((line) => line.id === employeeId);
   const line = index === -1 ? null : lines[index];
 
   // Siempre hay rol que calcular: sin captura, lo capturado vale cero y las cifras derivadas
   // salen igual de la ficha. La app sirve sin Excel, y este es el punto donde eso se decide.
-  // Los conceptos extra los declara el PERÍODO, no la ficha: son una columna del rol compartida
-  // por toda la nómina del mes, y aquí solo se captura el importe de este empleado.
-  const extraConcepts = period?.extraConcepts ?? EMPTY_EXTRA_CONCEPTS;
+  // Las filas de bono viajan DENTRO de la captura, así que el rol de este empleado no necesita
+  // nada del período para calcularse.
   const computed = useMemo(
-    () => (line ? computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS, extraConcepts) : null),
-    [line, extraConcepts],
+    () => (line ? computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS) : null),
+    [line],
   );
   const capture = useMemo(() => line?.capture ?? emptyCapture(), [line]);
 
@@ -149,15 +161,30 @@ export function EmployeeDetailView({
     [patchCapture],
   );
 
-  const handleProvision = useCallback(
-    (flag: ProvisionFlag, checked: boolean) => patchCapture({ [flag]: checked }),
-    [patchCapture],
-  );
-
   const addConcept = useCallback(
     (code: string) => setAdded((current) => new Set(current).add(code)),
     [],
   );
+
+  /**
+   * Da de baja al empleado de ESTE período y vuelve al listado: sin él, esta pantalla se queda
+   * enseñando «no existe» sobre una URL que ya no lleva a nada.
+   *
+   * Se navega ANTES de que `useLiveQuery` relea, que es lo que evita ese parpadeo.
+   */
+  const [removing, setRemoving] = useState(false);
+  const confirmDelete = useCallback(async () => {
+    if (!line) {
+      return;
+    }
+    setRemoving(true);
+    try {
+      await deleteEmployee(line.id);
+      router.push(`/payroll/${periodId}`);
+    } finally {
+      setRemoving(false);
+    }
+  }, [line, periodId, router]);
 
   /**
    * Quita una fila del catálogo del rol de ESTE empleado: vacía lo tecleado y la deja de mostrar.
@@ -166,20 +193,24 @@ export function EmployeeDetailView({
    * existen siempre—, y por eso son dos escrituras: el importe (o las horas) a cero, que es lo que
    * hace que `visibleIncomeConcepts` deje de rendirla, y la salida de `added`, sin la cual la fila
    * seguiría a la vista en cero hasta recargar. Con una sola de las dos la fila no se va.
+   *
+   * Y se lleva el RÓTULO PROPIO en la misma escritura: dejarlo colgado lo resucitaría al volver a
+   * agregar ese concepto, poniéndole a una cifra nueva el nombre de otro mes.
    */
   const removeConcept = useCallback(
     (code: string) => {
+      const base = line?.capture ?? emptyCapture();
+      const labels = withoutRowLabel(base.labels, code);
       const income = INCOME_CONCEPTS.find((concept) => concept.code === code);
       const hoursField = income ? capturedHoursField(income) : null;
       if (hoursField) {
-        patchCapture({ [hoursField]: 0 });
+        patchCapture({ [hoursField]: 0, labels });
       } else if (income?.kind === "capturado") {
-        patchCapture({ [income.field]: 0 });
+        patchCapture({ [income.field]: 0, labels });
       } else {
         const deduction = DEDUCTION_CONCEPTS.find((concept) => concept.code === code);
         if (deduction?.kind === "capturado") {
-          const base = line?.capture ?? emptyCapture();
-          patchCapture({ deductions: { ...base.deductions, [deduction.field]: 0 } });
+          patchCapture({ deductions: { ...base.deductions, [deduction.field]: 0 }, labels });
         }
       }
       setAdded((current) => {
@@ -192,9 +223,10 @@ export function EmployeeDetailView({
   );
 
   /**
-   * Los conceptos que el período declara por su cuenta. Las tres operaciones escriben en el
-   * PERÍODO —no en esta ficha— porque un concepto extra es una columna del rol: declararlo aquí
-   * le abre la fila a toda la nómina del mes, que es lo que hace que el rol siga siendo una tabla.
+   * Las filas de BONO de este empleado, y el rótulo propio de las filas del catálogo. Las cinco
+   * operaciones escriben en la CAPTURA, que es donde vive ahora todo rótulo del rol: una fila de
+   * bono lleva su nombre, su clase y su importe juntos, y una del catálogo guarda su nombre en
+   * `labels` bajo su código.
    *
    * El rechazo de un nombre (repetido, vacío, largo) se guarda para poder decirlo, y se limpia en
    * cuanto una operación sale bien: un aviso que se queda pegado deja de leerse.
@@ -202,87 +234,95 @@ export function EmployeeDetailView({
   const [extraError, setExtraError] = useState<string | null>(null);
   useEffect(() => setExtraError(null), [employeeId]);
 
-  const applyExtra = useCallback(async (run: () => Promise<ExtraConceptResult>) => {
-    const result = await run();
-    setExtraError(result.ok ? null : result.message);
-  }, []);
+  /** El universo contra el que se juzga la unicidad: todo lo que este empleado tiene a la vista. */
+  const labelUniverse = useMemo(
+    () =>
+      rowLabelUniverse(capture, [
+        ...visibleIncomeConcepts(capture, added),
+        ...visibleDeductionConcepts(capture, added),
+      ]),
+    [capture, added],
+  );
 
   const addExtra = useCallback(
     (kind: PayrollExtraConceptKind) => {
       // Nace con un nombre provisional porque la fila tiene que existir para poder escribir en
-      // ella: el campo del rótulo es la propia fila, así que pedirlo antes en un diálogo sería un
+      // ella: el campo del rótulo ES la propia fila, así que pedirlo antes en un diálogo sería un
       // paso de más y dejaría el nombre en dos sitios.
-      void applyExtra(() =>
-        addExtraConcept(periodId, uniqueDefaultLabel(period?.extraConcepts ?? [], kind), kind),
-      );
+      const base = line?.capture ?? emptyCapture();
+      const rows = base.extras ?? [];
+      setExtraError(null);
+      patchCapture({
+        extras: [
+          ...rows,
+          newExtraRow(
+            kind,
+            rows,
+            labelUniverse.map((row) => row.label),
+          ),
+        ],
+      });
     },
-    [applyExtra, periodId, period?.extraConcepts],
+    [line?.capture, patchCapture, labelUniverse],
   );
 
   const renameExtra = useCallback(
-    (conceptId: string, label: string) =>
-      void applyExtra(() => renameExtraConcept(periodId, conceptId, label)),
-    [applyExtra, periodId],
+    (rowId: string, label: string) => {
+      const base = line?.capture ?? emptyCapture();
+      const check = validateRowLabel(label, labelUniverse, rowId);
+      if (!check.ok) {
+        setExtraError(check.message);
+        return;
+      }
+      setExtraError(null);
+      patchCapture({ extras: renameExtraRow(base.extras ?? [], rowId, check.name) });
+    },
+    [line?.capture, patchCapture, labelUniverse],
   );
 
   const removeExtra = useCallback(
-    (conceptId: string) => {
+    (rowId: string) => {
+      const base = line?.capture ?? emptyCapture();
       setExtraError(null);
-      void deleteExtraConcept(periodId, conceptId);
+      patchCapture({ extras: removeExtraRow(base.extras ?? [], rowId) });
     },
-    [periodId],
+    [line?.capture, patchCapture],
   );
 
   const setExtraAmount = useCallback(
-    (conceptId: string, value: number) => {
+    (rowId: string, value: number) => {
       const base = line?.capture ?? emptyCapture();
-      patchCapture({ extraAmounts: { ...base.extraAmounts, [conceptId]: value } });
+      patchCapture({ extras: setExtraRowAmount(base.extras ?? [], rowId, value) });
     },
     [line?.capture, patchCapture],
+  );
+
+  /** El rótulo propio de una fila del CATÁLOGO. Un nombre vacío borra la entrada: la fila vuelve a
+   *  llamarse como el libro en vez de guardarse rotulada con nada. */
+  const renameRow = useCallback(
+    (code: string, label: string) => {
+      const base = line?.capture ?? emptyCapture();
+      if (label.trim()) {
+        const check = validateRowLabel(label, labelUniverse, code);
+        if (!check.ok) {
+          setExtraError(check.message);
+          return;
+        }
+        setExtraError(null);
+        patchCapture({ labels: withRowLabel(base.labels, code, check.name) });
+        return;
+      }
+      setExtraError(null);
+      patchCapture({ labels: withRowLabel(base.labels, code, "") });
+    },
+    [line?.capture, patchCapture, labelUniverse],
   );
 
   /** Los topes, contra el sueldo unificado que el motor acaba de derivar. */
   const capBreaches = useMemo(
     () =>
-      computed
-        ? extraCapBreaches(
-            sumExtraIncome(extraConcepts, capture.extraAmounts),
-            computed.unifiedSalary,
-          )
-        : [],
-    [computed, extraConcepts, capture.extraAmounts],
-  );
-
-  /**
-   * Cambia una fila por otro concepto, llevándose lo que se tecleó en ella cuando las dos hablan
-   * la misma unidad. QUÉ se escribe lo decide `incomeSwapPatch`/`deductionSwapPatch`, en la capa
-   * pura y con tests: aquí solo queda recordar que la fila nueva está puesta, para que no
-   * desaparezca en el instante en que nace valiendo cero.
-   */
-  const swapConcept = useCallback(
-    (
-      from: string,
-      to: string,
-      patchFor: (base: PayrollMonthlyCapture) => Partial<PayrollMonthlyCapture> | null,
-    ) => {
-      const patch = patchFor(line?.capture ?? emptyCapture());
-      if (!patch) {
-        return;
-      }
-      patchCapture(patch);
-      setAdded((current) => {
-        // El concepto nuevo ocupa el SITIO del viejo, no el final de la cola: cambiar lo que una
-        // fila es no debería moverla de sitio bajo el cursor.
-        const codes = [...current];
-        const at = codes.indexOf(from);
-        if (at === -1) {
-          return new Set([...codes, to]);
-        }
-        codes[at] = to;
-        return new Set(codes);
-      });
-    },
-    [line?.capture, patchCapture],
+      computed ? extraCapBreaches(sumExtraIncome(capture.extras), computed.unifiedSalary) : [],
+    [computed, capture.extras],
   );
 
   /**
@@ -306,7 +346,7 @@ export function EmployeeDetailView({
         monthIndex: period.monthIndex,
         clientName: activeClient?.name ?? "",
         ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
-        extraConcepts,
+        ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
         // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
         position: index + 1,
@@ -321,34 +361,13 @@ export function EmployeeDetailView({
   }, [
     activeClient?.name,
     activeClient?.logo,
+    activeClient?.company,
     capture,
     computed,
-    extraConcepts,
     index,
     line,
     period,
   ]);
-
-  const swapIncome = useCallback(
-    (from: string, to: string) => {
-      const origin = INCOME_CONCEPTS.find((c) => c.code === from);
-      const target = INCOME_CONCEPTS.find((c) => c.code === to);
-      if (origin && target) {
-        swapConcept(from, to, (base) => incomeSwapPatch(origin, target, base));
-      }
-    },
-    [swapConcept],
-  );
-  const swapDeduction = useCallback(
-    (from: string, to: string) => {
-      const origin = DEDUCTION_CONCEPTS.find((c) => c.code === from);
-      const target = DEDUCTION_CONCEPTS.find((c) => c.code === to);
-      if (origin && target) {
-        swapConcept(from, to, (base) => deductionSwapPatch(origin, target, base));
-      }
-    },
-    [swapConcept],
-  );
 
   // Antes de la primera lectura de Dexie no se sabe si el período existe: esperar evita el
   // parpadeo del vacío «no existe» sobre uno que en realidad sí está.
@@ -378,6 +397,8 @@ export function EmployeeDetailView({
         next={target(1)}
         onDownloadPayslip={() => void downloadPayslip()}
         downloading={downloading}
+        onEdit={() => setEditing(true)}
+        onDelete={() => setDeleting(true)}
       />
 
       <div className="mt-4">
@@ -397,6 +418,12 @@ export function EmployeeDetailView({
             hireDate={formatDayMonthYear(line.hireDate)}
             contractType={line.contractType}
             accumulatesReserveFund={line.accumulatesReserveFund}
+            thirteenthProvision={
+              line.provisionsThirteenth ? (computed?.thirteenthProvision ?? 0) : null
+            }
+            fourteenthProvision={
+              line.provisionsFourteenth ? (computed?.fourteenthProvision ?? 0) : null
+            }
             days={line.days}
             baseSalary={line.baseSalary}
             paid={line.capture?.paid ?? null}
@@ -417,10 +444,10 @@ export function EmployeeDetailView({
                   onAmountChange={handleIncomeAmount}
                   onHoursChange={handleHours}
                   onAdd={addConcept}
-                  onSwap={swapIncome}
+                  onRename={renameRow}
                   onRemove={removeConcept}
                   extra={{
-                    concepts: extraConcepts,
+                    rows: capture.extras ?? [],
                     breaches: capBreaches,
                     onAdd: addExtra,
                     onRename: renameExtra,
@@ -438,20 +465,17 @@ export function EmployeeDetailView({
                     added={added}
                     onAmountChange={handleDeductionAmount}
                     onAdd={addConcept}
-                    onSwap={swapDeduction}
+                    onRename={renameRow}
                     onRemove={removeConcept}
                   />
                 </div>
               </EmployeeDetailSection>
 
               <EmployeeDetailSection className="flex flex-wrap items-start justify-between gap-5">
-                <EmployeeMonthAdjustments
+                <EmployeeOvertimeApproval
                   approvedOvertime={capture.approvedOvertime}
-                  provisionsThirteenth={capture.provisionsThirteenth}
-                  provisionsFourteenth={capture.provisionsFourteenth}
                   computed={computed}
                   onApprovedOvertimeChange={handleApprovedOvertime}
-                  onProvisionChange={handleProvision}
                 />
                 <EmployeeTotals computed={computed} />
               </EmployeeDetailSection>
@@ -459,6 +483,31 @@ export function EmployeeDetailView({
           )}
         </EmployeeDetailCard>
       </div>
+
+      {editing && (
+        <EmployeeFormModal
+          period={period}
+          lines={lines}
+          employee={line}
+          onClose={() => setEditing(false)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={deleting}
+        variant="destructive"
+        title={`Eliminar a ${line.name}`}
+        description={
+          <>
+            Sale de la nómina de {periodLongLabel(period.year, period.monthIndex)} y el rol del mes
+            se recalcula sin él. Los otros períodos no cambian: cada uno guarda su propia nómina.
+          </>
+        }
+        confirmLabel="Eliminar empleado"
+        busy={removing}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleting(false)}
+      />
     </div>
   );
 }
@@ -473,28 +522,6 @@ export function EmployeeDetailView({
  * porque un área podría cargarse contra un centro con otro nombre—. El día que ese mapa exista,
  * esto se sustituye por una lectura y no por otra plantilla.
  */
-/**
- * El nombre con el que nace un concepto: «Bono aportable», y «Bono aportable 2» si ese ya está.
- *
- * Nace con nombre en vez de vacío porque el rótulo es único dentro del período y dos filas sin
- * nombre chocarían entre sí antes de que nadie escriba nada. El sufijo se busca contra los
- * declarados, no contra un contador, para que borrar el 2 y volver a crear no dé un 3.
- */
-function uniqueDefaultLabel(
-  existing: readonly PayrollExtraConcept[],
-  kind: PayrollExtraConceptKind,
-): string {
-  const base = EXTRA_CONCEPT_KIND_LABEL[kind];
-  const taken = new Set(existing.map((concept) => concept.label.toLowerCase()));
-  if (!taken.has(base.toLowerCase())) {
-    return base;
-  }
-  let n = 2;
-  while (taken.has(`${base} ${n}`.toLowerCase())) {
-    n += 1;
-  }
-  return `${base} ${n}`;
-}
 
 function costCenterFor(area: string): string | null {
   const trimmed = area.trim();

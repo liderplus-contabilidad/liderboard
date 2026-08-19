@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { NumericInput } from "@/components/ui/numeric-input";
+import { formatCurrency } from "@/lib/format";
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 
 interface EmployeePeriodFieldsProps {
@@ -17,6 +18,15 @@ interface EmployeePeriodFieldsProps {
   contractType: PayrollEmployeeLine["contractType"];
   /** `AZ` · AC FR — de la ficha, no del mes: es una elección del empleado. */
   accumulatesReserveFund: boolean;
+  /** `AS` y `AT` · lo que el motor derivó para las dos provisiones de décimos, o `null` cuando la
+   *  ficha las tiene apagadas. La caja enseña el IMPORTE cuando provisiona y «No» cuando no: son
+   *  las dos preguntas que alguien se hace ahí, y el importe implica ya la respuesta a la primera.
+   *
+   *  Están aquí, en solo lectura, porque estas dos cifras no salen en ninguna otra parte de la
+   *  pantalla —`EmployeeTotals` no desglosa ninguna de las cinco provisiones— y las casillas que
+   *  las enseñaban se fueron al diálogo de ficha, que es de donde salen. */
+  thirteenthProvision: number | null;
+  fourteenthProvision: number | null;
   /** `E` · días pagados del mes. */
   days: number;
   /** `D` · sueldo base. */
@@ -40,8 +50,9 @@ interface EmployeePeriodFieldsProps {
  * (gris = lo que no se teclea), así que quien lee la pantalla aprende la regla una vez.
  *
  * Los dos extremos del período no se editan porque los declara el período, no el empleado; el tipo
- * de contrato, la fecha de ingreso y la acumulación de fondo de reserva son de la FICHA y cambian
- * en la ficha, no en el mes que se está capturando.
+ * de contrato, la fecha de ingreso, la acumulación de fondo de reserva y las dos provisiones de
+ * décimos son de la FICHA y cambian ahí —en «Editar ficha», del encabezado—, no en el mes que se
+ * está capturando.
  *
  * El rótulo va a la IZQUIERDA del valor y alineado hacia él, no encima: con los ocho valores en
  * cajas del mismo ancho y a la derecha, la columna de cifras queda a plomo y se compara de un
@@ -53,6 +64,8 @@ export function EmployeePeriodFields({
   hireDate,
   contractType,
   accumulatesReserveFund,
+  thirteenthProvision,
+  fourteenthProvision,
   days,
   baseSalary,
   paid,
@@ -88,6 +101,8 @@ export function EmployeePeriodFields({
       <ReadOnlyField label="Tipo de contrato" value={contractType} />
       <ReadOnlyField label="Fecha de ingreso" value={hireDate} />
       <ReadOnlyField label="Acumula fondo reserva" value={accumulatesReserveFund ? "Sí" : "No"} />
+      <ReadOnlyField label="Provisiona décimo III" value={provisionLabel(thirteenthProvision)} />
+      <ReadOnlyField label="Provisiona décimo IV" value={provisionLabel(fourteenthProvision)} />
       <EditableField label="Pagado">
         <NumericInput
           value={paid}
@@ -100,6 +115,12 @@ export function EmployeePeriodFields({
       </EditableField>
     </div>
   );
+}
+
+/** Una provisión encendida se dice con su importe; apagada, con un «No». Un `$0.00` no serviría:
+ *  se leería como «provisiona cero» en vez de «no provisiona». */
+function provisionLabel(amount: number | null): string {
+  return amount === null ? "No" : formatCurrency(amount, { cents: true });
 }
 
 /** Las dos clases de campo miden igual: el rótulo se encoge y la caja no, así que las ocho cajas

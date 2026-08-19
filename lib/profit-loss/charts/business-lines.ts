@@ -68,6 +68,12 @@ export interface BusinessLineSet {
    */
   excluded: { code: string; label: string }[];
   /**
+   * Las líneas que la LEYENDA dejó apagadas — apartadas, nunca borradas: sus cuentas siguen siendo
+   * ingresos del estado, así que el cuadre tiene que contarlas o la nota declararía miles «sin
+   * clasificar», que es justo el aviso de que la lectura no cierra.
+   */
+  hidden: BusinessLine[];
+  /**
    * Las ramas de actividades ordinarias que la lectura recorre: la del hospedaje y toda hermana
    * que el PLAN declare también ordinaria. Contra la suma de estas se cuadra la lectura.
    */
@@ -76,7 +82,13 @@ export interface BusinessLineSet {
   sectionLabels: string[];
 }
 
-const EMPTY: BusinessLineSet = { lines: [], excluded: [], sectionCodes: [], sectionLabels: [] };
+const EMPTY: BusinessLineSet = {
+  lines: [],
+  hidden: [],
+  excluded: [],
+  sectionCodes: [],
+  sectionLabels: [],
+};
 
 /** Ingresos: el nodo de hospedaje se busca DENTRO de esta raíz y en ninguna otra. */
 const REVENUE_PREFIX = "4.";
@@ -246,7 +258,37 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
     return EMPTY;
   }
   const sections = [section, ...alsoOrdinary];
-  return { lines, excluded, sectionCodes: sections, sectionLabels: sections.map(labelOf) };
+  return {
+    lines,
+    hidden: [],
+    excluded,
+    sectionCodes: sections,
+    sectionLabels: sections.map(labelOf),
+  };
+}
+
+/**
+ * Lo que la LEYENDA deja encendido, y aparte lo que apagó.
+ *
+ * Apagar una línea no es quitarla del estado: sus cuentas siguen siendo ingresos declarados, así
+ * que se APARTAN en vez de borrarse y el cuadre las cuenta del lado de lo que queda fuera. Sin eso
+ * la nota afirmaría un residuo «sin clasificar» del tamaño de la línea apagada, que es exactamente
+ * el aviso que esa frase existe para dar cuando algo va mal de verdad.
+ *
+ * Un id que ninguna línea declara —el de un plan que ya no está abierto— vale como ninguno: es la
+ * misma defensa que el resto del módulo aplica a una marca huérfana, porque vaciar la pantalla
+ * sería peor que no acotar.
+ */
+export function selectBusinessLines(
+  set: BusinessLineSet,
+  hidden: readonly string[],
+): BusinessLineSet {
+  const off = new Set(hidden);
+  const visible = set.lines.filter((line) => !off.has(line.id));
+  if (visible.length === set.lines.length) {
+    return set;
+  }
+  return { ...set, lines: visible, hidden: set.lines.filter((line) => off.has(line.id)) };
 }
 
 /** La categoría que un nombre declara, o `null` — el orden de la lista es la prioridad. */
@@ -512,6 +554,11 @@ export interface BusinessLinesBalance {
   section: number | null;
   /** Suma de las cuentas dejadas fuera; negativa cuando son rebajas, que es el caso normal. */
   excluded: number | null;
+  /**
+   * Suma de las líneas APAGADAS en la leyenda. Es opcional porque una lectura sin nada apagado no
+   * tiene que declarar un cero: la nota queda entonces letra por letra como estaba.
+   */
+  hidden?: number | null;
   /** Categorías quitadas por no moverse en el tramo. */
   idle: number;
 }
@@ -538,6 +585,11 @@ export function describeBusinessLines(
     set.excluded.length > 0
       ? `Fuera de las líneas: ${set.excluded.map((entry) => entry.label).join(", ")}.`
       : "",
+    // Las apagadas se NOMBRAN, y aquí y no en el cuadre: una barra que falta se lee como un dato
+    // que falta, y el cuadre puede no existir —un tramo sin cobertura no tiene cifras que restar—.
+    set.hidden.length > 0
+      ? `Apagadas en la leyenda: ${set.hidden.map((line) => line.label).join(", ")}.`
+      : "",
     balance.idle > 0
       ? `${balance.idle} ${balance.idle === 1 ? "categoría quedó fuera" : "categorías quedaron fuera"} por no tener movimiento en el periodo.`
       : "",
@@ -552,15 +604,25 @@ function balanceLine(set: BusinessLineSet, balance: BusinessLinesBalance): strin
   // Con CENTAVOS, que es lo contrario de la regla del eje: aquí la cifra no se mira, se COTEJA
   // contra el estado, y $201,998 no se puede cotejar contra $201,998.26.
   const amount = (value: number) => formatCurrency(value, { cents: true });
-  const total = `Las ${set.lines.length} líneas suman ${amount(balance.lines)}`;
+  // «encendidas» solo cuando alguna está apagada: si no, la palabra sobra y esta frase se coteja
+  // contra el Excel del contador, donde cada letra de más es una pregunta.
+  const drawn = set.hidden.length > 0 ? "líneas encendidas" : "líneas";
+  const total = `Las ${set.lines.length} ${drawn} suman ${amount(balance.lines)}`;
   if (sameAmount(balance.lines, balance.section)) {
     return `${total}, que es lo que el estado declara.`;
   }
   const excluded = balance.excluded ?? 0;
+  const hidden = balance.hidden ?? 0;
   // El residuo es la red de seguridad: si lo de fuera no explica la diferencia, la nota lo dice en
-  // vez de dejar al lector con dos cifras que no cierran y ninguna pista de por qué.
-  const residual = balance.section - (balance.lines + excluded);
-  const explained = `${total} y el estado declara ${amount(balance.section)}: la diferencia son ${amount(excluded)} de cuentas que quedan fuera`;
+  // vez de dejar al lector con dos cifras que no cierran y ninguna pista de por qué. Lo apagado
+  // entra en esa cuenta como una parte más de la diferencia — es plata del estado que no está en
+  // ninguna barra, igual que las rebajas.
+  const residual = balance.section - (balance.lines + excluded + hidden);
+  const parts = [
+    `${amount(excluded)} de cuentas que quedan fuera`,
+    ...(set.hidden.length > 0 ? [`${amount(hidden)} de las líneas apagadas`] : []),
+  ];
+  const explained = `${total} y el estado declara ${amount(balance.section)}: la diferencia son ${parts.join(" y ")}`;
   return sameAmount(residual, 0)
     ? `${explained}.`
     : `${explained}, y ${amount(residual)} sin clasificar.`;

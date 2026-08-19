@@ -28,6 +28,7 @@
  * corrigiera los días trabajados, y el papel diría una cosa y la pantalla otra.
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
+import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/logos";
 import {
   DEDUCTION_CONCEPTS,
@@ -39,7 +40,8 @@ import {
 } from "../concepts";
 import { sameToTheCentavo } from "../amounts";
 import type { PayrollEmployeeComputation } from "../engine/types";
-import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
+import { payslipLabelFor } from "../row-labels";
+import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
 import { formatPayslipAmount, formatQuantity } from "./format";
 import type { PayslipDocument, PayslipRow } from "./types";
 
@@ -98,6 +100,7 @@ function rowFor(
   concept: IncomeConcept | DeductionConcept,
   amount: number,
   quantity: string | null,
+  capture: PayrollMonthlyCapture,
 ): PayslipRow[] {
   if (sameToTheCentavo(amount, 0)) {
     return [];
@@ -105,7 +108,10 @@ function rowFor(
   return [
     {
       code: concept.code,
-      label: concept.payslipLabel,
+      // El rótulo del libro, salvo que este empleado le haya puesto uno propio a esta fila. Es el
+      // motivo de `row-labels.ts`: `E-11` es la columna `AH OTROS` y un comprobante que imprime el
+      // nombre de la columna no dice qué se descontó.
+      label: payslipLabelFor(concept, capture),
       quantity,
       value: formatPayslipAmount(amount),
     },
@@ -113,7 +119,7 @@ function rowFor(
 }
 
 /**
- * Las filas de los conceptos que el PERÍODO declara, con el rótulo que el usuario les puso.
+ * Las filas de BONO que la captura de este empleado declara, con el rótulo que él les puso.
  *
  * El `code` va vacío: los `I-01`…`I-13` del catálogo son posiciones del libro que el contador
  * reconoce, y numerar estos con la misma gramática afirmaría que también salen de su hoja. El
@@ -122,21 +128,17 @@ function rowFor(
  * Los NO aportables llevan el `(*)`, la misma marca que `U` y `V`, porque su nota al pie —«No
  * aporta IESS ni es Ingreso Gravado»— es literalmente lo que su clase significa.
  */
-function extraIncomeRows(
-  concepts: readonly PayrollExtraConcept[] | undefined,
-  capture: PayrollMonthlyCapture,
-): PayslipRow[] {
-  return (concepts ?? []).flatMap((concept) => {
-    const amount = capture.extraAmounts?.[concept.id] ?? 0;
-    if (sameToTheCentavo(amount, 0)) {
+function extraIncomeRows(capture: PayrollMonthlyCapture): PayslipRow[] {
+  return (capture.extras ?? []).flatMap((row) => {
+    if (sameToTheCentavo(row.amount, 0)) {
       return [];
     }
     return [
       {
         code: "",
-        label: concept.label.toUpperCase(),
-        quantity: concept.kind === "noAportable" ? NOT_CONTRIBUTORY_MARK : null,
-        value: formatPayslipAmount(amount),
+        label: row.label.toUpperCase(),
+        quantity: row.kind === "noAportable" ? NOT_CONTRIBUTORY_MARK : null,
+        value: formatPayslipAmount(row.amount),
       },
     ];
   });
@@ -155,42 +157,49 @@ export function buildPayslipDocument({
   monthIndex,
   clientName,
   clientLogo,
+  clientCompany,
   position,
-  extraConcepts,
 }: {
   line: PayrollEmployeeLine;
   computed: PayrollEmployeeComputation;
   capture: PayrollMonthlyCapture;
   year: number;
   monthIndex: number;
-  /** El nombre que el usuario le dio al cliente. El comprobante del contador imprime aquí la razón
-   *  social que declara `GENERAL!B1`, pero la app no la guarda todavía. */
+  /** El nombre que el usuario le dio al cliente. La razón social que el contador imprime aquí va
+   *  DEBAJO, en `companyLines`: son dos cosas distintas —«Delicmar» y `DELICMAR S.A.S.`— y el papel
+   *  las escribe las dos. */
   clientName: string;
   /** El logo del cliente, si subió uno. Encabeza el comprobante junto al nombre. */
   clientLogo?: EntityLogo;
+  /** Los datos de la empresa que el cliente declaró. Sin ellos el encabezado queda como estaba. */
+  clientCompany?: CompanyProfile;
   /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
-  /** Los conceptos de ingreso que el PERÍODO declara además de los del catálogo. */
-  extraConcepts?: readonly PayrollExtraConcept[];
 }): PayslipDocument {
   const incomes: PayslipRow[] = [
     ...payslipIncomeConcepts().flatMap((concept) =>
-      rowFor(concept, incomeAmount(concept, computed, capture), incomeQuantity(concept, capture)),
+      rowFor(
+        concept,
+        incomeAmount(concept, computed, capture),
+        incomeQuantity(concept, capture),
+        capture,
+      ),
     ),
-    // Los conceptos extra van DETRÁS del catálogo y no intercalados: el orden del papel es el de
-    // COLUMNAS del libro, y estos no tienen ninguna — no hay sitio donde meterlos que signifique
+    // Las filas de bono van DETRÁS del catálogo y no intercaladas: el orden del papel es el de
+    // COLUMNAS del libro, y estas no tienen ninguna — no hay sitio donde meterlas que signifique
     // algo. Detrás, además, deja intacta la posición de las trece filas que el contador conoce.
-    ...extraIncomeRows(extraConcepts, capture),
+    ...extraIncomeRows(capture),
   ];
 
   const deductions: PayslipRow[] = payslipDeductionConcepts().flatMap((concept) =>
-    rowFor(concept, deductionAmount(concept, computed, capture), null),
+    rowFor(concept, deductionAmount(concept, computed, capture), null, capture),
   );
 
   return {
     company: clientName,
     ...(clientLogo ? { logo: clientLogo } : {}),
+    companyLines: letterheadLines(clientCompany),
     title: "ROL DE PAGOS",
     period: `MES: ${payslipMonthLabel(year, monthIndex)}`,
     codeLine: `Codigo: ${position}`,

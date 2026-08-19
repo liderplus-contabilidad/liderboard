@@ -2,12 +2,14 @@
 
 import { ChevronRight } from "lucide-react";
 import { memo, type ReactNode } from "react";
+import { ChartGuideTip } from "@/components/ui/chart-guide-tip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { cn } from "@/lib/cn";
 import { formatPercent } from "@/lib/format";
 import { periodLabel } from "@/lib/profit-loss/analytics/period";
 import type { AccountOption } from "@/lib/profit-loss/filter";
+import { GUIDE_VERTICAL } from "@/lib/profit-loss/charts/guides";
 import type { VerticalAnalysis, VerticalRow } from "@/lib/profit-loss/charts/vertical";
 import { AccountBasePicker } from "../account-base-picker";
 
@@ -55,6 +57,7 @@ export function VerticalAnalysisCard({
         </div>
         <div className="flex shrink-0 items-center gap-2.5">
           <AccountBasePicker accounts={accounts} value={baseCode} onChange={onChangeBase} />
+          <ChartGuideTip title="Análisis vertical" guide={GUIDE_VERTICAL} />
         </div>
       </header>
 

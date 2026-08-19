@@ -196,6 +196,17 @@ export interface ChartTooltip {
   borderWidth?: number;
   padding?: number | number[];
   textStyle?: ChartTextStyle;
+  /**
+   * Que el tooltip se quede dentro del CONTENEDOR de la gráfica y no solo dentro de la ventana.
+   *
+   * Sin esto el renderer lo cuelga del contenedor pero lo coloca contra la ventana, así que al
+   * pasar el cursor por las últimas barras la caja se sale por el borde de la tarjeta — y la
+   * tarjeta, que es un `overflow-hidden` para que su tabla no se salga de las esquinas
+   * redondeadas, la CORTA ahí. El texto nunca se recorta (la caja crece hasta el renglón más
+   * largo); lo que se pierde es el trozo que quedó fuera, y se pierde justo cuando el nombre de
+   * la cuenta es largo, que es cuando hace falta leerlo.
+   */
+  confine?: boolean;
   /** Axis trigger receives the whole column; item trigger a single mark. */
   formatter?: (params: ChartParam[] | ChartParam) => string;
 }
@@ -256,6 +267,37 @@ export interface ChartTable {
  * report) draw the SAME cards instead of each computing its own. Two computations of one
  * question drift, and nothing downstream can tell which of the two numbers is the right one.
  */
+/**
+ * La ayuda de una tarjeta: qué pregunta contesta, qué gestos la mueven y qué se puede afirmar con
+ * lo que dibuja. Viaja en el `ChartCardSpec` y no en un catálogo aparte por la razón de siempre:
+ * una tarjeta cambia de identidad con el estado —la primera de Gráficos es «Comparación», «Ventas
+ * por línea de negocio» o el anexo de gastos según lo marcado—, y una segunda lista indexada por
+ * `id` acabaría describiendo una tarjeta distinta de la que se está viendo.
+ *
+ * `actions` nombra los controles por su RÓTULO real («Cuenta contable», «Ver como tabla»), porque
+ * una ayuda que no dice dónde está el control obliga a buscarlo, y solo nombra gestos que existen
+ * de verdad en ESA tarjeta.
+ */
+export interface ChartGuideAction {
+  /** El control, con su rótulo EXACTO de pantalla — es lo que el lector va a buscar. */
+  control: string;
+  /** Qué hace, en pocas palabras y sin repetir el nombre del control. */
+  effect: string;
+}
+
+export interface ChartGuide {
+  /** Para qué sirve la tarjeta, en una frase corta. */
+  purpose: string;
+  /**
+   * Los controles que la mueven. Van PARTIDOS en dos —el rótulo y lo que hace— porque así se
+   * pintan en dos tintas y la lista se recorre de un vistazo por la columna de los nombres; una
+   * frase entera por gesto obliga a leerlas todas para encontrar el control que se busca.
+   */
+  actions: readonly ChartGuideAction[];
+  /** Lo que la forma no dice sola y se malinterpreta sin ello. Opcional. */
+  reading?: string;
+}
+
 export interface ChartCardSpec {
   /** Stable and independent of the copy: the React key, and what a test names. */
   id: string;
@@ -269,5 +311,7 @@ export interface ChartCardSpec {
   warnings?: string[];
   /** Footnote for what the card set aside, e.g. a negative slice left out of a pie. */
   note?: string;
+  /** Lo que el ⓘ de la cabecera abre. Una tarjeta sin guía no dibuja el icono. */
+  guide?: ChartGuide;
   height: number;
 }

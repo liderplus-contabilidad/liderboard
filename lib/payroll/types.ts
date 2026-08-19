@@ -11,6 +11,7 @@
  * step would produce, with no owner yet — `db.ts` is what stamps the `clientId` at the door.
  */
 
+import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/workspaces";
 import type { CapturedDeductions } from "./engine/types";
 
@@ -24,6 +25,16 @@ export interface PayrollClient {
   /** El logo que subió el usuario, si subió alguno — el que encabeza su comprobante en PDF.
    *  Opcional y NO indexado, así que no costó migración de Dexie. */
   logo?: EntityLogo;
+  /**
+   * Lo que el papel de la firma imprime bajo el logo: razón social, ubicación y teléfonos. Es
+   * OPCIONAL en el tipo aunque el diálogo exija sus seis campos, porque los clientes creados antes
+   * de que existiera no lo tienen: un tipo que lo declarara obligatorio afirmaría algo falso sobre
+   * lo que hay en la base y obligaría a cada lectura a mentir. La obligatoriedad es una regla del
+   * ALTA y vive en el formulario, no en el dato.
+   *
+   * No indexado, como el logo, así que tampoco costó versión nueva de Dexie.
+   */
+  company?: CompanyProfile;
 }
 
 /** Único tipo de período por ahora; el tipo deja sitio a "décimos" y "liquidaciones" más adelante. */
@@ -49,24 +60,27 @@ export interface PayrollRosterSummary {
 export type PayrollExtraConceptKind = "aportable" | "noAportable";
 
 /**
- * Un concepto de ingreso que ESTE período declara además de los trece del libro.
+ * Una fila de bono que la captura de ESTE empleado declara, además de los trece ingresos del libro.
  *
  * Existe porque el rol de cada empresa nombra los suyos: `MOVILIZACION NO APORTABLE` y
  * `ALIMENTACION NO APORTABLE` en el libro de DELICMAR, otros en el siguiente. Un catálogo cerrado
  * no puede crecer a ese ritmo sin tocar el motor, el asiento y el comprobante cada vez.
  *
- * **El rótulo vive en el PERÍODO y el importe en la ficha.** Un concepto extra es una COLUMNA del
- * rol, compartida por toda la nómina del mes — si el nombre viviera en cada captura, dos empleados
- * podrían llamar distinto a la misma columna y el rol dejaría de ser una tabla.
+ * **El rótulo y el importe viajan JUNTOS**, y esa es la diferencia con la forma anterior, donde la
+ * declaración vivía en el período y el importe en la ficha: así no puede existir un importe
+ * huérfano cuyo concepto ya nadie declara, ni dos definiciones de cómo se llama una fila. El
+ * argumento que sostenía lo otro —una columna es de toda la nómina— se cae en cuanto el comodín
+ * `AH OTROS` del propio libro significa cosas distintas en empleados distintos.
  *
- * El `id` es lo que la captura referencia, y por eso es estable e independiente del rótulo:
- * renombrar no mueve ningún importe.
+ * El `id` es estable e independiente del rótulo dentro de esa captura: renombrar no mueve el
+ * importe, que es todo el motivo por el que el `id` existe además del nombre.
  */
-export interface PayrollExtraConcept {
+export interface PayrollExtraRow {
   id: string;
   /** Como lo escribe el rol de esa empresa, verbatim: `MOVILIZACION NO APORTABLE`. */
   label: string;
   kind: PayrollExtraConceptKind;
+  amount: number;
 }
 
 export interface PayrollPeriod {
@@ -76,14 +90,6 @@ export interface PayrollPeriod {
   /** 0–11, igual que el resto de la app. */
   monthIndex: number;
   kind: PayrollPeriodKind;
-  /**
-   * Los conceptos de ingreso extra que este período declara, en el orden en que se declararon.
-   *
-   * AUSENTE en un período que no declara ninguno, que es todo lo que existía antes de que esto
-   * hubiera. Opcional y NO indexado, así que no costó migración de Dexie — igual que
-   * `PayrollClient.logo`.
-   */
-  extraConcepts?: PayrollExtraConcept[];
 }
 
 /** Lo que produciría la capa de parseo, sin dueño todavía: `db.ts` estampa el `clientId`. */
@@ -122,23 +128,30 @@ export interface PayrollMonthlyCapture {
   variableCommission: number;
   bonus: number;
   /**
-   * El importe de cada concepto extra que el PERÍODO declara, por `id`.
+   * Las filas de BONO que este empleado declara este mes, en el orden en que se declararon.
    *
-   * Solo el importe: el rótulo y la clase viven en `PayrollPeriod.extraConcepts`, porque un
-   * concepto extra es una columna del rol y no una decisión de cada empleado. Una entrada cuyo
-   * concepto ya no exista es huérfana y no suma —nadie la recorre sin su declaración—, pero se
-   * limpia al borrarlo, en la misma transacción, para que no reviva si alguien reusara el `id`.
+   * Cada una lleva su rótulo, su clase y su importe: no hay declaración en un sitio e importe en
+   * otro, así que un importe huérfano no puede existir. Quitar la fila se lleva el importe con ella.
    *
-   * AUSENTE en toda captura anterior a este campo, que se lee como «ningún importe extra».
+   * AUSENTE en toda captura que no declara ninguna, que se lee como «ningún bono».
    */
-  extraAmounts?: Record<string, number>;
+  extras?: PayrollExtraRow[];
+  /**
+   * El RÓTULO PROPIO que este empleado le puso a una fila del catálogo, por código de concepto
+   * (`"E-11"` → `"Uniformes"`).
+   *
+   * Existe porque `E-11 OTROS` es un comodín: es la columna `AH` del libro y significa cosas
+   * distintas en empleados distintos, así que el comprobante que cada uno firma tiene que poder
+   * decir `UNIFORMES` en vez del nombre de la columna. Lo admite toda fila cuyo IMPORTE se teclea;
+   * las `calculado` no, porque su rótulo es una tasa de ley y no un nombre.
+   *
+   * Vive en la captura y no en la ficha porque un rótulo acompaña a un importe, y los importes son
+   * del MES. AUSENTE se lee como «cada fila se llama como el libro».
+   */
+  labels?: Record<string, string>;
   /** `Y`…`AN` · los doce egresos con nombre. El aporte al IESS (`X`) no está aquí: lo deriva
    *  el motor. */
   deductions: CapturedDeductions;
-  /** `AS`, `AT` · si el mes provisiona los décimos. Apagados en todo el archivo real, porque
-   *  ya se mensualizan en `N` y `O`. */
-  provisionsThirteenth: boolean;
-  provisionsFourteenth: boolean;
   /**
    * `BZ` · PAGADO. `null` mientras nadie lo declare — y eso NO es cero: sin él el empleado no
    * está ni conciliado ni con diferencia.
@@ -168,6 +181,22 @@ export interface PayrollEmployeeLine {
   /** `AZ` · AC FR — ¿lo acumula en el IESS en vez de cobrarlo mensual? También de la ficha:
    *  es una elección del empleado, no del mes. */
   accumulatesReserveFund: boolean;
+  /**
+   * `AS`, `AT` · si se provisionan los décimos.
+   *
+   * Están en la FICHA por la misma razón que las dos de arriba, y no es una analogía: cobrar los
+   * décimos mensualizados o acumularlos es una elección del EMPLEADO —la del SUT—, estable mes a
+   * mes. Viviendo en la captura no sobrevivían a `copyRoster`, así que había que volver a
+   * marcarlas cada mes empleado por empleado, y olvidarse un mes dejaba de provisionar sin que
+   * nada lo dijera.
+   *
+   * Apagadas en todo el archivo real, porque los décimos ya se mensualizan en `N` y `O` y
+   * provisionarlos otra vez los contaría dos veces. Que estén aquí no las hace menos del mes para
+   * el motor: cada período guarda su propia ficha, así que el importador las sigue deduciendo del
+   * archivo mes a mes.
+   */
+  provisionsThirteenth: boolean;
+  provisionsFourteenth: boolean;
   /** E · días pagados del mes. Es del MES, no de la ficha, pero tiene un default natural: se
    *  copia como 30 y se corrige al capturar (ingreso a mitad de mes, salida, licencia). */
   days: number;

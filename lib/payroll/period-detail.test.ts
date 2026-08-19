@@ -54,6 +54,8 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     sectorCode: "S001",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     ...overrides,
   };
@@ -113,7 +115,7 @@ describe("computePeriodFinancials", () => {
   // totaliza desde el primer momento y lo único sin totales es un período SIN empleados.
   it("una nómina sin nada capturado SÍ totaliza: el motor la deriva de la ficha", () => {
     const totals = computePeriodFinancials([
-      computeLinePayroll(line(), DEFAULT_PAYROLL_PARAMETERS, []),
+      computeLinePayroll(line(), DEFAULT_PAYROLL_PARAMETERS),
     ]);
     expect(totals).toBeDefined();
     expect(totals?.net).toBeGreaterThan(0);

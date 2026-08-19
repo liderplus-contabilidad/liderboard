@@ -13,13 +13,14 @@
  * `workbook.ts` recorre esta rejilla y la dibuja sin decidir nada — la misma separación que el
  * comprobante en PDF (`document.ts` → `layout.ts` → `render.ts`).
  */
+import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { areaKey } from "../areas";
 import { computeLinePayroll } from "../employee-input";
 import { emptyCapture } from "../employee-input";
 import type { PayrollParameters } from "../engine/parameters";
 import { sumExtraIncome } from "../extra-income";
-import type { ParsedPayrollEmployeeLine, PayrollExtraConcept } from "../types";
+import type { ParsedPayrollEmployeeLine } from "../types";
 import {
   columnIndexOf,
   EXTRA_INCOME_COLUMN,
@@ -31,7 +32,14 @@ import {
 } from "./columns";
 
 /** Qué ES cada fila, para que `workbook.ts` sepa cómo pintarla sin volver a deducirlo. */
-export type RolRowKind = "company" | "labels" | "area" | "employee" | "subtotal" | "suman";
+export type RolRowKind =
+  | "company"
+  | "letterhead"
+  | "labels"
+  | "area"
+  | "employee"
+  | "subtotal"
+  | "suman";
 
 export interface RolExportRow {
   kind: RolRowKind;
@@ -47,12 +55,14 @@ export interface RolExportGrid {
 export interface RolExportInput {
   /** El nombre que el usuario le dio al cliente. Va donde el libro pone su razón social. */
   clientName: string;
+  /** Los datos de la empresa, si el cliente los declaró: son las filas del membrete, bajo el
+   *  nombre. Sin ellos el preámbulo queda como estaba. */
+  company?: CompanyProfile;
   year: number;
   monthIndex: number;
   /** En el orden en que la nómina se lee en pantalla. */
   lines: readonly ParsedPayrollEmployeeLine[];
   parameters: PayrollParameters;
-  extraConcepts: readonly PayrollExtraConcept[];
 }
 
 /** `MARZO 2026` — la forma que el lector reconoce. */
@@ -148,10 +158,11 @@ function totalRow(
 }
 
 export function buildRolGrid(input: RolExportInput): RolExportGrid {
-  const columns =
-    input.extraConcepts.length > 0
-      ? [...ROL_EXPORT_COLUMNS, EXTRA_INCOME_COLUMN]
-      : ROL_EXPORT_COLUMNS;
+  // La columna agregada solo existe si ALGUIEN declara filas de bono. Se juzga sobre las capturas
+  // y no sobre una declaración de período, que ya no hay: son las filas las que traen los dólares
+  // que `W TOTAL INGRESO` tendría si no que explicar.
+  const hasExtras = input.lines.some((line) => (line.capture?.extras?.length ?? 0) > 0);
+  const columns = hasExtras ? [...ROL_EXPORT_COLUMNS, EXTRA_INCOME_COLUMN] : ROL_EXPORT_COLUMNS;
   const width = sheetWidth(columns);
   const rows: RolExportRow[] = [];
 
@@ -162,6 +173,19 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
   const company = blankRow(width);
   put(company, "B", input.clientName);
   rows.push({ kind: "company", cells: company });
+
+  // El membrete va DEBAJO del nombre y encima de los rótulos, en la misma columna `B`. Las líneas
+  // llegan compuestas por `letterheadLines`, la misma función que escriben la pantalla y el
+  // comprobante en PDF: aquí no se junta ninguna dirección.
+  //
+  // Añadir filas al preámbulo es seguro para el viaje de vuelta y no por casualidad: el lector
+  // localiza el período por su FORMA entre las filas anteriores a la cabecera, y la empresa por ser
+  // la primera con texto de esta columna. Ninguna línea del membrete puede casar con un período.
+  for (const line of letterheadLines(input.company)) {
+    const row = blankRow(width);
+    put(row, "B", line);
+    rows.push({ kind: "letterhead", cells: row });
+  }
 
   const labelsTop = blankRow(width);
   put(labelsTop, "B", periodText(input.year, input.monthIndex));
@@ -193,11 +217,11 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
     for (const line of group.lines) {
       ordinal++;
       const capture = line.capture ?? emptyCapture();
-      const extras = sumExtraIncome(input.extraConcepts, capture.extraAmounts);
+      const extras = sumExtraIncome(capture.extras);
       const ctx = {
         line,
         capture,
-        computed: computeLinePayroll(line, input.parameters, input.extraConcepts),
+        computed: computeLinePayroll(line, input.parameters),
         // Las dos clases van juntas en la columna agregada: lo que las separa es en qué bases
         // entran, y eso ya lo resolvió el motor antes de llegar aquí.
         extras: extras.contributory + extras.nonContributory,

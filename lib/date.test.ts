@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMonthYear, monthBounds } from "./date";
+import { formatDayMonthYear, formatTimestampEs, monthBounds } from "./date";
 
 describe("formatDayMonthYear", () => {
   it("escribe una fecha ISO como DD/MM/AAAA", () => {
@@ -49,5 +49,15 @@ describe("monthBounds", () => {
 
   it("diciembre no se desborda al año siguiente", () => {
     expect(monthBounds(2026, 11)).toEqual({ start: "01/12/2026", end: "31/12/2026" });
+  });
+});
+
+describe("formatTimestampEs", () => {
+  it("escribe día, mes en letras y hora, la lectura que coteja el contador", () => {
+    expect(formatTimestampEs(new Date(2026, 6, 30, 14, 22))).toBe("30 de julio de 2026, 14:22");
+  });
+
+  it("rellena con cero la hora y el minuto de un solo dígito", () => {
+    expect(formatTimestampEs(new Date(2026, 0, 5, 9, 5))).toBe("5 de enero de 2026, 09:05");
   });
 });

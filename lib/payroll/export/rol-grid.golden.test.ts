@@ -33,6 +33,9 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
     sectorCode: "1608551004134",
     hasReserveFund: input.hasReserveFund,
     accumulatesReserveFund: input.accumulatesReserveFund,
+    // Las dos provisiones son de la FICHA, no de la captura: el motor las lee de aquí.
+    provisionsThirteenth: input.flags.provisionsThirteenth,
+    provisionsFourteenth: input.flags.provisionsFourteenth,
     days: input.days,
     capture: {
       overtimeHours50: input.overtimeHours50,
@@ -46,8 +49,6 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
       variableCommission: input.variableCommission,
       bonus: input.bonus,
       deductions: input.deductions,
-      provisionsThirteenth: input.flags.provisionsThirteenth,
-      provisionsFourteenth: input.flags.provisionsFourteenth,
       paid: input.paid,
     },
   };
@@ -83,7 +84,6 @@ const grid = buildRolGrid({
   monthIndex: 2,
   lines: GOLDEN_MARCH_2026.map((golden) => toLine(golden.name, golden.input)),
   parameters: DEFAULT_PAYROLL_PARAMETERS,
-  extraConcepts: [],
 });
 const employees = grid.rows.filter((row) => row.kind === "employee");
 const at = (row: RolExportRow, letter: string) => row.cells[columnIndexOf(letter)];

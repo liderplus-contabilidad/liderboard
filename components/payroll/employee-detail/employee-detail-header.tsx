@@ -1,14 +1,8 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, FileText, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { periodLongLabel } from "@/lib/payroll/periods";
-
-/** Quitar un empleado de la nómina sigue siendo trabajo de otra ronda. Se apaga con su motivo en
- *  el tooltip, la misma convención que `PeriodHeader` — la píldora de `DisabledReasonPill` es para
- *  cuando lo que falta es el paso anterior de todo el módulo y hay que verlo sin apuntar; aquí lo
- *  que falta es una función. */
-const DELETE_DISABLED_REASON = "Quitar un empleado de la nómina no está disponible todavía";
 
 /** El mismo alto y radio que el control de período del encabezado hermano: las flechas de esta
  *  pantalla y las de aquella son el mismo gesto y no pueden medir distinto. */
@@ -39,11 +33,18 @@ interface EmployeeDetailHeaderProps {
   onDownloadPayslip: () => void;
   /** Mientras `pdf-lib` se carga y el PDF se arma. */
   downloading: boolean;
+  /** Abre el diálogo de ficha en modo edición. */
+  onEdit: () => void;
+  /** Pide la baja del empleado. La confirmación la pone quien recibe esto, no este encabezado. */
+  onDelete: () => void;
 }
 
 /**
  * El encabezado del detalle de un empleado: la vuelta al período, el título con su nombre y, a la
- * derecha, las flechas que recorren la nómina más las dos acciones que todavía no existen.
+ * derecha, las flechas que recorren la nómina más las tres acciones sobre él.
+ *
+ * «Eliminar empleado» va la ÚLTIMA, en el borde, y no entre las dos benignas: es la única
+ * destructiva de la fila y con tres botones seguidos un clic desviado tiene adónde caer.
  *
  * Las flechas son el control que hace útil esta pantalla: revisar una nómina es pasar empleado por
  * empleado, y volver al listado entre uno y otro cuesta dos clics por persona. No hay desplegable
@@ -60,6 +61,8 @@ export function EmployeeDetailHeader({
   next,
   onDownloadPayslip,
   downloading,
+  onEdit,
+  onDelete,
 }: EmployeeDetailHeaderProps) {
   return (
     <div className="mb-5">
@@ -89,11 +92,9 @@ export function EmployeeDetailHeader({
             <EmployeeNavArrow direction="next" target={next} />
           </div>
 
-          <span title={DELETE_DISABLED_REASON}>
-            <Button variant="danger" size="toolbar" disabled icon={<Trash2 size={15} />}>
-              Eliminar empleado
-            </Button>
-          </span>
+          <Button variant="secondary" size="toolbar" icon={<Pencil size={15} />} onClick={onEdit}>
+            Editar ficha
+          </Button>
           <Button
             variant="secondary"
             size="toolbar"
@@ -102,6 +103,9 @@ export function EmployeeDetailHeader({
             onClick={onDownloadPayslip}
           >
             {downloading ? "Generando…" : "Descargar rol (PDF)"}
+          </Button>
+          <Button variant="danger" size="toolbar" icon={<Trash2 size={15} />} onClick={onDelete}>
+            Eliminar empleado
           </Button>
         </div>
       </div>
