@@ -13,6 +13,7 @@
  * `workbook.ts` recorre esta rejilla y la dibuja sin decidir nada — la misma separación que el
  * comprobante en PDF (`document.ts` → `layout.ts` → `render.ts`).
  */
+import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { areaKey } from "../areas";
 import { computeLinePayroll } from "../employee-input";
@@ -31,7 +32,14 @@ import {
 } from "./columns";
 
 /** Qué ES cada fila, para que `workbook.ts` sepa cómo pintarla sin volver a deducirlo. */
-export type RolRowKind = "company" | "labels" | "area" | "employee" | "subtotal" | "suman";
+export type RolRowKind =
+  | "company"
+  | "letterhead"
+  | "labels"
+  | "area"
+  | "employee"
+  | "subtotal"
+  | "suman";
 
 export interface RolExportRow {
   kind: RolRowKind;
@@ -47,6 +55,9 @@ export interface RolExportGrid {
 export interface RolExportInput {
   /** El nombre que el usuario le dio al cliente. Va donde el libro pone su razón social. */
   clientName: string;
+  /** Los datos de la empresa, si el cliente los declaró: son las filas del membrete, bajo el
+   *  nombre. Sin ellos el preámbulo queda como estaba. */
+  company?: CompanyProfile;
   year: number;
   monthIndex: number;
   /** En el orden en que la nómina se lee en pantalla. */
@@ -162,6 +173,19 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
   const company = blankRow(width);
   put(company, "B", input.clientName);
   rows.push({ kind: "company", cells: company });
+
+  // El membrete va DEBAJO del nombre y encima de los rótulos, en la misma columna `B`. Las líneas
+  // llegan compuestas por `letterheadLines`, la misma función que escriben la pantalla y el
+  // comprobante en PDF: aquí no se junta ninguna dirección.
+  //
+  // Añadir filas al preámbulo es seguro para el viaje de vuelta y no por casualidad: el lector
+  // localiza el período por su FORMA entre las filas anteriores a la cabecera, y la empresa por ser
+  // la primera con texto de esta columna. Ninguna línea del membrete puede casar con un período.
+  for (const line of letterheadLines(input.company)) {
+    const row = blankRow(width);
+    put(row, "B", line);
+    rows.push({ kind: "letterhead", cells: row });
+  }
 
   const labelsTop = blankRow(width);
   put(labelsTop, "B", periodText(input.year, input.monthIndex));

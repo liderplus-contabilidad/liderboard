@@ -28,6 +28,8 @@ const NUMBER_FORMATS: Record<RolCellFormat, string | null> = {
 const HEADER_FILL = "FFF1F5F9";
 const AREA_FILL = "FFE2E8F0";
 const RULE_COLOR = "FF94A3B8";
+/** La tinta del membrete: el gris con el que la app escribe un dato secundario. */
+const LETTERHEAD_INK = "FF64748B";
 
 /** Ancho de una columna que el catálogo no declara (los huecos del libro). */
 const GAP_WIDTH = 6;
@@ -39,6 +41,12 @@ function paintRow(
 ): void {
   if (kind === "company") {
     row.getCell(2).font = { bold: true, size: 13 };
+    return;
+  }
+  // El membrete, en cuerpo pequeño y tinta suave: es el pie de identidad del nombre de arriba, no
+  // otro título. El mismo escalón que en el comprobante en PDF.
+  if (kind === "letterhead") {
+    row.getCell(2).font = { size: 9, color: { argb: LETTERHEAD_INK } };
     return;
   }
   if (kind === "labels") {
@@ -108,9 +116,16 @@ export async function buildRolWorkbook(
   }
 
   // Ochenta columnas se leen desplazándose a la derecha, así que el nombre tiene que quedarse a la
-  // vista; y por debajo de los rótulos, para saber qué se está mirando. `rowCount` ya incluye la
-  // banda del membrete, si la hubo.
-  ws.views = [{ state: "frozen", xSplit: 3, ySplit: ws.rowCount - grid.rows.length + 3 }];
+  // vista; y por debajo de los rótulos, para saber qué se está mirando. Dónde acaban los rótulos se
+  // CUENTA sobre la rejilla y no se estima: el preámbulo mide distinto según cuántas líneas de
+  // membrete traiga el cliente, y una fila congelada de más taparía la primera área.
+  const lastLabelRow = grid.rows.reduce(
+    (last, row, index) => (row.kind === "labels" ? index + 1 : last),
+    0,
+  );
+  ws.views = [
+    { state: "frozen", xSplit: 3, ySplit: ws.rowCount - grid.rows.length + lastLabelRow },
+  ];
 
   return wb.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }

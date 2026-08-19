@@ -6,6 +6,14 @@ import {
   DEFAULT_ENTITY_LABELS,
   type EntityLabels,
 } from "@/components/dashboard/active-client";
+import {
+  checkCompanyProfile,
+  companyDraftFrom,
+  emptyCompanyDraft,
+  type CompanyDraft,
+  type CompanyField,
+  type CompanyProfile,
+} from "@/lib/company-profile";
 import { withCenterLogo } from "@/lib/logos";
 import {
   findByName,
@@ -24,6 +32,9 @@ import {
 export type NameableEntity = NamedEntity & {
   centerLogos?: CenterLogos;
   centerOptions?: readonly CenterOption[];
+  /** El perfil de empresa, en los módulos que lo piden. Como los dos de arriba: quien no lo use ni
+   *  lo declara ni se entera de que existe. */
+  company?: CompanyProfile;
 };
 
 export interface EntityNaming {
@@ -49,22 +60,32 @@ export function useEntityNaming({
   labels = DEFAULT_ENTITY_LABELS,
   onCreate,
   onRename,
+  withCompany = false,
 }: {
   entities: readonly NameableEntity[];
   labels?: EntityLabels;
-  onCreate: (name: string, logo?: EntityLogo) => Promise<unknown>;
+  onCreate: (name: string, logo?: EntityLogo, company?: CompanyProfile) => Promise<unknown>;
   onRename: (
     id: string,
     name: string,
     logo: EntityLogo | null,
     centerLogos: CenterLogos | undefined,
+    company?: CompanyProfile,
   ) => Promise<unknown>;
+  /**
+   * Pide además los datos de la empresa del membrete, y los EXIGE para guardar. Apagado por
+   * defecto, que es lo que deja el diálogo de PyG y el de Ocupaciones exactamente como estaban: no
+   * envían perfil, no lo reciben y su formulario no lo menciona.
+   */
+  withCompany?: boolean;
 }): EntityNaming {
   const [naming, setNaming] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<EntityLogo | null>(null);
   const [centerLogos, setCenterLogos] = useState<CenterLogos | undefined>(undefined);
+  const [company, setCompany] = useState<CompanyDraft>(emptyCompanyDraft);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [companyError, setCompanyError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openCreate = useCallback(() => {
@@ -72,7 +93,9 @@ export function useEntityNaming({
     setLogo(null);
     // Un workspace nuevo nace vacío, así que no tiene centros a los que ponerle logo todavía.
     setCenterLogos(undefined);
+    setCompany(emptyCompanyDraft());
     setNameError(null);
+    setCompanyError(null);
     setNaming({ mode: "create" });
   }, []);
 
@@ -85,7 +108,12 @@ export function useEntityNaming({
       // multiplicado por el número de centros, para los suyos.
       setLogo(entity?.logo ?? null);
       setCenterLogos(entity?.centerLogos);
+      // Lo guardado se precarga por el mismo motivo que el logo: si no, cada edición parecería
+      // estar vaciando el membrete. Un cliente antiguo abre con los campos en blanco, que es
+      // exactamente lo que el aviso de «faltan los datos» ofrece completar.
+      setCompany(companyDraftFrom(entity?.company));
       setNameError(null);
+      setCompanyError(null);
       setNaming({ mode: "rename", id });
     },
     [entities],
@@ -107,18 +135,46 @@ export function useEntityNaming({
       setNameError(`Ya existe un ${labels.subject} llamado «${taken.name}».`);
       return;
     }
+    // El perfil se valida ENTERO aquí y no mientras se teclea: el botón ya está apagado si falta un
+    // obligatorio, así que lo único que puede fallar en este punto es el RUC.
+    let profile: CompanyProfile | undefined;
+    if (withCompany) {
+      const companyCheck = checkCompanyProfile(company);
+      if (!companyCheck.ok) {
+        setCompanyError(companyCheck.message);
+        return;
+      }
+      profile = companyCheck.profile;
+    }
+
     setBusy(true);
     try {
       if (naming.mode === "create") {
-        await onCreate(check.name, logo ?? undefined);
+        await onCreate(check.name, logo ?? undefined, profile);
       } else if (naming.id) {
-        await onRename(naming.id, check.name, logo, centerLogos);
+        await onRename(naming.id, check.name, logo, centerLogos, profile);
       }
       setNaming(null);
     } finally {
       setBusy(false);
     }
-  }, [naming, name, logo, centerLogos, entities, labels.subject, onCreate, onRename]);
+  }, [
+    naming,
+    name,
+    logo,
+    centerLogos,
+    company,
+    withCompany,
+    entities,
+    labels.subject,
+    onCreate,
+    onRename,
+  ]);
+
+  const changeCompanyField = useCallback((field: CompanyField, value: string) => {
+    setCompany((current) => ({ ...current, [field]: value }));
+    setCompanyError(null);
+  }, []);
 
   const dialog = (
     <ClientNameDialog
@@ -128,6 +184,8 @@ export function useEntityNaming({
       logo={logo}
       {...(editing?.centerOptions ? { centers: editing.centerOptions } : {})}
       centerLogos={centerLogos}
+      {...(withCompany ? { company, onCompanyChange: changeCompanyField } : {})}
+      companyError={companyError}
       error={nameError}
       busy={busy}
       labels={labels}

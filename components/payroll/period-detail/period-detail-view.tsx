@@ -123,13 +123,14 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           parameters: DEFAULT_PAYROLL_PARAMETERS,
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
+          ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         }),
         payslipBatchFilename(period.year, period.monthIndex),
       );
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, lines, period]);
+  }, [activeClient?.name, activeClient?.logo, activeClient?.company, lines, period]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -193,6 +194,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
               extraConcepts={extraConcepts}
               clientName={activeClient?.name ?? ""}
               {...(activeClient?.logo ? { clientLogo: activeClient.logo } : {})}
+              {...(activeClient?.company ? { clientCompany: activeClient.company } : {})}
             />
           ) : null
         }

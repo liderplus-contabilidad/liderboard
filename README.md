@@ -883,6 +883,27 @@ bajo su tabla—.
   el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
   escala.
 
+## Membrete del cliente (Rol de Pagos)
+
+Un cliente de Rol de Pagos guarda, junto a su nombre y su logo, los **datos de la empresa** con los
+que la firma encabeza su papel: razón social, RUC, provincia, cantón, parroquia, dirección,
+teléfonos y correo. Se piden en el mismo diálogo que crea o edita el cliente —los seis primeros son
+obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaciones no los ven.
+
+- **Una sola definición del bloque.** `lib/company-profile.ts` (puro + testeado) compone las líneas
+  —`DELICMAR S.A.S. · RUC 1891234567001`, `TUNGURAHUA / AMBATO / AMBATO / …`, los teléfonos, el
+  correo— y las tres superficies las reciben ya hechas, así que ninguna puede escribir la dirección
+  a su manera. Un campo opcional ausente no deja línea ni separador.
+- **No se dibuja en ninguna pantalla.** El membrete es para el papel: en pantalla, quién es el
+  cliente ya lo dicen el selector del header y la ficha del empleador, y repetirlo solo gasta el
+  alto que las cifras necesitan.
+- **Dónde se imprime.** En el comprobante en PDF, bajo el nombre del cliente, y en el preámbulo de
+  la hoja `GENERAL` del Excel del período. El archivo sigue volviendo a entrar a la app: el lector
+  localiza el período por su forma y la empresa por ser la primera celda con texto de la columna
+  `B` sobre la cabecera, sin coordenadas fijas.
+- **Un cliente sin esos datos no bloquea nada**: descarga igual, con el logo y el nombre. Qué falta
+  lo dice el diálogo del cliente, que es donde se llena.
+
 ## Informes imprimibles (PyG y Sueldos por Áreas)
 
 Dos módulos ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros: pedir

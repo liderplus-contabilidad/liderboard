@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { ExcelActions } from "@/components/ui/excel-actions";
+import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/logos";
 import { downloadRolWorkbook } from "@/lib/payroll/export/download";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
@@ -26,6 +27,7 @@ export function PayrollExcelActions({
   extraConcepts,
   clientName,
   clientLogo,
+  clientCompany,
 }: {
   period: PayrollPeriod;
   periods: readonly PayrollPeriod[];
@@ -33,6 +35,7 @@ export function PayrollExcelActions({
   extraConcepts: readonly PayrollExtraConcept[];
   clientName: string;
   clientLogo?: EntityLogo;
+  clientCompany?: CompanyProfile;
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -41,6 +44,7 @@ export function PayrollExcelActions({
       downloadRolWorkbook(
         {
           clientName,
+          ...(clientCompany ? { company: clientCompany } : {}),
           year: period.year,
           monthIndex: period.monthIndex,
           lines,
@@ -49,7 +53,7 @@ export function PayrollExcelActions({
         },
         clientLogo,
       ),
-    [clientName, clientLogo, extraConcepts, lines, period.monthIndex, period.year],
+    [clientName, clientCompany, clientLogo, extraConcepts, lines, period.monthIndex, period.year],
   );
 
   const empty = lines.length === 0;
@@ -82,11 +86,13 @@ export function PayrollExcelActions({
                 abierto.
               </p>
               <p className="mt-2">
-                Entrega esa misma hoja —una sola, con cada columna en su letra del libro— y vuelve a
-                entrar aquí sin perder nada. Las columnas cuyo dato la app no guarda (número de
-                cuenta, ctas. por cobrar) salen con su rótulo y en blanco, y los conceptos de
-                ingreso extra van sumados en <span className="font-mono">OTROS INGRESOS</span>: esa
-                columna todavía no se relee, así que volver a cargar el archivo la perdería.
+                Entrega esa misma hoja —una sola, con cada columna en su letra del libro—,
+                encabezada por el logo y los datos de la empresa del cliente, y vuelve a entrar aquí
+                sin perder nada: el membrete no se relee porque esos datos son del cliente, no del
+                archivo. Las columnas cuyo dato la app no guarda (número de cuenta, ctas. por
+                cobrar) salen con su rótulo y en blanco, y los conceptos de ingreso extra van
+                sumados en <span className="font-mono">OTROS INGRESOS</span>: esa columna todavía no
+                se relee, así que volver a cargar el archivo la perdería.
               </p>
             </>
           ),

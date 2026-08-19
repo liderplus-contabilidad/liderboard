@@ -23,10 +23,11 @@
  */
 import { sameToTheCentavo } from "@/lib/payroll/amounts";
 import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "@/lib/payroll/types";
-import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
+import { readGrid, readWorkbook } from "@/lib/excel/workbook";
 import { PayrollParseError } from "./errors";
 import {
   excelSerialToISODate,
+  findCompany,
   findPeriod,
   locateColumns,
   missingColumnLabels,
@@ -40,16 +41,6 @@ const CONTRACT_TYPES = new Set(["CT", "TP"]);
 const DEFAULT_CONTRACT_TYPE = "CT";
 /** Lo que `FR` y `AC FR` escriben cuando la respuesta es que sí. */
 const YES = "S";
-
-function cellText(cell: Cell): string {
-  if (typeof cell === "string") {
-    return cell.trim();
-  }
-  if (typeof cell === "number" && Number.isFinite(cell)) {
-    return String(cell);
-  }
-  return "";
-}
 
 /**
  * `FR` y `AC FR` valen lo que el libro pregunta de ellas: `IF(FR="S", …, 0)`. Solo una `S` enciende
@@ -136,8 +127,10 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
     throw new PayrollParseError("invalid-file");
   }
 
-  const company = cellText(grid[0]?.[1] ?? null);
   const columns = locateColumns(grid);
+  // Por su SITIO en el preámbulo, no por `B1`: el rol que esta app genera abre con la banda del logo
+  // y, bajo el nombre, con las líneas del membrete.
+  const company = findCompany(grid, columns.headerRow);
   // Por su FORMA, no por su celda: el rol que esta app genera lleva membrete, y unas filas de logo
   // por encima del preámbulo movían el `B2` fijo que se leía antes.
   const period = findPeriod(grid, columns.headerRow);

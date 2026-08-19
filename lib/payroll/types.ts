@@ -11,6 +11,7 @@
  * step would produce, with no owner yet — `db.ts` is what stamps the `clientId` at the door.
  */
 
+import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/workspaces";
 import type { CapturedDeductions } from "./engine/types";
 
@@ -24,6 +25,16 @@ export interface PayrollClient {
   /** El logo que subió el usuario, si subió alguno — el que encabeza su comprobante en PDF.
    *  Opcional y NO indexado, así que no costó migración de Dexie. */
   logo?: EntityLogo;
+  /**
+   * Lo que el papel de la firma imprime bajo el logo: razón social, ubicación y teléfonos. Es
+   * OPCIONAL en el tipo aunque el diálogo exija sus seis campos, porque los clientes creados antes
+   * de que existiera no lo tienen: un tipo que lo declarara obligatorio afirmaría algo falso sobre
+   * lo que hay en la base y obligaría a cada lectura a mentir. La obligatoriedad es una regla del
+   * ALTA y vive en el formulario, no en el dato.
+   *
+   * No indexado, como el logo, así que tampoco costó versión nueva de Dexie.
+   */
+  company?: CompanyProfile;
 }
 
 /** Único tipo de período por ahora; el tipo deja sitio a "décimos" y "liquidaciones" más adelante. */

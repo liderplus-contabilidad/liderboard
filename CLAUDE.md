@@ -1123,6 +1123,36 @@ archivo de la app no habría podido describir su propio estado. Es `.xlsx` y no 
 por período—, y el importador todavía no la lee: re-subir el archivo los pierde, lo dice el `ⓘ` y hay
 un test que lo fija para el día que deje de ser cierto.
 
+**EL MEMBRETE del cliente** son los datos con los que la firma encabeza su papel —razón social, RUC,
+provincia, cantón, parroquia, dirección, teléfonos y correo—, y viven junto al nombre y el logo, en
+`PayrollClient.company`. La capa pura es `lib/company-profile.ts` y está en `lib/` y no en
+`lib/payroll/` porque quien los CAPTURA es el diálogo compartido del header: un componente de
+`components/dashboard/` que importara de un módulo invertiría la dependencia. Es la misma vecindad de
+`lib/logos.ts` y `lib/workspaces.ts`, y hoy solo lo cablea Rol de Pagos. **`letterheadLines` devuelve
+LÍNEAS ya compuestas, no campos**, y es lo único que sostiene el cambio: el modo de fallo real no es
+que una dirección salga mal, sino que salga de DOS maneras —con coma en la pantalla y con barra en el
+Excel— sin que ninguna cifra lo delate; el `COMPANY_FIELDS` de al lado es el catálogo del que salen a
+la vez el formulario, la validación y el borrador vacío. El perfil es **opcional en el TIPO aunque el
+diálogo exija sus seis campos** (RUC y correo no), porque los clientes guardados antes no lo tienen y
+un tipo que mintiera obligaría a cada lectura a inventarse algo — la obligatoriedad es del ALTA. Por
+lo mismo no costó versión de Dexie: `stores()` declara índices y ninguno cambia. La sección del
+diálogo entra por la puerta que ya abrió la de logos por centro (`company`/`onCompanyChange`
+opcionales en `ClientNameDialog`), así que PyG y Ocupaciones no cambian ni una línea. **No se dibuja en NINGUNA
+pantalla**, y eso se aprendió construyéndolo: como banda repetía el nombre del cliente que ya dicen
+el selector del header y —en el detalle de un empleado— la ficha del empleador, y dentro de esa ficha
+la llevaba de cuatro líneas a ocho para repetir un dato que ahí nadie usa; quien revisa el rol de una
+persona no necesita la parroquia de la empresa. El membrete existe para el PAPEL, y ahí va entero: el
+comprobante en PDF lo imprime bajo el nombre, donde **solo la primera línea cede ancho al bloque del
+título** —es la única que comparte renglón con el mes— porque con un tope común la ubicación del
+cliente real (325 pt) solo entraba a 6,5 pt en cuanto había logo; y la hoja `GENERAL` lo escribe en
+filas de la columna `B` bajo el nombre. Esas filas son seguras para el viaje de vuelta porque el
+lector ya no usa ninguna coordenada fija: `findPeriod` localiza el período por su forma y ahora
+`findCompany` localiza la empresa por ser la primera celda con TEXTO de esa columna sobre la cabecera
+—se leía en `grid[0][1]`, que desde la banda del logo era una fila en blanco, así que un rol
+descargado con logo volvía a entrar sin empresa—. Un cliente sin perfil no bloquea nada: imprime lo
+que hay, y quien dice qué falta es el DIÁLOGO —donde se llena—, no un aviso en una vista que
+señalaría el hueco de un bloque que no se dibuja.
+
 **SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
 `EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL
 (`employerCost`, `AY`) por área y por empleado a lo largo de meses y años. **No es un módulo** —lo

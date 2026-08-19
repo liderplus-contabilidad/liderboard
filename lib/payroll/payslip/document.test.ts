@@ -340,3 +340,45 @@ describe("conceptos de ingreso extra del período", () => {
     expect(amount(con.totalIncome) - amount(sin.totalIncome)).toBeCloseTo(30, 2);
   });
 });
+
+describe("el membrete del cliente", () => {
+  const COMPANY = {
+    legalName: "DELICMAR S.A.S.",
+    taxId: "1891234567001",
+    province: "TUNGURAHUA",
+    canton: "AMBATO",
+    parish: "AMBATO",
+    address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+    phones: "0991045439 - 0958780660",
+  };
+
+  const withCompany = buildPayslipDocument({
+    line: SORIA,
+    computed: computeEmployeePayroll(toEngineInput(SORIA, []), DEFAULT_PAYROLL_PARAMETERS),
+    capture: SORIA.capture ?? emptyCapture(),
+    year: 2026,
+    monthIndex: 2,
+    clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+    clientCompany: COMPANY,
+    position: 6,
+  });
+
+  // Las líneas llegan COMPUESTAS, no como campos: es lo que hace imposible que el papel escriba la
+  // dirección de una manera y el Excel de otra.
+  it("baja el perfil a las líneas de `letterheadLines`", () => {
+    expect(withCompany.companyLines).toEqual([
+      "DELICMAR S.A.S. · RUC 1891234567001",
+      "TUNGURAHUA / AMBATO / AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+      "0991045439 - 0958780660",
+    ]);
+  });
+
+  // El nombre del cliente y su razón social son dos cosas distintas, y el papel escribe las dos.
+  it("no toca el nombre del cliente, que sigue siendo la primera línea", () => {
+    expect(withCompany.company).toBe("HOTEL BOUTIQUE CULTURA MANOR");
+  });
+
+  it("sin perfil no hay líneas", () => {
+    expect(build(SORIA).companyLines).toEqual([]);
+  });
+});

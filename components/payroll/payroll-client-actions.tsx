@@ -38,15 +38,21 @@ function describeClient(client: PayrollClientSummary): string | undefined {
 
 /**
  * El diálogo de nombre conectado al provider de Rol de Pagos. Las reglas y el estado son de
- * `useEntityNaming`; aquí solo se dice qué lista y qué palabras usar.
+ * `useEntityNaming`; aquí solo se dice qué lista, qué palabras y que este módulo pide además los
+ * datos de la empresa del membrete.
  */
 function useClientNaming() {
   const { clients, createClient, updateClient } = usePayrollData();
   return useEntityNaming({
     entities: clients,
     labels: PAYROLL_LABELS,
+    // Rol de Pagos es el único módulo que pide el perfil de empresa: su rol y su comprobante son
+    // documentos con membrete, y un cliente sin esos datos no puede producirlos.
+    withCompany: true,
     onCreate: createClient,
-    onRename: updateClient,
+    // Los logos por centro son el cuarto argumento y aquí no existen: un cliente de Rol de Pagos no
+    // tiene centros, así que se descarta y el perfil sigue de largo.
+    onRename: (id, name, logo, _centerLogos, company) => updateClient(id, name, logo, company),
   });
 }
 

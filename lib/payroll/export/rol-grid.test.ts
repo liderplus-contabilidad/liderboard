@@ -30,9 +30,11 @@ function employee(
 function build(
   lines: readonly ParsedPayrollEmployeeLine[],
   extraConcepts: readonly PayrollExtraConcept[] = [],
+  company?: typeof COMPANY,
 ): RolExportGrid {
   return buildRolGrid({
     clientName: "HOTEL DE PRUEBA",
+    ...(company ? { company } : {}),
     year: 2026,
     monthIndex: 2,
     lines,
@@ -40,6 +42,17 @@ function build(
     extraConcepts,
   });
 }
+
+/** El perfil del archivo real del cliente. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+};
 
 const at = (row: RolExportRow, letter: string) => row.cells[columnIndexOf(letter)];
 const kinds = (grid: RolExportGrid) => grid.rows.map((row) => row.kind);
@@ -242,5 +255,55 @@ describe("los conceptos extra", () => {
     const grid = build([employee("ALFA", "COCINA")]);
     expect(grid.columns.some((column) => column.letter === "CB")).toBe(false);
     expect(grid.rows[0].cells).toHaveLength(columnIndexOf("CA") + 1);
+  });
+});
+
+describe("el membrete del cliente", () => {
+  const lines = [employee("ALFA", "COCINA"), employee("BETA", "VENTAS")];
+
+  it("escribe sus líneas en `B`, bajo el nombre y encima de los rótulos", () => {
+    const grid = build(lines, [], COMPANY);
+    expect(kinds(grid).slice(0, 6)).toEqual([
+      "company",
+      "letterhead",
+      "letterhead",
+      "letterhead",
+      "labels",
+      "labels",
+    ]);
+    expect(at(grid.rows[0], "B")).toBe("HOTEL DE PRUEBA");
+    expect(at(grid.rows[1], "B")).toBe("DELICMAR S.A.S. · RUC 1891234567001");
+    expect(at(grid.rows[2], "B")).toBe(
+      "TUNGURAHUA / AMBATO / AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+    );
+    expect(at(grid.rows[3], "B")).toBe("0991045439 - 0958780660");
+  });
+
+  // El período comparte fila con la primera hilera de rótulos y el lector lo busca POR SU FORMA
+  // entre las filas de arriba: ninguna línea del membrete puede parecerse a un período.
+  it("el período sigue estando, y ninguna línea del membrete puede confundirse con él", () => {
+    const grid = build(lines, [], COMPANY);
+    expect(at(grid.rows[4], "B")).toBe("MARZO 2026");
+    for (const row of grid.rows.filter((r) => r.kind === "letterhead")) {
+      expect(at(row, "B")).not.toBe("MARZO 2026");
+    }
+  });
+
+  it("sin perfil el preámbulo no gana ninguna fila", () => {
+    expect(kinds(build(lines)).slice(0, 3)).toEqual(["company", "labels", "labels"]);
+    expect(build(lines).rows.some((row) => row.kind === "letterhead")).toBe(false);
+  });
+
+  // Lo que el contador coteja es la LETRA de cada columna: el membrete solo puede empujar el cuerpo
+  // hacia abajo, nunca moverlo de lado.
+  it("el cuerpo no se mueve de columna, y `SUMAN` dice lo mismo con membrete y sin él", () => {
+    const conMembrete = build(lines, [], COMPANY);
+    const sinMembrete = build(lines);
+    const suman = (grid: RolExportGrid) => grid.rows.find((row) => row.kind === "suman");
+
+    expect(suman(conMembrete)?.cells).toEqual(suman(sinMembrete)?.cells);
+    expect(
+      conMembrete.rows.filter((row) => row.kind === "employee").map((row) => row.cells),
+    ).toEqual(sinMembrete.rows.filter((row) => row.kind === "employee").map((row) => row.cells));
   });
 });

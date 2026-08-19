@@ -9,6 +9,7 @@
  * name — the same resolution already standing between those two modules.
  */
 import Dexie, { type Table } from "dexie";
+import type { CompanyProfile } from "@/lib/company-profile";
 import { sortByName, type EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll } from "./employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
@@ -78,8 +79,17 @@ export async function getClient(clientId: string): Promise<PayrollClient | undef
  * Creates an EMPTY cliente and opens it. The name is taken as given: validation and duplicate
  * checking are `useEntityNaming`'s job, run where the caller can say what is wrong.
  */
-export async function createClient(name: string, logo?: EntityLogo): Promise<PayrollClient> {
-  const client: PayrollClient = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
+export async function createClient(
+  name: string,
+  logo?: EntityLogo,
+  company?: CompanyProfile,
+): Promise<PayrollClient> {
+  const client: PayrollClient = {
+    id: crypto.randomUUID(),
+    name,
+    ...(logo ? { logo } : {}),
+    ...(company ? { company } : {}),
+  };
   await db.transaction("rw", db.clients, db.active, async () => {
     await db.clients.add(client);
     await db.active.put({ key: ACTIVE_KEY, clientId: client.id });
@@ -88,16 +98,25 @@ export async function createClient(name: string, logo?: EntityLogo): Promise<Pay
 }
 
 /**
- * Changes the cliente's LABEL — its name and its logo — and NOTHING else: no período and no nómina
- * is touched. Both travel in one write because the dialog edits them together; `logo: null` removes
- * it, and an `undefined` in a Dexie `update` deletes the property, which is what that means here.
+ * Changes the cliente's LABEL — its name, its logo and its company profile — and NOTHING else: no
+ * período and no nómina is touched. The three travel in one write because the dialog edits them
+ * together; `logo: null` removes it, and an `undefined` in a Dexie `update` deletes the property,
+ * which is what that means here.
+ *
+ * El perfil llega `null` solo desde un módulo que no lo pide; en Rol de Pagos el diálogo lo exige,
+ * así que guardar un cliente es también la vía por la que uno antiguo deja de estar incompleto.
  */
 export async function updateClient(
   clientId: string,
   name: string,
   logo: EntityLogo | null,
+  company?: CompanyProfile | null,
 ): Promise<void> {
-  await db.clients.update(clientId, { name, logo: logo ?? undefined });
+  await db.clients.update(clientId, {
+    name,
+    logo: logo ?? undefined,
+    ...(company === undefined ? {} : { company: company ?? undefined }),
+  });
 }
 
 /**

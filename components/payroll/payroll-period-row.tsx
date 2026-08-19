@@ -96,13 +96,14 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
           parameters: DEFAULT_PAYROLL_PARAMETERS,
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
+          ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         }),
         payslipBatchFilename(period.year, period.monthIndex),
       );
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, period]);
+  }, [activeClient?.name, activeClient?.logo, activeClient?.company, period]);
 
   const confirmDelete = useCallback(async () => {
     setBusy(true);

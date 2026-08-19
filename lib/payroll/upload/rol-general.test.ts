@@ -40,6 +40,33 @@ describe("parseRolGeneral — archivo bien formado", () => {
     expect(result.monthIndex).toBe(2);
   });
 
+  // Las tres formas que un archivo puede tener hoy. La segunda y la tercera son las que la app
+  // GENERA, y sin esto un rol descargado volvía a entrar sin empresa: `B1` es una fila en blanco de
+  // la banda del logo.
+  it("lee la empresa aunque la banda del logo empuje el preámbulo hacia abajo", () => {
+    const conBanda = [[], [], [], ...ROL_GENERAL_AOA];
+    const result = parseRolGeneral(bufferOf(conBanda));
+    expect(result.company).toBe("HOTEL BOUTIQUE FICTICIO");
+    expect(result.year).toBe(2026);
+  });
+
+  it("no confunde una línea del membrete con la empresa", () => {
+    const [nombre, ...resto] = ROL_GENERAL_AOA;
+    const conMembrete = [
+      [],
+      [],
+      nombre,
+      [null, "DELICMAR S.A.S. · RUC 1891234567001"],
+      [null, "TUNGURAHUA / AMBATO / AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA"],
+      [null, "0991045439 - 0958780660"],
+      ...resto,
+    ];
+    const result = parseRolGeneral(bufferOf(conMembrete));
+    expect(result.company).toBe("HOTEL BOUTIQUE FICTICIO");
+    expect(result.year).toBe(2026);
+    expect(result.monthIndex).toBe(2);
+  });
+
   it("el período nunca sale del nombre del archivo — la función ni siquiera lo recibe", () => {
     // A diferencia del formato mensual por centros de PyG (que sí lee el nombre), este parser no
     // toma ningún nombre de archivo como argumento: no hay forma de que el período salga de ahí.

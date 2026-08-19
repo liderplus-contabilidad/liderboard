@@ -2,7 +2,12 @@ import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 
 interface EmployeeIdentityCardsProps {
   /** El nombre que el usuario le puso al cliente — NO la razón social del archivo, que este módulo
-   *  nunca compara contra nada (misma regla que PyG y Ocupaciones). */
+   *  nunca compara contra nada (misma regla que PyG y Ocupaciones).
+   *
+   *  Los DATOS DE LA EMPRESA no entran aquí, y es deliberado: se probaron —razón social, ubicación
+   *  y teléfonos bajo el nombre— y esta ficha pasó de cuatro líneas a ocho para repetir algo que en
+   *  pantalla no se usa. El membrete existe para el papel, así que vive donde se imprime: el
+   *  comprobante en PDF y el Excel del período. */
   clientName: string;
   /** El centro de costo del empleado. `null` mientras la ficha no lo declare: no es «GENERAL», es
    *  «no hay». */

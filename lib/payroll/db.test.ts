@@ -35,6 +35,18 @@ import {
 /** The cliente every scoped case runs inside; a second one appears only where isolation is the point. */
 let clientId = "";
 
+/** Un perfil de empresa completo, el del archivo real del cliente. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+  email: "nomina@delicmar.com",
+};
+
 /** Una ficha completa, para no repetir sus nueve campos en cada test de nómina. */
 function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
   return {
@@ -106,6 +118,36 @@ describe("clientes", () => {
 
   it("a cliente created with no logo stores no empty field either", async () => {
     expect("logo" in ((await getClient(clientId)) ?? {})).toBe(false);
+  });
+
+  it("guarda el perfil de empresa y lo edita sin tocar los períodos", async () => {
+    const conPerfil = await createClient("Delicmar", undefined, COMPANY);
+    expect((await getClient(conPerfil.id))?.company).toEqual(COMPANY);
+
+    await createPeriod(conPerfil.id, 2026, 2);
+    await updateClient(conPerfil.id, "Delicmar", null, {
+      ...COMPANY,
+      address: "OTRA CALLE",
+    });
+
+    expect((await getClient(conPerfil.id))?.company?.address).toBe("OTRA CALLE");
+    expect((await listPeriods(conPerfil.id)).length).toBe(1);
+  });
+
+  // Un cliente guardado antes de que el perfil existiera es el caso normal, no el raro: la app
+  // tiene que leerlo sin error y el membrete imprimir lo que haya.
+  it("un cliente sin perfil no guarda un campo vacío y se lee igual", async () => {
+    const client = await getClient(clientId);
+    expect(client?.company).toBeUndefined();
+    expect("company" in (client ?? {})).toBe(false);
+  });
+
+  // Renombrar desde un módulo que no pide perfil (PyG, Ocupaciones) NO puede borrar el que hay:
+  // `undefined` significa «esta llamada no habla del perfil», no «quítalo».
+  it("renombrar sin hablar del perfil lo conserva", async () => {
+    const conPerfil = await createClient("Delicmar", undefined, COMPANY);
+    await updateClient(conPerfil.id, "Delicmar S.A.S.", null);
+    expect((await getClient(conPerfil.id))?.company).toEqual(COMPANY);
   });
 
   it("summarizes what each cliente holds, for the selector's subline", async () => {

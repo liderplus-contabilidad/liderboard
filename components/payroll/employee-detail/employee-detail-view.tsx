@@ -306,6 +306,7 @@ export function EmployeeDetailView({
         monthIndex: period.monthIndex,
         clientName: activeClient?.name ?? "",
         ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
+        ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         extraConcepts,
         // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
         // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
@@ -321,6 +322,7 @@ export function EmployeeDetailView({
   }, [
     activeClient?.name,
     activeClient?.logo,
+    activeClient?.company,
     capture,
     computed,
     extraConcepts,

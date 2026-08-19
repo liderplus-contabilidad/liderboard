@@ -55,12 +55,25 @@ function employee(
   };
 }
 
+/** El perfil de empresa del archivo real del cliente: tres líneas bajo el nombre. */
+const COMPANY = {
+  legalName: "DELICMAR S.A.S.",
+  taxId: "1891234567001",
+  province: "TUNGURAHUA",
+  canton: "AMBATO",
+  parish: "AMBATO",
+  address: "LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA",
+  phones: "0991045439 - 0958780660",
+};
+
 function input(
   lines: readonly ParsedPayrollEmployeeLine[],
   extraConcepts: readonly PayrollExtraConcept[] = [],
+  company?: typeof COMPANY,
 ): RolExportInput {
   return {
     clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+    ...(company ? { company } : {}),
     year: 2026,
     monthIndex: 2,
     lines,
@@ -73,8 +86,9 @@ async function roundTrip(
   lines: readonly ParsedPayrollEmployeeLine[],
   logo?: EntityLogo,
   extraConcepts: readonly PayrollExtraConcept[] = [],
+  company?: typeof COMPANY,
 ) {
-  const buffer = await buildRolWorkbook(input(lines, extraConcepts), logo ?? null);
+  const buffer = await buildRolWorkbook(input(lines, extraConcepts, company), logo ?? null);
   return parseRolGeneral(buffer);
 }
 
@@ -163,5 +177,33 @@ describe("el rol descargado vuelve a entrar", () => {
       { id: "mov", label: "MOVILIZACION", kind: "aportable" },
     ]);
     expect(parsed.lines[0].capture?.extraAmounts).toBeUndefined();
+  });
+});
+
+describe("con el membrete completo", () => {
+  const LINES = [employee("MORALES MENA SILVIA JIMENA"), employee("ALFA", { area: "COCINA" })];
+
+  // El caso que junta las dos cosas que mueven el preámbulo: la banda del logo por encima y las
+  // líneas del membrete por debajo del nombre. Es lo que baja el usuario de verdad.
+  it("recupera el período, la empresa y la nómina entera", async () => {
+    const parsed = await roundTrip(LINES, LOGO, [], COMPANY);
+    expect(parsed.company).toBe("HOTEL BOUTIQUE CULTURA MANOR");
+    expect(parsed.year).toBe(2026);
+    expect(parsed.monthIndex).toBe(2);
+    expect(parsed.lines.map((line) => line.name)).toEqual(["MORALES MENA SILVIA JIMENA", "ALFA"]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("lee las mismas fichas y capturas que sin membrete", async () => {
+    const conMembrete = await roundTrip(LINES, LOGO, [], COMPANY);
+    const sinMembrete = await roundTrip(LINES);
+    expect(conMembrete.lines).toEqual(sinMembrete.lines);
+  });
+
+  // Ninguna línea del membrete puede colarse como un área: las áreas viven bajo la cabecera y esto
+  // está por encima.
+  it("ninguna línea del membrete se lee como un área ni como un empleado", async () => {
+    const parsed = await roundTrip(LINES, LOGO, [], COMPANY);
+    expect(parsed.lines.map((line) => line.area)).toEqual(["HOSPEDAJE", "COCINA"]);
   });
 });
