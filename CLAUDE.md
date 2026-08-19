@@ -185,7 +185,20 @@ mezclarlas es el encargo, por eso tiene nombre propio y devuelve cada cliente po
 `assertRealClient` rechaza toda escritura contra el centinela, porque una carga que aterrizara ahí
 crearía una partición fantasma que ninguna pantalla lista y ningún borrado alcanza. La descarga
 existe pero **sin la hoja de metadatos oculta** (`buildConsolidatedWorkbook`), para que el archivo no
-pueda re-entrar a un cliente real y reemplazarlo por cuentas que no son suyas. **Qué clientes entran
+pueda re-entrar a un cliente real y reemplazarlo por cuentas que no son suyas. **Y saca el DETALLE,
+no solo el total**: por año, la hoja de la suma y detrás una por cada pieza que la sumó —cada
+(cliente · centro) que entró, rotulada «Restaurante · Dingoo» como el chip y la leyenda, y el estado
+entero de cada cliente de estado único, rotulado con su nombre—, que es el equivalente entre
+empresas del «Excel completo» y por el mismo motivo: quien recibe una suma de cinco empresas
+pregunta enseguida de dónde sale, y una sola hoja no lo dice. Las piezas llegan HECHAS de la capa
+pura (`ConsolidatedWorkspace.summedDatasets`, que reusa las entradas de `centerDatasets` en vez de
+derivar un segundo centro) y no se recomponen en el Excel: cuáles entraron ya lo decidió el filtro
+al sumar, así que las hojas cuadran con su total por construcción y un cliente de estado único
+apartado por una marca de centro tampoco tiene hoja. «Ocultar ceros» se sigue juzgando POR LIBRO
+—las piezas incluidas—, de modo que todas las hojas comparten plan de cuentas y columnas; y el
+membrete es por hoja, con el logo del cliente a la izquierda y el de su centro a la derecha (la del
+total no lleva ninguno, porque son varias empresas), lo que hizo que `StatementSheet` ganara un
+`logo` propio además del del libro. **Qué clientes entran
 se elige en la barra**, no en un control propio: `client-filter.tsx` es el primer desplegable y no se
 rinde fuera del consolidado, igual que `center-filter.tsx` no se rinde en modo estado único.
 `PygFilters` gana `clientIds` con las mismas reglas que el resto —ninguno marcado es TODOS, orden del
@@ -638,6 +651,36 @@ testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no cha
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
 
+**«Ocultar meses en 0» quita del EJE las columnas de mes en las que no se movió nada.** Es el gemelo
+en Gráficos de la poda de columnas de Datos, y `movingPeriods` (en `charts/presets.ts`, puro +
+testeado) es su única regla. Se juzga contra el EJE y no contra la cobertura, que es lo que hace que
+el botón sirva para algo: el eje es el de la frecuencia —las doce del año salvo que «Periodo» lo
+acote—, así que un archivo que llega hasta julio pinta Ago–Dic vacías aunque el rótulo diga «Ene–Jul»,
+y son justo esas las que estorban. Cae además el mes que sí se cargó y no movió nada, que solo existe
+con la cobertura DECLARADA (`loadedMonthsByYear`). **Los dos casos se van juntos** y para el motor
+siguen siendo distintos —un `null` nunca es un `0`, y el rótulo y las cifras lo leen por
+`coveredPeriods`—: el botón no decide qué está cargado sino qué columnas se dibujan, y ahí las dos son
+una columna vacía. Contarlas contra los meses CUBIERTOS en vez de contra los dibujados daba cero justo
+en el caso que se ve en pantalla, y el control no asomaba nunca. Se juzga el ESTADO y no una cuenta, la regla de
+`computeCoverage`: con una cuenta marcada, un mes parado PARA ELLA sigue siendo un mes del ejercicio,
+y borrarlo del eje de todas las tarjetas afirmaría que no pasó nada. Se aplica en `cards.ts`, en el
+ÚNICO sitio donde se resuelve el tramo, así que las cinco tarjetas y el rótulo lo heredan de una vez
+y ninguna nombra un tramo distinto de la de al lado. La primera tarjeta es la excepción de fontanería:
+su eje no sale de `periodRefs` sino de `toSeriesQuery`, así que los periodos que quedan le llegan como
+si estuvieran MARCADOS —acotar es exactamente lo que una marca hace—, en vez de abrirle una segunda
+puerta al motor que pudiera dibujar otro eje que el resto de la pantalla. El rótulo no necesita caso propio, porque
+`periodRangeLabel` ya ENUMERA un conjunto con huecos («Ene, Feb, Abr…») en vez de afirmar «Ene–Jul».
+**Las cifras no se mueven**: un mes en cero suma cero, así que los tiles, la tarta, el ranking y la
+cascada dan el mismo número y solo se encoge el eje — el mismo argumento por el que ocultar un mes
+vacío no descuadra el Total en Datos. El interruptor vive en Gráficos y NO en la barra, porque lo
+leen las tarjetas de esa pestaña y ninguna de las otras dos (en la barra sería un control muerto en
+Datos y en Análisis): es estado local, no es un `PygFilters`, no produce chip y el informe imprimible
+—que llama a `buildGraficosCards` por su cuenta— sigue sacando el eje completo. Solo asoma en
+MENSUAL, porque un trimestre cubierto agrega tres meses y no es «un mes en 0», y solo si hay alguno
+que ocultar; `emptyPeriods` se cuenta siempre sobre el eje SIN podar, así que el botón no se esfuma
+justo al pulsarlo, y encendido lleva la CUENTA de lo que quitó, ya que aquí no hay pie de tabla donde
+ponerla.
+
 **Una cifra de Gráficos o Análisis es el TOTAL del periodo seleccionado**, nunca el valor de una de
 sus columnas. Marcar seis meses y leer el de junio era lo que hacía `lastCoveredIndex`, de cuando no
 existía el filtro «Periodo» y la última columna cargada era el único periodo del que se podía
@@ -864,14 +907,16 @@ del tramo —la única lectura donde cada barra imprime su cifra encima—.
 
 **Reparte por ESTABLECIMIENTO y por MES, y las marcas lo dicen.** Encender «Ventas» SIEMBRA los
 periodos cubiertos del año abierto en «Periodo» —los que dibuja, ni uno que el archivo no trajera— y
-los centros reales en «Centro de costo» (`withPresetSelected` recibe la lista; el proveedor la saca
-de las vistas con rol `center`), así que lo dibujado y lo marcado son lo mismo: se ve cuáles entran
-y se quita uno desmarcándolo, donde el usuario ya sabe buscar. Apagarla las limpia — eran marcas que
-puso la vista, y dejar cinco chips detrás de un interruptor apagado es basura que el usuario no
-puso. El Consolidado no se siembra porque no es un centro sino su suma, y «Sin centro de costo»
-tampoco porque no es un establecimiento sino lo que el sistema contable no supo asignar: mientras
-siga desmarcado la nota lo DICE, ya que son dólares que estaban en el consolidado y ya no están en
-ninguna columna. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre, y desmarcar
+TODO el listado de «Centro de costo» (`withPresetSelected` recibe la lista; el proveedor la saca de
+las vistas con rol `center` **y `sin-centro`**), así que lo dibujado y lo marcado son lo mismo: se ve
+cuáles entran y se quita uno desmarcándolo, donde el usuario ya sabe buscar. Apagarla las limpia —
+eran marcas que puso la vista, y dejar cinco chips detrás de un interruptor apagado es basura que el
+usuario no puso. El Consolidado es lo ÚNICO que no se siembra, porque no es un centro sino su suma y
+su columna repetiría las otras. **«Sin centro de costo» sí entra**, aunque no sea un
+establecimiento: es lo que el sistema contable no supo asignar, y son dólares del estado, así que
+dejarlo fuera por defecto los sacaba de TODAS las columnas a la vez y la lectura arrancaba por
+debajo del consolidado. La nota que lo dice sigue en pie para quien lo desmarque a mano, que es
+donde ese aviso hace falta. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre, y desmarcar
 meses acota el eje de TODAS las tarjetas, que es lo que una marca de «Periodo» siempre ha hecho. Con
 más de ocho periodos marcados cada columna se cierra en el total del tramo —ocho es lo que da la
 paleta— y la nota dice qué hacer para volver a compararlos uno a uno. **El CONSOLIDADO ENTRE

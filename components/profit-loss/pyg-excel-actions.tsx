@@ -4,6 +4,8 @@ import { FilePlus2, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
 import { pluralize } from "@/lib/format";
+import type { CenterLogos, EntityLogo } from "@/lib/logos";
+import { consolidatedCenterId } from "@/lib/profit-loss/consolidate";
 import { datasetEdits } from "@/lib/profit-loss/db";
 import { CostCenterUploadModal } from "./cost-center-upload-modal";
 import { usePygData } from "./pyg-data-provider";
@@ -13,20 +15,24 @@ import { usePygData } from "./pyg-data-provider";
  * which handles rendering, progress, and errors. Used in tabs (`ModuleTabs`) and empty states
  * (`PygEmptyState`) to upload or download files.
  *
- * The download menu includes options like "Full Excel" (entire workspace, re-uploadable) and
- * "Raw Month" (latest loaded month in accounting system format). "Raw Month" is only available
- * if the workspace supports writing its format. Accepted formats are loaded dynamically.
+ * The download menu includes options like «Excel completo» (entire workspace, re-uploadable) and
+ * «Un mes en crudo» (latest loaded month in accounting system format). The latter is only
+ * available if the workspace supports writing its format. Accepted formats are loaded
+ * dynamically. In the CONSOLIDADO the file is instead the sum plus one sheet per piece it summed
+ * — every (cliente · centro) that entered and the whole statement of each single-mode client.
  */
 function withoutZeros(hide: boolean, description: string): string {
-  return hide ? `${description}, excluding zero accounts` : description;
+  return hide ? `${description}, sin las cuentas en cero` : description;
 }
 
 export function PygExcelActions() {
   const {
+    clients,
     activeClientId,
     activeClient,
     isConsolidated,
     contributors,
+    consolidatedDetails,
     dataset,
     datasets,
     views,
@@ -58,6 +64,26 @@ export function PygExcelActions() {
 
   const canWriteRawMonth = Boolean(sourceSystemId && writableSystems?.includes(sourceSystemId));
 
+  /**
+   * Los logos que encabezan cada hoja del consolidado: el del CLIENTE a la izquierda y el de su
+   * CENTRO a la derecha. Los centros se indexan por el id COMPUESTO `<clientId>::<centerId>`, que
+   * es el que llevan las piezas — el mismo centro existe en varias empresas, así que el suelto
+   * emparejaría con la primera que lo declarara.
+   */
+  const consolidatedLogos = useMemo(() => {
+    const clientLogos: Record<string, EntityLogo> = {};
+    const centerLogos: CenterLogos = {};
+    for (const client of clients) {
+      if (client.logo) {
+        clientLogos[client.id] = client.logo;
+      }
+      for (const [centerId, logo] of Object.entries(client.centerLogos ?? {})) {
+        centerLogos[consolidatedCenterId(client.id, centerId)] = logo;
+      }
+    }
+    return { clientLogos, centerLogos };
+  }, [clients]);
+
   const centerViews = useMemo(
     () => views.filter((v) => v.role === "center" || v.role === "sin-centro"),
     [views],
@@ -67,32 +93,40 @@ export function PygExcelActions() {
   const rawYearMonths = rawYear === null ? [] : (loadedMonthsByYear[rawYear] ?? []);
   const latestLoadedMonth = rawYearMonths.length > 0 ? Math.max(...rawYearMonths) : null;
   const anyMonthLoaded = Object.values(loadedMonthsByYear).some((months) => months.length > 0);
-  const severalYearsReason = "Multiple years visible; select one to download a raw month.";
+  const severalYearsReason =
+    "Hay varios años a la vista; elige uno para descargar un mes en crudo.";
 
   const downloads = useMemo<ExcelDownloadOption[]>(() => {
     if (isConsolidated) {
       return [
         {
           id: "consolidado",
-          title: "Consolidated Excel",
+          title: "Excel consolidado",
           description: withoutZeros(
             hideZeroRows,
-            `Sum of ${pluralize(contributors.length, "client")}, one sheet per year`,
+            consolidatedDetails.length > 0
+              ? `Suma de ${pluralize(contributors.length, "cliente")}: el total por año y una hoja por cada cliente y centro que entra`
+              : `Suma de ${pluralize(contributors.length, "cliente")}, una hoja por año`,
           ),
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
           disabled: datasets.length === 0,
-          disabledReason: "No data to consolidate yet.",
+          disabledReason: "Todavía no hay nada que consolidar.",
           run: async () => {
             const [exportMod, { downloadBlob }] = await Promise.all([
               import("@/lib/profit-loss/export"),
               import("@/lib/download"),
             ]);
-            const workbook = exportMod.buildConsolidatedWorkbook(
+            const workbook = exportMod.buildConsolidatedWorkbook({
               datasets,
+              // Las piezas que la suma tomó, tal como las devolvió `consolidate.ts`: así el archivo
+              // no puede traer hojas que no cuadren con su propio total.
+              details: consolidatedDetails,
               loadedMonthsByYear,
-              hideZeroRows,
-            );
+              hideEmpty: hideZeroRows,
+              clientLogos: consolidatedLogos.clientLogos,
+              centerLogos: consolidatedLogos.centerLogos,
+            });
             const blob = await exportMod.workbookToBlob(workbook);
             downloadBlob(blob, exportMod.consolidatedFilename(loadedYears));
           },
@@ -101,14 +135,14 @@ export function PygExcelActions() {
     }
 
     if (mode === "multi") {
-      const noMonthsReason = "Load a month first.";
+      const noMonthsReason = "Carga un mes primero.";
       const options: ExcelDownloadOption[] = [
         {
           id: "completo",
-          title: "Full Excel",
+          title: "Excel completo",
           description: withoutZeros(
             hideZeroRows,
-            "Entire workspace: consolidated sheet and one per center, re-uploadable",
+            "Todo el espacio de trabajo: la hoja consolidada y una por centro, se puede volver a subir",
           ),
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
@@ -144,8 +178,9 @@ export function PygExcelActions() {
         },
         {
           id: "mes-crudo",
-          title: "Raw Month",
-          description: "Latest loaded month in accounting system format, with adjustments applied",
+          title: "Un mes en crudo",
+          description:
+            "El último mes cargado en el formato del sistema contable, con los ajustes aplicados",
           icon: FilePlus2,
           iconClassName: "text-muted",
           disabled: latestLoadedMonth === null,
@@ -180,19 +215,19 @@ export function PygExcelActions() {
       return canWriteRawMonth ? options : options.filter((option) => option.id !== "mes-crudo");
     }
 
-    const noMonthsReason = "Load a month first.";
+    const noMonthsReason = "Carga un mes primero.";
     const options: ExcelDownloadOption[] = [
       {
         id: "data",
-        title: "Excel with Your Data",
+        title: "Excel con tus datos",
         description: withoutZeros(
           hideZeroRows,
-          "Statement with 12 monthly columns, current values, and comments",
+          "El estado de resultados con sus doce columnas mensuales, los valores actuales y los comentarios",
         ),
         icon: FileSpreadsheet,
         iconClassName: "text-brand",
         disabled: !dataset,
-        disabledReason: "Load an Excel file first.",
+        disabledReason: "Carga un archivo de Excel primero.",
         run: async () => {
           if (!dataset) {
             return;
@@ -221,8 +256,9 @@ export function PygExcelActions() {
       },
       {
         id: "mes-crudo",
-        title: "Raw Month",
-        description: "Latest loaded month in accounting system format, with adjustments applied",
+        title: "Un mes en crudo",
+        description:
+          "El último mes cargado en el formato del sistema contable, con los ajustes aplicados",
         icon: FilePlus2,
         iconClassName: "text-muted",
         disabled: !dataset || latestLoadedMonth === null,
@@ -252,6 +288,8 @@ export function PygExcelActions() {
   }, [
     isConsolidated,
     contributors.length,
+    consolidatedDetails,
+    consolidatedLogos,
     activeClient?.logo,
     activeClient?.centerLogos,
     dataset,
@@ -275,17 +313,17 @@ export function PygExcelActions() {
           onClick: () => setUploadOpen(true),
           disabled: activeClientId === null || isConsolidated,
           disabledReason: isConsolidated
-            ? "Consolidated data is a sum of all clients. Open one to upload data."
-            : "Create a client before uploading data.",
+            ? "El consolidado es la suma de todos los clientes. Abre uno para cargar datos."
+            : "Crea un cliente antes de cargar datos.",
         }}
         downloads={downloads}
         info={{
-          title: "Accepted Files",
+          title: "Archivos aceptados",
           children:
             acceptedFormats.length > 0 ? (
-              <>Accepted: {acceptedFormats.map((f) => f.label).join(", ")}.</>
+              <>Se aceptan: {acceptedFormats.map((f) => f.label).join(", ")}.</>
             ) : (
-              "Loading accepted formats..."
+              "Cargando los formatos aceptados…"
             ),
         }}
       />

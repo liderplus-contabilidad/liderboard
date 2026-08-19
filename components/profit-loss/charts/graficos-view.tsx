@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
 import { StatTile } from "@/components/ui/stat-tile";
+import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import { buildGraficosCards } from "@/lib/profit-loss/charts/cards";
 import { usePygAnalytics } from "../pyg-analytics-provider";
@@ -25,12 +28,24 @@ import { ExpenseSharePanel } from "./expense-share-panel";
  * it cannot come back into this file.
  */
 export function GraficosView() {
-  const { dataset, filters } = usePygData();
+  const { dataset, filters, frequency } = usePygData();
   const { context } = usePygAnalytics();
-  const { periodName, tiles, cards, annex } = useMemo(
-    () => buildGraficosCards(context, filters),
-    [context, filters],
+  /**
+   * Los meses del eje en los que el estado no movió nada —los que el archivo nunca trajo y los que
+   * trajo en cero, que en pantalla son la misma columna vacía—. Es estado local de esta pantalla y no un
+   * `PygFilters`: lo leen las cinco tarjetas de aquí y ninguna de Datos ni de Análisis, así que no
+   * se guarda, no produce chip y el informe imprimible —que llama a `buildGraficosCards` por su
+   * cuenta— sigue sacando el eje completo.
+   */
+  const [hideEmptyPeriods, setHideEmptyPeriods] = useState(false);
+  const { periodName, tiles, cards, annex, emptyPeriods } = useMemo(
+    () => buildGraficosCards(context, filters, { hideEmptyPeriods }),
+    [context, filters, hideEmptyPeriods],
   );
+  // Solo asoma en MENSUAL —un trimestre cubierto agrega tres meses y no es «un mes en 0»— y solo si
+  // hay alguno que ocultar: un control que no puede hacer nada enseña a no leer el de al lado.
+  // `emptyPeriods` se cuenta sobre el eje sin podar, así que el botón no se esfuma al pulsarlo.
+  const canHideEmptyPeriods = frequency === "mensual" && emptyPeriods > 0;
 
   /**
    * El rubro cuyo peso se está mirando, por su posición en el reparto. Es un ÍNDICE y no un código
@@ -57,6 +72,31 @@ export function GraficosView() {
           />
         ))}
       </div>
+
+      {canHideEmptyPeriods && (
+        <div className="flex justify-end">
+          {/* Mismo aspecto que el de la tarjeta de Datos, para que se lean como el mismo gesto. Va
+              aquí y no en la barra de filtros porque lo leen las tarjetas de ESTA pestaña y ninguna
+              de las otras dos: en la barra sería un control muerto en Datos y en Análisis. */}
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-pressed={hideEmptyPeriods}
+            onClick={() => setHideEmptyPeriods((current) => !current)}
+            icon={hideEmptyPeriods ? <Eye size={14} /> : <EyeOff size={14} />}
+            className={cn(
+              "font-medium",
+              hideEmptyPeriods && "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+            )}
+          >
+            {/* Encendido lleva la CUENTA de lo que quitó: aquí no hay pie de tabla donde ponerla,
+                así que sin ella el eje se encogería sin decir cuánto. */}
+            {hideEmptyPeriods
+              ? `Mostrar ${emptyPeriods} ${emptyPeriods === 1 ? "mes" : "meses"} en 0`
+              : "Ocultar meses en 0"}
+          </Button>
+        </div>
+      )}
 
       {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone, y las cinco van al
           MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se

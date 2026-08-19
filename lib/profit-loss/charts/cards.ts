@@ -35,7 +35,7 @@ import {
   type AmountEntry,
   type ParetoResult,
 } from "../analytics/structure";
-import type { AnalyticsSource, PeriodRef, SeriesBundle } from "../analytics/types";
+import type { AnalyticsSource, PeriodRef, PeriodSlot, SeriesBundle } from "../analytics/types";
 import { compareSeries } from "../analytics/variation";
 import type { PygFilters } from "../filters";
 import {
@@ -85,6 +85,7 @@ import {
   childrenOf,
   compositionQuery,
   coveredPeriods,
+  movingPeriods,
   excludedNote,
   expenseRootsOf,
   EXPENSE_RANKING_SIZE,
@@ -137,6 +138,17 @@ export interface CardTile {
   sign?: "positivo" | "negativo";
 }
 
+/**
+ * Lo que la VISTA decide y las marcas no: «Ocultar meses en 0» es de Gráficos y de ninguna otra
+ * pestaña, así que no es un `PygFilters` —no se guarda, no produce chip y Datos y Análisis dibujan
+ * lo mismo encendido o apagado—. Entra como opción por la misma razón por la que el interruptor de
+ * Datos vive en la cabecera de su tarjeta: lo leen las tarjetas de una sola pantalla.
+ */
+export interface GraficosOptions {
+  /** Quita del eje los periodos cubiertos en los que el estado no movió nada. Solo en mensual. */
+  hideEmptyPeriods?: boolean;
+}
+
 export interface GraficosCards {
   /** The periods the figures sum, in axis order; empty when nothing is covered. */
   periods: PeriodRef[];
@@ -150,6 +162,12 @@ export interface GraficosCards {
    * posición aquí: las dos listas están ordenadas de mayor a menor por el mismo sitio.
    */
   annex: ExpenseDistribution | null;
+  /**
+   * Cuántos periodos CUBIERTOS no movieron nada — lo que «Ocultar meses en 0» puede quitar del eje.
+   * Se cuenta siempre sobre el eje SIN podar, así que no cambia al pulsar el botón: contarlo sobre
+   * lo podado lo dejaría en cero y el control se esfumaría justo al usarlo, sin forma de volver.
+   */
+  emptyPeriods: number;
 }
 
 export interface AnalisisCards {
@@ -522,17 +540,53 @@ function sumAllOver(bundle: SeriesBundle, code: string): number | null {
  * resolved its own, one subtitle would read «Ene–Jul» and the next «Ene–Dic» over the same
  * screen. Returning it alongside makes that unicity structural instead of a convention.
  */
-export function buildGraficosCards(context: SelectionContext, filters: PygFilters): GraficosCards {
+export function buildGraficosCards(
+  context: SelectionContext,
+  filters: PygFilters,
+  options: GraficosOptions = {},
+): GraficosCards {
   const sources = [...context.sources];
   const runQuery = (query: Parameters<typeof buildSeries>[1]) => buildSeries(sources, query);
   const source = activeSource(context);
   // A marked period is a year-less slot; the engine reads dated references. Gráficos still reads
   // ONE year (`context.year`), so the expansion has a single year to stamp.
-  const periodRefs = expandSlots(filters.periods, [context.year]);
+  const marked = expandSlots(filters.periods, [context.year]);
 
   const defaultCodes = defaultEvolutionCodes(source);
-  const totals = runQuery(presetQuery(defaultCodes, context, { periods: periodRefs }));
-  const periods = coveredPeriods(totals);
+  const statement = runQuery(presetQuery(defaultCodes, context, { periods: marked }));
+  const covered = coveredPeriods(statement);
+  // Un «mes en 0» solo existe en MENSUAL: un trimestre agrega tres meses, y uno que sumara cero
+  // sería un trimestre en cero, no un mes — la vista tampoco ofrece el botón fuera de ahí, y esto es
+  // lo que hace que pasarlo igual sea inofensivo.
+  const moving = context.frequency === "mensual" ? movingPeriods(statement) : statement.periods;
+  // Se cuenta contra las columnas DIBUJADAS y no contra las cubiertas, que es lo que hace que el
+  // botón sirva para algo: el eje es el de la frecuencia —las doce del año salvo que «Periodo» lo
+  // acote—, así que un archivo que llega hasta julio pinta Ago–Dic vacías aunque el rótulo diga
+  // «Ene–Jul». Contra los cubiertos daba cero justo en el caso que se ve en pantalla.
+  //
+  // Un mes NUNCA cargado y uno cargado en cero se van los dos: para el motor son cosas distintas y
+  // lo siguen siendo —el rótulo y los tiles leen `coveredPeriods`—, pero lo que el botón quita son
+  // columnas vacías, y en el eje las dos lo son.
+  const emptyPeriods = statement.periods.length - moving.length;
+  // Se poda solo si queda algo: con TODO el eje en cero, acotar a una lista vacía significa «el eje
+  // entero» para el motor, así que las columnas volverían enteras. Ahí no hay nada que ocultar.
+  const hiding = options.hideEmptyPeriods === true && emptyPeriods > 0 && moving.length > 0;
+  const periodRefs = hiding ? moving : marked;
+  // La primera tarjeta no lee `periodRefs`: su eje sale de `toSeriesQuery`, que lo construye de las
+  // marcas de «Periodo». Para que la poda la alcance se le pasan los periodos que quedaron como si
+  // estuvieran marcados —acotar es exactamente lo que una marca hace—, en vez de abrirle una segunda
+  // puerta al motor que pudiera acabar dibujando otro eje que el resto de la pantalla.
+  const axisSlots: PeriodSlot[] = hiding
+    ? moving.map(({ frequency, index }) => ({ frequency, index }))
+    : [...filters.periods];
+  // La tanda se repite sobre el eje acotado en vez de filtrarse a mano: es la misma consulta que
+  // hacen las demás tarjetas, así que su cobertura y sus avisos salen de la misma regla y no de una
+  // segunda poda que pudiera divergir. Las cifras no se mueven —un mes en cero suma cero—; lo que
+  // cambia es el eje.
+  const totals = hiding
+    ? runQuery(presetQuery(defaultCodes, context, { periods: periodRefs }))
+    : statement;
+  const periods = hiding ? moving : covered;
   const periodName = nameOf(periods);
 
   const revenue = sumOver(totals, REVENUE_ROOT);
@@ -545,7 +599,7 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   // The evolution card draws the marked accounts (and centers); with nothing marked it falls
   // back to Ingresos vs Costos y Gastos — the same totals the tiles read.
   const evolutionCodes = filters.codes.length > 0 ? filters.codes : defaultCodes;
-  const evolutionFilters = { ...filters, codes: evolutionCodes };
+  const evolutionFilters = { ...filters, codes: evolutionCodes, periods: axisSlots };
   const evolution = runQuery(toSeriesQuery(evolutionFilters, context));
   // Marcar una cuenta y otra que la contiene no es solo comparar dos barras: la pregunta que
   // produce esa marca es qué parte de la primera es la segunda. El porcentaje se calcula UNA vez
@@ -718,6 +772,7 @@ export function buildGraficosCards(context: SelectionContext, filters: PygFilter
   return {
     periods,
     periodName,
+    emptyPeriods,
     annex,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },

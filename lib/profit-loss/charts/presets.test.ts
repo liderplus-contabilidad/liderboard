@@ -14,6 +14,7 @@ import {
   intersectWithMarked,
   lastCoveredIndex,
   leavesOf,
+  movingPeriods,
   presetQuery,
   RANKING_SIZE,
   sumOver,
@@ -141,6 +142,62 @@ describe("el periodo activo", () => {
     expect(lastCoveredIndex(empty)).toBe(-1);
     expect(amountsOver(empty)).toEqual([]);
     expect(sumOver(empty, "4")).toBeNull();
+  });
+
+  /**
+   * Un mes CARGADO cuyas cuentas valen todas cero: la cobertura la declara el workspace
+   * (`loadedMonthsByYear`), así que existe como columna aunque no se moviera nada. Es el caso que
+   * el botón «Ocultar meses en 0» quita del eje, y el único donde `movingPeriods` y
+   * `coveredPeriods` difieren — con la cobertura inferida de los valores no puede haber uno.
+   */
+  const declarado = buildSeries(
+    [
+      {
+        ...MANOR,
+        coverage: new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]),
+      },
+    ],
+    presetQuery(["4", "5"], CONTEXT),
+  );
+
+  it("los meses en 0 siguen CUBIERTOS: la cobertura la declara el workspace, no el valor", () => {
+    // Ago y Sep se declararon cargados y el archivo los trae en cero.
+    expect(coveredPeriods(declarado).map((period) => period.index)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
+  });
+
+  it("`movingPeriods` deja fuera el mes cubierto que no movió nada", () => {
+    expect(movingPeriods(declarado).map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("un mes nunca cargado ya estaba fuera, así que las dos lecturas coinciden", () => {
+    expect(movingPeriods(bundle)).toEqual(coveredPeriods(bundle));
+  });
+
+  it("juzga el ESTADO y no una cuenta: un mes con solo gasto se queda", () => {
+    // Febrero sin ingreso ninguno pero con su gasto: el negocio se movió, la columna es real.
+    const soloGasto = buildSeries(
+      [
+        {
+          ...MANOR,
+          coverage: new Set([0, 1]),
+          valuesByCode: new Map([
+            ["4", [10, 0, ...Array(10).fill(0)]],
+            ["5", [3, 4, ...Array(10).fill(0)]],
+          ]),
+        },
+      ],
+      presetQuery(["4", "5"], CONTEXT),
+    );
+
+    expect(movingPeriods(soloGasto).map((period) => period.index)).toEqual([0, 1]);
+  });
+
+  it("sin cobertura no hay ninguno que se mueva", () => {
+    const empty = buildSeries([{ ...MANOR, coverage: new Set() }], presetQuery(["4"], CONTEXT));
+
+    expect(movingPeriods(empty)).toEqual([]);
   });
 
   it("suma cada cuenta sobre el eje entero, no una de sus columnas", () => {

@@ -202,6 +202,155 @@ describe("el periodo del que hablan las tarjetas", () => {
   });
 });
 
+/* --------------------------------------------------------------- los meses en 0 del eje */
+
+/**
+ * Un workspace que DECLARÓ cargados agosto y septiembre y cuyo archivo los trae en cero: dos
+ * columnas reales y vacías en el eje de todas las tarjetas. Es lo que quita «Ocultar meses en 0»,
+ * y es el único caso donde existe — un mes que nunca se cargó no llega ni a ser columna.
+ */
+const CON_MESES_VACIOS = ctx(
+  [{ ...CULTURA_MANOR_SOURCE, coverage: new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]) }],
+  "cultura-manor",
+);
+
+describe("los meses en 0 del eje", () => {
+  /**
+   * EL CASO REAL, el de la captura: un archivo que llega hasta julio dibuja las DOCE columnas del
+   * año —el eje es el de la frecuencia, no el de la cobertura—, así que Ago–Dic salen vacías aunque
+   * los tiles digan «Ene–Jul». Son las que el botón quita, y contarlas contra los meses CUBIERTOS
+   * en vez de contra las columnas dibujadas daba cero y el botón no asomaba nunca.
+   */
+  it("cuenta los meses vacíos contra las columnas DIBUJADAS, no contra los cubiertos", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(MANOR, emptyFilters());
+
+    expect(periodName).toBe("Ene–Jul");
+    expect(periods).toHaveLength(7);
+    // Ago–Dic: cinco columnas vacías en el eje.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("ocultándolos el eje se queda en los siete meses con movimiento", () => {
+    const { cards, periodName } = buildGraficosCards(MANOR, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    expect(periodName).toBe("Ene–Jul");
+    // El eje que dibuja la primera tarjeta: sin Ago–Dic.
+    const axis = cards[0].option?.xAxis;
+    const categories = Array.isArray(axis) ? axis[0].data : axis?.data;
+    expect(categories).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul"]);
+  });
+
+  it("un mes NUNCA cargado y uno cargado en cero se van los dos: los dos son columna vacía", () => {
+    // La distinción «un null no es un 0» es del MOTOR y sigue intacta —los tiles y el rótulo la
+    // leen—; el botón habla de lo que se DIBUJA, y ahí las dos son una columna sin nada.
+    const { emptyPeriods } = buildGraficosCards(CON_MESES_VACIOS, emptyFilters());
+
+    // Ago y Sep cargados en cero, más Oct–Dic que nunca llegaron.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("por defecto se dibujan: son columnas del año, y el rango nombra lo cubierto", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(
+      CON_MESES_VACIOS,
+      emptyFilters(),
+    );
+
+    expect(periods.map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(periodName).toBe("Ene–Sep");
+    // Cuántos PUEDE quitar, contados sobre el eje sin podar: es lo que rotula el botón, y por eso
+    // no cambia al pulsarlo — si se contara sobre lo podado, el control desaparecería al usarlo.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("ocultándolos el eje se encoge y el rótulo lo dice", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(
+      CON_MESES_VACIOS,
+      emptyFilters(),
+      { hideEmptyPeriods: true },
+    );
+
+    expect(periods.map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(periodName).toBe("Ene–Jul");
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("las CIFRAS no se mueven: un mes en cero suma cero", () => {
+    const visible = buildGraficosCards(CON_MESES_VACIOS, emptyFilters());
+    const podado = buildGraficosCards(CON_MESES_VACIOS, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    expect(podado.tiles).toEqual(visible.tiles);
+  });
+
+  it("un hueco EN MEDIO se lee como hueco y no como rango continuo", () => {
+    // Marzo declarado cargado y en cero, entre dos meses que sí se movieron.
+    const conHueco = ctx(
+      [
+        {
+          ...CULTURA_MANOR_SOURCE,
+          valuesByCode: new Map(
+            [...CULTURA_MANOR_SOURCE.valuesByCode].map(([code, values]) => [
+              code,
+              values.map((value, index) => (index === 2 ? 0 : value)),
+            ]),
+          ),
+        },
+      ],
+      "cultura-manor",
+    );
+    const { periodName } = buildGraficosCards(conHueco, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    // `periodRangeLabel` ENUMERA un conjunto con huecos en vez de componer sub-rangos: «Ene–Jul»
+    // afirmaría que marzo está sumado, y el punto de ocultarlo es que no lo está.
+    expect(periodName).toBe("Ene, Feb, Abr, May, Jun, Jul");
+    expect(periodName).not.toContain("Ene–Jul");
+  });
+
+  it("las tarjetas heredan el eje podado, así que ninguna nombra un tramo distinto", () => {
+    const { cards } = buildGraficosCards(CON_MESES_VACIOS, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    for (const card of cards.slice(0, 4)) {
+      expect(card.subtitle).toContain("Ene–Jul");
+    }
+  });
+
+  it("fuera de mensual no hace nada: el flag ni siquiera llega", () => {
+    // La vista no ofrece el botón salvo en mensual; aquí se comprueba que pasarlo es inofensivo,
+    // porque un trimestre cubierto agrega tres meses y no es «un mes en 0».
+    const trimestral = ctx(
+      [{ ...CULTURA_MANOR_SOURCE, coverage: new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]) }],
+      "cultura-manor",
+      { frequency: "trimestral" },
+    );
+    const visible = buildGraficosCards(trimestral, emptyFilters());
+    const podado = buildGraficosCards(trimestral, emptyFilters(), { hideEmptyPeriods: true });
+
+    expect(podado.periods).toEqual(visible.periods);
+    expect(podado.periodName).toBe(visible.periodName);
+    expect(podado.emptyPeriods).toBe(0);
+    expect(visible.emptyPeriods).toBe(0);
+  });
+
+  it("con el eje ACOTADO a lo que se movió no queda nada que ocultar", () => {
+    // Marcar Ene–Jul deja el eje justo en los siete meses con movimiento: el botón no asoma.
+    const acotado = buildGraficosCards(
+      MANOR,
+      withFilters({
+        periods: [0, 1, 2, 3, 4, 5, 6].map((index) => ({ frequency: "mensual" as const, index })),
+      }),
+    );
+
+    expect(acotado.emptyPeriods).toBe(0);
+  });
+});
+
 /* ---------------------------------------------------------------- las cifras del periodo */
 
 describe("las cifras del periodo", () => {
