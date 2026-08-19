@@ -95,9 +95,17 @@ const LOGO = {
   height: 120,
 };
 
+/** El logo del centro de costo: apaisado y distinto del del cliente, para poder decir cuál es cuál
+ *  por su forma sin mirar sus bytes. */
+const CENTER_LOGO = { ...LOGO, dataUrl: "data:image/png;base64,Q0M=", width: 400, height: 100 };
+
 function documentFor(
   overrides: Partial<PayrollEmployeeLine> = {},
-  extras: { company?: typeof COMPANY; logo?: typeof LOGO } = {},
+  extras: {
+    company?: typeof COMPANY;
+    logo?: typeof LOGO;
+    costCenter?: { name: string; logo?: typeof LOGO };
+  } = {},
 ): PayslipDocument {
   const line = { ...LINE, ...overrides };
   const capture = line.capture ?? emptyCapture();
@@ -110,6 +118,7 @@ function documentFor(
     clientName: "HOTEL BOUTIQUE CULTURA MANOR",
     ...(extras.company ? { clientCompany: extras.company } : {}),
     ...(extras.logo ? { clientLogo: extras.logo } : {}),
+    ...(extras.costCenter ? { clientCostCenter: extras.costCenter } : {}),
     position: 6,
   });
 }
@@ -402,5 +411,89 @@ describe("el membrete del cliente", () => {
   it("sin perfil, el encabezado mide lo que medía", () => {
     const layout = layoutPayslip(documentFor(FULL), measure);
     expect(layout.rules[0]?.y).toBe(78);
+  });
+});
+
+/**
+ * EL CENTRO DE COSTO EN EL ENCABEZADO. Lo que puede estar mal no es que el logo salga: es que los
+ * dos se pisen, que el título quede debajo del que le corresponde, o que un cliente SIN centro deje
+ * de imprimir el comprobante que imprimía.
+ */
+describe("el centro de costo", () => {
+  const conCentro = () =>
+    layoutPayslip(
+      documentFor(FULL, {
+        company: COMPANY,
+        logo: LOGO,
+        costCenter: { name: "Planta Ambato", logo: CENTER_LOGO },
+      }),
+      measure,
+    );
+
+  it("compone el rótulo del encabezado con el nombre del centro", () => {
+    const { boxes } = conCentro();
+    expect(boxes[0]?.text).toBe("HOTEL BOUTIQUE CULTURA MANOR · Planta Ambato");
+  });
+
+  it("el del cliente encabeza a la izquierda y el del centro va a la derecha", () => {
+    const { images } = conCentro();
+    expect(images).toHaveLength(2);
+
+    const izquierda = images.find((image) => image.dataUrl === LOGO.dataUrl)!;
+    const derecha = images.find((image) => image.dataUrl === CENTER_LOGO.dataUrl)!;
+    expect(izquierda.x).toBe(PAYSLIP_COLUMNS.pageLeft);
+    expect(derecha.x + derecha.width).toBeCloseTo(PAYSLIP_COLUMNS.pageRight, 6);
+    // No se pisan, que es lo único que un encabezado de dos logos puede hacer mal en silencio.
+    expect(izquierda.x + izquierda.width).toBeLessThan(derecha.x);
+  });
+
+  it("ninguna caja del encabezado se cruza con el logo de la derecha", () => {
+    const layout = conCentro();
+    const derecha = layout.images.find((image) => image.dataUrl === CENTER_LOGO.dataUrl)!;
+    const titulo = layout.boxes.find((box) => box.text === "ROL DE PAGOS")!;
+
+    // El título BAJA lo que ocupa el logo, en vez de compartir renglón con él.
+    expect(titulo.y).toBeGreaterThanOrEqual(derecha.y + derecha.height);
+    // Y el nombre de la empresa y su membrete se quedan a la izquierda del bloque derecho.
+    for (const box of layout.boxes.filter((candidate) => candidate.align !== "right")) {
+      if (box.y > derecha.y + derecha.height) {
+        continue;
+      }
+      expect(box.x + measure(box.text, box.size, box.bold)).toBeLessThanOrEqual(derecha.x);
+    }
+  });
+
+  it("el comprobante entero sigue cabiendo en la hoja", () => {
+    const layout = conCentro();
+    expect(layout.overflow).toBe(false);
+    for (const image of layout.images) {
+      expect(image.x).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft);
+      expect(image.x + image.width).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight);
+      expect(image.y).toBeGreaterThanOrEqual(0);
+    }
+    for (const box of layout.boxes) {
+      expect(box.y).toBeLessThan(PAGE_HEIGHT);
+    }
+  });
+
+  it("un centro SIN logo solo cambia el rótulo: el del cliente no se mueve", () => {
+    const sinLogo = layoutPayslip(
+      documentFor(FULL, { company: COMPANY, logo: LOGO, costCenter: { name: "Planta Ambato" } }),
+      measure,
+    );
+    const base = layoutPayslip(documentFor(FULL, { company: COMPANY, logo: LOGO }), measure);
+
+    expect(sinLogo.images).toHaveLength(1);
+    expect(sinLogo.images[0]).toEqual(base.images[0]);
+    expect(sinLogo.rules[0]?.y).toBe(base.rules[0]?.y);
+  });
+
+  // La regresión que importa: sin centro, el comprobante es el de siempre hasta el último punto.
+  it("sin centro el encabezado no se mueve ni un punto", () => {
+    const base = layoutPayslip(documentFor(FULL, { company: COMPANY, logo: LOGO }), measure);
+    expect(base.images).toHaveLength(1);
+    expect(base.rules[0]?.y).toBe(
+      layoutPayslip(documentFor(FULL, { company: COMPANY, logo: LOGO }), measure).rules[0]?.y,
+    );
   });
 });

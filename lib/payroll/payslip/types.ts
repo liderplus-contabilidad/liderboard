@@ -24,10 +24,18 @@ export interface PayslipRow {
 }
 
 export interface PayslipDocument {
-  /** Fila 1 del comprobante: la empresa. */
+  /** Fila 1 del comprobante: la empresa, y su centro de costo si lo declaró —«Delicmar · Planta
+   *  Ambato», ya compuesto por `costCenterHeading`. */
   company: string;
-  /** El logo del cliente, si subió uno. Encabeza el comprobante a la izquierda de `company`. */
+  /**
+   * El logo que encabeza a la IZQUIERDA, delante de `company`: el del cliente. Quién ocupa cada
+   * lado ya lo decidió `letterheadLogos`, que es la única regla de eso en la app: este documento no
+   * vuelve a preguntarlo, y por eso el layout no tiene que saber que los centros de costo existen.
+   */
   logo?: EntityLogo;
+  /** El de la DERECHA, arriba del título: el del centro de costo. Ausente en todo cliente que no
+   *  declare uno con logo, que es lo que deja su comprobante como estaba. */
+  rightLogo?: EntityLogo;
   /**
    * El membrete bajo el nombre: razón social, ubicación, teléfonos y correo, YA compuestos por
    * `letterheadLines`. Llegan como líneas y no como campos por lo mismo que los importes llegan

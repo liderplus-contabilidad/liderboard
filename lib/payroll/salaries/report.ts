@@ -33,9 +33,14 @@ export interface SalariesReportSection {
 }
 
 export interface SalariesReportHeader {
-  /** La etiqueta que el usuario le dio al cliente — nunca la razón social de ningún archivo. */
+  /** La etiqueta que el usuario le dio al cliente, con su centro de costo si lo declaró
+   *  («Delicmar · Planta Ambato») — nunca la razón social de ningún archivo. */
   clientName: string;
+  /** El de la IZQUIERDA: el del cliente. Quién ocupa cada lado lo decide `letterheadLogos`, la
+   *  misma regla que colocan el comprobante y el Excel. */
   logo?: EntityLogo;
+  /** El de la DERECHA: el del centro de costo, cuando lo declaró y le subió logo. */
+  rightLogo?: EntityLogo;
   /** «Ene 2026 – Dic 2026», o una lista si el rango tiene huecos. */
   rangeLabel: string;
   /** Cuántas secciones de ÁREA trae el informe — el consolidado no cuenta como una. */
@@ -51,6 +56,7 @@ export interface SalariesReport {
 export interface BuildSalariesReportInput {
   clientName: string;
   logo?: EntityLogo;
+  rightLogo?: EntityLogo;
   source: SalariesSource;
   filters: SalariesFilters;
   parameters: PayrollParameters;
@@ -60,7 +66,7 @@ export interface BuildSalariesReportInput {
 }
 
 export function buildSalariesReport(input: BuildSalariesReportInput): SalariesReport {
-  const { clientName, logo, source, filters, parameters, generatedAt } = input;
+  const { clientName, logo, rightLogo, source, filters, parameters, generatedAt } = input;
   // La marca de Área se ignora aquí, en el único sitio que arma el informe: ni el consolidado ni
   // ninguna sección de área la reciben.
   const baseFilters: SalariesFilters = { ...filters, areas: [] };
@@ -87,6 +93,7 @@ export function buildSalariesReport(input: BuildSalariesReportInput): SalariesRe
     header: {
       clientName,
       ...(logo ? { logo } : {}),
+      ...(rightLogo ? { rightLogo } : {}),
       rangeLabel: rangeLabel(consolidated.columns),
       areaCount: areaSections.length,
       generatedAt: formatTimestampEs(generatedAt),

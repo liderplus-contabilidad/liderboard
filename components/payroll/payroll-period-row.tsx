@@ -97,13 +97,20 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
           ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
+          ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
         }),
         payslipBatchFilename(period.year, period.monthIndex),
       );
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, activeClient?.company, period]);
+  }, [
+    activeClient?.name,
+    activeClient?.logo,
+    activeClient?.company,
+    activeClient?.costCenter,
+    period,
+  ]);
 
   const confirmDelete = useCallback(async () => {
     setBusy(true);

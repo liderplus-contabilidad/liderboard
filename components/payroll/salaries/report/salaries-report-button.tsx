@@ -23,12 +23,14 @@ const SalariesReportPreview = dynamic(
 export function SalariesReportButton({
   clientName,
   logo,
+  rightLogo,
   source,
   filters,
   hasPayroll,
 }: {
   clientName: string;
   logo?: EntityLogo;
+  rightLogo?: EntityLogo;
   source: SalariesSource;
   filters: SalariesFilters;
   hasPayroll: boolean;
@@ -52,6 +54,7 @@ export function SalariesReportButton({
         <SalariesReportPreview
           clientName={clientName}
           {...(logo ? { logo } : {})}
+          {...(rightLogo ? { rightLogo } : {})}
           source={source}
           filters={filters}
           onClose={() => setOpen(false)}

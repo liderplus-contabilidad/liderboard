@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useMemo, useState } from "react";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { costCenterHeading, letterheadLogos } from "@/lib/cost-center";
 import { employeesForPeriods } from "@/lib/payroll/db";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildSalariesCard } from "@/lib/payroll/salaries/chart";
@@ -62,6 +63,8 @@ export function SalariesView() {
   );
 
   const universe = useMemo(() => salariesUniverse(source), [source]);
+  // El reparto izquierda/derecha del membrete, resuelto donde se resuelve en los otros dos papeles.
+  const reportLogos = letterheadLogos(activeClient?.logo, activeClient?.costCenter);
   // Podado en la LECTURA, nunca en un efecto: cambiar de cliente no deja un render con marcas de
   // años que este cliente no tiene.
   const filters = useMemo(() => sanitizeFilters(rawFilters, universe), [rawFilters, universe]);
@@ -112,8 +115,9 @@ export function SalariesView() {
           </p>
         </div>
         <SalariesReportButton
-          clientName={activeClient?.name ?? "Cliente"}
-          {...(activeClient?.logo ? { logo: activeClient.logo } : {})}
+          clientName={costCenterHeading(activeClient?.name ?? "Cliente", activeClient?.costCenter)}
+          {...(reportLogos.left ? { logo: reportLogos.left } : {})}
+          {...(reportLogos.right ? { rightLogo: reportLogos.right } : {})}
           source={source}
           filters={filters}
           hasPayroll={universe.areas.length > 0}

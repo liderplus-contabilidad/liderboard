@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { ExcelActions } from "@/components/ui/excel-actions";
 import type { CompanyProfile } from "@/lib/company-profile";
+import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/logos";
 import { downloadRolWorkbook } from "@/lib/payroll/export/download";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
@@ -27,6 +28,7 @@ export function PayrollExcelActions({
   clientName,
   clientLogo,
   clientCompany,
+  clientCostCenter,
 }: {
   period: PayrollPeriod;
   periods: readonly PayrollPeriod[];
@@ -34,6 +36,7 @@ export function PayrollExcelActions({
   clientName: string;
   clientLogo?: EntityLogo;
   clientCompany?: CompanyProfile;
+  clientCostCenter?: CostCenter;
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -43,6 +46,7 @@ export function PayrollExcelActions({
         {
           clientName,
           ...(clientCompany ? { company: clientCompany } : {}),
+          ...(clientCostCenter ? { costCenter: clientCostCenter } : {}),
           year: period.year,
           monthIndex: period.monthIndex,
           lines,
@@ -50,7 +54,15 @@ export function PayrollExcelActions({
         },
         clientLogo,
       ),
-    [clientName, clientCompany, clientLogo, lines, period.monthIndex, period.year],
+    [
+      clientName,
+      clientCompany,
+      clientCostCenter,
+      clientLogo,
+      lines,
+      period.monthIndex,
+      period.year,
+    ],
   );
 
   const empty = lines.length === 0;

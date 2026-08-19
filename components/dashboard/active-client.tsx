@@ -21,6 +21,7 @@ import {
   type CompanyDraft,
   type CompanyField,
 } from "@/lib/company-profile";
+import type { CostCenterDraft } from "@/lib/cost-center";
 import {
   matchesSearch,
   type CenterLogos,
@@ -514,6 +515,9 @@ export function ClientNameDialog({
   company,
   onCompanyChange,
   companyError,
+  costCenter,
+  onCostCenterChange,
+  costCenterError,
   error,
   busy,
   onChange,
@@ -543,6 +547,17 @@ export function ClientNameDialog({
   onCompanyChange?: (field: CompanyField, value: string) => void;
   /** El rechazo del perfil al enviar —un RUC que no tiene trece dígitos—, ya en castellano. */
   companyError?: string | null;
+  /**
+   * El CENTRO DE COSTO de este workspace: un nombre más específico que el suyo y su propio logo,
+   * los dos opcionales. Entra por la misma puerta que `company` y que `centers` —sin él el diálogo
+   * queda EXACTAMENTE como estaba—, y no es lo mismo que aquellos: `centers` LISTA los centros que
+   * salen de los datos para ponerles logo, y esto DECLARA uno que no está en ningún dato. Hoy solo
+   * lo pasa Rol de Pagos.
+   */
+  costCenter?: CostCenterDraft;
+  onCostCenterChange?: (draft: CostCenterDraft) => void;
+  /** El rechazo del centro al enviar —un logo sin nombre—, ya en castellano. */
+  costCenterError?: string | null;
   error: string | null;
   busy?: boolean;
   onChange: (value: string) => void;
@@ -588,7 +603,9 @@ export function ClientNameDialog({
           // columna altísima— y puede scrollear: el botón que lo cierra no puede quedar fuera de
           // la pantalla por cuántos campos pide.
           "w-full max-h-[calc(100vh-56px)] overflow-y-auto rounded-[13px] border border-border bg-surface p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]",
-          company && onCompanyChange ? "max-w-[560px]" : "max-w-[440px]",
+          (company && onCompanyChange) || (costCenter && onCostCenterChange)
+            ? "max-w-[560px]"
+            : "max-w-[440px]",
         )}
       >
         <div className="flex items-start gap-3">
@@ -634,6 +651,52 @@ export function ClientNameDialog({
             hint={`Opcional. Acompaña al nombre del ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
           />
         </div>
+
+        {/*
+          El centro de costo va JUNTO al nombre y al logo del cliente porque es la otra mitad de lo
+          mismo —cómo se llama y qué cara tiene lo que emite este papel—, y encima del membrete
+          porque así el diálogo se lee en el orden en que el papel se imprime: primero quién
+          encabeza el papel, después de quién es el logo que lo cierra. La sección no existe
+          si el módulo no la pide.
+        */}
+        {costCenter && onCostCenterChange && (
+          <div className="mt-4 flex flex-col gap-1.5 rounded-[9px] border border-border-soft p-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+                Centro de costo
+              </span>
+              <span className="text-[11px] text-faintest">opcional</span>
+            </div>
+            <p className="text-[11.5px] text-faint">
+              Su nombre acompaña al del {labels.subject} en el PDF y en el Excel, y su logo va a la
+              derecha del membrete. Sin centro todo queda como está.
+            </p>
+            <label className="mt-0.5 flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-ink-soft">Nombre del centro</span>
+              <input
+                value={costCenter.name}
+                disabled={busy}
+                placeholder="Planta Ambato"
+                onChange={(event) =>
+                  onCostCenterChange({ ...costCenter, name: event.target.value })
+                }
+                className="h-[34px] rounded-[9px] border border-border bg-surface px-2.5 text-[12.5px] text-ink outline-none placeholder:text-faintest focus:border-brand"
+              />
+            </label>
+            <div className="mt-1">
+              <LogoPicker
+                value={costCenter.logo}
+                onChange={(next) => onCostCenterChange({ ...costCenter, logo: next })}
+                disabled={busy}
+                label="Logo del centro"
+                hint={`Opcional. Va a la derecha del membrete; el del ${labels.subject} encabeza a la izquierda.`}
+              />
+            </div>
+            {costCenterError && (
+              <span className="text-[11.5px] text-negative">{costCenterError}</span>
+            )}
+          </div>
+        )}
 
         {/*
           Los datos de la empresa son el MEMBRETE: lo que el papel de la firma imprime bajo el logo.

@@ -7,6 +7,7 @@
  * quien no descargue el rol no paga sus bytes.
  */
 import type ExcelJS from "exceljs";
+import { letterheadLogos } from "@/lib/cost-center";
 import { writeLogoHeader } from "@/lib/excel-logo";
 import type { EntityLogo } from "@/lib/logos";
 import { columnIndexOf, type RolCellFormat, type RolExportColumn } from "./columns";
@@ -100,7 +101,11 @@ export async function buildRolWorkbook(
     width: widths[index] ?? GAP_WIDTH,
   }));
 
-  writeLogoHeader(wb, ws, logo, null, 3);
+  // El del cliente a la izquierda y el de su centro a la derecha, la misma regla —y la misma
+  // función— que coloca los del comprobante en PDF. Sin centro con logo, uno solo a la izquierda,
+  // exactamente como antes.
+  const logos = letterheadLogos(logo, input.costCenter);
+  writeLogoHeader(wb, ws, logos.left, logos.right, 3);
 
   for (const row of grid.rows) {
     const written = ws.addRow([...row.cells]);

@@ -10,6 +10,7 @@ import {
 import { useEntityNaming } from "@/components/dashboard/use-entity-naming";
 import { Button } from "@/components/ui/button";
 import { DiscardedRow } from "@/components/ui/discarded-row";
+import { costCenterHeading, letterheadLogos } from "@/lib/cost-center";
 import { formatList, pluralize } from "@/lib/format";
 import type { PayrollClientContents, PayrollClientSummary } from "@/lib/payroll/db";
 import { describeClientContents } from "@/lib/payroll/db";
@@ -49,10 +50,20 @@ function useClientNaming() {
     // Rol de Pagos es el único módulo que pide el perfil de empresa: su rol y su comprobante son
     // documentos con membrete, y un cliente sin esos datos no puede producirlos.
     withCompany: true,
+    // Y el único que declara un CENTRO DE COSTO: su nombre entra en el rótulo del papel y su logo
+    // lo cierra por la derecha. Es opcional, a diferencia del perfil.
+    withCostCenter: true,
+    // Y el único que admite NOMBRES REPETIDOS: la firma lleva la nómina de varias unidades de una
+    // misma empresa y las llama a todas igual, así que rechazar el segundo «Delicmar» obligaba a
+    // inventarle un nombre que su papel no dice. Lo que las distingue en pantalla es el centro de
+    // costo, que viaja en el rótulo de la fila cuando se declara.
+    allowDuplicateNames: true,
     onCreate: createClient,
     // Los logos por centro son el cuarto argumento y aquí no existen: un cliente de Rol de Pagos no
-    // tiene centros, así que se descarta y el perfil sigue de largo.
-    onRename: (id, name, logo, _centerLogos, company) => updateClient(id, name, logo, company),
+    // tiene la lista de centros que PyG deriva de sus datos —el suyo lo DECLARA el usuario—, así
+    // que se descarta y el perfil sigue de largo.
+    onRename: (id, name, logo, _centerLogos, company, costCenter) =>
+      updateClient(id, name, logo, company, costCenter),
   });
 }
 
@@ -87,13 +98,18 @@ export function PayrollClientActions() {
         const caption = describeClient(client);
         return {
           id: client.id,
-          name: client.name,
+          // El rótulo COMPUESTO, el mismo que encabeza el PDF y el Excel: con nombres repetidos
+          // permitidos, el centro es lo único que puede decir cuál de los dos «Delicmar» es cada
+          // fila, y decirlo aquí es más barato que una segunda línea que casi siempre sobra.
+          name: costCenterHeading(client.name, client.costCenter),
           ...(caption ? { caption } : {}),
           ...(client.logo ? { logo: client.logo } : {}),
         };
       }),
     [clients],
   );
+
+  const activeLogos = letterheadLogos(activeClient?.logo, activeClient?.costCenter);
 
   const confirmDelete = useCallback(async () => {
     if (!deleting) {
@@ -114,9 +130,12 @@ export function PayrollClientActions() {
         {...(activeClient
           ? {
               client: {
-                name: activeClient.name,
+                name: costCenterHeading(activeClient.name, activeClient.costCenter),
                 period: pluralize(activeClient.periodCount, "período"),
-                ...(activeClient.logo ? { logo: activeClient.logo } : {}),
+                // En el orden en que se IMPRIMEN: el del cliente delante y el de su centro detrás,
+                // así que la cabecera confirma en pantalla lo que el PDF y el Excel encabezan.
+                ...(activeLogos.left ? { logo: activeLogos.left } : {}),
+                ...(activeLogos.right ? { centerLogo: activeLogos.right } : {}),
               },
             }
           : {})}

@@ -12,6 +12,7 @@
  */
 
 import type { CompanyProfile } from "@/lib/company-profile";
+import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/workspaces";
 import type { CapturedDeductions } from "./engine/types";
 
@@ -35,6 +36,20 @@ export interface PayrollClient {
    * No indexado, como el logo, así que tampoco costó versión nueva de Dexie.
    */
   company?: CompanyProfile;
+  /**
+   * El CENTRO DE COSTO al que pertenece el papel de este cliente: un nombre más específico que el
+   * suyo y —si el usuario lo subió— su propio logo. Opcional, declarado al crear el cliente, y UNO
+   * solo: no es la estructura de centros de PyG ni de Ocupaciones, donde un centro sale de los
+   * datos y hay varios (ver `lib/cost-center.ts`).
+   *
+   * Su efecto es entero del PAPEL: el rótulo del encabezado pasa a ser «Cliente · Centro»
+   * (`costCenterHeading`) y su logo cierra el membrete por la derecha, donde PyG y Ocupaciones
+   * ponen el del centro de cada hoja (`letterheadLogos`). Ni el motor, ni el asiento, ni una sola
+   * cifra lo miran.
+   *
+   * No indexado, como el logo y el perfil, así que tampoco costó versión nueva de Dexie.
+   */
+  costCenter?: CostCenter;
 }
 
 /** Único tipo de período por ahora; el tipo deja sitio a "décimos" y "liquidaciones" más adelante. */
