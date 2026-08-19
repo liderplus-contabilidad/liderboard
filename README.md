@@ -882,3 +882,28 @@ bajo su tabla—.
 - **Dos decimales fijos** en las tarjetas (`formatMonthlyFigure`), sin el umbral por magnitud que usa
   el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
   escala.
+
+## Informes imprimibles (PyG y Sueldos por Áreas)
+
+Dos módulos ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros: pedir
+un informe no es seleccionar nada) que abre una vista previa a ancho de página y deja que el
+navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación de PDF en código.
+
+- **Mecanismo compartido** (`components/ui/report-layer.tsx`): `ReportLayer` monta el portal sobre
+  `document.body`, la capa de impresión (clase `.report-layer`, la que `@media print` aísla en
+  `globals.css` — atada a la clase y no a un id, para que un segundo informe no imprima la app
+  entera detrás del otro), el cierre con Escape, el título del documento (de donde el navegador
+  toma el nombre sugerido del PDF) y la barra «Guardar PDF» / «Cerrar»; `ReportSheet` dibuja la
+  hoja A4, vertical o apaisada a su ancho real. Los gráficos se miden bien porque la vista previa
+  los monta **visibles y a su ancho real** — uno oculto se mide contra un ancho de cero.
+- **PyG** (`components/profit-loss/report/`): portada con cliente, sistema de origen y todos los
+  filtros aplicados (incluidos los que nadie marcó), resumen del periodo, gráficos y análisis,
+  análisis vertical, el estado de resultados completo (una tabla por centro y año, apaisada si no
+  cabe en vertical) y el anexo de centros de costo.
+- **Sueldos por Áreas** (`components/payroll/salaries/report/`): cabecera compacta —cliente, rango
+  de periodos, cuántas áreas y fecha de generación— seguida del **consolidado por área** y **una
+  sección por área**, cada una con su tabla y su gráfica impresas JUNTAS (sin el interruptor «Ver
+  como tabla/gráfica» de la pantalla). El informe **ignora** la marca de Área de la barra —saca
+  siempre el consolidado y todas las áreas— y **honra** Año y Mes, que acotan las columnas de cada
+  tabla. Un área sin ninguna ficha en el rango visible no imprime una página vacía, y el botón está
+  deshabilitado mientras el cliente activo no tenga ningún período con nómina.

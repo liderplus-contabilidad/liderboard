@@ -82,9 +82,10 @@ body {
 }
 
 /* ── Printing ─────────────────────────────────────────────────────────────
-  The Profit and Loss report is mounted in a portal over <body> with this id
-  and printed using window.print(). Nothing else from the app is included in
-  the print output.
+  Every printable report (PyG, Sueldos por Áreas) mounts in a portal over
+  <body> as `.report-layer` (see components/ui/report-layer.tsx) and prints
+  with window.print(). The class, not an id, is what the app now has more
+  than one of: nothing else from the app is included in the print output.
 
   Releasing html/body IS NOT optional: the lock above (height:100% +
   overflow:hidden) causes the browser to paginate only what fits in the
@@ -98,11 +99,11 @@ body {
     background: #ffffff;
   }
 
-  body > *:not(#pyg-report) {
+  body > *:not(.report-layer) {
     display: none !important;
   }
 
-  #pyg-report {
+  .report-layer {
     position: static;
     overflow: visible;
   }

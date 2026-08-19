@@ -26,6 +26,7 @@ import {
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 import { PayrollEmptyState } from "../payroll-empty-state";
 import { usePayrollData } from "../payroll-data-provider";
+import { SalariesReportButton } from "./report/salaries-report-button";
 import { SalariesToolbar } from "./salaries-toolbar";
 
 const EMPTY_LINES: Map<string, PayrollEmployeeLine[]> = new Map();
@@ -45,7 +46,7 @@ const EMPTY_LINES: Map<string, PayrollEmployeeLine[]> = new Map();
  * algo que ninguna otra pantalla lee.
  */
 export function SalariesView() {
-  const { activeClientId, periods, ready } = usePayrollData();
+  const { activeClient, activeClientId, periods, ready } = usePayrollData();
   const [rawFilters, setRawFilters] = useState<SalariesFilters>(emptyFilters);
 
   // Una sola consulta para TODOS los períodos del cliente, acotada por sus ids — nunca una lectura
@@ -102,12 +103,21 @@ export function SalariesView() {
 
   return (
     <div className="px-7 py-5">
-      <div className="mb-4 rounded-[13px] border border-border bg-surface px-5 py-4">
-        <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">Sueldos por áreas</h2>
-        <p className="mt-0.5 text-[12.5px] text-faint">
-          Evolución del costo total de la nómina, mes a mes. Marca un área para ver a sus empleados
-          uno por uno.
-        </p>
+      <div className="mb-4 flex items-center justify-between gap-4 rounded-[13px] border border-border bg-surface px-5 py-4">
+        <div>
+          <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">Sueldos por áreas</h2>
+          <p className="mt-0.5 text-[12.5px] text-faint">
+            Evolución del costo total de la nómina, mes a mes. Marca un área para ver a sus
+            empleados uno por uno.
+          </p>
+        </div>
+        <SalariesReportButton
+          clientName={activeClient?.name ?? "Cliente"}
+          {...(activeClient?.logo ? { logo: activeClient.logo } : {})}
+          source={source}
+          filters={filters}
+          hasPayroll={universe.areas.length > 0}
+        />
       </div>
 
       <div className="mb-4">

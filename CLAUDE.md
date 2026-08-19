@@ -1153,6 +1153,20 @@ mes no le cambie el elenco— y declara al pie cuántas dejó fuera, mientras la
 Las marcas son estado LOCAL de la vista y no del provider del layout: la regla es que un provider
 vive ahí porque la cabecera lee de su mismo estado, y de este módulo la cabecera solo lee el cliente.
 
+**Y tiene su propio «Informe PDF»**, el botón en la CABECERA de la vista (no en la barra, que es
+la única superficie de SELECCIÓN) — deshabilitado hasta que el cliente tenga alguna ficha cargada,
+nombrando el paso que falta en vez de quedar apagado sin explicación. `lib/payroll/salaries/
+report.ts` (puro + testeado) es la misma tarjeta pedida N+1 veces: `buildSalariesGrid` +
+`buildSalariesCard` con las MISMAS marcas del usuario, variando solo `areas` — `[]` para el
+consolidado que abre el informe y `[area]` para cada sección de área, en el orden del universo. La
+marca de Área de la barra se IGNORA —el informe saca el consolidado y TODAS las áreas por
+definición— y las de Año y Mes se HONRAN, porque son las que acotan las columnas de cada tabla; la
+cabecera escribe cliente, rango, cuántas áreas y la fecha (sellada al abrir la vista previa) porque
+en papel la barra ya no está. Un área sin ninguna ficha en el rango visible no produce sección
+—ausente, no vacía—, y sin ninguna sección el informe entero desaparece. Cada sección imprime la
+tabla Y la gráfica JUNTAS, sin el interruptor de pantalla —un control impreso es un botón que nadie
+puede pulsar—, montadas por `components/payroll/salaries/report/`.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind
@@ -1275,6 +1289,20 @@ medio y apaga el fondo, que es lo correcto cuando lo que se abre se lee SOLO y s
 El peso de un rubro al pulsar su barra del anexo entra por aquí, y además porque un cajón lateral
 caería justo encima de las barras y taparía la que se acaba de pulsar. `ConfirmDialog` es anterior a
 este archivo y repite sus mecánicas; cuando alguien lo toque, conviene plegarlo aquí.
+
+**El armazón de todo informe imprimible vive en `components/ui/report-layer.tsx`.** `ReportLayer`
+aporta el portal sobre `document.body`, la capa `.report-layer` que `@media print` aísla (en
+`globals.css`, atada a la CLASE y no a un id — el cambio que hizo posible un segundo informe sin que
+uno imprimiera la app entera detrás del otro), Escape, el título de impresión (de donde el navegador
+toma el nombre sugerido del PDF, restaurado al cerrar aunque se cierre sin imprimir) y la barra con
+«Guardar PDF»/«Cerrar»; `ReportSheet` aporta la hoja, A4 vertical o apaisada a su ancho real. No
+importa nada de `profit-loss/` ni de `payroll/`: lo propio de cada informe —el `Detalle` de PyG, sus
+avisos de cuántas hojas trae— entra por los huecos `controls`/`note`. El informe de PyG
+(`pyg-report-preview.tsx`) se portó a él sin cambiar una línea de lo que imprime, y el de Sueldos por
+Áreas nació sobre él directamente. `statementFit` —qué orientación y qué cuerpo de letra caben según
+el número de columnas— vive por eso en `lib/report/page-fit.ts` y no en `profit-loss/`, y
+`formatTimestampEs` —la fecha «18 de agosto de 2026, 14:05» que sella la cabecera de los dos
+informes— vive en `lib/date.ts`, para que ninguno de los dos pueda decir la fecha de dos maneras.
 
 ## Design source
 

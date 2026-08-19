@@ -13,7 +13,7 @@
  * Pure, `generatedAt` included: the timestamp arrives as an argument rather than being read off
  * the clock, so the whole cover is testable.
  */
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
+import { formatTimestampEs, MONTHS_SHORT_ES } from "@/lib/date";
 import { frequencyLabel, type Frequency } from "@/lib/period";
 import type { EntityLogo } from "@/lib/logos";
 import { periodSlotLabel } from "../analytics/period";
@@ -69,7 +69,7 @@ export function describePygReport(input: ReportSummaryInput): ReportCover {
     scope: describeScope(input),
     filters: describeFilters(input),
     coverageNote: COVERAGE_NOTE,
-    generatedAt: formatTimestamp(input.generatedAt),
+    generatedAt: formatTimestampEs(input.generatedAt),
   };
 }
 
@@ -193,13 +193,4 @@ function joinList(values: readonly string[]): string {
     return values[0];
   }
   return `${values.slice(0, -1).join(", ")} y ${values[values.length - 1]}`;
-}
-
-/** «30 de julio de 2026, 14:22» — the local reading, which is the one the accountant checks. */
-function formatTimestamp(date: Date): string {
-  const day = date.getDate();
-  const month = MONTHS_FULL_ES[date.getMonth()]?.toLowerCase() ?? String(date.getMonth() + 1);
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${day} de ${month} de ${date.getFullYear()}, ${hours}:${minutes}`;
 }
