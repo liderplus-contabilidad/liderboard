@@ -10,6 +10,7 @@ import {
   columnsByCenter,
   readByPeriod,
   readTotal,
+  selectBusinessLines,
   sumBusinessLines,
 } from "./business-lines";
 
@@ -331,6 +332,58 @@ describe("el cuadre contra el estado", () => {
       idle: 0,
     });
     expect(note).toContain("$50.00 sin clasificar");
+  });
+});
+
+/**
+ * La LEYENDA: apagar una categoría y volver a encenderla, el mismo gesto que la leyenda de meses.
+ *
+ * Lo que puede estar mal no es qué columnas se dibujan —eso se ve— sino el CUADRE: la nota afirma
+ * cuánto suman las líneas contra lo que declara el estado, y con una apagada esa resta deja de
+ * cerrar. Sin contarla, la nota declararía miles «sin clasificar», que es justo el aviso de que
+ * algo va mal en la lectura.
+ */
+describe("apagar una línea en la leyenda", () => {
+  const set = buildBusinessLines(source);
+
+  it("la aparta sin borrarla: sale de las barras y sigue en el conjunto", () => {
+    const selected = selectBusinessLines(set, ["bar"]);
+    expect(selected.lines.map((line) => line.label)).not.toContain("Bar");
+    expect(selected.hidden.map((line) => line.label)).toEqual(["Bar"]);
+    // Nada más se mueve: lo excluido y la sección contra la que se cuadra son los mismos.
+    expect(selected.excluded).toEqual(set.excluded);
+    expect(selected.sectionCodes).toEqual(set.sectionCodes);
+  });
+
+  it("una marca huérfana —de un plan que ya no está abierto— vale como ninguna", () => {
+    // La misma defensa que el resto del módulo: vaciar la pantalla sería peor que no acotar.
+    expect(selectBusinessLines(set, ["spa"]).lines).toEqual(set.lines);
+  });
+
+  it("el cuadre cuenta lo apagado como parte de la diferencia, no como sin clasificar", () => {
+    const note = describeBusinessLines(selectBusinessLines(set, ["bar"]), {
+      lines: 200_000,
+      section: 201_998.26,
+      excluded: -2_047.25,
+      hidden: 4_045.51,
+      idle: 0,
+    });
+    expect(note).toContain("$4,045.51");
+    expect(note).not.toContain("sin clasificar");
+  });
+
+  it("NOMBRA las apagadas: una barra que falta se lee como un dato que falta", () => {
+    const note = describeBusinessLines(selectBusinessLines(set, ["bar", "tours"]), {
+      lines: null,
+      section: null,
+      excluded: null,
+      idle: 0,
+    });
+    expect(note).toContain("Apagadas en la leyenda: Bar, Tours.");
+  });
+
+  it("sin ninguna apagada la nota no cambia ni una letra", () => {
+    expect(describeBusinessLines(selectBusinessLines(set, []))).toBe(describeBusinessLines(set));
   });
 });
 

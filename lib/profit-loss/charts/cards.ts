@@ -45,6 +45,7 @@ import {
   columnsByCenter,
   readByPeriod,
   readTotal,
+  selectBusinessLines,
   sumBusinessLines,
   type BusinessLineSet,
 } from "./business-lines";
@@ -114,7 +115,7 @@ import { buildWaterfall } from "./waterfall";
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
 /**
- * El alto de una tarta, y por qué lo declaran las DOS que hay en vez de escribirlo cada una.
+ * El alto de la ÚNICA tarta que queda —la dona del anexo—, y por qué no es el de las demás.
  *
  * A una tarta el ancho no le sirve de nada: el radio de ECharts es un porcentaje de la dimensión
  * MENOR del lienzo, y en una tarjeta a ancho completo la menor es siempre el alto. Con los 280 px
@@ -123,8 +124,8 @@ const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
  * astillas donde el rótulo con su línea guía no cabía. Subirlo es lo ÚNICO que la agranda.
  *
  * 420 es el alto que ya usa la barra vertical del anexo, así que las dos tarjetas de esa vista
- * quedan a la misma altura; y las dos tartas de la app comparten el número para que la misma
- * figura no se lea de dos tamaños según la pestaña.
+ * quedan a la misma altura. «Composición de los ingresos» compartía el número mientras también era
+ * una tarta; ahora son barras y su alto lo piden sus filas, no un radio.
  */
 const PIE_HEIGHT = 420;
 
@@ -147,6 +148,12 @@ export interface CardTile {
 export interface GraficosOptions {
   /** Quita del eje los periodos cubiertos en los que el estado no movió nada. Solo en mensual. */
   hideEmptyPeriods?: boolean;
+  /**
+   * Las líneas de negocio APAGADAS en la leyenda de su tarjeta, por id. Entra como opción y no como
+   * marca por lo mismo que «Ocultar meses en 0»: lo lee UNA tarjeta de UNA pestaña, así que no se
+   * guarda, no produce chip y el informe imprimible sigue sacando las seis.
+   */
+  hiddenLines?: readonly string[];
 }
 
 export interface GraficosCards {
@@ -168,6 +175,15 @@ export interface GraficosCards {
    * lo podado lo dejaría en cero y el control se esfumaría justo al usarlo, sin forma de volver.
    */
   emptyPeriods: number;
+  /**
+   * Las líneas de negocio que la leyenda ofrece, y `[]` fuera de esa vista. Salen de aquí en vez de
+   * derivarse otra vez en la vista para que la leyenda y las barras no puedan hablar de listas
+   * distintas — es la misma razón por la que el anexo saca su reparto en crudo.
+   *
+   * Van TODAS las que se mueven en el tramo, también las apagadas: la leyenda es el único sitio
+   * desde el que se vuelven a encender, y un ítem que desapareciera al pulsarlo no tendría vuelta.
+   */
+  lines: { id: string; label: string }[];
 }
 
 export interface AnalisisCards {
@@ -192,13 +208,14 @@ export function entryColor(codes: string[]): (code: string) => string {
 }
 
 /**
- * El color de una porción de la tarta de composición por su LUGAR en el reparto, no por su código.
+ * El color de una fila de la composición por su LUGAR en el reparto, no por su código.
  *
  * `entryColor` no sirve aquí aunque la lista ya venga ordenada: lo que hace es repartir las ranuras
- * de `CHART_PALETTE`, que es el set de IDENTIDAD, y esta tarta tiene el suyo. La firma lo pidió
+ * de `CHART_PALETTE`, que es el set de IDENTIDAD, y este reparto tiene el suyo. La firma lo pidió
  * cálido —ver `CHART_COMPOSITION_PALETTE`, donde está medido por qué no son los tonos exactos de la
  * referencia que trajeron—. La gemela en tabla lo consume TAMBIÉN, que es lo que mantiene el punto
- * de color de cada fila igual al de su porción.
+ * de color de cada fila igual al de su barra. Lo siguen repartiendo los slots y no la entidad
+ * aunque la tarjeta ya no sea una tarta: lo que dibuja sigue siendo el reparto ENTERO y ordenado.
  */
 export function compositionColor(codes: string[]): (code: string) => string {
   const slotByCode = new Map(codes.map((code, index) => [code, index]));
@@ -328,6 +345,12 @@ function businessLineCard(
     ),
     section: addTotals(set.sectionCodes.map((code) => sumAllOver(bundle, code))),
     excluded: addTotals(set.excluded.map((entry) => sumAllOver(bundle, entry.code))),
+    // Lo apagado en la leyenda sigue siendo plata del estado: se suma aquí para que el cuadre lo
+    // cuente como diferencia en vez de declararlo «sin clasificar», que es el aviso de que la
+    // lectura no cierra y no debe gastarse en algo que el usuario acaba de apagar a propósito.
+    hidden: addTotals(
+      set.hidden.flatMap((line) => line.codes.map((code) => sumAllOver(bundle, code))),
+    ),
     idle: set.lines.length - drawnCodes.size,
   };
 
@@ -374,7 +397,11 @@ function businessLineCard(
     warnings: bundle.warnings,
     ...withNote(
       [
-        describeBusinessLines(set, balance),
+        // Con todas apagadas no hay cuadre que escribir —no queda ninguna línea que sumar—, así
+        // que la nota dice qué pasó y dónde se deshace, que es lo único útil ahí.
+        set.lines.length === 0
+          ? "Todas las líneas están apagadas: enciende alguna en la leyenda para volver a dibujar."
+          : describeBusinessLines(set, balance),
         // Por qué Hospedaje enseña tres establecimientos y no los cinco marcados: los otros dos no
         // venden hospedaje. Sin decirlo, una columna que falta se lee como un dato que falta.
         centers.length > 1 && columns.length < drawnLines * centers.length
@@ -615,7 +642,13 @@ export function buildGraficosCards(
   // marcadas, o —con una vista predeterminada elegida— lo que esa vista presenta. Que sean
   // excluyentes lo garantiza `filters.ts`; aquí solo se elige, y un plan que no declara líneas
   // deja la marca inerte en vez de vaciar la tarjeta.
-  const lineSet = filters.preset === BUSINESS_LINES_PRESET ? buildBusinessLines(source) : null;
+  const declaredLines =
+    filters.preset === BUSINESS_LINES_PRESET ? buildBusinessLines(source) : null;
+  // Lo que la LEYENDA dejó encendido. Las apagadas no se pierden: viajan en el mismo conjunto para
+  // que el cuadre las cuente, y la lista que se ofrece para volver a encenderlas sale de abajo.
+  const lineSet = declaredLines
+    ? selectBusinessLines(declaredLines, options.hiddenLines ?? [])
+    : null;
   // La consulta lleva, además de las cuentas miembro, las EXCLUIDAS y la sección entera: son las
   // dos cifras con las que la nota cuadra la lectura contra el estado, y pedirlas aparte abriría la
   // puerta a cuadrar contra un tramo distinto del que dibujan las barras.
@@ -630,14 +663,17 @@ export function buildGraficosCards(
   const omittedCenters = context.centers.filter(
     (center) => center.kind === "sin-centro" && !lineCenters.includes(center.id),
   );
+  // La tanda pide las cuentas de TODAS las líneas declaradas, no solo las encendidas: las apagadas
+  // entran en el cuadre y en la leyenda, y pedirlas aparte abriría la puerta a cuadrar contra un
+  // tramo distinto del que dibujan las barras.
   const lineBundle =
-    lineSet && lineSet.lines.length > 0
+    declaredLines && declaredLines.lines.length > 0
       ? runQuery(
           compositionQuery(
             [
-              ...lineSet.lines.flatMap((line) => line.codes),
-              ...lineSet.excluded.map((entry) => entry.code),
-              ...lineSet.sectionCodes,
+              ...declaredLines.lines.flatMap((line) => line.codes),
+              ...declaredLines.excluded.map((entry) => entry.code),
+              ...declaredLines.sectionCodes,
             ],
             context,
             { periods: periodRefs, centerIds: lineCenters },
@@ -645,6 +681,18 @@ export function buildGraficosCards(
         )
       : null;
   const centerLabels = new Map(context.sources.map((entry) => [entry.centerId, entry.centerName]));
+  // Solo las que se mueven: el plan declara cuentas en cero todo el año, y un ítem de leyenda que
+  // no dibuja nada al encenderlo enseña a no pulsar los de al lado. Se juzga sobre la MISMA tanda
+  // que dibujan las barras, así que lo que la leyenda ofrece y lo que se ve no pueden separarse.
+  const lineLegend =
+    declaredLines && lineBundle
+      ? declaredLines.lines
+          .filter((line) => {
+            const total = addTotals(line.codes.map((code) => sumAllOver(lineBundle, code)));
+            return total !== null && total !== 0;
+          })
+          .map((line) => ({ id: line.id, label: line.label }))
+      : [];
 
   // Distribución: de qué está hecha una cuenta, periodo a periodo. La cuenta la resuelve la misma
   // figura que el centro y el año — exactamente una marcada es esa, ninguna o varias es Ingresos —
@@ -691,7 +739,7 @@ export function buildGraficosCards(
     compositionQuery(compositionCodes, context, { periods: periodRefs }),
   );
   // El corte lo declara la escala, no un número suelto: así «Otros» cae siempre en la última
-  // ranura y ninguna porción se queda sin tono.
+  // ranura y ninguna fila se queda sin tono.
   const slices = toPieSlices(amountsOver(composition), { maxSlices: CHART_COMPOSITION_MAX });
   const sliceColor = compositionColor(slices.slices.map((slice) => slice.code));
   const compositionEmptyNote =
@@ -740,19 +788,67 @@ export function buildGraficosCards(
     ? expenseDistributionCards(annex, periodName, expenses.warnings, rankingEmptyNote)
     : [null, null];
 
-  // Las dos que cierran la lista se declaran aparte porque el anexo las INTERCAMBIA: son la misma
-  // tarjeta en los dos casos, así que sacarlas del literal es lo que evita escribirlas dos veces.
+  // Las tres que cierran la lista se declaran aparte porque el anexo las REORDENA: son las mismas
+  // tarjetas en los dos casos, así que sacarlas del literal es lo que evita escribirlas dos veces.
+  //
+  // La composición se dibuja en BARRAS HORIZONTALES y no en una tarta, la misma forma del ranking
+  // que tiene al lado: el reparto ya viene ordenado de mayor a menor, y una barra dice cuánto pesa
+  // cada línea por su LARGO —que se compara de un vistazo entre filas alineadas— mientras que una
+  // tarta lo dice por un ángulo que hay que estimar. El precio de la tarta era además el rótulo:
+  // seis porciones pequeñas escriben sus nombres fuera, con línea guía, amontonados en un borde;
+  // aquí cada línea tiene su renglón y su monto al final de la barra. Lo que se conserva es el
+  // reparto —«Otros» y las excluidas siguen siendo los de `toPieSlices`, con su nota al pie— y el
+  // set cálido de color, que aquí solo tiene que distinguir seis filas.
+  //
+  // Las barras se ordenan de mayor a menor, y la tabla gemela recibe ESA lista y no la de
+  // `toPieSlices` — que deja «Otros» al final porque una tarta lo dibuja en el orden del array.
+  // Ordenar una sola vez es lo que impide que la fila tercera de la tabla sea la quinta barra
+  // cuando la cola plegada pesa más que una cuenta suelta. El COLOR se sigue resolviendo sobre la
+  // lista sin ordenar, que es lo que mantiene a «Otros» en la última ranura del set cálido.
+  const compositionEntries = [...slices.slices].sort((a, b) => b.value - a.value);
   const composicionCard: ChartCardSpec = {
     id: "composicion",
     title: "Composición de los ingresos",
     subtitle: periodName,
     option:
-      slices.slices.length > 0 ? pieOption(slices, { colorOf: sliceColor, donut: true }) : null,
+      compositionEntries.length > 0
+        ? horizontalBarOption(compositionEntries, { colorOf: sliceColor })
+        : null,
     table:
-      slices.slices.length > 0 ? entryTable(slices.slices, { colorOf: sliceColor }) : EMPTY_TABLE,
+      compositionEntries.length > 0
+        ? entryTable(compositionEntries, { colorOf: sliceColor })
+        : EMPTY_TABLE,
     warnings: composition.warnings,
-    ...withNote(compositionEmptyNote ?? excludedNote(slices.excluded)),
-    height: PIE_HEIGHT,
+    // El rótulo de lo excluido ya no puede decir «pastel»: la tarjeta son barras. El anexo, que
+    // sigue siendo una tarta, se queda con el lead por defecto.
+    ...withNote(compositionEmptyNote ?? excludedNote(slices.excluded, "Fuera del reparto")),
+    // Seis filas no piden el alto de una tarta: a la densidad del ranking (~34 px por fila) se
+    // quedaría corta para una tarjeta, y a 420 px las barras nadan en blanco.
+    height: 320,
+  };
+  const rankingCard: ChartCardSpec = {
+    id: "ranking",
+    title: "Ranking de gastos",
+    subtitle: `De mayor a menor · ${periodName}`,
+    option:
+      ranking.entries.length > 0
+        ? horizontalBarOption(ranking.entries, { colorOf: rankingColor })
+        : null,
+    table:
+      ranking.entries.length > 0
+        ? entryTable(ranking.entries, { colorOf: rankingColor })
+        : EMPTY_TABLE,
+    warnings: expenses.warnings,
+    ...withNote(
+      rankingEmptyNote ??
+        (ranking.hidden > 0
+          ? `Se muestran las ${ranking.entries.length} cuentas más grandes; ${ranking.hidden} quedaron fuera.`
+          : undefined),
+    ),
+    // Quince filas piden el alto de quince filas: a 280 px cada barra cae a 17 px y el rótulo
+    // de la cuenta deja de caber al lado de su monto. Es la misma densidad de antes (~34 px
+    // por fila), no una tarjeta más grande.
+    height: 520,
   };
   const cascadaCard: ChartCardSpec = {
     id: "cascada",
@@ -774,6 +870,7 @@ export function buildGraficosCards(
     periodName,
     emptyPeriods,
     annex,
+    lines: lineLegend,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },
       { id: "gastos", label: "Costos y Gastos", value: expense },
@@ -834,41 +931,19 @@ export function buildGraficosCards(
               height: 320,
             } satisfies ChartCardSpec,
           ]),
-      // El ranking va ANTES de la composición: son las dos lecturas del tramo, y la de gastos es
-      // la que el lector busca primero —de dónde se va el dinero— mientras que la tarta reparte
-      // unos ingresos cuyo total ya declaran las cifras de arriba. El informe impreso hereda este
-      // orden porque lee esta misma lista.
-      annexPie ?? {
-        id: "ranking",
-        title: "Ranking de gastos",
-        subtitle: `De mayor a menor · ${periodName}`,
-        option:
-          ranking.entries.length > 0
-            ? horizontalBarOption(ranking.entries, { colorOf: rankingColor })
-            : null,
-        table:
-          ranking.entries.length > 0
-            ? entryTable(ranking.entries, { colorOf: rankingColor })
-            : EMPTY_TABLE,
-        warnings: expenses.warnings,
-        ...withNote(
-          rankingEmptyNote ??
-            (ranking.hidden > 0
-              ? `Se muestran las ${ranking.entries.length} cuentas más grandes; ${ranking.hidden} quedaron fuera.`
-              : undefined),
-        ),
-        // Quince filas piden el alto de quince filas: a 280 px cada barra cae a 17 px y el rótulo
-        // de la cuenta deja de caber al lado de su monto. Es la misma densidad de antes (~34 px
-        // por fila), no una tarjeta más grande.
-        height: 520,
-      },
-      // Bajo el anexo la CASCADA se adelanta a la composición de ingresos, y el motivo es qué
-      // responde cada una a esa pregunta: la cascada va del ingreso al resultado pasando por los
-      // gastos, así que es la continuación natural del reparto que se acaba de leer, mientras que
-      // la tarta de ingresos sigue ahí solo como el contexto de la columna «% del ingreso». Fuera
-      // del anexo el orden es el de siempre — la composición acompaña al reparto de arriba y la
-      // cascada cierra con la historia completa.
-      ...(annex ? [cascadaCard, composicionCard] : [composicionCard, cascadaCard]),
+      // La COMPOSICIÓN va ANTES del ranking: las dos son el mismo reparto del tramo en la misma
+      // forma —barras ordenadas de mayor a menor—, y el estado se lee empezando por lo que entró.
+      // Además son quince filas contra seis: con el ranking primero, la composición quedaba al pie
+      // de una tarjeta del doble de alto, que es justo donde el ojo ya no llega. El informe impreso
+      // hereda este orden porque lee esta misma lista.
+      //
+      // Bajo el anexo el par no existe: el ranking cede su ranura a la tarjeta del anexo y ahí la
+      // que se adelanta es la CASCADA, que va del ingreso al resultado pasando por los gastos —la
+      // continuación del reparto que se acaba de leer—, mientras la composición se queda detrás
+      // como el contexto de la columna «% del ingreso».
+      ...(annex
+        ? [annexPie ?? rankingCard, cascadaCard, composicionCard]
+        : [composicionCard, rankingCard, cascadaCard]),
     ],
   };
 }

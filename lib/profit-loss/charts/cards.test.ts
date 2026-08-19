@@ -121,10 +121,34 @@ describe("el contrato de la lista", () => {
     expect(cards.map((card) => card.id)).toEqual([
       "evolucion",
       "distribucion",
-      "ranking",
       "composicion",
+      "ranking",
       "cascada",
     ]);
+  });
+
+  it("la composición son BARRAS y no una tarta, la misma forma del ranking que sigue", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+    const composicion = cards[2];
+    const ranking = cards[3];
+
+    // Las dos son el mismo reparto ordenado de mayor a menor: una tarta lo diría por un ángulo
+    // que hay que estimar, y con los rótulos fuera y con línea guía apilados en un borde.
+    expect(composicion.option?.series[0].type).toBe("bar");
+    expect(ranking.option?.series[0].type).toBe("bar");
+    // El eje de categorías lleva un renglón por cuenta, en el orden que dibuja.
+    expect(composicion.option?.yAxis).toMatchObject({ type: "category", inverse: true });
+    const drawn = composicion.option?.yAxis;
+    expect(!Array.isArray(drawn) && drawn?.data).toEqual(
+      composicion.table.rows.map((row) => row.label),
+    );
+  });
+
+  it("lo excluido del reparto no se nombra ya como «fuera del pastel»", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+
+    // El anexo, que SIGUE siendo una tarta, se queda con el lead por defecto.
+    expect(cards[2].note).toContain("Fuera del reparto —");
   });
 
   it("Análisis declara tres, y la tabla de análisis vertical no es una de ellas", () => {
@@ -140,8 +164,8 @@ describe("el contrato de la lista", () => {
     expect(graficos.cards.map((card) => [card.title, card.height])).toEqual([
       ["Ingresos contra Costos y Gastos", 300],
       ["Distribución de Ventas", 320],
+      ["Composición de los ingresos", 320],
       ["Ranking de gastos", 520],
-      ["Composición de los ingresos", 420],
       ["Del ingreso a la utilidad", 340],
     ]);
     expect(analisis.cards.map((card) => [card.title, card.height])).toEqual([
@@ -186,7 +210,7 @@ describe("el periodo del que hablan las tarjetas", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[3].subtitle).toBe("Ene–Jul");
+    expect(graficos.cards[2].subtitle).toBe("Ene–Jul");
     for (const card of [...graficos.cards.slice(0, 4), analisis.cards[0], analisis.cards[2]]) {
       expect(card.subtitle).toContain("Ene–Jul");
     }
@@ -421,9 +445,9 @@ describe("lo que marcan los filtros", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.1.1.1", "5.1.5"] }));
 
     // La composición queda con la única hoja de ingresos marcada…
-    expect(cards[3].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
+    expect(cards[2].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
     // …y el ranking con las cuatro que cuelgan de 5.1.5, sin el sueldo, que cuelga de 5.1.1.
-    expect(cards[2].table.rows.map((row) => row.id)).toEqual([
+    expect(cards[3].table.rows.map((row) => row.id)).toEqual([
       "5.1.5.12",
       "5.1.5.3",
       "5.1.5.7",
@@ -434,8 +458,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un gasto vacía la composición de ingresos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["5.1.5"] }));
 
-    expect(cards[3].option).toBeNull();
-    expect(cards[3].note).toBe(
+    expect(cards[2].option).toBeNull();
+    expect(cards[2].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos.",
     );
   });
@@ -443,8 +467,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un ingreso vacía el ranking de gastos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.2"] }));
 
-    expect(cards[2].option).toBeNull();
-    expect(cards[2].note).toBe(
+    expect(cards[3].option).toBeNull();
+    expect(cards[3].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos.",
     );
   });
@@ -518,7 +542,7 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
    */
   it("el ranking de gastos pinta la segunda barra con el segundo slot", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const rows = cards[2].table.rows;
+    const rows = cards[3].table.rows;
 
     expect(rows.map((row) => row.id)).toEqual([
       "5.1.1.1.1",
@@ -680,7 +704,7 @@ describe("lo que cada tarjeta dice de sí misma", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     // Cinco gastos y el corte está en quince: no hay nada que declarar fuera de la lista.
-    expect(cards[2].note).toBeUndefined();
+    expect(cards[3].note).toBeUndefined();
   });
 });
 
@@ -812,6 +836,62 @@ describe("la vista predeterminada de líneas de negocio", () => {
       "Lavandería",
       "Otros ingresos ordinarios",
     ]);
+  });
+
+  /* ------------------------------------------------------------------ la leyenda */
+
+  it("apagar una línea la saca de las barras y la nota lo DICE", () => {
+    const sinLavanderia = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: BUSINESS_LINES_PRESET }),
+      { hiddenLines: ["lavanderia"] },
+    ).cards[0];
+
+    expect(sinLavanderia.table.rows.map((row) => row.label)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Otros ingresos ordinarios",
+    ]);
+    expect(sinLavanderia.note).toContain("Apagadas en la leyenda: Lavandería");
+    // Y el cuadre sigue cerrando: lo apagado cuenta como diferencia, no como un agujero.
+    expect(sinLavanderia.note).not.toContain("sin clasificar");
+  });
+
+  it("ofrece la leyenda con las líneas del plan, también la apagada", () => {
+    // Es donde se vuelve a encender: una leyenda que perdiera el ítem al apagarlo no tendría
+    // ningún sitio desde el que reponerlo.
+    expect(lines.lines.map((line) => line.label)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Lavandería",
+      "Otros ingresos ordinarios",
+    ]);
+    expect(
+      buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+        hiddenLines: ["lavanderia"],
+      }).lines.map((line) => line.id),
+    ).toContain("lavanderia");
+  });
+
+  it("fuera de la vista no hay leyenda que ofrecer", () => {
+    expect(plain.lines).toEqual([]);
+  });
+
+  it("apagarlas TODAS no dibuja un gráfico vacío: lo dice", () => {
+    const todas = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+      hiddenLines: ["hospedaje", "restaurante", "lavanderia", "bar", "tours", "otros"],
+    }).cards[0];
+
+    expect(todas.title).toBe("Ventas por línea de negocio");
+    expect(todas.option).toBeNull();
+    expect(todas.note).toContain("Todas las líneas están apagadas");
+  });
+
+  it("una marca huérfana no vacía la pantalla", () => {
+    const conHuerfana = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+      hiddenLines: ["spa"],
+    }).cards[0];
+    expect(JSON.stringify(conHuerfana)).toBe(JSON.stringify(lines.cards[0]));
   });
 
   it("se queda inerte con un plan que no declara líneas", () => {
@@ -998,8 +1078,8 @@ describe("la vista predeterminada de costos y gastos", () => {
     expect(cards.map((card) => card.title)).toEqual([
       "Ingresos contra Costos y Gastos",
       "Distribución de Ventas",
-      "Ranking de gastos",
       "Composición de los ingresos",
+      "Ranking de gastos",
       "Del ingreso a la utilidad",
     ]);
   });

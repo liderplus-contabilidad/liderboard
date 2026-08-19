@@ -26,6 +26,13 @@ export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
   tableToggle?: boolean;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
+  /**
+   * Lo que va PEGADO al gráfico y bajo él: una leyenda propia, que es un control de lectura y no
+   * de encuadre. Va aquí y no en `headerSlot` porque se lee junto a las barras que nombra, y sigue
+   * dibujándose cuando no hay nada que dibujar — una leyenda que desapareciera al apagar el último
+   * ítem no tendría desde dónde volver a encenderlo.
+   */
+  footerSlot?: ReactNode;
 }
 
 /**
@@ -47,6 +54,7 @@ export const ChartCard = memo(function ChartCard({
   empty = false,
   tableToggle = true,
   headerSlot,
+  footerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
@@ -124,6 +132,8 @@ export const ChartCard = memo(function ChartCard({
                   : "No hay nada que dibujar en este periodo."}
               </EmptyState>
             )}
+
+            {footerSlot}
 
             {note && <p className="mt-3 text-[11.5px] leading-snug text-faint">{note}</p>}
           </>

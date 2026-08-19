@@ -831,7 +831,7 @@ La vista ocupa DOS ranuras de la lista: la primera, que es la que toda vista sus
 **ranking**, porque pregunta lo mismo sobre el mismo universo y dejar las dos imprimiría la lista dos
 veces. **La CASCADA se adelanta a la composición de ingresos**, porque es la que continúa la
 lectura: va del ingreso al resultado pasando por los gastos, que es justo el reparto que se acaba de
-leer, mientras que la tarta de ingresos se queda detrás como contexto de la columna «% del ingreso».
+leer, mientras que la composición de ingresos se queda detrás como contexto de la columna «% del ingreso».
 Fuera del anexo el orden es el de siempre, así que las dos se declaran aparte del literal y la lista
 las intercambia — son la misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
 con quince marcadas resuelve Ingresos: bajo un anexo de GASTOS quedaba una tarjeta repartiendo
@@ -949,6 +949,23 @@ CAMBIO, y una divisoria por grupo añadiría verticales a una retícula que ya t
 extremos son ÍNDICES de columna y no rótulos, porque el mismo establecimiento aparece en varios
 grupos y un rango por nombre engancharía la primera aparición. Exigió registrar `MarkAreaComponent`
 en `chart.tsx`: sin él un `markArea` no falla, simplemente no se dibuja, que es peor.
+
+**Y las CATEGORÍAS se quitan y se ponen desde una LEYENDA propia**, el mismo gesto que la leyenda de
+meses que ECharts dibuja bajo esa misma tarjeta. La dibuja React (`business-line-legend.tsx`, colgada
+del nuevo `footerSlot` de `ChartCard`) porque ahí las líneas son el EJE y ECharts solo sabe hacer
+leyenda de SERIES; sus marcas no llevan color —el color lo lleva el periodo, así que seis puntos de
+colores prometerían una distinción que no existe, la misma regla por la que la tabla del anexo no
+lleva punto— y son de tinta, llena encendida y hueca apagada. Es estado LOCAL de Gráficos y no un
+`PygFilters`: lo lee UNA tarjeta, así que no se guarda, no deja chip y el informe imprimible —que
+llama a `buildGraficosCards` por su cuenta— sigue sacando todas; una marca huérfana vale como
+ninguna, la defensa de siempre. **Lo que puede estar mal no son las columnas —eso se ve— sino el
+CUADRE**: `selectBusinessLines` APARTA las apagadas en vez de borrarlas y la nota las suma del lado de
+lo que queda fuera («la diferencia son −$2.047,25 de cuentas que quedan fuera y $4.045,51 de las
+líneas apagadas»), porque dejarlas caer en el residuo declararía miles «sin clasificar», que es justo
+el aviso que esa frase existe para dar cuando la lectura no cierra de verdad. La leyenda ofrece solo
+las líneas que SE MUEVEN en el tramo —un ítem que no dibuja nada al encenderlo enseña a no pulsar los
+de al lado—, se juzga contra la MISMA tanda que dibujan las barras, y sigue en pantalla con todas
+apagadas, que es el único sitio desde el que se vuelven a encender.
 
 **«Distribución» es la tercera lectura de la composición y no repite a las otras dos**: la dona dice
 de qué se compone el TRAMO entero y el ranking cuáles son las más grandes, pero solo un apilado por
@@ -1269,8 +1286,19 @@ UI are:
   Excel tal cual NO es opción y está medido: dan 1,3:1 contra el papel —barras invisibles— y ΔE 7,4
   entre el verde y el celeste, por debajo del piso de visión normal. Lo que se conserva es el TONO;
   la luminosidad es otro trabajo. Medido: CVD ΔE 18.1, visión normal ΔE 19.5.
-- **`CHART_COMPOSITION_PALETTE` es el set CÁLIDO de la tarta de «Composición de los ingresos»**, y
-  la tercera vez que un color deja de seguir a la entidad. Aquí no hay entidades que vayan y
+- **`CHART_COMPOSITION_PALETTE` es el set CÁLIDO de «Composición de los ingresos»**, y
+  la tercera vez que un color deja de seguir a la entidad. **Esa tarjeta ya no es una tarta**: son
+  BARRAS HORIZONTALES, la misma forma del ranking que tiene debajo, porque el reparto ya venía
+  ordenado de mayor a menor y una barra dice cuánto pesa cada línea por su LARGO —comparable de un
+  vistazo entre filas alineadas— mientras que la tarta lo decía por un ángulo que hay que estimar y
+  escribía los rótulos de las porciones pequeñas fuera, con línea guía y amontonados en un borde. Lo
+  que se conserva es el REPARTO: `toPieSlices` sigue siendo quien pliega «Otros» y aparta las
+  negativas, y su nota al pie solo cambió el rótulo («Fuera del reparto», ya no «del pastel»). Las
+  barras se ordenan por monto y la tabla gemela recibe ESA lista y no la de `toPieSlices` —que deja
+  «Otros» al final porque una tarta dibuja en el orden del array—, así que la fila tercera de la
+  tabla no puede ser la quinta barra; el COLOR se sigue resolviendo sobre la lista sin ordenar, que
+  es lo que mantiene a «Otros» en la última ranura. El set se queda porque lo que lo justifica no es
+  el círculo sino el reparto. Aquí no hay entidades que vayan y
   vengan: `toPieSlices` devuelve el reparto ENTERO, siempre completo y ordenado de mayor a menor, y
   el color ya seguía a ese orden — `colorForCompositionSlot` solo lo dice en voz alta. A diferencia
   de `CHART_DISTRIBUTION_RAMP` son HUES y no una rampa, porque una pila necesita leerse como «este
@@ -1279,13 +1307,14 @@ UI are:
   medida**: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL —la porción del 30 % y la del 20 % son
   casi el mismo rojo para cualquiera— y `#99aa27`↔`#ff8500` dan ΔE 3.9 protan. En la referencia eso
   no se nota porque cada porción lleva su «20%» impreso DENTRO, y el número es lo que desambigua;
-  en esta tarjeta los rótulos van fuera con línea guía, así que ese relieve no existe. Se conserva
+  en esta tarjeta el tono es lo que empareja una fila de la tabla gemela con su barra —un punto de
+  color, sin cifra dentro—, así que ese relieve no existe. Se conserva
   el CARÁCTER —el rojo, el naranja y el teal, tres de sus cinco— y se ensancha el arco, porque rojo,
   naranja y ámbar viven en unos 60° de tono y no llegan al piso sin separarse en luminosidad, lo
   que saca al ámbar de la banda por arriba. Ninguno de los seis es una ranura de `CHART_PALETTE`
   (el azul se desplazó a `#0f5bb5` por eso), la misma regla que ya cumple la rampa de distribución.
   `CHART_COMPOSITION_MAX` es además el corte que `toPieSlices` recibe, en vez de un 6 suelto, para
-  que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin tono. Medido: banda
+  que «Otros» caiga siempre en la última ranura y ninguna fila se quede sin tono. Medido: banda
   PASS, croma PASS, CVD ΔE 15.0, visión normal ΔE 16.2.
 - **`CHART_RANKING_TAIL_RAMP` es la COLA del «Ranking de gastos», que pasó de 8 barras a 15.** Las
   ocho primeras se pintan como siempre, con `CHART_PALETTE`: ahí el color sigue haciendo su trabajo
@@ -1315,8 +1344,11 @@ UI are:
   `CHART_RANKING_MAX` se DERIVA (8 + 7) y `EXPENSE_RANKING_SIZE` es ese número, no un 15 suelto,
   así que ninguna barra dibujada puede quedarse sin tono; el resto de rankings sigue en
   `RANKING_SIZE` (8), que es lo que da la paleta con la que se pintan. La tarjeta subió a 520 px
-  —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **antes** de «Composición
-  de los ingresos» (de dónde se va el dinero se lee primero) y las cinco de Gráficos quedaron al
+  —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **después** de «Composición
+  de los ingresos» (las dos son el mismo reparto en la misma forma, y el estado se lee empezando por
+  lo que entró; además son quince filas contra seis, así que con el ranking delante la composición
+  quedaba al pie de una tarjeta del doble de alto, justo donde el ojo ya no llega) y las cinco de
+  Gráficos quedaron al
   MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se lee
   como que algo no cargó, y el ranking además necesita el ancho completo porque a media pantalla
   los 150 px fijos del canal de rótulos truncan casi todos los nombres de cuenta.
