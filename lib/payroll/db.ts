@@ -10,6 +10,7 @@
  */
 import Dexie, { type Table } from "dexie";
 import type { CompanyProfile } from "@/lib/company-profile";
+import type { CostCenter } from "@/lib/cost-center";
 import { sortByName, type EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll, emptyCapture } from "./employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
@@ -171,12 +172,14 @@ export async function createClient(
   name: string,
   logo?: EntityLogo,
   company?: CompanyProfile,
+  costCenter?: CostCenter,
 ): Promise<PayrollClient> {
   const client: PayrollClient = {
     id: crypto.randomUUID(),
     name,
     ...(logo ? { logo } : {}),
     ...(company ? { company } : {}),
+    ...(costCenter ? { costCenter } : {}),
   };
   await db.transaction("rw", db.clients, db.active, async () => {
     await db.clients.add(client);
@@ -186,24 +189,28 @@ export async function createClient(
 }
 
 /**
- * Changes the cliente's LABEL — its name, its logo and its company profile — and NOTHING else: no
- * período and no nómina is touched. The three travel in one write because the dialog edits them
- * together; `logo: null` removes it, and an `undefined` in a Dexie `update` deletes the property,
- * which is what that means here.
+ * Changes the cliente's LABEL — its name, its logo, its company profile and its centro de costo —
+ * and NOTHING else: no período and no nómina is touched. Los cuatro viajan en una escritura porque
+ * el diálogo los edita juntos; `logo: null` lo quita, y un `undefined` en un `update` de Dexie
+ * borra la propiedad, que es justamente lo que eso significa aquí.
  *
  * El perfil llega `null` solo desde un módulo que no lo pide; en Rol de Pagos el diálogo lo exige,
- * así que guardar un cliente es también la vía por la que uno antiguo deja de estar incompleto.
+ * así que guardar un cliente es también la vía por la que uno antiguo deja de estar incompleto. El
+ * centro es opcional SIEMPRE, así que `undefined` es su forma de irse: vaciar su nombre en el
+ * diálogo borra el campo, que es lo que devuelve el papel a su forma de antes.
  */
 export async function updateClient(
   clientId: string,
   name: string,
   logo: EntityLogo | null,
   company?: CompanyProfile | null,
+  costCenter?: CostCenter | null,
 ): Promise<void> {
   await db.clients.update(clientId, {
     name,
     logo: logo ?? undefined,
     ...(company === undefined ? {} : { company: company ?? undefined }),
+    ...(costCenter === undefined ? {} : { costCenter: costCenter ?? undefined }),
   });
 }
 

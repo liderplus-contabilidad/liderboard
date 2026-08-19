@@ -24,12 +24,14 @@ import { SalariesReportSection } from "./salaries-report-section";
 export function SalariesReportPreview({
   clientName,
   logo,
+  rightLogo,
   source,
   filters,
   onClose,
 }: {
   clientName: string;
   logo?: EntityLogo;
+  rightLogo?: EntityLogo;
   source: SalariesSource;
   filters: SalariesFilters;
   onClose: () => void;
@@ -42,12 +44,13 @@ export function SalariesReportPreview({
       buildSalariesReport({
         clientName,
         ...(logo ? { logo } : {}),
+        ...(rightLogo ? { rightLogo } : {}),
         source,
         filters,
         parameters: DEFAULT_PAYROLL_PARAMETERS,
         generatedAt,
       }),
-    [clientName, logo, source, filters, generatedAt],
+    [clientName, logo, rightLogo, source, filters, generatedAt],
   );
 
   const columnCount = Math.max(

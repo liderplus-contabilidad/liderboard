@@ -29,6 +29,7 @@
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
+import { costCenterHeading, letterheadLogos, type CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/logos";
 import {
   DEDUCTION_CONCEPTS,
@@ -158,6 +159,7 @@ export function buildPayslipDocument({
   clientName,
   clientLogo,
   clientCompany,
+  clientCostCenter,
   position,
 }: {
   line: PayrollEmployeeLine;
@@ -173,6 +175,9 @@ export function buildPayslipDocument({
   clientLogo?: EntityLogo;
   /** Los datos de la empresa que el cliente declaró. Sin ellos el encabezado queda como estaba. */
   clientCompany?: CompanyProfile;
+  /** El centro de costo declarado, si lo hay: aporta la segunda mitad del rótulo y el logo de la
+   *  derecha. Sin él el comprobante sale exactamente como salía. */
+  clientCostCenter?: CostCenter;
   /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
@@ -196,9 +201,12 @@ export function buildPayslipDocument({
     rowFor(concept, deductionAmount(concept, computed, capture), null, capture),
   );
 
+  const logos = letterheadLogos(clientLogo, clientCostCenter);
+
   return {
-    company: clientName,
-    ...(clientLogo ? { logo: clientLogo } : {}),
+    company: costCenterHeading(clientName, clientCostCenter),
+    ...(logos.left ? { logo: logos.left } : {}),
+    ...(logos.right ? { rightLogo: logos.right } : {}),
     companyLines: letterheadLines(clientCompany),
     title: "ROL DE PAGOS",
     period: `MES: ${payslipMonthLabel(year, monthIndex)}`,

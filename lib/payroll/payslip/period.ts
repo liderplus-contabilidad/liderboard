@@ -16,6 +16,7 @@
  * capa de arriba.
  */
 import type { CompanyProfile } from "@/lib/company-profile";
+import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/workspaces";
 import { computeLinePayroll, emptyCapture } from "../employee-input";
 import type { PayrollParameters } from "../engine/parameters";
@@ -30,6 +31,7 @@ export function buildPeriodPayslips({
   clientName,
   clientLogo,
   clientCompany,
+  clientCostCenter,
 }: {
   period: PayrollPeriod;
   /** La nómina en el orden en que se lee la tabla: es el que numera el `Codigo:`. */
@@ -38,6 +40,7 @@ export function buildPeriodPayslips({
   clientName: string;
   clientLogo?: EntityLogo;
   clientCompany?: CompanyProfile;
+  clientCostCenter?: CostCenter;
 }): PayslipDocument[] {
   return lines.map((line, index) =>
     buildPayslipDocument({
@@ -49,6 +52,7 @@ export function buildPeriodPayslips({
       clientName,
       ...(clientLogo ? { clientLogo } : {}),
       ...(clientCompany ? { clientCompany } : {}),
+      ...(clientCostCenter ? { clientCostCenter } : {}),
       // `Codigo:` es la POSICIÓN en la nómina, 1…N, no el `id` de la ficha: la columna `A` del
       // libro es un contador por orden que salta las cabeceras de área.
       position: index + 1,

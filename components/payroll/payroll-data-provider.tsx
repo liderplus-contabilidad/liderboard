@@ -3,6 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { CompanyProfile } from "@/lib/company-profile";
+import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/workspaces";
 import * as payrollDb from "@/lib/payroll/db";
 import {
@@ -32,13 +33,20 @@ interface PayrollDataValue {
   clients: payrollDb.PayrollClientSummary[];
   activeClientId: string | null;
   activeClient: payrollDb.PayrollClientSummary | undefined;
-  createClient: (name: string, logo?: EntityLogo, company?: CompanyProfile) => Promise<string>;
-  /** Cambia la ETIQUETA — nombre, logo y datos de la empresa — y nada más. */
+  createClient: (
+    name: string,
+    logo?: EntityLogo,
+    company?: CompanyProfile,
+    costCenter?: CostCenter,
+  ) => Promise<string>;
+  /** Cambia la ETIQUETA — nombre, logo, datos de la empresa y centro de costo — y nada más. */
   updateClient: (
     clientId: string,
     name: string,
     logo: EntityLogo | null,
     company?: CompanyProfile,
+    /** `null` borra el centro guardado; `undefined` lo deja como está. */
+    costCenter?: CostCenter | null,
   ) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   selectClient: (clientId: string) => Promise<void>;
@@ -144,16 +152,21 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
   );
 
   const createClient = useCallback(
-    async (name: string, logo?: EntityLogo, company?: CompanyProfile) => {
-      const client = await payrollDb.createClient(name, logo, company);
+    async (name: string, logo?: EntityLogo, company?: CompanyProfile, costCenter?: CostCenter) => {
+      const client = await payrollDb.createClient(name, logo, company, costCenter);
       return client.id;
     },
     [],
   );
 
   const updateClient = useCallback(
-    (clientId: string, name: string, logo: EntityLogo | null, company?: CompanyProfile) =>
-      payrollDb.updateClient(clientId, name, logo, company),
+    (
+      clientId: string,
+      name: string,
+      logo: EntityLogo | null,
+      company?: CompanyProfile,
+      costCenter?: CostCenter | null,
+    ) => payrollDb.updateClient(clientId, name, logo, company, costCenter),
     [],
   );
 

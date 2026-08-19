@@ -56,6 +56,17 @@ const BODY_SIZE = 9;
 /** Los escalones a los que baja un texto que no cabe, antes de truncarse. */
 const SIZE_STEPS = [9, 8, 7] as const;
 const COMPANY_SIZE = 15;
+/**
+ * Los escalones del rótulo de la empresa. Es el ÚNICO bloque de jerarquía que se deja encoger, y
+ * la razón es que desde que existe el centro de costo su texto tiene DOS mitades («Delicmar ·
+ * Planta Ambato»): truncarlo se lleva por delante la segunda, que es exactamente lo que el centro
+ * existe para decir, mientras que bajar de cuerpo lo conserva entero. El último escalón, 11, queda
+ * por debajo del título de la derecha (13) y eso es deliberado: solo lo alcanza un rótulo de más de
+ * cuarenta caracteres —el nombre largo de un cliente MÁS el de su centro—, y ahí perder la mitad
+ * que dice de qué centro es el papel es peor que perder el escalón. Sigue por encima del membrete
+ * (8) y del mes (9), que son los que no puede igualar.
+ */
+const COMPANY_SIZE_STEPS = [15, 13.5, 12, 11] as const;
 const TITLE_SIZE = 13;
 const SUBTITLE_SIZE = 9;
 const SECTION_SIZE = 8.5;
@@ -81,6 +92,18 @@ const LOGO_SLOT_WIDTH = 76;
 
 /** Aire entre el logo y el nombre de la empresa. */
 const LOGO_GAP = 10;
+
+/**
+ * El hueco del logo de la DERECHA — el del centro de costo, cuando el cliente declaró uno.
+ * El ALTO sí es constante aquí, al revés que el de la izquierda: ese bloque lleva debajo el título
+ * y el mes, así que un logo que creciera con el encabezado los empujaría fuera de su renglón. 30 pt
+ * son las dos líneas que tiene debajo, que es lo que lo deja leerse como su par y no como un
+ * segundo título.
+ */
+const RIGHT_LOGO_SLOT = { width: 76, height: 30 } as const;
+
+/** Aire entre el logo de la derecha y el título que va debajo. */
+const RIGHT_LOGO_GAP = 6;
 
 /** El cuerpo de las líneas del membrete y los escalones a los que baja antes de truncarse. Empiezan
  *  por debajo del nombre —son su pie de identidad, no otro título— y llegan a 6.5 porque la línea de
@@ -217,8 +240,15 @@ export function layoutPayslip(
   // El alto del encabezado lo pide el bloque de la IZQUIERDA cuando hay membrete —el nombre más sus
   // líneas—, y el de siempre cuando no lo hay, así que un comprobante sin perfil sale exactamente
   // como salía. `SUBTITLE_SIZE` está aquí porque a la derecha, bajo el título, va el mes.
+  //
+  // Con logo a la DERECHA el bloque de ese lado es una pila —logo, título, mes—, así que el título
+  // baja lo que ocupa el logo y el encabezado entero puede crecer por ese lado. Sin él, no cambia
+  // ni un punto: `rightLogoBox` es `null` y todos los términos que introduce valen cero.
+  const rightLogoBox = document.rightLogo ? fitLogoBox(document.rightLogo, RIGHT_LOGO_SLOT) : null;
+  const rightLogoOffset = rightLogoBox ? rightLogoBox.height + RIGHT_LOGO_GAP : 0;
+
   const headerHeight = Math.max(
-    COMPANY_SIZE + SUBTITLE_SIZE,
+    rightLogoOffset + COMPANY_SIZE + SUBTITLE_SIZE,
     document.companyLines.length > 0
       ? COMPANY_SIZE + HEADER_LINE_GAP + document.companyLines.length * HEADER_LINE_PITCH
       : 0,
@@ -243,21 +273,22 @@ export function layoutPayslip(
   const companyX = logoBox ? MARGIN_X + logoBox.width + LOGO_GAP : MARGIN_X;
   /** El mes tal como se imprime, sin su prefijo: se mide y se dibuja, así que se resuelve una vez. */
   const periodText = document.period.replace(/^MES:\s*/, "");
-  push(
-    clip(
-      document.company,
-      // Lo que le queda al nombre tras ceder el logo. El 0.55 del ancho útil era su tope cuando
-      // empezaba en el margen; aquí el tope es el mismo punto de corte, no la misma anchura.
-      MARGIN_X + contentWidth * 0.55 - companyX,
-      COMPANY_SIZE,
-      true,
-      measure,
-    ),
-    companyX,
-    COMPANY_SIZE,
-    true,
-    PAYSLIP_COLORS.ink,
-  );
+  /** El sitio que se lleva el bloque de la derecha —título, mes y, si lo hay, el logo del cliente—.
+   *  Se MIDE, no se estima, y lo acotan tanto el nombre de la empresa como la primera línea del
+   *  membrete, que son las dos que comparten renglón con él. */
+  const rightBlockWidth =
+    Math.max(
+      measure(document.title, TITLE_SIZE, true),
+      measure(periodText, SUBTITLE_SIZE, false),
+      rightLogoBox?.width ?? 0,
+    ) + HEADER_RIGHT_GAP;
+  // Lo que le queda al rótulo: desde donde acaba el logo hasta donde empieza el bloque de la
+  // derecha. Ese borde se MIDE (`rightBlockWidth`) en vez de estimarse con la fracción del ancho
+  // útil que se usaba antes: la estimación sobraba —el título ya se mide— y era justo lo que
+  // truncaba un rótulo con centro de costo teniendo sitio libre a su derecha.
+  const companyLimit = MARGIN_X + contentWidth - rightBlockWidth - companyX;
+  const companyText = fit(document.company, companyLimit, true, measure, COMPANY_SIZE_STEPS);
+  push(companyText.text, companyX, companyText.size, true, PAYSLIP_COLORS.ink);
   // El membrete, bajo el nombre y en tinta suave: la razón social con su RUC, la ubicación, los
   // teléfonos y el correo. Llegan ya compuestos (`letterheadLines`), así que aquí solo se colocan.
   //
@@ -267,9 +298,6 @@ export function layoutPayslip(
   // AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA» mide 325 pt— y con un tope común habría que
   // dibujarla a 6.5 pt en cuanto el cliente tuviera logo. El sitio del bloque derecho se MIDE, no se
   // estima: es la mayor de sus dos líneas.
-  const rightBlockWidth =
-    Math.max(measure(document.title, TITLE_SIZE, true), measure(periodText, SUBTITLE_SIZE, false)) +
-    HEADER_RIGHT_GAP;
 
   document.companyLines.forEach((line, index) => {
     const limit = index === 0 ? contentWidth - rightBlockWidth : contentWidth;
@@ -285,7 +313,28 @@ export function layoutPayslip(
     );
   });
 
-  push(document.title, MARGIN_X + contentWidth, TITLE_SIZE, true, PAYSLIP_COLORS.ink, "right");
+  // El logo de la derecha, pegado al margen y arriba del todo: es el par del de la izquierda, así
+  // que los dos arrancan en el mismo renglón y lo que baja es el texto que va debajo de él.
+  if (document.rightLogo && rightLogoBox) {
+    images.push({
+      dataUrl: document.rightLogo.dataUrl,
+      mime: document.rightLogo.mime,
+      x: MARGIN_X + contentWidth - rightLogoBox.width,
+      y,
+      width: rightLogoBox.width,
+      height: rightLogoBox.height,
+    });
+  }
+
+  push(
+    document.title,
+    MARGIN_X + contentWidth,
+    TITLE_SIZE,
+    true,
+    PAYSLIP_COLORS.ink,
+    "right",
+    y + rightLogoOffset,
+  );
   push(
     periodText,
     MARGIN_X + contentWidth,
@@ -293,7 +342,7 @@ export function layoutPayslip(
     false,
     PAYSLIP_COLORS.muted,
     "right",
-    y + TITLE_SIZE + 4,
+    y + rightLogoOffset + TITLE_SIZE + 4,
   );
 
   y += headerHeight + 10;

@@ -347,6 +347,7 @@ export function EmployeeDetailView({
         clientName: activeClient?.name ?? "",
         ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
         ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
+        ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
         // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
         // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
         position: index + 1,
@@ -362,6 +363,7 @@ export function EmployeeDetailView({
     activeClient?.name,
     activeClient?.logo,
     activeClient?.company,
+    activeClient?.costCenter,
     capture,
     computed,
     index,

@@ -149,6 +149,39 @@ describe("clientes", () => {
     expect((await getClient(conPerfil.id))?.company).toEqual(COMPANY);
   });
 
+  it("guarda el centro de costo, y vaciarlo BORRA el campo en vez de dejarlo a medias", async () => {
+    const center = {
+      name: "Planta Ambato",
+      logo: {
+        dataUrl: "data:image/png;base64,Q0M=",
+        mime: "image/png" as const,
+        width: 8,
+        height: 4,
+      },
+    };
+    const conCentro = await createClient("Delicmar", undefined, COMPANY, center);
+    expect((await getClient(conCentro.id))?.costCenter).toEqual(center);
+
+    // Vaciar el nombre en el diálogo llega aquí como `null`, y es la única forma de quitarlo: un
+    // `{ name: "" }` guardado dejaría un rótulo «Delicmar · » en los tres papeles.
+    await updateClient(conCentro.id, "Delicmar", null, COMPANY, null);
+    const cleared = await getClient(conCentro.id);
+    expect(cleared?.costCenter).toBeUndefined();
+    expect("costCenter" in (cleared ?? {})).toBe(false);
+  });
+
+  // El mismo contrato que el perfil: `undefined` es «esta llamada no habla del centro».
+  it("renombrar sin hablar del centro lo conserva", async () => {
+    const center = { name: "Planta Ambato" };
+    const conCentro = await createClient("Delicmar", undefined, undefined, center);
+    await updateClient(conCentro.id, "Delicmar S.A.S.", null);
+    expect((await getClient(conCentro.id))?.costCenter).toEqual(center);
+  });
+
+  it("un cliente sin centro no guarda un campo vacío", async () => {
+    expect("costCenter" in ((await getClient(clientId)) ?? {})).toBe(false);
+  });
+
   it("summarizes what each cliente holds, for the selector's subline", async () => {
     await createPeriod(clientId, 2025, 0);
     await createPeriod(clientId, 2026, 2);

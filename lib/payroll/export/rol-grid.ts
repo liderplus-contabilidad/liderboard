@@ -14,6 +14,7 @@
  * comprobante en PDF (`document.ts` → `layout.ts` → `render.ts`).
  */
 import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
+import { costCenterHeading, type CostCenter } from "@/lib/cost-center";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { areaKey } from "../areas";
 import { computeLinePayroll } from "../employee-input";
@@ -58,6 +59,9 @@ export interface RolExportInput {
   /** Los datos de la empresa, si el cliente los declaró: son las filas del membrete, bajo el
    *  nombre. Sin ellos el preámbulo queda como estaba. */
   company?: CompanyProfile;
+  /** El centro de costo declarado, si lo hay. Compone la segunda mitad del rótulo de `B` —la misma
+   *  cadena que encabeza el comprobante en PDF— y aporta el logo de la derecha del membrete. */
+  costCenter?: CostCenter;
   year: number;
   monthIndex: number;
   /** En el orden en que la nómina se lee en pantalla. */
@@ -171,7 +175,10 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
   // declara y los rótulos empiezan en `G`. Que compartan fila es lo que hace que el lector, que
   // busca el período por su forma entre las filas de arriba, lo encuentre antes de la cabecera.
   const company = blankRow(width);
-  put(company, "B", input.clientName);
+  // El rótulo lo compone `costCenterHeading`, la misma función que escribe el comprobante en PDF:
+  // «Delicmar · Planta Ambato» tiene que decirse igual en los dos papeles. Sin centro es el nombre
+  // pelado, así que el viaje de vuelta de todo cliente que no declare ninguno no cambia.
+  put(company, "B", costCenterHeading(input.clientName, input.costCenter));
   rows.push({ kind: "company", cells: company });
 
   // El membrete va DEBAJO del nombre y encima de los rótulos, en la misma columna `B`. Las líneas

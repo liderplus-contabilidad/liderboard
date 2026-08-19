@@ -68,13 +68,19 @@ const COMPANY = {
   phones: "0991045439 - 0958780660",
 };
 
+/** El centro de costo declarado al crear el cliente: su nombre compone el rótulo de `B` y su logo
+ *  encabeza a la izquierda, empujando el del cliente a la derecha. */
+const CENTER = { name: "Planta Ambato", logo: { ...LOGO, dataUrl: "data:image/png;base64,Q0M=" } };
+
 function input(
   lines: readonly ParsedPayrollEmployeeLine[],
   company?: typeof COMPANY,
+  costCenter?: typeof CENTER,
 ): RolExportInput {
   return {
     clientName: "HOTEL BOUTIQUE CULTURA MANOR",
     ...(company ? { company } : {}),
+    ...(costCenter ? { costCenter } : {}),
     year: 2026,
     monthIndex: 2,
     lines,
@@ -86,8 +92,9 @@ async function roundTrip(
   lines: readonly ParsedPayrollEmployeeLine[],
   logo?: EntityLogo,
   company?: typeof COMPANY,
+  costCenter?: typeof CENTER,
 ) {
-  const buffer = await buildRolWorkbook(input(lines, company), logo ?? null);
+  const buffer = await buildRolWorkbook(input(lines, company, costCenter), logo ?? null);
   return parseRolGeneral(buffer);
 }
 
@@ -220,5 +227,33 @@ describe("con el membrete completo", () => {
   it("ninguna línea del membrete se lee como un área ni como un empleado", async () => {
     const parsed = await roundTrip(LINES, LOGO, COMPANY);
     expect(parsed.lines.map((line) => line.area)).toEqual(["HOSPEDAJE", "COCINA"]);
+  });
+});
+
+/**
+ * EL CENTRO DE COSTO EN LA HOJA. Lo que puede estar mal es el viaje de vuelta: el rótulo de `B` es
+ * lo que el lector toma por empresa, y con DOS logos el preámbulo arranca más abajo. Las cifras no
+ * las toca nada de esto, y eso es justamente lo que estas pruebas afirman.
+ */
+describe("con centro de costo", () => {
+  const LINES = [employee("MORALES MENA SILVIA JIMENA"), employee("ALFA", { area: "COCINA" })];
+
+  it("escribe el rótulo compuesto, el mismo que encabeza el comprobante en PDF", async () => {
+    const parsed = await roundTrip(LINES, LOGO, COMPANY, CENTER);
+    expect(parsed.company).toBe("HOTEL BOUTIQUE CULTURA MANOR · Planta Ambato");
+  });
+
+  it("el período y la nómina entera vuelven a entrar bajo los dos logos", async () => {
+    const parsed = await roundTrip(LINES, LOGO, COMPANY, CENTER);
+    expect(parsed.year).toBe(2026);
+    expect(parsed.monthIndex).toBe(2);
+    expect(parsed.lines.map((line) => line.name)).toEqual(["MORALES MENA SILVIA JIMENA", "ALFA"]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  it("lee las mismas fichas y capturas que sin centro: el papel cambia, las cifras no", async () => {
+    const conCentro = await roundTrip(LINES, LOGO, COMPANY, CENTER);
+    const sinCentro = await roundTrip(LINES, LOGO, COMPANY);
+    expect(conCentro.lines).toEqual(sinCentro.lines);
   });
 });

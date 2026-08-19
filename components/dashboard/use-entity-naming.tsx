@@ -14,6 +14,13 @@ import {
   type CompanyField,
   type CompanyProfile,
 } from "@/lib/company-profile";
+import {
+  checkCostCenter,
+  costCenterDraftFrom,
+  emptyCostCenterDraft,
+  type CostCenter,
+  type CostCenterDraft,
+} from "@/lib/cost-center";
 import { withCenterLogo } from "@/lib/logos";
 import {
   findByName,
@@ -35,6 +42,8 @@ export type NameableEntity = NamedEntity & {
   /** El perfil de empresa, en los módulos que lo piden. Como los dos de arriba: quien no lo use ni
    *  lo declara ni se entera de que existe. */
   company?: CompanyProfile;
+  /** El centro de costo declarado, en los módulos que lo piden. Igual que el perfil. */
+  costCenter?: CostCenter;
 };
 
 export interface EntityNaming {
@@ -61,16 +70,25 @@ export function useEntityNaming({
   onCreate,
   onRename,
   withCompany = false,
+  withCostCenter = false,
+  allowDuplicateNames = false,
 }: {
   entities: readonly NameableEntity[];
   labels?: EntityLabels;
-  onCreate: (name: string, logo?: EntityLogo, company?: CompanyProfile) => Promise<unknown>;
+  onCreate: (
+    name: string,
+    logo?: EntityLogo,
+    company?: CompanyProfile,
+    costCenter?: CostCenter,
+  ) => Promise<unknown>;
   onRename: (
     id: string,
     name: string,
     logo: EntityLogo | null,
     centerLogos: CenterLogos | undefined,
     company?: CompanyProfile,
+    /** `null` es «este cliente ya no tiene centro»; `undefined`, «este módulo no los pide». */
+    costCenter?: CostCenter | null,
   ) => Promise<unknown>;
   /**
    * Pide además los datos de la empresa del membrete, y los EXIGE para guardar. Apagado por
@@ -78,14 +96,34 @@ export function useEntityNaming({
    * envían perfil, no lo reciben y su formulario no lo menciona.
    */
   withCompany?: boolean;
+  /**
+   * Pide además el centro de costo —nombre y logo—, que a diferencia del perfil es OPCIONAL para
+   * guardar: vaciar su nombre es cómo se quita. Apagado por defecto, que es lo que deja el diálogo
+   * de PyG y el de Ocupaciones exactamente como estaban.
+   */
+  withCostCenter?: boolean;
+  /**
+   * Deja crear y renombrar workspaces que se llamen IGUAL que otro. Apagado por defecto, que es la
+   * regla de siempre y la que siguen PyG y Ocupaciones: allí el nombre es lo único que distingue a
+   * un cliente de otro en el selector, y dos filas idénticas hacen que borrar o renombrar la
+   * equivocada deje de ser evitable.
+   *
+   * Rol de Pagos lo enciende a pedido de la firma: lleva la nómina de varias unidades de una misma
+   * empresa y las llama a todas por el nombre de la empresa. El precio —dos filas que se leen
+   * igual— es suyo y está aceptado; lo que lo amortigua es el centro de costo, que cuando se
+   * declara viaja en el rótulo de la fila.
+   */
+  allowDuplicateNames?: boolean;
 }): EntityNaming {
   const [naming, setNaming] = useState<{ mode: "create" | "rename"; id?: string } | null>(null);
   const [name, setName] = useState("");
   const [logo, setLogo] = useState<EntityLogo | null>(null);
   const [centerLogos, setCenterLogos] = useState<CenterLogos | undefined>(undefined);
   const [company, setCompany] = useState<CompanyDraft>(emptyCompanyDraft);
+  const [costCenter, setCostCenter] = useState<CostCenterDraft>(emptyCostCenterDraft);
   const [nameError, setNameError] = useState<string | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
+  const [costCenterError, setCostCenterError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const openCreate = useCallback(() => {
@@ -94,8 +132,10 @@ export function useEntityNaming({
     // Un workspace nuevo nace vacío, así que no tiene centros a los que ponerle logo todavía.
     setCenterLogos(undefined);
     setCompany(emptyCompanyDraft());
+    setCostCenter(emptyCostCenterDraft());
     setNameError(null);
     setCompanyError(null);
+    setCostCenterError(null);
     setNaming({ mode: "create" });
   }, []);
 
@@ -112,8 +152,10 @@ export function useEntityNaming({
       // estar vaciando el membrete. Un cliente antiguo abre con los campos en blanco, que es
       // exactamente lo que el aviso de «faltan los datos» ofrece completar.
       setCompany(companyDraftFrom(entity?.company));
+      setCostCenter(costCenterDraftFrom(entity?.costCenter));
       setNameError(null);
       setCompanyError(null);
+      setCostCenterError(null);
       setNaming({ mode: "rename", id });
     },
     [entities],
@@ -130,7 +172,7 @@ export function useEntityNaming({
       setNameError(check.message);
       return;
     }
-    const taken = findByName(check.name, entities, naming.id);
+    const taken = allowDuplicateNames ? undefined : findByName(check.name, entities, naming.id);
     if (taken) {
       setNameError(`Ya existe un ${labels.subject} llamado «${taken.name}».`);
       return;
@@ -146,13 +188,34 @@ export function useEntityNaming({
       }
       profile = companyCheck.profile;
     }
+    // El centro se valida aquí y no mientras se teclea por lo mismo que el RUC: lo único que puede
+    // fallar —un logo sin nombre— es un estado por el que se pasa llenando el formulario, y apagar
+    // «Guardar» en él haría creer que falta algo obligatorio cuando el centro entero es opcional.
+    let center: CostCenter | undefined;
+    if (withCostCenter) {
+      const centerCheck = checkCostCenter(costCenter);
+      if (!centerCheck.ok) {
+        setCostCenterError(centerCheck.message);
+        return;
+      }
+      center = centerCheck.center;
+    }
 
     setBusy(true);
     try {
       if (naming.mode === "create") {
-        await onCreate(check.name, logo ?? undefined, profile);
+        await onCreate(check.name, logo ?? undefined, profile, center);
       } else if (naming.id) {
-        await onRename(naming.id, check.name, logo, centerLogos, profile);
+        // `null` cuando el módulo lo pide y el usuario lo dejó vacío: es lo que BORRA el centro
+        // guardado. Sin `withCostCenter` va `undefined`, que es «no lo toques».
+        await onRename(
+          naming.id,
+          check.name,
+          logo,
+          centerLogos,
+          profile,
+          withCostCenter ? (center ?? null) : undefined,
+        );
       }
       setNaming(null);
     } finally {
@@ -165,6 +228,9 @@ export function useEntityNaming({
     centerLogos,
     company,
     withCompany,
+    costCenter,
+    withCostCenter,
+    allowDuplicateNames,
     entities,
     labels.subject,
     onCreate,
@@ -174,6 +240,11 @@ export function useEntityNaming({
   const changeCompanyField = useCallback((field: CompanyField, value: string) => {
     setCompany((current) => ({ ...current, [field]: value }));
     setCompanyError(null);
+  }, []);
+
+  const changeCostCenter = useCallback((draft: CostCenterDraft) => {
+    setCostCenter(draft);
+    setCostCenterError(null);
   }, []);
 
   const dialog = (
@@ -186,6 +257,8 @@ export function useEntityNaming({
       centerLogos={centerLogos}
       {...(withCompany ? { company, onCompanyChange: changeCompanyField } : {})}
       companyError={companyError}
+      {...(withCostCenter ? { costCenter, onCostCenterChange: changeCostCenter } : {})}
+      costCenterError={costCenterError}
       error={nameError}
       busy={busy}
       labels={labels}

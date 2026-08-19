@@ -24,7 +24,7 @@ export function SalariesReportHeader({ header }: { header: SalariesReportHeaderS
             className="mt-1 max-h-[56px] w-auto max-w-[160px] shrink-0 object-contain"
           />
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
             Sueldos por Áreas · Informe
           </p>
@@ -32,6 +32,19 @@ export function SalariesReportHeader({ header }: { header: SalariesReportHeaderS
             {header.clientName}
           </h1>
         </div>
+
+        {/* El de la DERECHA — el del centro de costo —, el mismo reparto con el que se encabezan
+            el comprobante en PDF y el Excel del período. */}
+        {header.rightLogo && (
+          // oxlint-disable-next-line next/no-img-element
+          <img
+            src={header.rightLogo.dataUrl}
+            alt=""
+            width={header.rightLogo.width}
+            height={header.rightLogo.height}
+            className="mt-1 max-h-[56px] w-auto max-w-[160px] shrink-0 object-contain"
+          />
+        )}
       </div>
 
       <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[12.5px]">

@@ -1,7 +1,12 @@
 /**
- * EL MEMBRETE DE UN LIBRO — el logo del cliente arriba a la IZQUIERDA de cada hoja, encima del
- * nombre de la empresa, como en un papel con hoja timbrada, y el del CENTRO al que esa hoja
- * pertenece a la derecha.
+ * EL MEMBRETE DE UN LIBRO — un logo arriba a la IZQUIERDA de cada hoja, encima del nombre de la
+ * empresa, como en un papel con hoja timbrada, y otro a la DERECHA.
+ *
+ * **Quién ocupa cada lado lo decide el llamador, no este archivo.** Los tres módulos reparten
+ * igual —el del workspace abre por la izquierda, el del centro de esa hoja cierra por la derecha—,
+ * pero de dónde sale cada uno no: en PyG y en Ocupaciones el centro es una fila que sale de los
+ * datos, y en Rol de Pagos lo declara el cliente (`letterheadLogos`, en `lib/cost-center.ts`). Los
+ * parámetros se llaman por su SITIO porque es lo único que este archivo sabe de ellos.
  *
  * Vive aparte y no dentro de cada `export.ts` porque los dos módulos que descargan Excel —PyG y
  * Ocupaciones— quieren exactamente lo mismo, y dos versiones de «dónde va el logo» acabarían
@@ -167,20 +172,21 @@ function imageIdFor(wb: ExcelJS.Workbook, logo: EntityLogo): number {
 export function writeLogoHeader(
   wb: ExcelJS.Workbook,
   ws: ExcelJS.Worksheet,
-  logo: EntityLogo | null | undefined,
-  /** El logo del centro al que pertenece esta hoja. El Consolidado y el mes en crudo no tienen. */
-  centerLogo?: EntityLogo | null | undefined,
+  /** El que encabeza a la izquierda, pegado al borde. */
+  leftLogo: EntityLogo | null | undefined,
+  /** El de la derecha. El Consolidado, el mes en crudo y un cliente sin centro no tienen. */
+  rightLogo?: EntityLogo | null | undefined,
   /**
    * Cuántas columnas de la izquierda son rótulos y no cifras. Es lo que fija el borde derecho de la
-   * banda, así que solo importa cuando hay logo de centro.
+   * banda, así que solo importa cuando hay un segundo logo.
    */
   labelColumns = 2,
 ): void {
-  if (!logo && !centerLogo) {
+  if (!leftLogo && !rightLogo) {
     return;
   }
-  const left = logo ? fitLogoBox(logo, LOGO_SLOT) : null;
-  const right = centerLogo ? fitLogoBox(centerLogo, LOGO_SLOT) : null;
+  const left = leftLogo ? fitLogoBox(leftLogo, LOGO_SLOT) : null;
+  const right = rightLogo ? fitLogoBox(rightLogo, LOGO_SLOT) : null;
 
   // El hueco lo pide el más alto de los dos: con filas para uno solo, el otro se derramaría sobre
   // el preámbulo.
@@ -190,17 +196,17 @@ export function writeLogoHeader(
     ws.addRow([]);
   }
 
-  if (logo && left) {
-    ws.addImage(imageIdFor(wb, logo), {
+  if (leftLogo && left) {
+    ws.addImage(imageIdFor(wb, leftLogo), {
       tl: topLeftAt({ nativeCol: 0, nativeColOff: 0 }),
       ext: left,
       editAs: "oneCell",
     });
   }
-  if (centerLogo && right) {
+  if (rightLogo && right) {
     const widths = (ws.columns ?? []).map((column) => column?.width);
     const band = bandWidthFor(widths, labelColumns, left?.width ?? 0, right.width);
-    ws.addImage(imageIdFor(wb, centerLogo), {
+    ws.addImage(imageIdFor(wb, rightLogo), {
       tl: topLeftAt(columnAnchorAt(widths, Math.max(0, band - right.width))),
       ext: right,
       editAs: "oneCell",

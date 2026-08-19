@@ -122,13 +122,21 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           clientName: activeClient?.name ?? "",
           ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
           ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
+          ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
         }),
         payslipBatchFilename(period.year, period.monthIndex),
       );
     } finally {
       setDownloading(false);
     }
-  }, [activeClient?.name, activeClient?.logo, activeClient?.company, lines, period]);
+  }, [
+    activeClient?.name,
+    activeClient?.logo,
+    activeClient?.company,
+    activeClient?.costCenter,
+    lines,
+    period,
+  ]);
 
   const confirmDelete = useCallback(async () => {
     if (!period) {
@@ -192,6 +200,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
               clientName={activeClient?.name ?? ""}
               {...(activeClient?.logo ? { clientLogo: activeClient.logo } : {})}
               {...(activeClient?.company ? { clientCompany: activeClient.company } : {})}
+              {...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {})}
             />
           ) : null
         }

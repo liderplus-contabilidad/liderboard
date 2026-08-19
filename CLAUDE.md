@@ -1316,6 +1316,44 @@ descargado con logo volvía a entrar sin empresa—. Un cliente sin perfil no bl
 que hay, y quien dice qué falta es el DIÁLOGO —donde se llena—, no un aviso en una vista que
 señalaría el hueco de un bloque que no se dibuja.
 
+**EL CENTRO DE COSTO de un cliente es un nombre más específico y un logo propio, y NADA más**
+(`lib/cost-center.ts`, puro + testeado). Se declara al crear el cliente, en el mismo diálogo que su
+nombre y su membrete, es OPCIONAL y es UNO: **no es la estructura de centros de PyG ni de
+Ocupaciones**, donde un centro sale de los datos —un slug de los datasets, la mitad de una clave—,
+hay varios y sus logos se guardan por `centerId` en un registro. Aquí no hay nada de dónde derivarlo
+ni jerarquía que mantener, y por eso `CostCenter` es `{ name, logo? }` colgado del cliente, no
+indexado, sin versión nueva de Dexie. Su efecto es entero del PAPEL: ni el motor, ni el asiento, ni
+una sola cifra lo miran, y el `golden` de marzo 2026 no se movió. **Dos funciones son toda la
+regla**, y existen por el mismo motivo que `letterheadLines`: el modo de fallo real no es que el
+membrete salga mal, sino que salga de DOS maneras sin que ninguna cifra lo delate.
+`costCenterHeading` compone el rótulo —«Delicmar · Planta Ambato»— que encabezan el comprobante en
+PDF, la columna `B` de la hoja `GENERAL`, el informe de Sueldos y el selector del header; y
+`letterheadLogos` reparte los dos logos: **el del CLIENTE encabeza a la izquierda y el de su CENTRO
+va a la derecha**, el mismo reparto con el que PyG y Ocupaciones timbran sus hojas, así que un logo
+en el borde izquierdo quiere decir lo mismo en los tres módulos. Sin centro —o con un centro que no
+subió logo— no hay segundo logo y el del cliente se queda donde siempre, de modo que todo cliente
+que no declare ninguno imprime exactamente lo que imprimía. `writeLogoHeader` nombra sus parámetros
+por su SITIO (`leftLogo`/`rightLogo`) porque es lo único que ese archivo sabe de ellos: de dónde
+sale cada uno sí cambia por módulo —en PyG el centro es una fila derivada de los datos, aquí lo
+declara el cliente—, y un `centerLogo` allí sería un nombre que solo vale para dos de los tres. Un logo SIN nombre se rechaza en vez de descartarse en silencio —una imagen sin
+rótulo no se puede nombrar en ninguna pantalla—, y vaciar el nombre es cómo se quita el centro
+entero (`null` en `updateClient`; `undefined` sigue siendo «esta llamada no habla del centro», el
+mismo contrato del perfil). En el PDF el logo de la derecha es una PILA —logo, título, mes—, así que
+el título baja en vez de compartir renglón con él; y el rótulo de la empresa pasó a ser el único
+bloque de jerarquía que se deja ENCOGER (15 → 13,5 → 12 → 11): desde que tiene dos mitades,
+truncarlo se lleva justo la que dice de qué centro es el papel. Su tope se MIDE contra el bloque
+derecho en vez de estimarse con la fracción del ancho útil que se usaba antes — esa estimación
+sobraba (el título ya se medía) y era lo que truncaba teniendo sitio libre al lado. En el Excel el
+viaje de vuelta sigue intacto: `findCompany` toma esa primera celda de `B` con texto, así que lo que
+recupera es el rótulo compuesto, y ninguna cifra ni ninguna letra de columna se mueve. **Y es el único módulo que admite NOMBRES REPETIDOS** (`allowDuplicateNames` en
+`useEntityNaming`, apagado por defecto): la firma lleva la nómina de varias unidades de una misma
+empresa y las llama a todas por el nombre de la empresa, así que rechazar el segundo «Delicmar»
+obligaba a inventarle un nombre que su papel no dice. El precio está aceptado y es real —dos filas
+del selector pueden leerse igual, y entonces borrar o renombrar la equivocada deja de ser
+evitable—; lo que lo amortigua es que la fila muestre el rótulo COMPUESTO, así que dos clientes con
+centros distintos sí se distinguen. La regla vivía en UN solo sitio, que es lo que permitió apagarla
+sin tocar PyG ni Ocupaciones, donde el nombre sigue siendo lo único que separa un workspace de otro.
+
 **SUELDOS POR ÁREAS** (`/payroll/salaries`, subitem del sidebar) sustituye el libro aparte
 `EVOLUCION SUELDOS Y SALARIOS` que la firma llevaba a mano: la evolución del COSTO TOTAL
 (`employerCost`, `AY`) por área y por empleado a lo largo de meses y años. **No es un módulo** —lo
