@@ -31,14 +31,18 @@ export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
    */
   showGuide?: boolean;
   /**
-   * Ofrece la flecha que PLIEGA la tarjeta, la misma del árbol de cuentas de Datos y por el mismo
-   * motivo: una pestaña con cinco gráficas obliga a bajar hasta el final para leer la última, y
-   * plegar las que ya se leyeron es lo que devuelve la de abajo a la primera pantalla. Aquí no hay
-   * niveles que plegar —una tarjeta no contiene a otra—, así que la flecha abre y cierra SOLO su
-   * propio cuerpo. Por defecto NO se ofrece: el informe imprimible y el panel de la ficha muestran
-   * una tarjeta que se lee sola, donde plegarla es un botón sin trabajo que hacer.
+   * La flecha que PLIEGA la tarjeta, la misma del árbol de cuentas de Datos y por el mismo motivo:
+   * una pestaña con cinco gráficas obliga a bajar hasta el final para leer la última, y plegar las
+   * que ya se leyeron es lo que devuelve la de abajo a la primera pantalla. Aquí no hay niveles que
+   * plegar —una tarjeta no contiene a otra—, así que la flecha abre y cierra SOLO su propio cuerpo.
+   *
+   * Se ofrece justo cuando llega `onToggleCollapsed`, y el estado lo guarda QUIEN LLAMA: es lo que
+   * permite un «Cerrar todos» sin que existan dos verdades sobre si una tarjeta está plegada. Sin
+   * ese callback no hay flecha — el informe imprimible y el panel de la ficha muestran una tarjeta
+   * que se lee sola, donde plegarla es un botón sin trabajo que hacer.
    */
-  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
   /**
@@ -70,17 +74,15 @@ export const ChartCard = memo(function ChartCard({
   empty = false,
   tableToggle = true,
   showGuide = true,
-  collapsible = false,
+  collapsed = false,
+  onToggleCollapsed,
   headerSlot,
   footerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
-  // Nace desplegada: una tarjeta plegada de salida esconde justo lo que la pestaña existe para
-  // enseñar. Es estado LOCAL de la tarjeta —no se guarda, no produce chip— y su clave es el `id`
-  // de la lista que la monta, así que cambiar de cliente o de vista la devuelve abierta.
-  const [collapsed, setCollapsed] = useState(false);
   const bodyId = useId();
+  const collapsible = onToggleCollapsed !== undefined;
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
   const isCollapsed = collapsible && collapsed;
   // Plegada se van con el cuerpo los controles que actúan SOBRE él: elegir «Ver como tabla» de una
@@ -93,25 +95,31 @@ export const ChartCard = memo(function ChartCard({
 
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[13px] border border-border bg-surface">
+      {/* La cabecera ENTERA es el disparador cuando la tarjeta pliega, no solo la flecha: un blanco
+          de 20 px obliga a apuntar, y lo que el lector quiere pulsar es el título. El `::after` del
+          botón es lo que lo estira sobre toda la barra —un `<button>` no puede contener un `<h3>`,
+          así que envolverla no es opción—, y los controles de la derecha van por encima (`z-10`)
+          para que sigan siendo suyos. */}
       <header
         className={cn(
-          "flex items-start justify-between gap-3 bg-surface-header px-[18px] py-3",
+          "group relative flex items-start justify-between gap-3 bg-surface-header px-[18px] py-3 transition-colors",
           !isCollapsed && "border-b border-border",
+          collapsible && "hover:bg-surface-muted",
         )}
       >
-        <div className="flex min-w-0 items-start gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
           {collapsible && (
             <button
               type="button"
               aria-expanded={!collapsed}
               aria-controls={bodyId}
               aria-label={collapsed ? `Mostrar ${title}` : `Ocultar ${title}`}
-              onClick={() => setCollapsed((value) => !value)}
-              className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-canvas hover:text-brand"
+              onClick={onToggleCollapsed}
+              className="mt-px flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent text-faint transition-colors after:absolute after:inset-0 after:content-[''] group-hover:border-border group-hover:bg-surface group-hover:text-brand"
             >
               <ChevronDown
                 size={15}
-                strokeWidth={2}
+                strokeWidth={2.25}
                 className={cn("transition-transform duration-150", collapsed && "-rotate-90")}
               />
             </button>
@@ -122,7 +130,7 @@ export const ChartCard = memo(function ChartCard({
           </div>
         </div>
         {((headerSlot && !isCollapsed) || showToggle || helper) && (
-          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="relative z-10 flex shrink-0 items-center gap-2.5">
             {!isCollapsed && headerSlot}
             {helper && <ChartGuideTip title={title} guide={helper} />}
             {showToggle && (

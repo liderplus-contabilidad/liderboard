@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
+import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
@@ -61,6 +62,12 @@ export function GraficosView() {
   // `emptyPeriods` se cuenta sobre el eje sin podar, así que el botón no se esfuma al pulsarlo.
   const canHideEmptyPeriods = frequency === "mensual" && emptyPeriods > 0;
 
+  // Qué tarjetas están plegadas, y el «todos» que las mueve de una vez. Es estado local de esta
+  // pantalla, como los dos interruptores de arriba: no se guarda, no produce chip y el informe
+  // imprimible sigue sacando todas las tarjetas enteras.
+  const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
+  const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
+
   /**
    * El rubro cuyo peso se está mirando, por su posición en el reparto. Es un ÍNDICE y no un código
    * porque es lo que el gráfico entrega al clicar, y resolverlo aquí contra la misma lista que lo
@@ -87,11 +94,23 @@ export function GraficosView() {
         ))}
       </div>
 
-      {canHideEmptyPeriods && (
-        <div className="flex justify-end">
-          {/* Mismo aspecto que el de la tarjeta de Datos, para que se lean como el mismo gesto. Va
-              aquí y no en la barra de filtros porque lo leen las tarjetas de ESTA pestaña y ninguna
-              de las otras dos: en la barra sería un control muerto en Datos y en Análisis. */}
+      {/* Los dos interruptores de lectura de esta pestaña. Van aquí y no en la barra de filtros
+          porque los leen las tarjetas de ESTA pestaña y ninguna de las otras dos: en la barra
+          serían controles muertos en Datos y en Análisis. El de plegar va a la IZQUIERDA, sobre la
+          esquina de las tarjetas donde están las flechas que mueve; el de meses en 0 se queda a la
+          derecha con el aspecto del de la tarjeta de Datos, para que se lean como el mismo gesto. */}
+      <div className="flex items-center justify-between gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={toggleAll}
+          icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+          className="font-medium"
+        >
+          {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
+        </Button>
+
+        {canHideEmptyPeriods && (
           <Button
             size="sm"
             variant="secondary"
@@ -109,8 +128,8 @@ export function GraficosView() {
               ? `Mostrar ${emptyPeriods} ${emptyPeriods === 1 ? "mes" : "meses"} en 0`
               : "Ocultar meses en 0"}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone, y las cinco van al
           MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se
@@ -126,7 +145,8 @@ export function GraficosView() {
         <SpecCard
           key={card.id}
           spec={card}
-          collapsible
+          collapsed={isCollapsed(card.id)}
+          onToggleCollapsed={() => toggle(card.id)}
           {...(annex && index === 0 ? { onSelect: setOpenIndex } : {})}
           {...(index === 0 && lines.length > 0
             ? {

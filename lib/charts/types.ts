@@ -196,6 +196,17 @@ export interface ChartTooltip {
   borderWidth?: number;
   padding?: number | number[];
   textStyle?: ChartTextStyle;
+  /**
+   * Que el tooltip se quede dentro del CONTENEDOR de la gráfica y no solo dentro de la ventana.
+   *
+   * Sin esto el renderer lo cuelga del contenedor pero lo coloca contra la ventana, así que al
+   * pasar el cursor por las últimas barras la caja se sale por el borde de la tarjeta — y la
+   * tarjeta, que es un `overflow-hidden` para que su tabla no se salga de las esquinas
+   * redondeadas, la CORTA ahí. El texto nunca se recorta (la caja crece hasta el renglón más
+   * largo); lo que se pierde es el trozo que quedó fuera, y se pierde justo cuando el nombre de
+   * la cuenta es largo, que es cuando hace falta leerlo.
+   */
+  confine?: boolean;
   /** Axis trigger receives the whole column; item trigger a single mark. */
   formatter?: (params: ChartParam[] | ChartParam) => string;
 }

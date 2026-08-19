@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
+import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { buildAnalisisCards } from "@/lib/profit-loss/charts/cards";
 import { activeSource, expandSlots } from "@/lib/profit-loss/charts/selection";
 import { buildVerticalAnalysis } from "@/lib/profit-loss/charts/vertical";
@@ -53,6 +56,12 @@ export function AnalisisView() {
   const centerName =
     views.find((view) => view.id === context.activeCenterId)?.name ?? "Consolidado";
 
+  // Igual que en Gráficos: qué tarjetas están plegadas es estado local de la pantalla. El análisis
+  // vertical no entra — es una tabla con sus propios chevrons de árbol, y un segundo chevron en su
+  // cabecera dejaría sin decir cuál pliega qué.
+  const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
+  const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
+
   if (!dataset) {
     return <PygEmptyState />;
   }
@@ -70,12 +79,39 @@ export function AnalisisView() {
         onToggleCollapse={toggleCollapsed}
       />
 
+      {/* Un solo botón con dos sentidos, el mismo de Gráficos y en el mismo sitio —a la izquierda,
+          sobre la esquina donde están las flechas que mueve—: mientras quede una abierta cierra, y
+          con todas cerradas abre. */}
+      <div className="flex justify-start">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={toggleAll}
+          icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+          className="font-medium"
+        >
+          {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
+        </Button>
+      </div>
+
       {/* Igual que en Gráficos: el orden lo declara `buildAnalisisCards`. */}
-      <SpecCard spec={cards[0]} collapsible />
+      <SpecCard
+        spec={cards[0]}
+        collapsed={isCollapsed(cards[0].id)}
+        onToggleCollapsed={() => toggle(cards[0].id)}
+      />
 
       <div className="grid grid-cols-2 gap-4">
-        <SpecCard spec={cards[1]} collapsible />
-        <SpecCard spec={cards[2]} collapsible />
+        <SpecCard
+          spec={cards[1]}
+          collapsed={isCollapsed(cards[1].id)}
+          onToggleCollapsed={() => toggle(cards[1].id)}
+        />
+        <SpecCard
+          spec={cards[2]}
+          collapsed={isCollapsed(cards[2].id)}
+          onToggleCollapsed={() => toggle(cards[2].id)}
+        />
       </div>
     </div>
   );

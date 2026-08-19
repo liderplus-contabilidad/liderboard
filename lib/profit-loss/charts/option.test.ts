@@ -827,6 +827,19 @@ describe("el código de cuenta, al pasar el ratón", () => {
     makeSeries([500, null], { code: "4.1.1.3", label: "Ventas Eventos" }),
   ];
 
+  it("el tooltip se queda dentro de la TARJETA, que es lo único que puede cortarlo", () => {
+    // El texto nunca se recorta —la caja crece hasta el renglón más largo—, pero la tarjeta es un
+    // `overflow-hidden` y el renderer coloca el tooltip contra la VENTANA, así que al pasar por
+    // las últimas barras la caja se salía por el borde y se cortaba ahí, justo con los nombres de
+    // cuenta largos, que es cuando hace falta leerla entera.
+    const entries: AmountEntry[] = [{ code: "5.1.5.1", label: "Sueldos", value: 100 }];
+
+    expect(barOption(series, CONTEXT).tooltip?.confine).toBe(true);
+    expect(horizontalBarOption(entries, ENTRY_CONTEXT).tooltip?.confine).toBe(true);
+    expect(verticalBarOption(entries, ENTRY_CONTEXT).tooltip?.confine).toBe(true);
+    expect(pieOption(toPieSlices(entries), ENTRY_CONTEXT).tooltip?.confine).toBe(true);
+  });
+
   it("antepone el código al nombre de cada serie, en su fila", () => {
     const html = tooltipOf(barOption(series, CONTEXT), [{ value: 1000 }, { value: 500 }]);
 
