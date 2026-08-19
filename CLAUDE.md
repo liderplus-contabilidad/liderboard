@@ -846,7 +846,7 @@ Fuera del anexo el orden es el de siempre, así que las dos se declaran aparte d
 las intercambia — son la misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
 con quince marcadas resuelve Ingresos: bajo un anexo de GASTOS quedaba una tarjeta repartiendo
 ingresos sin relación con lo que se está leyendo. Se va entera en vez de reapuntarse a los gastos
-porque su lectura ya la dan las otras dos —el reparto lo dicen la dona y las barras, y en anual no
+porque su lectura ya la dan las otras dos —el reparto lo dicen la tarta y las barras, y en anual no
 hay evolución que apilar—, y por eso la lista puede traer CUATRO tarjetas en vez de cinco.
 
 **Las barras son VERTICALES** (`verticalBarOption`, espejo del horizontal) porque es como la firma
@@ -862,10 +862,15 @@ encima, el color no distingue nada, así que repartir diecisiete tonos gastaría
 en re-decir lo que la longitud ya dice. Por lo mismo las filas de la tabla no llevan punto de color:
 diecisiete puntos iguales prometerían una distinción que no existe. **Las dos tarjetas cortan en el
 MISMO sitio y por una sola reducción**: quince rubros (`ANNEX_MAX_SLICES`) con la cola plegada en
-«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la dona por la
+«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la tarta por la
 suya— y podían enseñar distinto número de rubros del mismo reparto, que es la clase de desacuerdo que
-nadie lee como un error. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
-mismo tono, así que por ahí no hay tope, y la dona tiene tonos para más; lo que no da para más es la
+nadie lee como un error. **Y esa segunda tarjeta es una TARTA y no un anillo**: el hueco de un anillo
+existe para poner el TOTAL en medio —lo único que una tarta no puede decir—, y aquí el total vive en
+la nota al pie y en la fila de cierre de la tabla gemela, así que el agujero gastaba el centro del
+círculo en nada y, al estrechar cada porción a una banda, decía el reparto peor que la tarta que la
+firma dibuja en su propio anexo. `pieOption` perdió con eso su interruptor `donut`, que se quedaba
+sin ningún llamador. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
+mismo tono, así que por ahí no hay tope, y la tarta tiene tonos para más; lo que no da para más es la
 lectura — un plan de gastos puede traer 133 cuentas de movimiento, y ahí las porciones caen bajo el
 0,1 %, donde no se ven ni se pueden rotular. La nota dice cuántos agrupó «Otros» y dónde están
 enteros, porque si no ese pliegue se lee como una cuenta más del plan. Pero **la tabla gemela no corta**: ES el anexo entero —código de `sublabel`, valor, % del gasto, % del ingreso

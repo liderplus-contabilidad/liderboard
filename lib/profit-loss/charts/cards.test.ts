@@ -174,6 +174,47 @@ describe("el contrato de la lista", () => {
     ]);
   });
 
+  /**
+   * La guía del ⓘ: existe para cada tarjeta y en cada estado, porque el modo de fallo real no es
+   * una frase mal escrita —eso se ve— sino una tarjeta NUEVA que se olvida de traerla, y ahí el
+   * icono simplemente no se dibuja y nada lo delata.
+   */
+  it("toda tarjeta trae su guía, en los tres estados de la primera", () => {
+    const estados = [
+      buildGraficosCards(MANOR, emptyFilters()),
+      buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET })),
+      buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET })),
+    ];
+
+    for (const { cards } of [...estados, buildAnalisisCards(MANOR, emptyFilters())]) {
+      for (const card of cards) {
+        expect(card.guide?.purpose, card.title).toBeTruthy();
+        expect(card.guide?.actions.length ?? 0, card.title).toBeGreaterThan(0);
+        // Un control sin rótulo o sin efecto rompe la lectura a dos tintas del panel.
+        for (const action of card.guide?.actions ?? []) {
+          expect(action.control, card.title).toBeTruthy();
+          expect(action.effect, card.title).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("la guía de una tarjeta describe ESA tarjeta y no la que ocupaba su ranura", () => {
+    const porDefecto = buildGraficosCards(MANOR, emptyFilters()).cards[0];
+    const ventas = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }))
+      .cards[0];
+    const anexo = buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }))
+      .cards[0];
+
+    expect(porDefecto.guide).not.toEqual(ventas.guide);
+    expect(ventas.guide).not.toEqual(anexo.guide);
+    // El único clic de toda la pantalla se nombra donde existe, y solo ahí.
+    expect(anexo.guide?.actions.some((action) => action.control === "Pulsa una barra")).toBe(true);
+    expect(porDefecto.guide?.actions.some((action) => action.control.includes("Pulsa"))).toBe(
+      false,
+    );
+  });
+
   it("sin cobertura, lo que no tiene entradas no dibuja y la evolución sale vacía", () => {
     const { cards } = buildGraficosCards(VACIO, emptyFilters());
 

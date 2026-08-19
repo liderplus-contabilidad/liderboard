@@ -156,13 +156,9 @@ describe("tipos de gráfico soportados", () => {
     expect(result.excluded).toEqual([{ ...entries[2], reason: "negativo" }]);
   });
 
-  it("makes a donut of the same slices when asked", () => {
+  it("es una TARTA y no un anillo: el hueco solo sirve para poner el total, y nadie lo pone", () => {
     const result = toPieSlices([{ code: "4.1.1.2", label: "Restaurante", value: 100 }]);
 
-    expect(pieOption(result, { ...ENTRY_CONTEXT, donut: true }).series[0].radius).toEqual([
-      "52%",
-      "78%",
-    ]);
     expect(pieOption(result, ENTRY_CONTEXT).series[0].radius).toEqual(["0%", "74%"]);
   });
 

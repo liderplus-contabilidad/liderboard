@@ -109,13 +109,26 @@ import {
   toSeriesQuery,
   type SelectionContext,
 } from "./selection";
+import {
+  GUIDE_BUSINESS_LINES,
+  GUIDE_COMPOSITION,
+  GUIDE_DISTRIBUTION,
+  GUIDE_EVOLUTION,
+  GUIDE_EXPENSE_ANNEX_BARS,
+  GUIDE_EXPENSE_ANNEX_PIE,
+  GUIDE_EXPENSE_SHARE,
+  GUIDE_PARETO,
+  GUIDE_RANKING,
+  GUIDE_VARIATION,
+  GUIDE_WATERFALL,
+} from "./guides";
 import { describeShares, markedShares } from "./share";
 import { buildWaterfall } from "./waterfall";
 
 const EMPTY_TABLE: ChartTable = { columns: [], rows: [] };
 
 /**
- * El alto de la ÚNICA tarta que queda —la dona del anexo—, y por qué no es el de las demás.
+ * El alto de la ÚNICA tarta que queda —la del anexo—, y por qué no es el de las demás.
  *
  * A una tarta el ancho no le sirve de nada: el radio de ECharts es un porcentaje de la dimensión
  * MENOR del lienzo, y en una tarjeta a ancho completo la menor es siempre el alto. Con los 280 px
@@ -388,6 +401,7 @@ function businessLineCard(
     id: "evolucion",
     title: "Ventas por línea de negocio",
     subtitle,
+    guide: GUIDE_BUSINESS_LINES,
     option: drawn
       ? categoryBarOption(reading.categories, reading.series, context, reading.groups)
       : null,
@@ -427,7 +441,7 @@ function businessLineCard(
  * Las dos tarjetas del ANEXO DE GASTOS, que es lo que la vista «Costos y gastos» pone en pantalla.
  *
  * Son dos porque son dos lecturas del MISMO reparto y ninguna sustituye a la otra: las barras dicen
- * cuánto —se leen en dólares y se cotejan contra el libro—, y la dona dice qué parte del total es
+ * cuánto —se leen en dólares y se cotejan contra el libro—, y la tarta dice qué parte del total es
  * cada una. El anexo del contador las lleva las dos, una debajo de la otra, por eso mismo.
  *
  * **La tabla gemela de las barras ES el anexo entero**: código, valor, % del gasto y % del ingreso,
@@ -442,9 +456,9 @@ function expenseDistributionCards(
   warnings: string[],
   emptyNote: string | undefined,
 ): [ChartCardSpec, ChartCardSpec] {
-  // UNA sola reducción para las dos tarjetas: las barras y la dona dibujan exactamente la misma
+  // UNA sola reducción para las dos tarjetas: las barras y la tarta dibujan exactamente la misma
   // lista, plegada en «Otros» a partir del rubro quince. Antes cada una cortaba por su cuenta —las
-  // barras por la escala del ranking, la dona por la suya— y podían enseñar distinto número de
+  // barras por la escala del ranking, la tarta por la suya— y podían enseñar distinto número de
   // rubros del mismo reparto, que es la clase de desacuerdo que nadie lee como un error.
   // Ordenar antes de cortar es lo que hace que el que se pliega sea siempre el más pequeño.
   const slices = toPieSlices(distribution.categories, { maxSlices: ANNEX_MAX_SLICES });
@@ -473,6 +487,7 @@ function expenseDistributionCards(
     {
       id: "evolucion",
       title: "Distribución de costos y gastos",
+      guide: GUIDE_EXPENSE_ANNEX_BARS,
       subtitle: `${distribution.categories.length} ${distribution.categories.length === 1 ? "rubro" : "rubros"} · ${periodName}`,
       option: drawn.length > 0 ? verticalBarOption(drawn, { colorOf }) : null,
       table: drawn.length > 0 ? expenseAnnexTable(distribution) : EMPTY_TABLE,
@@ -485,8 +500,9 @@ function expenseDistributionCards(
     {
       id: "ranking",
       title: "Distribución de costos y gastos %",
+      guide: GUIDE_EXPENSE_ANNEX_PIE,
       subtitle: `Peso de cada rubro · ${periodName}`,
-      option: drawn.length > 0 ? pieOption(slices, { colorOf: sliceColor, donut: true }) : null,
+      option: drawn.length > 0 ? pieOption(slices, { colorOf: sliceColor }) : null,
       table: drawn.length > 0 ? entryTable(drawn, { colorOf: sliceColor }) : EMPTY_TABLE,
       warnings,
       // Lo que la tarta no puede dibujar —una nota de crédito negativa— se nombra, que es la regla
@@ -809,6 +825,7 @@ export function buildGraficosCards(
   const composicionCard: ChartCardSpec = {
     id: "composicion",
     title: "Composición de los ingresos",
+    guide: GUIDE_COMPOSITION,
     subtitle: periodName,
     option:
       compositionEntries.length > 0
@@ -829,6 +846,7 @@ export function buildGraficosCards(
   const rankingCard: ChartCardSpec = {
     id: "ranking",
     title: "Ranking de gastos",
+    guide: GUIDE_RANKING,
     subtitle: `De mayor a menor · ${periodName}`,
     option:
       ranking.entries.length > 0
@@ -853,6 +871,7 @@ export function buildGraficosCards(
   const cascadaCard: ChartCardSpec = {
     id: "cascada",
     title: "Del ingreso a la utilidad",
+    guide: GUIDE_WATERFALL,
     subtitle: range ? `Suma de ${range}` : "Sin movimiento",
     option: steps.length > 0 ? waterfallOption(steps) : null,
     table: steps.length > 0 ? waterfallTable(steps) : EMPTY_TABLE,
@@ -894,6 +913,7 @@ export function buildGraficosCards(
           : {
               id: "evolucion",
               title: filters.codes.length > 0 ? "Comparación" : "Ingresos contra Costos y Gastos",
+              guide: GUIDE_EVOLUTION,
               subtitle: `${evolution.series.length} ${evolution.series.length === 1 ? "serie" : "series"} · ${periodName}`,
               option:
                 evolution.series.length > 0
@@ -908,7 +928,7 @@ export function buildGraficosCards(
       // Ingresos —quince cuentas marcadas no son «exactamente una»—, así que bajo un anexo de
       // GASTOS quedaba una tarjeta repartiendo ingresos que no tiene nada que ver con lo que se
       // está leyendo. Se va entera en vez de reapuntarse a los gastos porque la pila por periodo ya
-      // la dan las otras dos: el reparto lo dicen la dona y las barras, y en anual no hay evolución
+      // la dan las otras dos: el reparto lo dicen la tarta y las barras, y en anual no hay evolución
       // que apilar. Es la misma regla con la que un módulo entero desaparece de la barra cuando no
       // tiene nada que decir, y por eso la lista puede traer cuatro tarjetas en vez de cinco.
       ...(annex
@@ -917,6 +937,7 @@ export function buildGraficosCards(
             {
               id: "distribucion",
               title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
+              guide: GUIDE_DISTRIBUTION,
               subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
               option:
                 distribution.series.length > 0 && parentTotal
@@ -1021,6 +1042,7 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
       {
         id: "gastos-sobre-ingresos",
         title: "Gastos principales sobre ingresos",
+        guide: GUIDE_EXPENSE_SHARE,
         subtitle: `% sobre ingresos · ${periodName}`,
         option:
           shareEntries.length > 0
@@ -1037,6 +1059,7 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
       {
         id: "variacion",
         title: "Variación contra el periodo anterior",
+        guide: GUIDE_VARIATION,
         subtitle: variationName,
         option: variation.entries.length > 0 ? variationBarOption(variation.entries) : null,
         table:
@@ -1057,6 +1080,7 @@ export function buildAnalisisCards(context: SelectionContext, filters: PygFilter
       {
         id: "pareto",
         title: "Concentración de gastos",
+        guide: GUIDE_PARETO,
         subtitle: `Pareto · ${periodName}`,
         option: pareto.entries.length > 0 ? paretoOption(pareto, { colorOf: paretoColor }) : null,
         table:

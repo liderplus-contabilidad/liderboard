@@ -884,17 +884,18 @@ export function variationBarOption(
   };
 }
 
-export interface PieOptionContext extends EntryOptionContext {
-  /** A donut leaves the middle free for the total, which a pie cannot show. */
-  donut?: boolean;
-}
-
 /**
- * Pie or donut, fed by `toPieSlices` — which is what groups the tail into «Otros» and drops
- * the non-positive entries. `4.1.4 Rebaja y/o Descuentos sobre Ventas` is negative and would
- * otherwise draw a negative angle; it comes back in `excluded` for the card to footnote.
+ * La TARTA, alimentada por `toPieSlices` — que es quien pliega la cola en «Otros» y aparta las
+ * entradas no positivas. `4.1.4 Rebaja y/o Descuentos sobre Ventas` es negativa y dibujaría un
+ * ángulo negativo; vuelve en `excluded` para que la tarjeta la nombre al pie.
+ *
+ * Sin agujero, y eso es una decisión: el hueco de un anillo existe para poner el TOTAL en medio,
+ * que es lo único que una tarta no puede decir, y ninguna tarjeta lo pone ahí —el total del anexo
+ * vive en su nota al pie y en la fila de cierre de la tabla gemela—. Un anillo vacío gasta el
+ * centro del círculo en nada y, al estrechar cada porción a una banda, deja el reparto peor dicho
+ * que una tarta, que es lo que la firma dibuja en su propio anexo.
  */
-export function pieOption(result: PieResult, context: PieOptionContext): ChartOption {
+export function pieOption(result: PieResult, context: EntryOptionContext): ChartOption {
   return {
     animationDuration: 320,
     textStyle: { fontFamily: CHART_FONT },
@@ -921,7 +922,7 @@ export function pieOption(result: PieResult, context: PieOptionContext): ChartOp
       {
         id: "composicion",
         type: "pie",
-        radius: context.donut ? ["52%", "78%"] : ["0%", "74%"],
+        radius: ["0%", "74%"],
         center: ["50%", "44%"],
         data: result.slices.map((slice) => ({
           id: slice.code,
