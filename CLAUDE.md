@@ -45,6 +45,13 @@ hook runs `lint-staged` (oxlint --fix + oxfmt on staged files).
   every width-capped axis label truncates to a box that renders wider than its own cap (labels
   clipped at the _start_). `components/ui/chart.tsx` reads the generated family off `:root` and
   substitutes it before `setOption`; keep any new text sizing on that path.
+- **El tooltip de ECharts cuelga del contenedor de la gráfica, pero se coloca contra la VENTANA.**
+  El texto no se recorta nunca —el div lleva `white-space: nowrap`, así que la caja crece hasta el
+  renglón más largo—, pero `ChartCard` es un `overflow-hidden` (lo necesita para que su tabla no se
+  salga de las esquinas redondeadas), así que al pasar por las últimas barras la caja se salía por
+  el borde y la tarjeta la CORTABA, justo con los nombres de cuenta largos. Por eso todo tooltip
+  lleva `confine: true`, puesto una vez en el `TOOLTIP_CHROME` de cada módulo y no tooltip por
+  tooltip: el recorte es de la tarjeta, y todas las tarjetas son la misma.
 - TypeScript is `strict`; import alias `@/*` maps to the repo root (e.g.
   `@/lib/modules`).
 - Vitest covers only the pure layer under `lib/` (parse/derive/persistence, the analytics

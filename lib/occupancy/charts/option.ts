@@ -164,6 +164,8 @@ const TOOLTIP_CHROME: Omit<ChartTooltip, "trigger" | "formatter"> = {
   borderWidth: 1,
   padding: [8, 10],
   textStyle: { color: CHART_INK.strong, fontSize: 12 },
+  // Espejo del de PyG: las tarjetas son las mismas y el recorte contra su borde también.
+  confine: true,
 };
 
 function axisTooltip(unit: MetricUnit, pointer: "shadow" | "line"): ChartTooltip {

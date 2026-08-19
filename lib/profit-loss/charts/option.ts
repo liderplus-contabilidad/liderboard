@@ -1387,6 +1387,9 @@ const TOOLTIP_CHROME: Omit<ChartTooltip, "trigger" | "formatter"> = {
   borderWidth: 1,
   padding: [8, 10],
   textStyle: { color: CHART_INK.strong, fontSize: 12 },
+  // Dentro de la TARJETA, no dentro de la ventana — ver `ChartTooltip.confine`. Va aquí y no en
+  // cada tooltip porque el recorte es de la tarjeta y todas las tarjetas son la misma.
+  confine: true,
 };
 
 /** Everything a cartesian chart shares: font, animation, plot box and legend. */
