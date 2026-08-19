@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyCapture } from "../employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
-import type { ParsedPayrollEmployeeLine, PayrollExtraConcept } from "../types";
+import type { ParsedPayrollEmployeeLine } from "../types";
 import { columnIndexOf } from "./columns";
 import { buildRolGrid, periodText, type RolExportGrid, type RolExportRow } from "./rol-grid";
 
@@ -29,7 +29,6 @@ function employee(
 
 function build(
   lines: readonly ParsedPayrollEmployeeLine[],
-  extraConcepts: readonly PayrollExtraConcept[] = [],
   company?: typeof COMPANY,
 ): RolExportGrid {
   return buildRolGrid({
@@ -39,7 +38,6 @@ function build(
     monthIndex: 2,
     lines,
     parameters: DEFAULT_PAYROLL_PARAMETERS,
-    extraConcepts,
   });
 }
 
@@ -230,28 +228,54 @@ describe("la fila de un empleado", () => {
   });
 });
 
-describe("los conceptos extra", () => {
-  const concepts: PayrollExtraConcept[] = [
-    { id: "mov", label: "MOVILIZACION", kind: "aportable" },
-    { id: "ali", label: "ALIMENTACION", kind: "noAportable" },
-  ];
-
+describe("las filas de bono", () => {
   it("añaden UNA columna agregada al final, y el total de ingreso los incluye", () => {
     const line = employee("ALFA", "COCINA", {
-      capture: { ...emptyCapture(), extraAmounts: { mov: 50, ali: 30 } },
+      capture: {
+        ...emptyCapture(),
+        extras: [
+          { id: "mov", label: "MOVILIZACION", kind: "aportable", amount: 50 },
+          { id: "ali", label: "ALIMENTACION", kind: "noAportable", amount: 30 },
+        ],
+      },
     });
-    const grid = build([line], concepts);
+    const grid = build([line]);
     const row = grid.rows.find((entry) => entry.kind === "employee")!;
     expect(at(row, "CB")).toBe(80);
 
-    // El total sube 80 MÁS el décimo tercero de la mitad aportable (50/12): los extras no son un
+    // El total sube 80 MÁS el décimo tercero de la mitad aportable (50/12): los bonos no son un
     // añadido al final de la suma, entran en las bases. Es justo por eso que la columna tiene que
     // salir en la hoja — sin ella, `W` traería 84,17 que ninguna columna explica.
-    const sinExtras = build([line]).rows.find((entry) => entry.kind === "employee")!;
+    const sinExtras = build([employee("ALFA", "COCINA")]).rows.find(
+      (entry) => entry.kind === "employee",
+    )!;
     expect(at(row, "W") as number).toBeCloseTo((at(sinExtras, "W") as number) + 80 + 50 / 12, 2);
   });
 
-  it("sin conceptos declarados, la hoja termina donde termina el libro", () => {
+  it("la cabecera de `AH` es la del LIBRO aunque el empleado la haya rotulado", () => {
+    // La letra es el contrato contra el que el contador coteja, y una columna tiene UNA cabecera:
+    // el nombre propio vive en la pantalla y en el comprobante, no en la hoja.
+    const base = emptyCapture();
+    const line = employee("ALFA", "COCINA", {
+      capture: {
+        ...base,
+        labels: { "E-11": "Uniformes" },
+        deductions: { ...base.deductions, otherDeductions: 36 },
+      },
+    });
+    const grid = build([line]);
+    const labels = grid.rows.filter((row) => row.kind === "labels");
+    // `OTROS ` con el espacio sobrante que el libro escribe: la cabecera va VERBATIM.
+    expect(labels.some((row) => at(row, "AH") === "OTROS ")).toBe(true);
+    expect(
+      at(
+        grid.rows.find((row) => row.kind === "employee")!,
+        "AH",
+      ),
+    ).toBe(36);
+  });
+
+  it("sin filas de bono, la hoja termina donde termina el libro", () => {
     const grid = build([employee("ALFA", "COCINA")]);
     expect(grid.columns.some((column) => column.letter === "CB")).toBe(false);
     expect(grid.rows[0].cells).toHaveLength(columnIndexOf("CA") + 1);
@@ -262,7 +286,7 @@ describe("el membrete del cliente", () => {
   const lines = [employee("ALFA", "COCINA"), employee("BETA", "VENTAS")];
 
   it("escribe sus líneas en `B`, bajo el nombre y encima de los rótulos", () => {
-    const grid = build(lines, [], COMPANY);
+    const grid = build(lines, COMPANY);
     expect(kinds(grid).slice(0, 6)).toEqual([
       "company",
       "letterhead",
@@ -282,7 +306,7 @@ describe("el membrete del cliente", () => {
   // El período comparte fila con la primera hilera de rótulos y el lector lo busca POR SU FORMA
   // entre las filas de arriba: ninguna línea del membrete puede parecerse a un período.
   it("el período sigue estando, y ninguna línea del membrete puede confundirse con él", () => {
-    const grid = build(lines, [], COMPANY);
+    const grid = build(lines, COMPANY);
     expect(at(grid.rows[4], "B")).toBe("MARZO 2026");
     for (const row of grid.rows.filter((r) => r.kind === "letterhead")) {
       expect(at(row, "B")).not.toBe("MARZO 2026");
@@ -297,7 +321,7 @@ describe("el membrete del cliente", () => {
   // Lo que el contador coteja es la LETRA de cada columna: el membrete solo puede empujar el cuerpo
   // hacia abajo, nunca moverlo de lado.
   it("el cuerpo no se mueve de columna, y `SUMAN` dice lo mismo con membrete y sin él", () => {
-    const conMembrete = build(lines, [], COMPANY);
+    const conMembrete = build(lines, COMPANY);
     const sinMembrete = build(lines);
     const suman = (grid: RolExportGrid) => grid.rows.find((row) => row.kind === "suman");
 

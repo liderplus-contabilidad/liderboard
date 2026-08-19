@@ -27,7 +27,7 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
 
 /** El costo que el MOTOR deriva de esa ficha: el grid no puede inventarse otro. */
 function cost(overrides: Partial<PayrollEmployeeLine> = {}): number {
-  return computeLinePayroll(line(overrides), PARAMS, []).employerCost;
+  return computeLinePayroll(line(overrides), PARAMS).employerCost;
 }
 
 function source(

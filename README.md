@@ -883,6 +883,35 @@ bajo su tabla—.
   el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
   escala.
 
+## Nombre propio de una fila del rol (Rol de Pagos)
+
+Toda fila del rol cuyo **importe se teclea** admite el nombre que quien captura le quiera poner, por
+empleado y por mes: `E-11 Otros` se puede llamar «Uniformes», y así lo imprime el comprobante que esa
+persona firma.
+
+- **Por qué existe.** `Otros` es la columna `AH` del libro del contador, un comodín que significa
+  cosas distintas en empleados distintos. El comprobante imprimía el nombre de la COLUMNA en vez del
+  nombre del descuento: la cifra estaba bien y no decía de qué era.
+- **Qué filas.** Las que se teclean: `P Q R S T V` en ingresos y los doce egresos con nombre. Las que
+  la app deriva, no — el rótulo de «Horas extras 50%» es una tasa de ley, no un nombre.
+- **Dónde vive.** En la captura del mes de ese empleado, junto al importe que rotula. Dos empleados
+  pueden llamar distinto a la misma fila; el nombre no se copia al mes siguiente, igual que el
+  importe.
+- **Los bonos son filas de esa misma clase.** Se agregan desde el mismo menú de «Agregar ingreso» y
+  desde su misma lista —**«Bono aportable»** o **«Bono no aportable»**, al final—, tantas veces como
+  haga falta, y se nombran ahí mismo. La clase no se pregunta aparte: la dice cuál se eligió, y queda
+  escrita en la fila. Un bono aportable entra en las bases del IESS y en los décimos; uno no
+  aportable solo suma al total.
+- **Elegir al agregar.** Los dos botones abren un menú con los conceptos que ese empleado todavía no
+  usa, y la fila nace siendo el que se eligió — por eso la columna «Concepto» quedó libre para el
+  nombre y todas las filas se leen igual. Para cambiar de concepto se quita la fila y se agrega la
+  correcta.
+- **En el Excel no viaja.** La hoja `GENERAL` conserva las cabeceras del libro (`AH` sigue diciendo
+  `OTROS`): una columna tiene una cabecera y la letra es lo que el contador coteja. Los importes
+  vuelven completos al re-subir el archivo; los nombres no, y el `ⓘ` de la descarga lo dice.
+- **Renombrar no reclasifica.** Ni mueve un importe, ni cambia la aportabilidad, ni cambia la cuenta
+  del asiento: «Uniformes» no estrena cuenta contable.
+
 ## Membrete del cliente (Rol de Pagos)
 
 Un cliente de Rol de Pagos guarda, junto a su nombre y su logo, los **datos de la empresa** con los

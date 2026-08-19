@@ -50,7 +50,7 @@ export type ComputedIncomeField =
 /** Las cantidades de horas, que solo tienen tres conceptos. */
 export type OvertimeHoursField = "overtimeHours50" | "overtimeHours100" | "overtimeHours25";
 
-interface ConceptBase {
+export interface ConceptBase {
   /** Como lo nombra la pantalla. No es un id de base de datos: no se persiste. */
   code: string;
   /** Columna de la hoja `GENERAL`. Es la trazabilidad al archivo del contador. */

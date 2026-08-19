@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emptyCapture, toEngineInput } from "../employee-input";
 import { computeEmployeePayroll } from "../engine/compute";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
-import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
+import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
 import {
   NOT_CONTRIBUTORY_MARK,
   PAYSLIP_FOOTNOTE,
@@ -75,7 +75,7 @@ function build(line: PayrollEmployeeLine, position = 6): PayslipDocument {
   const capture: PayrollMonthlyCapture = line.capture ?? emptyCapture();
   return buildPayslipDocument({
     line,
-    computed: computeEmployeePayroll(toEngineInput(line, []), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
     capture,
     year: 2026,
     monthIndex: 2,
@@ -268,35 +268,33 @@ describe("las horas extras", () => {
   });
 });
 
-describe("conceptos de ingreso extra del período", () => {
-  const APORTABLE: PayrollExtraConcept = { id: "x1", label: "Movilización", kind: "aportable" };
-  const NO_APORTABLE: PayrollExtraConcept = {
-    id: "x2",
-    label: "Alimentación",
-    kind: "noAportable",
-  };
+describe("las filas de bono del empleado", () => {
+  const APORTABLE = { id: "x1", label: "Movilización", kind: "aportable" as const };
+  const NO_APORTABLE = { id: "x2", label: "Alimentación", kind: "noAportable" as const };
 
   const buildWith = (
-    concepts: readonly PayrollExtraConcept[],
-    extraAmounts: Record<string, number>,
+    extras: readonly { id: string; label: string; kind: "aportable" | "noAportable" }[],
+    amounts: Record<string, number>,
   ) => {
     const line: PayrollEmployeeLine = {
       ...FULL,
-      capture: { ...(FULL.capture ?? emptyCapture()), extraAmounts },
+      capture: {
+        ...(FULL.capture ?? emptyCapture()),
+        extras: extras.map((row) => ({ ...row, amount: amounts[row.id] ?? 0 })),
+      },
     };
     return buildPayslipDocument({
       line,
-      computed: computeEmployeePayroll(toEngineInput(line, concepts), DEFAULT_PAYROLL_PARAMETERS),
+      computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
       capture: line.capture ?? emptyCapture(),
       year: 2026,
       monthIndex: 2,
       clientName: "HOTEL BOUTIQUE CULTURA MANOR",
       position: 6,
-      extraConcepts: concepts,
     });
   };
 
-  it("imprime el rótulo que el período le puso, en mayúsculas", () => {
+  it("imprime el rótulo que el empleado le puso, en mayúsculas", () => {
     const document = buildWith([APORTABLE], { x1: 45 });
     const row = document.incomes.find((entry) => entry.label === "MOVILIZACIÓN");
     expect(row).toBeDefined();
@@ -327,17 +325,52 @@ describe("conceptos de ingreso extra del período", () => {
     expect(last.label).toBe("MOVILIZACIÓN");
   });
 
-  it("sin conceptos declarados el comprobante es exactamente el de antes", () => {
-    const sin = buildWith([], {});
-    const conImporteHuerfano = buildWith([], { x1: 999 });
-    expect(conImporteHuerfano).toEqual(sin);
+  it("sin filas declaradas el comprobante es exactamente el de antes", () => {
+    expect(buildWith([], {})).toEqual(build(FULL));
   });
 
-  it("el total de ingresos INCLUYE el concepto extra", () => {
+  it("el total de ingresos INCLUYE la fila de bono", () => {
     const amount = (formatted: string) => Number(formatted.replace(/[$,]/g, ""));
     const sin = buildWith([], {});
     const con = buildWith([NO_APORTABLE], { x2: 30 });
     expect(amount(con.totalIncome) - amount(sin.totalIncome)).toBeCloseTo(30, 2);
+  });
+});
+
+describe("el rótulo propio de una fila del catálogo", () => {
+  const withLabels = (labels: Record<string, string>, otherDeductions: number) => {
+    const base = FULL.capture ?? emptyCapture();
+    const line: PayrollEmployeeLine = {
+      ...FULL,
+      capture: { ...base, labels, deductions: { ...base.deductions, otherDeductions } },
+    };
+    return buildPayslipDocument({
+      line,
+      computed: computeEmployeePayroll(toEngineInput(line), DEFAULT_PAYROLL_PARAMETERS),
+      capture: line.capture ?? emptyCapture(),
+      year: 2026,
+      monthIndex: 2,
+      clientName: "HOTEL BOUTIQUE CULTURA MANOR",
+      position: 6,
+    });
+  };
+
+  // El motivo entero de `row-labels.ts`: `E-11` es la columna `AH OTROS` del libro, y un
+  // comprobante que imprime el nombre de la COLUMNA no dice qué se descontó.
+  it("«Otros» se imprime con el nombre del descuento, en mayúsculas", () => {
+    const document = withLabels({ "E-11": "Uniformes" }, 36);
+    expect(row(document.deductions, "UNIFORMES")?.value).toBe("$36.00");
+    expect(row(document.deductions, "OTROS")).toBeUndefined();
+  });
+
+  it("sin rótulo propio manda el libro", () => {
+    const document = withLabels({}, 36);
+    expect(row(document.deductions, "OTROS")?.value).toBe("$36.00");
+  });
+
+  it("un rótulo sobre una fila SIN importe no imprime nada: la regla del papel es el importe", () => {
+    const document = withLabels({ "E-11": "Uniformes" }, 0);
+    expect(row(document.deductions, "UNIFORMES")).toBeUndefined();
   });
 });
 
@@ -354,7 +387,7 @@ describe("el membrete del cliente", () => {
 
   const withCompany = buildPayslipDocument({
     line: SORIA,
-    computed: computeEmployeePayroll(toEngineInput(SORIA, []), DEFAULT_PAYROLL_PARAMETERS),
+    computed: computeEmployeePayroll(toEngineInput(SORIA), DEFAULT_PAYROLL_PARAMETERS),
     capture: SORIA.capture ?? emptyCapture(),
     year: 2026,
     monthIndex: 2,

@@ -83,7 +83,6 @@ const grid = buildRolGrid({
   monthIndex: 2,
   lines: GOLDEN_MARCH_2026.map((golden) => toLine(golden.name, golden.input)),
   parameters: DEFAULT_PAYROLL_PARAMETERS,
-  extraConcepts: [],
 });
 const employees = grid.rows.filter((row) => row.kind === "employee");
 const at = (row: RolExportRow, letter: string) => row.cells[columnIndexOf(letter)];

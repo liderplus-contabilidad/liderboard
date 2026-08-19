@@ -1062,6 +1062,49 @@ el motor deriva el rol de la ficha, `computePeriodFinancials` devuelve `undefine
 nómina VACÍA: ya no existe el estado «el período no recibió su archivo», así que una nómina copiada
 del mes anterior enseña sus cuatro KPIs desde el primer render, que es el caso de uso principal.
 
+**EL RÓTULO DE UNA FILA VIVE EN LA CAPTURA DEL MES DEL EMPLEADO**, y esa es la única definición de
+cómo se llama una fila del rol. Toda fila cuyo IMPORTE se teclea admite nombre propio —`P Q R S T V`
+en ingresos y los doce egresos con nombre—, guardado en `PayrollMonthlyCapture.labels` bajo el código
+del concepto; las `calculado` no, porque su rótulo es una tasa de ley (`Horas extras 50%`) y no un
+nombre, y renombrarlas mentiría sobre un cálculo que ninguna cifra delata. Existe porque `E-11 Otros`
+es un COMODÍN: es la columna `AH` del libro y significa cosas distintas en empleados distintos, así
+que el comprobante que cada uno firma imprimía el nombre de la COLUMNA en vez del del descuento.
+`lib/payroll/row-labels.ts` (puro + testeado) resuelve y valida: un rótulo propio pisa LOS DOS del
+catálogo —el de pantalla y el `payslipLabel`, este en mayúsculas—, porque pisar solo el primero
+dejaría el papel diciendo `OTROS`, que es el motivo de todo esto. La unicidad se juzga contra las
+filas VISIBLES de ese empleado y no contra el período: lo que protege es que dos filas de un mismo
+comprobante no se llamen igual; dos empleados llamando `Uniformes` a la suya siempre fue legítimo.
+Quitar una fila borra su rótulo en la misma escritura — colgado, resucitaría al volver a agregar ese
+concepto y le pondría a una cifra nueva el nombre de otro mes.
+
+**Los BONOS son filas de la misma clase, no un mecanismo aparte.** `PayrollExtraRow`
+(`{ id, label, kind, amount }`) vive en `capture.extras`, y el rótulo, la clase y el importe viajan
+JUNTOS: por eso el importe huérfano dejó de poder existir, cuando antes la declaración estaba en el
+período (`PayrollPeriod.extraConcepts`) y el importe en la ficha, y borrar una podía dejar el otro
+colgado. Se agregan desde el MISMO menú de `Agregar ingreso`, bajo una línea, como **«Bono aportable»**
+y **«Bono no aportable»**, repetibles cuantas veces haga falta —los tres no aportables de DELICMAR son
+elegir tres veces y nombrar—, así que la clase no se pregunta nunca: la dice cuál se eligió, y queda
+escrita en la fila porque el rótulo lo escribe el usuario y dos bonos de distinta clase no se
+distinguen mirándolos — por lo mismo, donde un concepto del libro pone su código, un bono pone su
+clase. `Agregar deducción` es un menú también, sin filas de bono: todas las
+deducciones restan igual, no hay clase que elegir. **Y como el concepto se elige AL AGREGAR, se fue el
+desplegable de cambiar de concepto** que ocupaba la celda del rótulo: esa celda es ahora el campo del
+nombre, y todas las filas se leen igual —píldora, nombre, importe, valor, papelera—, incluida la de
+bono, que era la única con esa forma. Cambiar de concepto es quitar la fila y agregar la correcta.
+
+Que las filas de bono viajen dentro de la captura es lo que quitó el parámetro `extraConcepts` de
+CINCO firmas —`toEngineInput`, `computeLinePayroll`, `journalAmountsFor`, `RolExportInput` y
+`buildPayslipDocument`— y el `bulkGet` de períodos de `periodFinancialsFor`. Era obligatorio y sin
+default a propósito, para que un consumidor que lo olvidara no compilara en vez de devolver un rol POR
+DEBAJO; ahora no hay nada que olvidar. Lo que SÍ arrastra `copyRoster` son las declaraciones, con el
+importe en cero: una fila de bono es FORMA del rol —la columna que esa empresa repite cada mes— y lo
+que no viaja es lo que cada empleado cobró en ella; los rótulos del CATÁLOGO no viajan, porque una
+fila del catálogo solo se VE si tiene cifra y arrastrar su nombre sin su importe pondría el rótulo de
+marzo esperando a la de abril. Esa copia vivía en `db.ts`, fuera de `copyRoster`, que se declara «la
+ÚNICA definición de qué sobrevive a un período». Nada de esto toca el motor —sigue recibiendo dos
+agregados y ninguna lista— ni el destino contable de ninguna columna: renombrar es un rótulo, no una
+reclasificación, y «Uniformes» no estrena cuenta.
+
 **El asiento contable** es UNO solo y consolidado del rol entero, no uno por área — y **el libro del
 contador lo escribe DOS VECES**, lo cual solo se ve siguiendo fórmulas, nunca rótulos. La hoja
 `ASIENTOS` trae cinco bloques rotulados por área: cuatro leen subtotales de área (dos con los
@@ -1195,10 +1238,14 @@ rótulo— y pasó a localizarse por su FORMA entre las filas anteriores a la ca
 una celda de `PAGADO` en blanco pasó a leerse `null` y no `0`, porque el rol descargado deja en blanco
 a quien no tiene pago declarado y con la regla vieja volvía «con diferencia» por todo su líquido — el
 archivo de la app no habría podido describir su propio estado. Es `.xlsx` y no el `.xls` del original
-(exceljs no escribe BIFF; SheetJS lee las dos). Los conceptos extra van SUMADOS en una columna
-`OTROS INGRESOS` tras `CA` —al final para no correr ninguna letra, agregados para no ensanchar la hoja
-por período—, y el importador todavía no la lee: re-subir el archivo los pierde, lo dice el `ⓘ` y hay
-un test que lo fija para el día que deje de ser cierto.
+(exceljs no escribe BIFF; SheetJS lee las dos). Las filas de bono van SUMADAS en una columna
+`OTROS INGRESOS` tras `CA` —al final para no correr ninguna letra, agregadas para no ensanchar la hoja
+por período—, y el importador todavía no la lee: re-subir el archivo las pierde, lo dice el `ⓘ` y hay
+un test que lo fija para el día que deje de ser cierto. **Los RÓTULOS PROPIOS tampoco viajan**, y eso
+no es una limitación pendiente sino la regla: la cabecera de `AH` dice `OTROS ` verbatim —con el
+espacio sobrante del libro— porque una columna tiene UNA cabecera y la LETRA es el contrato contra el
+que el contador coteja. Los importes vuelven completos; el nombre vive en la pantalla y en el papel,
+que son documentos por EMPLEADO.
 
 **EL MEMBRETE del cliente** son los datos con los que la firma encabeza su papel —razón social, RUC,
 provincia, cantón, parroquia, dirección, teléfonos y correo—, y viven junto al nombre y el logo, en

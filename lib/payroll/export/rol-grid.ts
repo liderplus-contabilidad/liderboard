@@ -20,7 +20,7 @@ import { computeLinePayroll } from "../employee-input";
 import { emptyCapture } from "../employee-input";
 import type { PayrollParameters } from "../engine/parameters";
 import { sumExtraIncome } from "../extra-income";
-import type { ParsedPayrollEmployeeLine, PayrollExtraConcept } from "../types";
+import type { ParsedPayrollEmployeeLine } from "../types";
 import {
   columnIndexOf,
   EXTRA_INCOME_COLUMN,
@@ -63,7 +63,6 @@ export interface RolExportInput {
   /** En el orden en que la nómina se lee en pantalla. */
   lines: readonly ParsedPayrollEmployeeLine[];
   parameters: PayrollParameters;
-  extraConcepts: readonly PayrollExtraConcept[];
 }
 
 /** `MARZO 2026` — la forma que el lector reconoce. */
@@ -159,10 +158,11 @@ function totalRow(
 }
 
 export function buildRolGrid(input: RolExportInput): RolExportGrid {
-  const columns =
-    input.extraConcepts.length > 0
-      ? [...ROL_EXPORT_COLUMNS, EXTRA_INCOME_COLUMN]
-      : ROL_EXPORT_COLUMNS;
+  // La columna agregada solo existe si ALGUIEN declara filas de bono. Se juzga sobre las capturas
+  // y no sobre una declaración de período, que ya no hay: son las filas las que traen los dólares
+  // que `W TOTAL INGRESO` tendría si no que explicar.
+  const hasExtras = input.lines.some((line) => (line.capture?.extras?.length ?? 0) > 0);
+  const columns = hasExtras ? [...ROL_EXPORT_COLUMNS, EXTRA_INCOME_COLUMN] : ROL_EXPORT_COLUMNS;
   const width = sheetWidth(columns);
   const rows: RolExportRow[] = [];
 
@@ -217,11 +217,11 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
     for (const line of group.lines) {
       ordinal++;
       const capture = line.capture ?? emptyCapture();
-      const extras = sumExtraIncome(input.extraConcepts, capture.extraAmounts);
+      const extras = sumExtraIncome(capture.extras);
       const ctx = {
         line,
         capture,
-        computed: computeLinePayroll(line, input.parameters, input.extraConcepts),
+        computed: computeLinePayroll(line, input.parameters),
         // Las dos clases van juntas en la columna agregada: lo que las separa es en qué bases
         // entran, y eso ya lo resolvió el motor antes de llegar aquí.
         extras: extras.contributory + extras.nonContributory,

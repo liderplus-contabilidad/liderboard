@@ -42,8 +42,7 @@ export function buildPeriodPayslips({
   return lines.map((line, index) =>
     buildPayslipDocument({
       line,
-      computed: computeLinePayroll(line, parameters, period.extraConcepts ?? []),
-      ...(period.extraConcepts?.length ? { extraConcepts: period.extraConcepts } : {}),
+      computed: computeLinePayroll(line, parameters),
       capture: line.capture ?? emptyCapture(),
       year: period.year,
       monthIndex: period.monthIndex,

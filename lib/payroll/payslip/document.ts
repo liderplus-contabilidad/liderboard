@@ -40,7 +40,8 @@ import {
 } from "../concepts";
 import { sameToTheCentavo } from "../amounts";
 import type { PayrollEmployeeComputation } from "../engine/types";
-import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollMonthlyCapture } from "../types";
+import { payslipLabelFor } from "../row-labels";
+import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
 import { formatPayslipAmount, formatQuantity } from "./format";
 import type { PayslipDocument, PayslipRow } from "./types";
 
@@ -99,6 +100,7 @@ function rowFor(
   concept: IncomeConcept | DeductionConcept,
   amount: number,
   quantity: string | null,
+  capture: PayrollMonthlyCapture,
 ): PayslipRow[] {
   if (sameToTheCentavo(amount, 0)) {
     return [];
@@ -106,7 +108,10 @@ function rowFor(
   return [
     {
       code: concept.code,
-      label: concept.payslipLabel,
+      // El rótulo del libro, salvo que este empleado le haya puesto uno propio a esta fila. Es el
+      // motivo de `row-labels.ts`: `E-11` es la columna `AH OTROS` y un comprobante que imprime el
+      // nombre de la columna no dice qué se descontó.
+      label: payslipLabelFor(concept, capture),
       quantity,
       value: formatPayslipAmount(amount),
     },
@@ -114,7 +119,7 @@ function rowFor(
 }
 
 /**
- * Las filas de los conceptos que el PERÍODO declara, con el rótulo que el usuario les puso.
+ * Las filas de BONO que la captura de este empleado declara, con el rótulo que él les puso.
  *
  * El `code` va vacío: los `I-01`…`I-13` del catálogo son posiciones del libro que el contador
  * reconoce, y numerar estos con la misma gramática afirmaría que también salen de su hoja. El
@@ -123,21 +128,17 @@ function rowFor(
  * Los NO aportables llevan el `(*)`, la misma marca que `U` y `V`, porque su nota al pie —«No
  * aporta IESS ni es Ingreso Gravado»— es literalmente lo que su clase significa.
  */
-function extraIncomeRows(
-  concepts: readonly PayrollExtraConcept[] | undefined,
-  capture: PayrollMonthlyCapture,
-): PayslipRow[] {
-  return (concepts ?? []).flatMap((concept) => {
-    const amount = capture.extraAmounts?.[concept.id] ?? 0;
-    if (sameToTheCentavo(amount, 0)) {
+function extraIncomeRows(capture: PayrollMonthlyCapture): PayslipRow[] {
+  return (capture.extras ?? []).flatMap((row) => {
+    if (sameToTheCentavo(row.amount, 0)) {
       return [];
     }
     return [
       {
         code: "",
-        label: concept.label.toUpperCase(),
-        quantity: concept.kind === "noAportable" ? NOT_CONTRIBUTORY_MARK : null,
-        value: formatPayslipAmount(amount),
+        label: row.label.toUpperCase(),
+        quantity: row.kind === "noAportable" ? NOT_CONTRIBUTORY_MARK : null,
+        value: formatPayslipAmount(row.amount),
       },
     ];
   });
@@ -158,7 +159,6 @@ export function buildPayslipDocument({
   clientLogo,
   clientCompany,
   position,
-  extraConcepts,
 }: {
   line: PayrollEmployeeLine;
   computed: PayrollEmployeeComputation;
@@ -176,21 +176,24 @@ export function buildPayslipDocument({
   /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
    *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
   position: number;
-  /** Los conceptos de ingreso que el PERÍODO declara además de los del catálogo. */
-  extraConcepts?: readonly PayrollExtraConcept[];
 }): PayslipDocument {
   const incomes: PayslipRow[] = [
     ...payslipIncomeConcepts().flatMap((concept) =>
-      rowFor(concept, incomeAmount(concept, computed, capture), incomeQuantity(concept, capture)),
+      rowFor(
+        concept,
+        incomeAmount(concept, computed, capture),
+        incomeQuantity(concept, capture),
+        capture,
+      ),
     ),
-    // Los conceptos extra van DETRÁS del catálogo y no intercalados: el orden del papel es el de
-    // COLUMNAS del libro, y estos no tienen ninguna — no hay sitio donde meterlos que signifique
+    // Las filas de bono van DETRÁS del catálogo y no intercaladas: el orden del papel es el de
+    // COLUMNAS del libro, y estas no tienen ninguna — no hay sitio donde meterlas que signifique
     // algo. Detrás, además, deja intacta la posición de las trece filas que el contador conoce.
-    ...extraIncomeRows(extraConcepts, capture),
+    ...extraIncomeRows(capture),
   ];
 
   const deductions: PayslipRow[] = payslipDeductionConcepts().flatMap((concept) =>
-    rowFor(concept, deductionAmount(concept, computed, capture), null),
+    rowFor(concept, deductionAmount(concept, computed, capture), null, capture),
   );
 
   return {

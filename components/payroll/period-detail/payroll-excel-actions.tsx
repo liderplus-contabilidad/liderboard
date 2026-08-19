@@ -6,7 +6,7 @@ import type { CompanyProfile } from "@/lib/company-profile";
 import type { EntityLogo } from "@/lib/logos";
 import { downloadRolWorkbook } from "@/lib/payroll/export/download";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
-import type { PayrollEmployeeLine, PayrollExtraConcept, PayrollPeriod } from "@/lib/payroll/types";
+import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 import { RolUploadModal } from "../rol-upload-modal";
 
 /**
@@ -24,7 +24,6 @@ export function PayrollExcelActions({
   period,
   periods,
   lines,
-  extraConcepts,
   clientName,
   clientLogo,
   clientCompany,
@@ -32,7 +31,6 @@ export function PayrollExcelActions({
   period: PayrollPeriod;
   periods: readonly PayrollPeriod[];
   lines: readonly PayrollEmployeeLine[];
-  extraConcepts: readonly PayrollExtraConcept[];
   clientName: string;
   clientLogo?: EntityLogo;
   clientCompany?: CompanyProfile;
@@ -49,11 +47,10 @@ export function PayrollExcelActions({
           monthIndex: period.monthIndex,
           lines,
           parameters: DEFAULT_PAYROLL_PARAMETERS,
-          extraConcepts,
         },
         clientLogo,
       ),
-    [clientName, clientCompany, clientLogo, extraConcepts, lines, period.monthIndex, period.year],
+    [clientName, clientCompany, clientLogo, lines, period.monthIndex, period.year],
   );
 
   const empty = lines.length === 0;
@@ -90,9 +87,16 @@ export function PayrollExcelActions({
                 encabezada por el logo y los datos de la empresa del cliente, y vuelve a entrar aquí
                 sin perder nada: el membrete no se relee porque esos datos son del cliente, no del
                 archivo. Las columnas cuyo dato la app no guarda (número de cuenta, ctas. por
-                cobrar) salen con su rótulo y en blanco, y los conceptos de ingreso extra van
-                sumados en <span className="font-mono">OTROS INGRESOS</span>: esa columna todavía no
-                se relee, así que volver a cargar el archivo la perdería.
+                cobrar) salen con su rótulo y en blanco, y las filas de bono van sumadas en{" "}
+                <span className="font-mono">OTROS INGRESOS</span>: esa columna todavía no se relee,
+                así que volver a cargar el archivo la perdería.
+              </p>
+              <p className="mt-2">
+                Los NOMBRES PROPIOS que un empleado le haya puesto a sus filas —llamarle{" "}
+                <span className="font-mono">Uniformes</span> a{" "}
+                <span className="font-mono">OTROS</span>, por ejemplo— tampoco viajan: cada columna
+                de la hoja lleva la cabecera del libro, que es lo que hace cotejable el archivo. Los
+                importes vuelven completos; los nombres viven en la pantalla y en el comprobante.
               </p>
             </>
           ),

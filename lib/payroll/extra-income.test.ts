@@ -2,49 +2,56 @@ import { describe, expect, it } from "vitest";
 import {
   NON_CONTRIBUTORY_CAP_RATE,
   extraCapBreaches,
-  newExtraConcept,
-  removeExtraConcept,
+  newExtraRow,
+  removeExtraRow,
+  renameExtraRow,
+  setExtraRowAmount,
   sumExtraIncome,
-  validateExtraLabel,
 } from "./extra-income";
-import type { PayrollExtraConcept } from "./types";
+import type { PayrollExtraRow } from "./types";
 
-const APORTABLE: PayrollExtraConcept = { id: "a1", label: "Movilización", kind: "aportable" };
-const NO_APORTABLE: PayrollExtraConcept = {
+const APORTABLE: PayrollExtraRow = {
+  id: "a1",
+  label: "Movilización",
+  kind: "aportable",
+  amount: 100,
+};
+const NO_APORTABLE: PayrollExtraRow = {
   id: "n1",
   label: "Alimentación",
   kind: "noAportable",
+  amount: 60,
 };
 
 describe("sumExtraIncome", () => {
   it("separa por clase", () => {
-    const totals = sumExtraIncome([APORTABLE, NO_APORTABLE], { a1: 100, n1: 60 });
-    expect(totals).toEqual({ contributory: 100, nonContributory: 60 });
+    expect(sumExtraIncome([APORTABLE, NO_APORTABLE])).toEqual({
+      contributory: 100,
+      nonContributory: 60,
+    });
   });
 
-  it("suma varios de la misma clase", () => {
-    const concepts: PayrollExtraConcept[] = [
+  it("suma varias de la misma clase", () => {
+    const rows: PayrollExtraRow[] = [
       APORTABLE,
-      { id: "a2", label: "Bono ventas", kind: "aportable" },
+      { id: "a2", label: "Bono ventas", kind: "aportable", amount: 50 },
     ];
-    expect(sumExtraIncome(concepts, { a1: 100, a2: 50 }).contributory).toBe(150);
+    expect(sumExtraIncome(rows).contributory).toBe(150);
   });
 
-  it("un concepto sin importe vale cero", () => {
-    expect(sumExtraIncome([APORTABLE, NO_APORTABLE], { a1: 100 })).toEqual({
+  it("una fila en cero suma cero", () => {
+    expect(sumExtraIncome([APORTABLE, { ...NO_APORTABLE, amount: 0 }])).toEqual({
       contributory: 100,
       nonContributory: 0,
     });
   });
 
-  /** El modo de fallo que el borrado cierra en `db.ts`: aquí se comprueba que, aunque quedara uno,
-   *  no suma. Sumarlo metería en el rol una cifra que ninguna pantalla puede enseñar ni corregir. */
-  it("ignora un importe huérfano, sin declaración que lo respalde", () => {
-    expect(sumExtraIncome([APORTABLE], { a1: 100, borrado: 999 }).contributory).toBe(100);
-  });
-
-  it("sin conceptos declarados los dos agregados son cero", () => {
-    expect(sumExtraIncome([], { a1: 100 })).toEqual({ contributory: 0, nonContributory: 0 });
+  /** El importe huérfano ya no puede existir: el rótulo, la clase y el importe viven en la MISMA
+   *  fila, así que quitarla se los lleva a los tres. Antes eran dos estructuras y una podía quedar
+   *  colgada de la otra. */
+  it("sin filas declaradas los dos agregados son cero", () => {
+    expect(sumExtraIncome([])).toEqual({ contributory: 0, nonContributory: 0 });
+    expect(sumExtraIncome(undefined)).toEqual({ contributory: 0, nonContributory: 0 });
   });
 });
 
@@ -54,14 +61,14 @@ describe("extraCapBreaches", () => {
     expect(extraCapBreaches({ contributory: 400, nonContributory: 100 }, 500)).toEqual([]);
   });
 
-  it("mide el tope de los no aportables sobre la SUMA, no concepto a concepto", () => {
-    const concepts: PayrollExtraConcept[] = [
-      { id: "n1", label: "Movilización", kind: "noAportable" },
-      { id: "n2", label: "Alimentación", kind: "noAportable" },
-      { id: "n3", label: "Bono", kind: "noAportable" },
+  it("mide el tope de los no aportables sobre la SUMA, no fila a fila", () => {
+    const rows: PayrollExtraRow[] = [
+      { id: "n1", label: "Movilización", kind: "noAportable", amount: 20 },
+      { id: "n2", label: "Alimentación", kind: "noAportable", amount: 20 },
+      { id: "n3", label: "Bono", kind: "noAportable", amount: 20 },
     ];
-    // Sueldo 200 → tope 40. Ninguno de los tres lo supera por su cuenta; juntos sí.
-    const totals = sumExtraIncome(concepts, { n1: 20, n2: 20, n3: 20 });
+    // Sueldo 200 → tope 40. Ninguna de las tres lo supera por su cuenta; juntas sí.
+    const totals = sumExtraIncome(rows);
     const breaches = extraCapBreaches(totals, 200);
 
     expect(breaches).toEqual([{ kind: "noAportable", total: 60, cap: 40, excess: 20 }]);
@@ -105,64 +112,49 @@ describe("extraCapBreaches", () => {
   });
 });
 
-describe("validateExtraLabel", () => {
-  it("acepta un rótulo nuevo", () => {
-    const result = validateExtraLabel("  Movilización  ", []);
-    expect(result).toEqual({ ok: true, name: "Movilización" });
-  });
-
-  it("rechaza el vacío", () => {
-    expect(validateExtraLabel("   ", [])).toMatchObject({ ok: false });
-  });
-
-  it("rechaza pasado el tope de 60 caracteres", () => {
-    expect(validateExtraLabel("x".repeat(61), [])).toMatchObject({ ok: false });
-  });
-
-  it("rechaza el repetido ignorando mayúsculas y acentos", () => {
-    const existing: PayrollExtraConcept[] = [
-      { id: "a1", label: "Movilización", kind: "aportable" },
-    ];
-    expect(validateExtraLabel("MOVILIZACION", existing)).toMatchObject({ ok: false });
-  });
-
-  /** Renombrar un concepto a lo que ya se llama no puede ser un choque consigo mismo. */
-  it("no choca con el concepto que se está renombrando", () => {
-    const existing: PayrollExtraConcept[] = [
-      { id: "a1", label: "Movilización", kind: "aportable" },
-    ];
-    expect(validateExtraLabel("Movilización", existing, "a1")).toMatchObject({ ok: true });
-  });
-
-  it("un mismo rótulo en clases distintas también choca", () => {
-    const existing: PayrollExtraConcept[] = [{ id: "a1", label: "Bono", kind: "aportable" }];
-    expect(validateExtraLabel("bono", existing)).toMatchObject({ ok: false });
-  });
-});
-
-describe("newExtraConcept", () => {
-  it("nace con un id que no colisiona con los declarados", () => {
-    const first = newExtraConcept("Movilización", "aportable", []);
-    const second = newExtraConcept("Alimentación", "noAportable", [first]);
+describe("newExtraRow", () => {
+  it("nace con un id que no colisiona con las declaradas", () => {
+    const first = newExtraRow("aportable", []);
+    const second = newExtraRow("noAportable", [first]);
     expect(second.id).not.toBe(first.id);
   });
 
-  it("conserva el rótulo tal como se escribió, sin espacios sobrantes", () => {
-    expect(newExtraConcept("  Bono  ventas ", "aportable", []).label).toBe("Bono ventas");
+  it("nace CON nombre: dos filas sin rótulo chocarían antes de que nadie escriba", () => {
+    expect(newExtraRow("aportable", []).label).toBe("Bono aportable");
+    expect(newExtraRow("noAportable", []).label).toBe("Bono no aportable");
+  });
+
+  it("busca sufijo contra los rótulos ya tomados, incluidos los de otras filas", () => {
+    const first = newExtraRow("aportable", []);
+    expect(newExtraRow("aportable", [first]).label).toBe("Bono aportable 2");
+    // El universo incluye los rótulos del catálogo: una fila nueva no puede nacer chocando con
+    // «Uniformes» solo porque el choque venga de la otra tabla.
+    expect(newExtraRow("aportable", [], ["Bono aportable"]).label).toBe("Bono aportable 2");
+  });
+
+  it("nace en cero", () => {
+    expect(newExtraRow("aportable", []).amount).toBe(0);
   });
 });
 
-describe("removeExtraConcept", () => {
-  it("quita la declaración y el importe de cada captura", () => {
-    const concepts = [APORTABLE, NO_APORTABLE];
-    const result = removeExtraConcept(concepts, "a1");
+describe("removeExtraRow / renameExtraRow / setExtraRowAmount", () => {
+  const rows = [APORTABLE, NO_APORTABLE];
 
-    expect(result.concepts).toEqual([NO_APORTABLE]);
-    expect(result.pruneAmounts({ a1: 100, n1: 60 })).toEqual({ n1: 60 });
+  it("quitar la fila se lleva su importe, porque vive dentro de ella", () => {
+    expect(removeExtraRow(rows, "a1")).toEqual([NO_APORTABLE]);
   });
 
-  it("podar una captura que no lo tenía la devuelve igual", () => {
-    const result = removeExtraConcept([APORTABLE], "a1");
-    expect(result.pruneAmounts({ n1: 60 })).toEqual({ n1: 60 });
+  it("quitar una que no está devuelve la lista igual", () => {
+    expect(removeExtraRow(rows, "zzz")).toEqual(rows);
+  });
+
+  it("renombrar NO mueve el importe ni la clase", () => {
+    const renamed = renameExtraRow(rows, "a1", "MOVILIZACION NO APORTABLE");
+    expect(renamed[0]).toEqual({ ...APORTABLE, label: "MOVILIZACION NO APORTABLE" });
+    expect(renamed[1]).toEqual(NO_APORTABLE);
+  });
+
+  it("cambiar el importe NO mueve el rótulo ni la clase", () => {
+    expect(setExtraRowAmount(rows, "n1", 75)[1]).toEqual({ ...NO_APORTABLE, amount: 75 });
   });
 });

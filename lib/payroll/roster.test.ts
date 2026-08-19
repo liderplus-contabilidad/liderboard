@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { emptyCapture } from "./employee-input";
 import { copyRoster } from "./roster";
 import type { PayrollEmployeeLine } from "./types";
 
@@ -123,5 +124,62 @@ describe("copyRoster", () => {
 
   it("una fuente vacía copia vacío", () => {
     expect(copyRoster([])).toEqual([]);
+  });
+
+  /**
+   * La EXCEPCIÓN a «lo de la captura no viaja»: una fila de bono es FORMA del rol —la columna que
+   * esa empresa nombra `MOVILIZACION NO APORTABLE` y repite cada mes—, y lo que no viaja es lo que
+   * cada empleado cobró en ella.
+   */
+  it("arrastra las filas de bono con su rótulo y su clase, y el importe en CERO", () => {
+    const [copied] = copyRoster([
+      line({
+        capture: {
+          ...emptyCapture(),
+          extras: [
+            { id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 50 },
+            { id: "x2", label: "ALIMENTACION", kind: "noAportable", amount: 30 },
+          ],
+        },
+      }),
+    ]);
+    expect(copied.capture?.extras).toEqual([
+      { id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 0 },
+      { id: "x2", label: "ALIMENTACION", kind: "noAportable", amount: 0 },
+    ]);
+  });
+
+  it("no arrastra nada MÁS de la captura de quien traía bonos", () => {
+    const [copied] = copyRoster([
+      line({
+        capture: {
+          ...emptyCapture(),
+          overtimeHours50: 5.5,
+          bonus: 26,
+          paid: 457.69,
+          extras: [{ id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 50 }],
+        },
+      }),
+    ]);
+    expect(copied.capture?.overtimeHours50).toBe(0);
+    expect(copied.capture?.bonus).toBe(0);
+    expect(copied.capture?.paid).toBeNull();
+  });
+
+  /**
+   * La asimetría que conviene tener escrita: una fila del catálogo existe en el libro con o sin
+   * cifra y solo se VE si tiene una, así que arrastrar su nombre sin su importe pondría el rótulo
+   * de marzo esperando a la cifra de abril.
+   */
+  it("NO arrastra el rótulo propio de una fila del catálogo", () => {
+    const [copied] = copyRoster([
+      line({ capture: { ...emptyCapture(), labels: { "E-11": "Uniformes" } } }),
+    ]);
+    expect("capture" in copied).toBe(false);
+  });
+
+  it("sin filas de bono la captura sigue AUSENTE, no vacía", () => {
+    const [copied] = copyRoster([line({ capture: { ...emptyCapture(), bonus: 26 } })]);
+    expect("capture" in copied).toBe(false);
   });
 });

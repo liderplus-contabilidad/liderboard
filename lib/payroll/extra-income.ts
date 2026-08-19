@@ -1,5 +1,5 @@
 /**
- * LOS CONCEPTOS DE INGRESO QUE UN PERÍODO DECLARA, además de los trece del libro.
+ * LAS FILAS DE BONO QUE UN EMPLEADO DECLARA EN SU MES, además de los trece ingresos del libro.
  *
  * El rol de cada empresa nombra los suyos: el libro de DELICMAR trae `MOVILIZACION NO APORTABLE`,
  * `ALIMENTACION NO APORTABLE` y `BONO NO APORTABLE` donde el de Cultura Manor trae viáticos,
@@ -7,15 +7,16 @@
  * traerá otros tres— sino el MISMO concepto declarado con nombres distintos, y lo único que el
  * cálculo mira de ellos es la CLASE.
  *
- * Este archivo es la capa pura de esa idea: sumar por clase, comprobar los dos topes y validar un
- * rótulo. No sabe de Dexie ni de React, y ninguna de sus funciones toca el motor: lo que el motor
- * recibe son los dos agregados que `sumExtraIncome` devuelve.
+ * Este archivo es la capa pura de esa idea: sumar por clase, comprobar los dos topes y las cuatro
+ * operaciones sobre la lista de filas. No sabe de Dexie ni de React, y ninguna de sus funciones
+ * toca el motor: lo que el motor recibe son los dos agregados que `sumExtraIncome` devuelve. Cómo
+ * se VALIDA un rótulo no está aquí sino en `row-labels.ts`, que es donde se resuelve el de toda
+ * fila del rol — el de un bono no se juzga contra otra regla que el de `E-11 Otros`.
  */
-import { MAX_ENTITY_NAME_LENGTH, normalizeEntityName, normalizeLabel } from "@/lib/workspaces";
-import type { EntityNameCheck } from "@/lib/workspaces";
+import { MAX_ENTITY_NAME_LENGTH } from "@/lib/workspaces";
 import { sameToTheCentavo } from "./amounts";
 import type { ExtraIncomeTotals } from "./engine/types";
-import type { PayrollExtraConcept, PayrollExtraConceptKind } from "./types";
+import type { PayrollExtraConceptKind, PayrollExtraRow } from "./types";
 
 export type { ExtraIncomeTotals };
 
@@ -43,29 +44,25 @@ export const CONTRIBUTORY_CAP_RATE = 1;
 export const NO_EXTRA_INCOME: ExtraIncomeTotals = { contributory: 0, nonContributory: 0 };
 
 /**
- * Suma los importes de una captura por la clase que el PERÍODO declaró.
+ * Suma los importes de las filas de bono de un empleado por su clase.
  *
- * Recorre las DECLARACIONES, no los importes, y eso es lo que hace que un importe huérfano —el de
- * un concepto que ya no existe— no sume: sin declaración no hay clase, y sin clase no hay base a la
- * que sumarlo. `db.ts` los limpia al borrar el concepto, pero esta función no depende de que lo
- * haya hecho.
+ * Recorre las filas, que llevan su importe dentro, y por eso ya no existe la figura del importe
+ * huérfano que la versión anterior tenía que defender: cuando la declaración vivía en el período y
+ * el importe en la ficha, borrar una podía dejar el otro. Aquí quitar la fila se lleva las dos
+ * cosas porque son la misma cosa.
  */
-export function sumExtraIncome(
-  concepts: readonly PayrollExtraConcept[],
-  amounts: Readonly<Record<string, number>> | undefined,
-): ExtraIncomeTotals {
-  if (concepts.length === 0 || !amounts) {
+export function sumExtraIncome(rows: readonly PayrollExtraRow[] | undefined): ExtraIncomeTotals {
+  if (!rows || rows.length === 0) {
     return { ...NO_EXTRA_INCOME };
   }
 
   let contributory = 0;
   let nonContributory = 0;
-  for (const concept of concepts) {
-    const amount = amounts[concept.id] ?? 0;
-    if (concept.kind === "aportable") {
-      contributory += amount;
+  for (const row of rows) {
+    if (row.kind === "aportable") {
+      contributory += row.amount;
     } else {
-      nonContributory += amount;
+      nonContributory += row.amount;
     }
   }
   return { contributory, nonContributory };
@@ -149,76 +146,65 @@ export function describeCapBreach(breach: ExtraCapBreach): {
 }
 
 /**
- * Valida el rótulo de un concepto dentro de SU período.
+ * Una fila de bono recién declarada, con su rótulo por defecto.
  *
- * Se apoya en las reglas genéricas de `lib/workspaces.ts` —no vacío, tope de 60, comparación sin
- * mayúsculas ni acentos— que ya usan los clientes de PyG y los hoteles de Ocupaciones, en vez de
- * abrir una tercera definición de «este nombre ya está tomado».
+ * El `id` se deriva de las que ya hay en vez de un aleatorio: esta capa es pura y testeable, y un
+ * `crypto.randomUUID()` aquí obligaría a inyectarlo o a mockearlo. Basta con que sea único DENTRO
+ * de esa captura, que es el único sitio donde se referencia.
  *
- * `selfId` es el concepto que se está RENOMBRANDO: sin él, dejar un rótulo como está chocaría
- * consigo mismo.
- *
- * La unicidad ignora la clase a propósito: dos filas rotuladas `Bono`, una aportable y otra no, se
- * leen igual en la tabla y en el comprobante, y quien las revise no puede saber cuál es cuál.
+ * Nace CON nombre en vez de vacío porque el rótulo es único entre las filas del empleado y dos
+ * filas sin nombre chocarían entre sí antes de que nadie escriba nada. El sufijo se busca contra
+ * los rótulos ya tomados, no contra un contador, para que borrar el 2 y volver a crear no dé un 3.
  */
-export function validateExtraLabel(
-  raw: string,
-  existing: readonly PayrollExtraConcept[],
-  selfId?: string,
-): EntityNameCheck {
-  const check = normalizeEntityName(raw, "concepto");
-  if (!check.ok) {
-    return check;
-  }
-
-  const normalized = normalizeLabel(check.name);
-  const clash = existing.find(
-    (concept) => concept.id !== selfId && normalizeLabel(concept.label) === normalized,
-  );
-  return clash
-    ? { ok: false, message: `Este período ya tiene un concepto llamado «${clash.label}».` }
-    : check;
-}
-
-/**
- * Un concepto recién declarado. El `id` se deriva de los que ya hay en vez de un aleatorio: esta
- * capa es pura y testeable, y un `crypto.randomUUID()` aquí obligaría a inyectarlo o a mockearlo.
- * Basta con que sea único DENTRO del período, que es el único sitio donde se referencia.
- */
-export function newExtraConcept(
-  label: string,
+export function newExtraRow(
   kind: PayrollExtraConceptKind,
-  existing: readonly PayrollExtraConcept[],
-): PayrollExtraConcept {
-  const taken = new Set(existing.map((concept) => concept.id));
+  existing: readonly PayrollExtraRow[],
+  taken: readonly string[] = [],
+): PayrollExtraRow {
+  const ids = new Set(existing.map((row) => row.id));
   let n = existing.length + 1;
-  while (taken.has(`x${n}`)) {
+  while (ids.has(`x${n}`)) {
     n += 1;
   }
-  return { id: `x${n}`, label: label.trim().replace(/\s+/g, " "), kind };
+
+  const base = EXTRA_CONCEPT_KIND_LABEL[kind];
+  const names = new Set(
+    [...existing.map((row) => row.label), ...taken].map((label) => label.toLowerCase()),
+  );
+  let label = base;
+  let suffix = 2;
+  while (names.has(label.toLowerCase())) {
+    label = `${base} ${suffix}`;
+    suffix += 1;
+  }
+
+  return { id: `x${n}`, label, kind, amount: 0 };
 }
 
 /**
- * Quitar un concepto es DOS cosas, y por eso vuelven juntas: la declaración se va del período y su
- * importe se va de cada captura.
+ * Quita una fila de bono. Es un filtro y nada más: el importe se va con ella porque vive dentro.
  *
- * Un importe huérfano no sumaría —`sumExtraIncome` recorre las declaraciones— pero volvería a la
- * vida si alguien reusara el `id`. Es improbable y silencioso, que es justo el modo de fallo que
- * conviene cerrar en la puerta.
+ * La versión anterior devolvía además un `pruneAmounts` para limpiar las capturas del período, que
+ * era la mitad cara de tener la declaración y el importe en estructuras distintas.
  */
-export function removeExtraConcept(
-  concepts: readonly PayrollExtraConcept[],
-  conceptId: string,
-): {
-  concepts: PayrollExtraConcept[];
-  pruneAmounts: (amounts: Readonly<Record<string, number>> | undefined) => Record<string, number>;
-} {
-  return {
-    concepts: concepts.filter((concept) => concept.id !== conceptId),
-    pruneAmounts: (amounts) => {
-      const next = { ...(amounts ?? {}) };
-      delete next[conceptId];
-      return next;
-    },
-  };
+export function removeExtraRow(rows: readonly PayrollExtraRow[], rowId: string): PayrollExtraRow[] {
+  return rows.filter((row) => row.id !== rowId);
+}
+
+/** Cambia el rótulo de una fila, sin tocar su importe ni su clase. */
+export function renameExtraRow(
+  rows: readonly PayrollExtraRow[],
+  rowId: string,
+  label: string,
+): PayrollExtraRow[] {
+  return rows.map((row) => (row.id === rowId ? { ...row, label } : row));
+}
+
+/** Cambia el importe de una fila, sin tocar su rótulo ni su clase. */
+export function setExtraRowAmount(
+  rows: readonly PayrollExtraRow[],
+  rowId: string,
+  amount: number,
+): PayrollExtraRow[] {
+  return rows.map((row) => (row.id === rowId ? { ...row, amount } : row));
 }
