@@ -126,6 +126,7 @@ export function GraficosView() {
         <SpecCard
           key={card.id}
           spec={card}
+          collapsible
           {...(annex && index === 0 ? { onSelect: setOpenIndex } : {})}
           {...(index === 0 && lines.length > 0
             ? {

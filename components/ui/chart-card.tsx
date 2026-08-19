@@ -1,7 +1,7 @@
 "use client";
 
-import { BarChart3, FileSpreadsheet, Table2 } from "lucide-react";
-import { memo, useState, type ReactNode } from "react";
+import { BarChart3, ChevronDown, FileSpreadsheet, Table2 } from "lucide-react";
+import { memo, useId, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
@@ -30,6 +30,15 @@ export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
    * tabla: un ⓘ en papel es un botón que nadie puede pulsar.
    */
   showGuide?: boolean;
+  /**
+   * Ofrece la flecha que PLIEGA la tarjeta, la misma del árbol de cuentas de Datos y por el mismo
+   * motivo: una pestaña con cinco gráficas obliga a bajar hasta el final para leer la última, y
+   * plegar las que ya se leyeron es lo que devuelve la de abajo a la primera pantalla. Aquí no hay
+   * niveles que plegar —una tarjeta no contiene a otra—, así que la flecha abre y cierra SOLO su
+   * propio cuerpo. Por defecto NO se ofrece: el informe imprimible y el panel de la ficha muestran
+   * una tarjeta que se lee sola, donde plegarla es un botón sin trabajo que hacer.
+   */
+  collapsible?: boolean;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
   /**
@@ -61,27 +70,60 @@ export const ChartCard = memo(function ChartCard({
   empty = false,
   tableToggle = true,
   showGuide = true,
+  collapsible = false,
   headerSlot,
   footerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
+  // Nace desplegada: una tarjeta plegada de salida esconde justo lo que la pestaña existe para
+  // enseñar. Es estado LOCAL de la tarjeta —no se guarda, no produce chip— y su clave es el `id`
+  // de la lista que la monta, así que cambiar de cliente o de vista la devuelve abierta.
+  const [collapsed, setCollapsed] = useState(false);
+  const bodyId = useId();
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
-  const showToggle = hasSeries && tableToggle;
+  const isCollapsed = collapsible && collapsed;
+  // Plegada se van con el cuerpo los controles que actúan SOBRE él: elegir «Ver como tabla» de una
+  // tabla que no está en pantalla no es una opción, es una trampa. La guía se queda, porque
+  // responde qué hay dentro, que es justo lo que se pregunta ante una tarjeta cerrada.
+  const showToggle = hasSeries && tableToggle && !isCollapsed;
   // La guía se dibuja aunque no haya nada que dibujar: una tarjeta vacía es justo donde el lector
   // pregunta qué tendría que marcar para llenarla.
   const helper = showGuide ? guide : undefined;
 
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[13px] border border-border bg-surface">
-      <header className="flex items-start justify-between gap-3 border-b border-border bg-surface-header px-[18px] py-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
-          {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
+      <header
+        className={cn(
+          "flex items-start justify-between gap-3 bg-surface-header px-[18px] py-3",
+          !isCollapsed && "border-b border-border",
+        )}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          {collapsible && (
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              aria-controls={bodyId}
+              aria-label={collapsed ? `Mostrar ${title}` : `Ocultar ${title}`}
+              onClick={() => setCollapsed((value) => !value)}
+              className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-canvas hover:text-brand"
+            >
+              <ChevronDown
+                size={15}
+                strokeWidth={2}
+                className={cn("transition-transform duration-150", collapsed && "-rotate-90")}
+              />
+            </button>
+          )}
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
+            {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
+          </div>
         </div>
-        {(headerSlot || showToggle || helper) && (
+        {((headerSlot && !isCollapsed) || showToggle || helper) && (
           <div className="flex shrink-0 items-center gap-2.5">
-            {headerSlot}
+            {!isCollapsed && headerSlot}
             {helper && <ChartGuideTip title={title} guide={helper} />}
             {showToggle && (
               <button
@@ -103,7 +145,7 @@ export const ChartCard = memo(function ChartCard({
         )}
       </header>
 
-      <div className="px-[18px] py-3.5">
+      <div id={bodyId} hidden={isCollapsed} className="px-[18px] py-3.5">
         {empty ? (
           <EmptyState icon={<FileSpreadsheet size={22} />} className="py-10">
             Carga un Excel para ver el estado de resultados.

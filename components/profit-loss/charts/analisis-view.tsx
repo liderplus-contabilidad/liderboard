@@ -71,11 +71,11 @@ export function AnalisisView() {
       />
 
       {/* Igual que en Gráficos: el orden lo declara `buildAnalisisCards`. */}
-      <SpecCard spec={cards[0]} />
+      <SpecCard spec={cards[0]} collapsible />
 
       <div className="grid grid-cols-2 gap-4">
-        <SpecCard spec={cards[1]} />
-        <SpecCard spec={cards[2]} />
+        <SpecCard spec={cards[1]} collapsible />
+        <SpecCard spec={cards[2]} collapsible />
       </div>
     </div>
   );
