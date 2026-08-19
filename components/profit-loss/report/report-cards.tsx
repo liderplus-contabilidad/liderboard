@@ -16,7 +16,7 @@ export function ReportCards({ cards }: { cards: readonly ChartCardSpec[] }) {
     <div className="flex flex-col gap-4">
       {cards.map((card) => (
         <div key={card.id} className="print-keep">
-          <SpecCard spec={card} tableToggle={false} />
+          <SpecCard spec={card} tableToggle={false} showGuide={false} />
         </div>
       ))}
     </div>

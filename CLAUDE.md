@@ -185,7 +185,20 @@ mezclarlas es el encargo, por eso tiene nombre propio y devuelve cada cliente po
 `assertRealClient` rechaza toda escritura contra el centinela, porque una carga que aterrizara ahí
 crearía una partición fantasma que ninguna pantalla lista y ningún borrado alcanza. La descarga
 existe pero **sin la hoja de metadatos oculta** (`buildConsolidatedWorkbook`), para que el archivo no
-pueda re-entrar a un cliente real y reemplazarlo por cuentas que no son suyas. **Qué clientes entran
+pueda re-entrar a un cliente real y reemplazarlo por cuentas que no son suyas. **Y saca el DETALLE,
+no solo el total**: por año, la hoja de la suma y detrás una por cada pieza que la sumó —cada
+(cliente · centro) que entró, rotulada «Restaurante · Dingoo» como el chip y la leyenda, y el estado
+entero de cada cliente de estado único, rotulado con su nombre—, que es el equivalente entre
+empresas del «Excel completo» y por el mismo motivo: quien recibe una suma de cinco empresas
+pregunta enseguida de dónde sale, y una sola hoja no lo dice. Las piezas llegan HECHAS de la capa
+pura (`ConsolidatedWorkspace.summedDatasets`, que reusa las entradas de `centerDatasets` en vez de
+derivar un segundo centro) y no se recomponen en el Excel: cuáles entraron ya lo decidió el filtro
+al sumar, así que las hojas cuadran con su total por construcción y un cliente de estado único
+apartado por una marca de centro tampoco tiene hoja. «Ocultar ceros» se sigue juzgando POR LIBRO
+—las piezas incluidas—, de modo que todas las hojas comparten plan de cuentas y columnas; y el
+membrete es por hoja, con el logo del cliente a la izquierda y el de su centro a la derecha (la del
+total no lleva ninguno, porque son varias empresas), lo que hizo que `StatementSheet` ganara un
+`logo` propio además del del libro. **Qué clientes entran
 se elige en la barra**, no en un control propio: `client-filter.tsx` es el primer desplegable y no se
 rinde fuera del consolidado, igual que `center-filter.tsx` no se rinde en modo estado único.
 `PygFilters` gana `clientIds` con las mismas reglas que el resto —ninguno marcado es TODOS, orden del
@@ -638,6 +651,36 @@ testing, that logic belongs in `lib/`.** Two invariants are load-bearing: no cha
 `yAxis` (the `ChartOption` type forbids it), and the palette never cycles — queries cap at
 `CHART_MAX_SERIES` (8) and the engine reports what it truncated.
 
+**«Ocultar meses en 0» quita del EJE las columnas de mes en las que no se movió nada.** Es el gemelo
+en Gráficos de la poda de columnas de Datos, y `movingPeriods` (en `charts/presets.ts`, puro +
+testeado) es su única regla. Se juzga contra el EJE y no contra la cobertura, que es lo que hace que
+el botón sirva para algo: el eje es el de la frecuencia —las doce del año salvo que «Periodo» lo
+acote—, así que un archivo que llega hasta julio pinta Ago–Dic vacías aunque el rótulo diga «Ene–Jul»,
+y son justo esas las que estorban. Cae además el mes que sí se cargó y no movió nada, que solo existe
+con la cobertura DECLARADA (`loadedMonthsByYear`). **Los dos casos se van juntos** y para el motor
+siguen siendo distintos —un `null` nunca es un `0`, y el rótulo y las cifras lo leen por
+`coveredPeriods`—: el botón no decide qué está cargado sino qué columnas se dibujan, y ahí las dos son
+una columna vacía. Contarlas contra los meses CUBIERTOS en vez de contra los dibujados daba cero justo
+en el caso que se ve en pantalla, y el control no asomaba nunca. Se juzga el ESTADO y no una cuenta, la regla de
+`computeCoverage`: con una cuenta marcada, un mes parado PARA ELLA sigue siendo un mes del ejercicio,
+y borrarlo del eje de todas las tarjetas afirmaría que no pasó nada. Se aplica en `cards.ts`, en el
+ÚNICO sitio donde se resuelve el tramo, así que las cinco tarjetas y el rótulo lo heredan de una vez
+y ninguna nombra un tramo distinto de la de al lado. La primera tarjeta es la excepción de fontanería:
+su eje no sale de `periodRefs` sino de `toSeriesQuery`, así que los periodos que quedan le llegan como
+si estuvieran MARCADOS —acotar es exactamente lo que una marca hace—, en vez de abrirle una segunda
+puerta al motor que pudiera dibujar otro eje que el resto de la pantalla. El rótulo no necesita caso propio, porque
+`periodRangeLabel` ya ENUMERA un conjunto con huecos («Ene, Feb, Abr…») en vez de afirmar «Ene–Jul».
+**Las cifras no se mueven**: un mes en cero suma cero, así que los tiles, la tarta, el ranking y la
+cascada dan el mismo número y solo se encoge el eje — el mismo argumento por el que ocultar un mes
+vacío no descuadra el Total en Datos. El interruptor vive en Gráficos y NO en la barra, porque lo
+leen las tarjetas de esa pestaña y ninguna de las otras dos (en la barra sería un control muerto en
+Datos y en Análisis): es estado local, no es un `PygFilters`, no produce chip y el informe imprimible
+—que llama a `buildGraficosCards` por su cuenta— sigue sacando el eje completo. Solo asoma en
+MENSUAL, porque un trimestre cubierto agrega tres meses y no es «un mes en 0», y solo si hay alguno
+que ocultar; `emptyPeriods` se cuenta siempre sobre el eje SIN podar, así que el botón no se esfuma
+justo al pulsarlo, y encendido lleva la CUENTA de lo que quitó, ya que aquí no hay pie de tabla donde
+ponerla.
+
 **Una cifra de Gráficos o Análisis es el TOTAL del periodo seleccionado**, nunca el valor de una de
 sus columnas. Marcar seis meses y leer el de junio era lo que hacía `lastCoveredIndex`, de cuando no
 existía el filtro «Periodo» y la última columna cargada era el único periodo del que se podía
@@ -744,18 +787,18 @@ llegar. **Y al revés que «Ventas», no necesita vocabulario ninguno.** Aquella
 por rótulo y por eso solo se ofrece a un plan de hotelería; las de aquí están a distinta profundidad
 según la rama (`5.2.02` junto a `5.3.03.01`) justamente porque son las cuentas de MOVIMIENTO del
 árbol de gastos, que es lo que `leavesOfAny` ya devuelve — regla estructural y no de dominio, sin
-una lista que mantener por cliente. **Pero se ofrece SOLO en MicroPlus**, y eso es una restricción de
-LEGIBILIDAD y no de que el cálculo falle: el reparto se hace sobre las cuentas de movimiento, y ahí
-cada plan da un número muy distinto — el de MicroPlus se queda en unas decenas, que es un anexo,
-mientras que otros formatos bajan mucho más y devuelven más de cien rubros, donde una tarta no
-reparte nada y las barras son una alfombra; con esos planes la pregunta hay que hacerla un nivel más
-arriba, y ese nivel no es el mismo en todos. Por eso `isAvailable` pasó a recibir un `PresetContext`
-(`{source, systemId}`) en vez de la fuente a secas: hay vistas que dependen del PLAN —«Ventas» mira
-los rótulos del árbol— y otras del SISTEMA del que salió el archivo, que es un dato del workspace y
-no del árbol; el consolidado entre clientes, cuyo `systemId` es `null` porque une planes de varios
-sistemas, tampoco la recibe. El precio, escrito en su entrada, es que un plan nuevo tan legible como
-el de MicroPlus no la hereda solo y hay que añadirlo ahí — se prefirió a un tope de cuentas porque es
-lo que la firma pidió. `lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
+una lista que mantener por cliente. **Y por eso se ofrece con CUALQUIER plan que declare cuentas de
+gasto**, sin mirar de qué sistema salió el archivo. Estuvo atada a MicroPlus, y era una restricción
+de LEGIBILIDAD y no de que el cálculo fallara: el reparto se hace sobre las cuentas de movimiento, y
+ahí cada plan da un número muy distinto —el de MicroPlus se queda en unas decenas, otros bajan mucho
+más y devuelven más de cien rubros—. Lo que hace legible ese caso no es el candado sino el CORTE, que
+es de la tarjeta y vale igual para todos: catorce rubros y un «Otros» que agrupa la cola, con la
+tabla gemela listándolos uno a uno con su cifra. El plan real de MicroPlus trae diecisiete rubros,
+así que ese cliente ya venía leyendo el pliegue, y el candado protegía en realidad la SIEMBRA —ver
+abajo—, que es lo que se quitó con él. `isAvailable` recibe igualmente un `PresetContext` y no la
+fuente a secas, porque lo que decide no tiene por qué estar en el árbol —el anexo dependió del
+SISTEMA, que es un dato del workspace— y la vista que venga puede necesitar otro dato así.
+`lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
 pequeña porque el motor ya existía: reusa la MISMA tanda del ranking en vez de pedir la suya —dos
 consultas para el mismo reparto podrían acabar cuadrando contra tramos distintos, que es justo lo
 que la nota afirma que no pasa—. **Lo que la define son sus DOS denominadores**: el total del gasto,
@@ -767,20 +810,30 @@ distintas; un total `null` o `0` da `null` y jamás `0 %`. El denominador es el 
 la suma de lo que haya en pantalla, de modo que con cuentas marcadas la columna suma menos de 100 %
 — que es lo correcto, y es lo que dice que se está mirando un trozo.
 
-**Y SIEMBRA sus propias cuentas**, que es lo que la separa de «Ventas»: al encenderse deja marcadas
-en «Cuenta contable» las mismas que dibuja (`PresetView.seedCodes`), así que se ve cuáles entran y se
-quita un rubro desmarcándolo. Eso obligó a abrir una excepción a la exclusividad entre marcas y
-vistas: normalmente marcar una cuenta apaga el predeterminado —son dos respuestas a «qué dibujo» y
-nada las arbitra—, pero eso vale cuando la vista dibuja algo que NO es un conjunto de cuentas; aquí
-los rubros SON cuentas del plan, así que la marca y la vista dicen lo mismo y desmarcar ACOTA el
-reparto en vez de contradecirlo (`withCodeToggled`, opción `keepPreset`). Quien sabe cuál es cuál es
+**NO siembra cuentas, pero se deja ACOTAR por ellas**, y las dos mitades de esa frase son la misma
+decisión. Sembró las que dibuja —al encenderse quedaban marcadas en «Cuenta contable», así se veía
+cuáles entran y se quitaba un rubro desmarcándolo—, y eso es justo lo que ataba la vista a MicroPlus:
+las que dibuja son TODAS las de movimiento del árbol de gastos, y un plan real declara ciento treinta
+y una, o sea ciento treinta y un chips en la tira de filtros, que no es ver nada. Sembrar solo las
+catorce dibujadas tampoco vale, por dos motivos independientes: cuáles son depende de los MONTOS, que
+salen del motor y del tramo, así que calcularlos en la siembra sería una segunda suma capaz de marcar
+catorce distintas de las catorce dibujadas; y una marca ACOTA lo que el anexo suma, de modo que
+marcar catorce se llevaría por delante el «Otros» que agrupa el resto. Sin siembra la barra queda con
+un chip, el anexo lee el árbol de gastos entero y la tabla gemela sigue listando cada rubro.
+Lo que SÍ sobrevive es la excepción a la exclusividad entre marcas y vistas: normalmente marcar una
+cuenta apaga el predeterminado —son dos respuestas a «qué dibujo» y nada las arbitra—, pero eso vale
+cuando la vista dibuja algo que NO es un conjunto de cuentas; aquí los rubros SON cuentas del plan,
+así que la marca y la vista dicen lo mismo y marcar ACOTA el reparto en vez de contradecirlo
+(`withCodeToggled`, opción `keepPreset`). Ahora lo DECLARA la vista (`PresetView.narrowedByCodes`) en
+vez de heredarlo de la siembra, que es lo que lo dejaba en pie al quitarla: son dos cosas distintas,
+y una vista puede no sembrar nada y aun así dejarse acotar por cuentas. Quien sabe cuál es cuál es
 el catálogo, que vive en `charts/`, y `PygDataProvider` no importa de ahí — así que lo que cada vista
-declara (`seeds`, `seedCodes`, `frequency`) viaja al proveedor como ARGUMENTO desde el botón de la
-barra, que sí lo conoce, y el proveedor solo recuerda si las marcas son suyas. La vista se lee además
+declara (`seeds`, `narrowedByCodes`, `frequency`) viaja al proveedor como ARGUMENTO desde el botón de
+la barra, que sí lo conoce, y el proveedor solo recuerda si la vista abierta se deja acotar. Se lee además
 en **ANUAL** y también lo declara ella: el anexo es una columna por rubro sobre el tramo entero, y en
 mensual saldrían seis barras por rubro, que es su evolución y no su reparto; se aplica al encender y
 no se deshace al apagar, porque «Ver por» está a la vista y se vuelve de un clic, al revés que las
-marcas, que dejarían chips que el usuario no puso. No siembra centros ni periodos — el anexo no
+marcas, que dejarían chips que el usuario no puso. Tampoco siembra centros ni periodos — el anexo no
 reparte por eso, y marcar los centros abriría una columna por establecimiento de algo que se lee como
 un total.
 
@@ -788,12 +841,12 @@ La vista ocupa DOS ranuras de la lista: la primera, que es la que toda vista sus
 **ranking**, porque pregunta lo mismo sobre el mismo universo y dejar las dos imprimiría la lista dos
 veces. **La CASCADA se adelanta a la composición de ingresos**, porque es la que continúa la
 lectura: va del ingreso al resultado pasando por los gastos, que es justo el reparto que se acaba de
-leer, mientras que la tarta de ingresos se queda detrás como contexto de la columna «% del ingreso».
+leer, mientras que la composición de ingresos se queda detrás como contexto de la columna «% del ingreso».
 Fuera del anexo el orden es el de siempre, así que las dos se declaran aparte del literal y la lista
 las intercambia — son la misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
 con quince marcadas resuelve Ingresos: bajo un anexo de GASTOS quedaba una tarjeta repartiendo
 ingresos sin relación con lo que se está leyendo. Se va entera en vez de reapuntarse a los gastos
-porque su lectura ya la dan las otras dos —el reparto lo dicen la dona y las barras, y en anual no
+porque su lectura ya la dan las otras dos —el reparto lo dicen la tarta y las barras, y en anual no
 hay evolución que apilar—, y por eso la lista puede traer CUATRO tarjetas en vez de cinco.
 
 **Las barras son VERTICALES** (`verticalBarOption`, espejo del horizontal) porque es como la firma
@@ -809,10 +862,15 @@ encima, el color no distingue nada, así que repartir diecisiete tonos gastaría
 en re-decir lo que la longitud ya dice. Por lo mismo las filas de la tabla no llevan punto de color:
 diecisiete puntos iguales prometerían una distinción que no existe. **Las dos tarjetas cortan en el
 MISMO sitio y por una sola reducción**: quince rubros (`ANNEX_MAX_SLICES`) con la cola plegada en
-«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la dona por la
+«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la tarta por la
 suya— y podían enseñar distinto número de rubros del mismo reparto, que es la clase de desacuerdo que
-nadie lee como un error. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
-mismo tono, así que por ahí no hay tope, y la dona tiene tonos para más; lo que no da para más es la
+nadie lee como un error. **Y esa segunda tarjeta es una TARTA y no un anillo**: el hueco de un anillo
+existe para poner el TOTAL en medio —lo único que una tarta no puede decir—, y aquí el total vive en
+la nota al pie y en la fila de cierre de la tabla gemela, así que el agujero gastaba el centro del
+círculo en nada y, al estrechar cada porción a una banda, decía el reparto peor que la tarta que la
+firma dibuja en su propio anexo. `pieOption` perdió con eso su interruptor `donut`, que se quedaba
+sin ningún llamador. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
+mismo tono, así que por ahí no hay tope, y la tarta tiene tonos para más; lo que no da para más es la
 lectura — un plan de gastos puede traer 133 cuentas de movimiento, y ahí las porciones caen bajo el
 0,1 %, donde no se ven ni se pueden rotular. La nota dice cuántos agrupó «Otros» y dónde están
 enteros, porque si no ese pliegue se lee como una cuenta más del plan. Pero **la tabla gemela no corta**: ES el anexo entero —código de `sublabel`, valor, % del gasto, % del ingreso
@@ -864,14 +922,16 @@ del tramo —la única lectura donde cada barra imprime su cifra encima—.
 
 **Reparte por ESTABLECIMIENTO y por MES, y las marcas lo dicen.** Encender «Ventas» SIEMBRA los
 periodos cubiertos del año abierto en «Periodo» —los que dibuja, ni uno que el archivo no trajera— y
-los centros reales en «Centro de costo» (`withPresetSelected` recibe la lista; el proveedor la saca
-de las vistas con rol `center`), así que lo dibujado y lo marcado son lo mismo: se ve cuáles entran
-y se quita uno desmarcándolo, donde el usuario ya sabe buscar. Apagarla las limpia — eran marcas que
-puso la vista, y dejar cinco chips detrás de un interruptor apagado es basura que el usuario no
-puso. El Consolidado no se siembra porque no es un centro sino su suma, y «Sin centro de costo»
-tampoco porque no es un establecimiento sino lo que el sistema contable no supo asignar: mientras
-siga desmarcado la nota lo DICE, ya que son dólares que estaban en el consolidado y ya no están en
-ninguna columna. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre, y desmarcar
+TODO el listado de «Centro de costo» (`withPresetSelected` recibe la lista; el proveedor la saca de
+las vistas con rol `center` **y `sin-centro`**), así que lo dibujado y lo marcado son lo mismo: se ve
+cuáles entran y se quita uno desmarcándolo, donde el usuario ya sabe buscar. Apagarla las limpia —
+eran marcas que puso la vista, y dejar cinco chips detrás de un interruptor apagado es basura que el
+usuario no puso. El Consolidado es lo ÚNICO que no se siembra, porque no es un centro sino su suma y
+su columna repetiría las otras. **«Sin centro de costo» sí entra**, aunque no sea un
+establecimiento: es lo que el sistema contable no supo asignar, y son dólares del estado, así que
+dejarlo fuera por defecto los sacaba de TODAS las columnas a la vez y la lectura arrancaba por
+debajo del consolidado. La nota que lo dice sigue en pie para quien lo desmarque a mano, que es
+donde ese aviso hace falta. Desmarcarlos todos vuelve al centro resuelto, la regla de siempre, y desmarcar
 meses acota el eje de TODAS las tarjetas, que es lo que una marca de «Periodo» siempre ha hecho. Con
 más de ocho periodos marcados cada columna se cierra en el total del tramo —ocho es lo que da la
 paleta— y la nota dice qué hacer para volver a compararlos uno a uno. **El CONSOLIDADO ENTRE
@@ -904,6 +964,23 @@ CAMBIO, y una divisoria por grupo añadiría verticales a una retícula que ya t
 extremos son ÍNDICES de columna y no rótulos, porque el mismo establecimiento aparece en varios
 grupos y un rango por nombre engancharía la primera aparición. Exigió registrar `MarkAreaComponent`
 en `chart.tsx`: sin él un `markArea` no falla, simplemente no se dibuja, que es peor.
+
+**Y las CATEGORÍAS se quitan y se ponen desde una LEYENDA propia**, el mismo gesto que la leyenda de
+meses que ECharts dibuja bajo esa misma tarjeta. La dibuja React (`business-line-legend.tsx`, colgada
+del nuevo `footerSlot` de `ChartCard`) porque ahí las líneas son el EJE y ECharts solo sabe hacer
+leyenda de SERIES; sus marcas no llevan color —el color lo lleva el periodo, así que seis puntos de
+colores prometerían una distinción que no existe, la misma regla por la que la tabla del anexo no
+lleva punto— y son de tinta, llena encendida y hueca apagada. Es estado LOCAL de Gráficos y no un
+`PygFilters`: lo lee UNA tarjeta, así que no se guarda, no deja chip y el informe imprimible —que
+llama a `buildGraficosCards` por su cuenta— sigue sacando todas; una marca huérfana vale como
+ninguna, la defensa de siempre. **Lo que puede estar mal no son las columnas —eso se ve— sino el
+CUADRE**: `selectBusinessLines` APARTA las apagadas en vez de borrarlas y la nota las suma del lado de
+lo que queda fuera («la diferencia son −$2.047,25 de cuentas que quedan fuera y $4.045,51 de las
+líneas apagadas»), porque dejarlas caer en el residuo declararía miles «sin clasificar», que es justo
+el aviso que esa frase existe para dar cuando la lectura no cierra de verdad. La leyenda ofrece solo
+las líneas que SE MUEVEN en el tramo —un ítem que no dibuja nada al encenderlo enseña a no pulsar los
+de al lado—, se juzga contra la MISMA tanda que dibujan las barras, y sigue en pantalla con todas
+apagadas, que es el único sitio desde el que se vuelven a encender.
 
 **«Distribución» es la tercera lectura de la composición y no repite a las otras dos**: la dona dice
 de qué se compone el TRAMO entero y el ranking cuáles son las más grandes, pero solo un apilado por
@@ -1254,8 +1331,19 @@ UI are:
   Excel tal cual NO es opción y está medido: dan 1,3:1 contra el papel —barras invisibles— y ΔE 7,4
   entre el verde y el celeste, por debajo del piso de visión normal. Lo que se conserva es el TONO;
   la luminosidad es otro trabajo. Medido: CVD ΔE 18.1, visión normal ΔE 19.5.
-- **`CHART_COMPOSITION_PALETTE` es el set CÁLIDO de la tarta de «Composición de los ingresos»**, y
-  la tercera vez que un color deja de seguir a la entidad. Aquí no hay entidades que vayan y
+- **`CHART_COMPOSITION_PALETTE` es el set CÁLIDO de «Composición de los ingresos»**, y
+  la tercera vez que un color deja de seguir a la entidad. **Esa tarjeta ya no es una tarta**: son
+  BARRAS HORIZONTALES, la misma forma del ranking que tiene debajo, porque el reparto ya venía
+  ordenado de mayor a menor y una barra dice cuánto pesa cada línea por su LARGO —comparable de un
+  vistazo entre filas alineadas— mientras que la tarta lo decía por un ángulo que hay que estimar y
+  escribía los rótulos de las porciones pequeñas fuera, con línea guía y amontonados en un borde. Lo
+  que se conserva es el REPARTO: `toPieSlices` sigue siendo quien pliega «Otros» y aparta las
+  negativas, y su nota al pie solo cambió el rótulo («Fuera del reparto», ya no «del pastel»). Las
+  barras se ordenan por monto y la tabla gemela recibe ESA lista y no la de `toPieSlices` —que deja
+  «Otros» al final porque una tarta dibuja en el orden del array—, así que la fila tercera de la
+  tabla no puede ser la quinta barra; el COLOR se sigue resolviendo sobre la lista sin ordenar, que
+  es lo que mantiene a «Otros» en la última ranura. El set se queda porque lo que lo justifica no es
+  el círculo sino el reparto. Aquí no hay entidades que vayan y
   vengan: `toPieSlices` devuelve el reparto ENTERO, siempre completo y ordenado de mayor a menor, y
   el color ya seguía a ese orden — `colorForCompositionSlot` solo lo dice en voz alta. A diferencia
   de `CHART_DISTRIBUTION_RAMP` son HUES y no una rampa, porque una pila necesita leerse como «este
@@ -1264,13 +1352,14 @@ UI are:
   medida**: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL —la porción del 30 % y la del 20 % son
   casi el mismo rojo para cualquiera— y `#99aa27`↔`#ff8500` dan ΔE 3.9 protan. En la referencia eso
   no se nota porque cada porción lleva su «20%» impreso DENTRO, y el número es lo que desambigua;
-  en esta tarjeta los rótulos van fuera con línea guía, así que ese relieve no existe. Se conserva
+  en esta tarjeta el tono es lo que empareja una fila de la tabla gemela con su barra —un punto de
+  color, sin cifra dentro—, así que ese relieve no existe. Se conserva
   el CARÁCTER —el rojo, el naranja y el teal, tres de sus cinco— y se ensancha el arco, porque rojo,
   naranja y ámbar viven en unos 60° de tono y no llegan al piso sin separarse en luminosidad, lo
   que saca al ámbar de la banda por arriba. Ninguno de los seis es una ranura de `CHART_PALETTE`
   (el azul se desplazó a `#0f5bb5` por eso), la misma regla que ya cumple la rampa de distribución.
   `CHART_COMPOSITION_MAX` es además el corte que `toPieSlices` recibe, en vez de un 6 suelto, para
-  que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin tono. Medido: banda
+  que «Otros» caiga siempre en la última ranura y ninguna fila se quede sin tono. Medido: banda
   PASS, croma PASS, CVD ΔE 15.0, visión normal ΔE 16.2.
 - **`CHART_RANKING_TAIL_RAMP` es la COLA del «Ranking de gastos», que pasó de 8 barras a 15.** Las
   ocho primeras se pintan como siempre, con `CHART_PALETTE`: ahí el color sigue haciendo su trabajo
@@ -1300,8 +1389,11 @@ UI are:
   `CHART_RANKING_MAX` se DERIVA (8 + 7) y `EXPENSE_RANKING_SIZE` es ese número, no un 15 suelto,
   así que ninguna barra dibujada puede quedarse sin tono; el resto de rankings sigue en
   `RANKING_SIZE` (8), que es lo que da la paleta con la que se pintan. La tarjeta subió a 520 px
-  —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **antes** de «Composición
-  de los ingresos» (de dónde se va el dinero se lee primero) y las cinco de Gráficos quedaron al
+  —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **después** de «Composición
+  de los ingresos» (las dos son el mismo reparto en la misma forma, y el estado se lee empezando por
+  lo que entró; además son quince filas contra seis, así que con el ranking delante la composición
+  quedaba al pie de una tarjeta del doble de alto, justo donde el ojo ya no llega) y las cinco de
+  Gráficos quedaron al
   MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se lee
   como que algo no cargó, y el ranking además necesita el ancho completo porque a media pantalla
   los 150 px fijos del canal de rótulos truncan casi todos los nombres de cuenta.

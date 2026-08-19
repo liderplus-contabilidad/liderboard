@@ -14,7 +14,6 @@
  */
 import type { AnalyticsSource } from "../analytics/types";
 import type { Frequency } from "../types";
-import { MICROPLUS_SYSTEM } from "../upload/systems";
 import { buildBusinessLines } from "./business-lines";
 import { expenseRootsOf, leavesOfAny } from "./presets";
 
@@ -27,14 +26,13 @@ export const EXPENSE_DISTRIBUTION_PRESET = "distribucion-de-gastos";
 const MIN_CATEGORIES = 2;
 
 /**
- * Contra qué se decide si una vista se puede dibujar. Es un objeto y no la fuente a secas porque
- * hay vistas que dependen del PLAN (la de líneas necesita rótulos de hotelería) y otras del
- * SISTEMA del que salió el archivo, que es un dato del workspace y no del árbol de cuentas.
+ * Contra qué se decide si una vista se puede dibujar. Es un objeto con nombre y no la fuente a
+ * secas porque lo que lo decide no tiene por qué estar en el árbol de cuentas: el anexo de gastos
+ * estuvo atado al SISTEMA del que salió el archivo, que es un dato del workspace, y la vista que
+ * venga puede necesitar otro. Así ese dato se añade aquí sin reescribir cada `isAvailable`.
  */
 export interface PresetContext {
   source: AnalyticsSource | undefined;
-  /** El sistema contable que originó el estado abierto; `null` en el consolidado entre clientes. */
-  systemId: string | null;
 }
 
 export interface PresetView {
@@ -53,13 +51,18 @@ export interface PresetView {
    */
   seeds?: { centers?: boolean; periods?: boolean };
   /**
-   * Las CUENTAS que la vista deja marcadas al encenderse, cuando sus categorías son cuentas del
-   * plan. Solo puede declararlo una vista así: «Ventas» agrupa ramas enteras y parte una cuenta en
-   * dos por el nombre de sus hijas, de modo que no hay marca que represente lo que dibuja, y por
-   * eso allí la marca y la vista se excluyen. En el anexo de gastos coinciden, así que marcarlas es
-   * lo que deja VER cuáles entran y quitar un rubro desmarcándolo, sin apagar la vista.
+   * Que marcar una cuenta ACOTE esta vista en vez de contradecirla. Normalmente las marcas y las
+   * vistas se excluyen —son dos respuestas a «qué dibujo» y nada las arbitra—, y eso vale cuando
+   * lo que la vista dibuja NO es un conjunto de cuentas: «Ventas» agrupa ramas enteras y parte una
+   * cuenta en dos por el nombre de sus hijas, así que no hay marca que represente lo que dibuja.
+   * En el anexo de gastos los rubros SON cuentas del plan, de modo que la marca y la vista dicen lo
+   * mismo y desmarcar acota el reparto; apagar la vista entera sería lo contrario de para lo que
+   * están las marcas.
+   *
+   * Se DECLARA aquí en vez de derivarse de una siembra —que es como se decidía antes— porque son
+   * dos cosas distintas: una vista puede no sembrar nada y aun así dejarse acotar por cuentas.
    */
-  seedCodes?: (source: AnalyticsSource | undefined) => string[];
+  narrowedByCodes?: boolean;
   /**
    * La granularidad con la que la vista se lee, cuando tiene una. El anexo es ANUAL: su tabla es
    * «del 01 de enero al 30 de junio» en una sola columna, y en mensual saldrían seis barras por
@@ -84,25 +87,32 @@ export const PRESET_VIEWS: readonly PresetView[] = [
     description:
       "Anexo de gastos: en qué se reparten, cuánto pesa cada rubro sobre el gasto y sobre el ingreso",
     /**
-     * Solo para MICROPLUS, y es una restricción de LEGIBILIDAD, no de que el cálculo no sirva.
+     * Cualquier plan que declare cuentas de gasto, sin mirar de qué sistema salió el archivo.
      *
-     * El reparto se hace sobre las cuentas de movimiento —las de nivel más específico de cada
-     * rama—, y ahí cada plan de cuentas da un número muy distinto: el de MicroPlus se queda en unas
-     * decenas, que es un anexo, mientras que otros formatos bajan mucho más y devuelven más de cien
-     * rubros, donde una tarta no reparte nada y las barras son una alfombra. Con ese plan la
-     * pregunta hay que hacerla un nivel más arriba, y ese nivel no es el mismo en todos.
+     * Estuvo atada a MicroPlus, y era una restricción de LEGIBILIDAD y no de que el cálculo
+     * fallara: el reparto se hace sobre las cuentas de MOVIMIENTO del árbol de gastos, y ahí cada
+     * plan da un número muy distinto —el de MicroPlus se queda en unas decenas, otros bajan mucho
+     * más y devuelven más de cien rubros—. Lo que hace legible ese caso ya no es el candado sino el
+     * CORTE, que es de la tarjeta y vale para cualquier plan: catorce rubros y un «Otros» que
+     * agrupa la cola, con la tabla gemela listándolos todos uno a uno con su cifra. El plan real de
+     * MicroPlus trae diecisiete rubros, así que ese cliente ya venía leyendo el pliegue.
      *
-     * Se apoya en el sistema y no en un tope de cuentas porque es lo que la firma pidió; el precio
-     * es que un plan nuevo tan legible como el de MicroPlus no la recibe solo, y hay que añadirlo
-     * aquí.
+     * Y por eso `isAvailable` ya no mira el sistema: la regla es estructural —hay al menos dos
+     * cuentas de movimiento que repartir— y sirve para un hospital, un hotel y un comercio sin una
+     * línea de código por cliente, incluido el consolidado entre clientes, donde no hay un sistema
+     * del que hablar.
      */
-    isAvailable: ({ source, systemId }) =>
-      systemId === MICROPLUS_SYSTEM &&
+    isAvailable: ({ source }) =>
       leavesOfAny(source, expenseRootsOf(source)).length >= MIN_CATEGORIES,
-    // Las mismas cuentas que dibuja: las de movimiento del árbol de gastos, que son las de nivel
-    // más específico de cada rama. No siembra centros ni periodos —el anexo es UNA columna por
-    // rubro— y se lee en ANUAL, que es lo que hace que esa columna sea el tramo entero.
-    seedCodes: (source) => leavesOfAny(source, expenseRootsOf(source)),
+    // No siembra NADA, y las cuentas son el caso que hay que explicar: los rubros del anexo son
+    // cuentas del plan, así que marcarlas sería «ver cuáles entran»; pero son todas las de
+    // movimiento del árbol de gastos, y un plan real declara más de cien — ciento treinta y un
+    // chips en la tira de filtros no es ver nada. Sembrar solo las catorce dibujadas tampoco vale:
+    // cuáles son depende de los MONTOS, que salen del motor y del tramo, y una marca ACOTA lo que
+    // el anexo suma, así que marcar catorce se llevaría por delante el «Otros» que agrupa el resto.
+    // Sin siembra la barra queda con un chip, el anexo lee el árbol entero y marcar a mano sigue
+    // acotando el reparto —eso es `narrowedByCodes`—, que es lo que se quería conservar.
+    narrowedByCodes: true,
     frequency: "anual",
   },
 ];

@@ -69,6 +69,22 @@ export interface ClientContribution {
   loadedMonthsByYear: Record<number, number[]>;
 }
 
+/**
+ * Una PIEZA de la suma: el estado que entró y de qué cliente salió.
+ *
+ * Es lo que hace que el consolidado se pueda escribir hoja por hoja sin que el Excel tenga que
+ * volver a decidir quién entró — la lista ya es exactamente lo que se sumó, así que la invariante
+ * «el Consolidado es la suma de sus hojas» no depende de que dos sitios apliquen el mismo filtro.
+ *
+ * El `clientId` es el del cliente REAL y no el centinela, porque es lo único que empareja la pieza
+ * con el logo de su empresa; el `dataset`, en cambio, ya viene con la partición del consolidado
+ * puesta, como todo lo demás que sale de aquí.
+ */
+export interface SummedDetail {
+  clientId: string;
+  dataset: PygDataset;
+}
+
 /** Un cliente que quedó fuera de la suma, y en qué palabras decirlo. */
 export interface ExcludedClient {
   name: string;
@@ -87,6 +103,14 @@ export interface ConsolidatedWorkspace {
    * el estado único de siempre.
    */
   centerDatasets: PygDataset[];
+  /**
+   * Las piezas que el total SUMÓ, cliente por cliente y año por año: los centros que quedaron
+   * dentro de quien tiene centros, y el estado entero de quien es de estado único.
+   *
+   * No es `centerDatasets` acotado: aquel es el UNIVERSO del filtro —marcado o no, y solo
+   * centros—, y este es lo que efectivamente se sumó. Con marcas, uno crece y el otro no.
+   */
+  summedDatasets: SummedDetail[];
   /** Unión de la cobertura de los clientes que entraron. */
   loadedMonthsByYear: Record<number, number[]>;
   /** Huecos de cobertura, conflictos estructurales y exclusiones, en ese orden. */
@@ -99,6 +123,7 @@ export interface ConsolidatedWorkspace {
 const EMPTY: ConsolidatedWorkspace = {
   datasets: [],
   centerDatasets: [],
+  summedDatasets: [],
   loadedMonthsByYear: {},
   warnings: [],
   contributors: [],
@@ -266,6 +291,7 @@ export function consolidateClients(
   return {
     datasets,
     centerDatasets,
+    summedDatasets: buildSummedDatasets(contributing, centerDatasets),
     loadedMonthsByYear,
     warnings: [
       ...coverageWarnings(summed, years, loadedMonthsByYear),
@@ -275,6 +301,59 @@ export function consolidateClients(
     ],
     contributors: summed.map((contribution) => contribution.name),
     excluded,
+  };
+}
+
+/**
+ * Las piezas de la suma, en el orden en que se leen: cliente por fuera —alfabético, el de
+ * `contributions`— y, dentro de cada uno, sus centros por su `order` y luego por año.
+ *
+ * Un centro REUSA su entrada de `centerDatasets`, que ya trae el id compuesto, el color y los
+ * ajustes aplicados: derivar una segunda versión del mismo centro es exactamente cómo las dos
+ * acaban diciendo cifras distintas. Un cliente de estado único no tiene ninguna, así que se le
+ * deriva la suya con la misma regla —ajustes plegados y la partición del consolidado puesta.
+ */
+function buildSummedDatasets(
+  contributing: readonly { contribution: ClientContribution; datasets: PygDataset[] }[],
+  centerDatasets: readonly PygDataset[],
+): SummedDetail[] {
+  const byCenterYear = new Map(
+    centerDatasets.map((dataset) => [`${dataset.centerId}|${dataset.year}`, dataset]),
+  );
+  return contributing.flatMap(({ contribution, datasets }) =>
+    [...datasets]
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.year - b.year)
+      .map((dataset) => ({
+        clientId: contribution.clientId,
+        dataset:
+          (dataset.centerId === undefined
+            ? undefined
+            : byCenterYear.get(
+                `${consolidatedCenterId(contribution.clientId, dataset.centerId)}|${dataset.year}`,
+              )) ?? consolidatedDataset(contribution, dataset),
+      })),
+  );
+}
+
+/**
+ * Un dataset del cliente tal como entra en el consolidado: sus ajustes ya plegados en las cuentas
+ * —volver a aplicarlos aguas abajo los contaría dos veces— y la partición del consolidado puesta.
+ * El nombre que lleva es la ETIQUETA que el usuario le puso al cliente y no la razón social del
+ * archivo, que es como el consolidado nombra a sus clientes en todas las demás pantallas.
+ */
+function consolidatedDataset(contribution: ClientContribution, dataset: PygDataset): PygDataset {
+  return {
+    ...dataset,
+    id: `${CONSOLIDATED_CLIENT_ID}-${contribution.clientId}-${dataset.year}`,
+    clientId: CONSOLIDATED_CLIENT_ID,
+    companyName: contribution.name,
+    accounts: applyEditsToLeafAccounts(
+      dataset.accounts,
+      contribution.edits.filter((edit) => edit.datasetId === dataset.id),
+    ),
+    // Ningún archivo declara la utilidad de una pieza suelta dentro de una suma de empresas.
+    resultFromFile: [],
+    warnings: [],
   };
 }
 

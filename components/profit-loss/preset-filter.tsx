@@ -25,16 +25,13 @@ import { usePygData } from "./pyg-data-provider";
  * enseña a no leer ninguno de los dos.
  */
 export function PresetFilter() {
-  const { filters, selectPreset, sourceSystemId } = usePygData();
+  const { filters, selectPreset } = usePygData();
   const { context } = usePygAnalytics();
 
   const source = activeSource(context);
-  // Qué vistas se ofrecen depende del PLAN y del SISTEMA del que salió el archivo: hay lecturas
-  // que solo son legibles sobre un plan de cierta profundidad, y eso no está en el árbol.
-  const presets = useMemo(
-    () => availablePresets({ source, systemId: sourceSystemId }),
-    [source, sourceSystemId],
-  );
+  // Qué vistas se ofrecen depende del PLAN abierto: «Ventas» necesita que declare líneas de
+  // hotelería y el anexo, que declare cuentas de gasto que repartir.
+  const presets = useMemo(() => availablePresets({ source }), [source]);
   if (presets.length === 0) {
     return null;
   }
@@ -54,7 +51,7 @@ export function PresetFilter() {
               selectPreset(preset.id, {
                 seeds: preset.seeds,
                 frequency: preset.frequency,
-                codes: preset.seedCodes?.(source),
+                narrowedByCodes: preset.narrowedByCodes,
               })
             }
             aria-pressed={active}

@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { sectionTone } from "./datos-sections";
 import { APP_WORKBOOK_META_SHEET, rowsToAppWorkbookMeta } from "./excel-metadata";
 import {
+  buildConsolidatedWorkbook,
   buildMonthSliceWorkbook,
   buildMultiCenterWorkbook,
   buildPygWorkbook,
@@ -361,6 +362,102 @@ describe("buildMultiCenterWorkbook", () => {
       expect(w.name.length).toBeLessThanOrEqual(31);
     }
     expect(new Set(wb.worksheets.map((w) => w.name)).size).toBe(wb.worksheets.length);
+  });
+});
+
+describe("buildConsolidatedWorkbook", () => {
+  const total = (year: number) =>
+    buildDataset(`consolidado-${year}`, MONTHLY_ACCOUNTS, { year, companyName: "Consolidado" });
+  const centro = (year: number) =>
+    buildDataset(`p-centro-${year}`, SUR_ACCOUNTS, {
+      year,
+      role: "center",
+      centerId: "dingoo::restaurante",
+      costCenterName: "Restaurante",
+      companyName: "Dingoo",
+    });
+  const unico = (year: number) =>
+    buildDataset(`p-unico-${year}`, SUR_ACCOUNTS, { year, companyName: "MicroPlus" });
+
+  it("escribe el Consolidado del año y detrás una hoja por pieza de la suma", () => {
+    const wb = buildConsolidatedWorkbook({
+      datasets: [total(2026)],
+      details: [
+        { clientId: "dingoo", dataset: centro(2026) },
+        { clientId: "microplus", dataset: unico(2026) },
+      ],
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+    });
+
+    // Un centro dice de quién es —el mismo rótulo que el chip y la leyenda—; un cliente de estado
+    // único no tiene centro que nombrar, así que la hoja es él.
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      "Consolidado",
+      "Restaurante · Dingoo",
+      "MicroPlus",
+    ]);
+  });
+
+  it("sigue SIN la hoja de metadatos oculta, que es lo que le impide volver a entrar", () => {
+    const wb = buildConsolidatedWorkbook({
+      datasets: [total(2026)],
+      details: [{ clientId: "dingoo", dataset: centro(2026) }],
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+    });
+
+    expect(wb.worksheets.map((w) => w.name)).not.toContain(APP_WORKBOOK_META_SHEET);
+  });
+
+  it("agrupa por año: cada Consolidado con sus piezas detrás", () => {
+    const wb = buildConsolidatedWorkbook({
+      datasets: [total(2026), total(2025)],
+      details: [
+        { clientId: "dingoo", dataset: centro(2026) },
+        { clientId: "dingoo", dataset: centro(2025) },
+      ],
+      loadedMonthsByYear: { 2025: ALL_MONTHS, 2026: ALL_MONTHS },
+    });
+
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      "Consolidado 2025",
+      "Restaurante · Dingoo 2025",
+      "Consolidado 2026",
+      "Restaurante · Dingoo 2026",
+    ]);
+  });
+
+  it("sin piezas queda como siempre: una hoja por año", () => {
+    const wb = buildConsolidatedWorkbook({
+      datasets: [total(2026)],
+      loadedMonthsByYear: { 2026: ALL_MONTHS },
+    });
+
+    expect(wb.worksheets.map((w) => w.name)).toEqual(["Consolidado"]);
+  });
+
+  it("«ocultar ceros» se juzga por LIBRO, así que las hojas comparten plan de cuentas", async () => {
+    // "4.1.2" solo se mueve en una pieza; sobrevive en todas para que se lean en paralelo, y "4.9",
+    // que no se mueve en ninguna, se va de todas.
+    const sheets = await codesBySheet(
+      buildConsolidatedWorkbook({
+        datasets: [buildDataset("c", plan({ "4.1.2": months(0, 55) }))],
+        details: [
+          { clientId: "a", dataset: buildDataset("a", plan(), { companyName: "A" }) },
+          {
+            clientId: "b",
+            dataset: buildDataset("b", plan({ "4.1.2": months(0, 55) }), { companyName: "B" }),
+          },
+        ],
+        loadedMonthsByYear: { 2026: ALL_MONTHS },
+        hideEmpty: true,
+      }),
+    );
+
+    expect([...sheets.keys()]).toEqual(["Consolidado", "A", "B"]);
+    for (const codes of sheets.values()) {
+      expect(codes).toContain("4.1.2");
+      expect(codes).not.toContain("4.9");
+    }
   });
 });
 

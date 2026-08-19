@@ -17,7 +17,7 @@ import type { ChartCardSpec } from "@/lib/charts/types";
 import type { AnalyticsSource } from "../analytics/types";
 import { OTHERS_CODE } from "../analytics/structure";
 import { ANNEX_MAX_SLICES } from "./expense-distribution";
-import { emptyFilters, type PygFilters } from "../filters";
+import { emptyFilters, type PygFilters, withPresetSelected } from "../filters";
 import { formatCurrency } from "@/lib/format";
 import type { Frequency } from "../types";
 import { buildSeries } from "../analytics/series";
@@ -28,8 +28,7 @@ import {
   EXPENSE_DISTRIBUTION_PRESET,
   PRESET_VIEWS,
 } from "./preset-views";
-import { expenseRootsOf, presetQuery, sumOver } from "./presets";
-import { DINGOO_SYSTEM, MICROPLUS_SYSTEM } from "../upload/systems";
+import { expenseRootsOf, leavesOfAny, presetQuery, sumOver } from "./presets";
 import { activeSource, type SelectionContext } from "./selection";
 
 /**
@@ -121,10 +120,34 @@ describe("el contrato de la lista", () => {
     expect(cards.map((card) => card.id)).toEqual([
       "evolucion",
       "distribucion",
-      "ranking",
       "composicion",
+      "ranking",
       "cascada",
     ]);
+  });
+
+  it("la composición son BARRAS y no una tarta, la misma forma del ranking que sigue", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+    const composicion = cards[2];
+    const ranking = cards[3];
+
+    // Las dos son el mismo reparto ordenado de mayor a menor: una tarta lo diría por un ángulo
+    // que hay que estimar, y con los rótulos fuera y con línea guía apilados en un borde.
+    expect(composicion.option?.series[0].type).toBe("bar");
+    expect(ranking.option?.series[0].type).toBe("bar");
+    // El eje de categorías lleva un renglón por cuenta, en el orden que dibuja.
+    expect(composicion.option?.yAxis).toMatchObject({ type: "category", inverse: true });
+    const drawn = composicion.option?.yAxis;
+    expect(!Array.isArray(drawn) && drawn?.data).toEqual(
+      composicion.table.rows.map((row) => row.label),
+    );
+  });
+
+  it("lo excluido del reparto no se nombra ya como «fuera del pastel»", () => {
+    const { cards } = buildGraficosCards(MANOR, emptyFilters());
+
+    // El anexo, que SIGUE siendo una tarta, se queda con el lead por defecto.
+    expect(cards[2].note).toContain("Fuera del reparto —");
   });
 
   it("Análisis declara tres, y la tabla de análisis vertical no es una de ellas", () => {
@@ -140,8 +163,8 @@ describe("el contrato de la lista", () => {
     expect(graficos.cards.map((card) => [card.title, card.height])).toEqual([
       ["Ingresos contra Costos y Gastos", 300],
       ["Distribución de Ventas", 320],
+      ["Composición de los ingresos", 320],
       ["Ranking de gastos", 520],
-      ["Composición de los ingresos", 420],
       ["Del ingreso a la utilidad", 340],
     ]);
     expect(analisis.cards.map((card) => [card.title, card.height])).toEqual([
@@ -149,6 +172,47 @@ describe("el contrato de la lista", () => {
       ["Variación contra el periodo anterior", 300],
       ["Concentración de gastos", 300],
     ]);
+  });
+
+  /**
+   * La guía del ⓘ: existe para cada tarjeta y en cada estado, porque el modo de fallo real no es
+   * una frase mal escrita —eso se ve— sino una tarjeta NUEVA que se olvida de traerla, y ahí el
+   * icono simplemente no se dibuja y nada lo delata.
+   */
+  it("toda tarjeta trae su guía, en los tres estados de la primera", () => {
+    const estados = [
+      buildGraficosCards(MANOR, emptyFilters()),
+      buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET })),
+      buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET })),
+    ];
+
+    for (const { cards } of [...estados, buildAnalisisCards(MANOR, emptyFilters())]) {
+      for (const card of cards) {
+        expect(card.guide?.purpose, card.title).toBeTruthy();
+        expect(card.guide?.actions.length ?? 0, card.title).toBeGreaterThan(0);
+        // Un control sin rótulo o sin efecto rompe la lectura a dos tintas del panel.
+        for (const action of card.guide?.actions ?? []) {
+          expect(action.control, card.title).toBeTruthy();
+          expect(action.effect, card.title).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("la guía de una tarjeta describe ESA tarjeta y no la que ocupaba su ranura", () => {
+    const porDefecto = buildGraficosCards(MANOR, emptyFilters()).cards[0];
+    const ventas = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }))
+      .cards[0];
+    const anexo = buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }))
+      .cards[0];
+
+    expect(porDefecto.guide).not.toEqual(ventas.guide);
+    expect(ventas.guide).not.toEqual(anexo.guide);
+    // El único clic de toda la pantalla se nombra donde existe, y solo ahí.
+    expect(anexo.guide?.actions.some((action) => action.control === "Pulsa una barra")).toBe(true);
+    expect(porDefecto.guide?.actions.some((action) => action.control.includes("Pulsa"))).toBe(
+      false,
+    );
   });
 
   it("sin cobertura, lo que no tiene entradas no dibuja y la evolución sale vacía", () => {
@@ -186,7 +250,7 @@ describe("el periodo del que hablan las tarjetas", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[3].subtitle).toBe("Ene–Jul");
+    expect(graficos.cards[2].subtitle).toBe("Ene–Jul");
     for (const card of [...graficos.cards.slice(0, 4), analisis.cards[0], analisis.cards[2]]) {
       expect(card.subtitle).toContain("Ene–Jul");
     }
@@ -199,6 +263,155 @@ describe("el periodo del que hablan las tarjetas", () => {
     expect(periodName).toBe("Sin movimiento");
     expect(tiles.map((tile) => tile.value)).toEqual([null, null, null]);
     expect(tiles.every((tile) => tile.sign === undefined)).toBe(true);
+  });
+});
+
+/* --------------------------------------------------------------- los meses en 0 del eje */
+
+/**
+ * Un workspace que DECLARÓ cargados agosto y septiembre y cuyo archivo los trae en cero: dos
+ * columnas reales y vacías en el eje de todas las tarjetas. Es lo que quita «Ocultar meses en 0»,
+ * y es el único caso donde existe — un mes que nunca se cargó no llega ni a ser columna.
+ */
+const CON_MESES_VACIOS = ctx(
+  [{ ...CULTURA_MANOR_SOURCE, coverage: new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]) }],
+  "cultura-manor",
+);
+
+describe("los meses en 0 del eje", () => {
+  /**
+   * EL CASO REAL, el de la captura: un archivo que llega hasta julio dibuja las DOCE columnas del
+   * año —el eje es el de la frecuencia, no el de la cobertura—, así que Ago–Dic salen vacías aunque
+   * los tiles digan «Ene–Jul». Son las que el botón quita, y contarlas contra los meses CUBIERTOS
+   * en vez de contra las columnas dibujadas daba cero y el botón no asomaba nunca.
+   */
+  it("cuenta los meses vacíos contra las columnas DIBUJADAS, no contra los cubiertos", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(MANOR, emptyFilters());
+
+    expect(periodName).toBe("Ene–Jul");
+    expect(periods).toHaveLength(7);
+    // Ago–Dic: cinco columnas vacías en el eje.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("ocultándolos el eje se queda en los siete meses con movimiento", () => {
+    const { cards, periodName } = buildGraficosCards(MANOR, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    expect(periodName).toBe("Ene–Jul");
+    // El eje que dibuja la primera tarjeta: sin Ago–Dic.
+    const axis = cards[0].option?.xAxis;
+    const categories = Array.isArray(axis) ? axis[0].data : axis?.data;
+    expect(categories).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul"]);
+  });
+
+  it("un mes NUNCA cargado y uno cargado en cero se van los dos: los dos son columna vacía", () => {
+    // La distinción «un null no es un 0» es del MOTOR y sigue intacta —los tiles y el rótulo la
+    // leen—; el botón habla de lo que se DIBUJA, y ahí las dos son una columna sin nada.
+    const { emptyPeriods } = buildGraficosCards(CON_MESES_VACIOS, emptyFilters());
+
+    // Ago y Sep cargados en cero, más Oct–Dic que nunca llegaron.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("por defecto se dibujan: son columnas del año, y el rango nombra lo cubierto", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(
+      CON_MESES_VACIOS,
+      emptyFilters(),
+    );
+
+    expect(periods.map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(periodName).toBe("Ene–Sep");
+    // Cuántos PUEDE quitar, contados sobre el eje sin podar: es lo que rotula el botón, y por eso
+    // no cambia al pulsarlo — si se contara sobre lo podado, el control desaparecería al usarlo.
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("ocultándolos el eje se encoge y el rótulo lo dice", () => {
+    const { periods, periodName, emptyPeriods } = buildGraficosCards(
+      CON_MESES_VACIOS,
+      emptyFilters(),
+      { hideEmptyPeriods: true },
+    );
+
+    expect(periods.map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(periodName).toBe("Ene–Jul");
+    expect(emptyPeriods).toBe(5);
+  });
+
+  it("las CIFRAS no se mueven: un mes en cero suma cero", () => {
+    const visible = buildGraficosCards(CON_MESES_VACIOS, emptyFilters());
+    const podado = buildGraficosCards(CON_MESES_VACIOS, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    expect(podado.tiles).toEqual(visible.tiles);
+  });
+
+  it("un hueco EN MEDIO se lee como hueco y no como rango continuo", () => {
+    // Marzo declarado cargado y en cero, entre dos meses que sí se movieron.
+    const conHueco = ctx(
+      [
+        {
+          ...CULTURA_MANOR_SOURCE,
+          valuesByCode: new Map(
+            [...CULTURA_MANOR_SOURCE.valuesByCode].map(([code, values]) => [
+              code,
+              values.map((value, index) => (index === 2 ? 0 : value)),
+            ]),
+          ),
+        },
+      ],
+      "cultura-manor",
+    );
+    const { periodName } = buildGraficosCards(conHueco, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    // `periodRangeLabel` ENUMERA un conjunto con huecos en vez de componer sub-rangos: «Ene–Jul»
+    // afirmaría que marzo está sumado, y el punto de ocultarlo es que no lo está.
+    expect(periodName).toBe("Ene, Feb, Abr, May, Jun, Jul");
+    expect(periodName).not.toContain("Ene–Jul");
+  });
+
+  it("las tarjetas heredan el eje podado, así que ninguna nombra un tramo distinto", () => {
+    const { cards } = buildGraficosCards(CON_MESES_VACIOS, emptyFilters(), {
+      hideEmptyPeriods: true,
+    });
+
+    for (const card of cards.slice(0, 4)) {
+      expect(card.subtitle).toContain("Ene–Jul");
+    }
+  });
+
+  it("fuera de mensual no hace nada: el flag ni siquiera llega", () => {
+    // La vista no ofrece el botón salvo en mensual; aquí se comprueba que pasarlo es inofensivo,
+    // porque un trimestre cubierto agrega tres meses y no es «un mes en 0».
+    const trimestral = ctx(
+      [{ ...CULTURA_MANOR_SOURCE, coverage: new Set([0, 1, 2, 3, 4, 5, 6, 7, 8]) }],
+      "cultura-manor",
+      { frequency: "trimestral" },
+    );
+    const visible = buildGraficosCards(trimestral, emptyFilters());
+    const podado = buildGraficosCards(trimestral, emptyFilters(), { hideEmptyPeriods: true });
+
+    expect(podado.periods).toEqual(visible.periods);
+    expect(podado.periodName).toBe(visible.periodName);
+    expect(podado.emptyPeriods).toBe(0);
+    expect(visible.emptyPeriods).toBe(0);
+  });
+
+  it("con el eje ACOTADO a lo que se movió no queda nada que ocultar", () => {
+    // Marcar Ene–Jul deja el eje justo en los siete meses con movimiento: el botón no asoma.
+    const acotado = buildGraficosCards(
+      MANOR,
+      withFilters({
+        periods: [0, 1, 2, 3, 4, 5, 6].map((index) => ({ frequency: "mensual" as const, index })),
+      }),
+    );
+
+    expect(acotado.emptyPeriods).toBe(0);
   });
 });
 
@@ -272,9 +485,9 @@ describe("lo que marcan los filtros", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.1.1.1", "5.1.5"] }));
 
     // La composición queda con la única hoja de ingresos marcada…
-    expect(cards[3].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
+    expect(cards[2].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
     // …y el ranking con las cuatro que cuelgan de 5.1.5, sin el sueldo, que cuelga de 5.1.1.
-    expect(cards[2].table.rows.map((row) => row.id)).toEqual([
+    expect(cards[3].table.rows.map((row) => row.id)).toEqual([
       "5.1.5.12",
       "5.1.5.3",
       "5.1.5.7",
@@ -285,8 +498,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un gasto vacía la composición de ingresos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["5.1.5"] }));
 
-    expect(cards[3].option).toBeNull();
-    expect(cards[3].note).toBe(
+    expect(cards[2].option).toBeNull();
+    expect(cards[2].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos.",
     );
   });
@@ -294,8 +507,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un ingreso vacía el ranking de gastos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.2"] }));
 
-    expect(cards[2].option).toBeNull();
-    expect(cards[2].note).toBe(
+    expect(cards[3].option).toBeNull();
+    expect(cards[3].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos.",
     );
   });
@@ -369,7 +582,7 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
    */
   it("el ranking de gastos pinta la segunda barra con el segundo slot", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const rows = cards[2].table.rows;
+    const rows = cards[3].table.rows;
 
     expect(rows.map((row) => row.id)).toEqual([
       "5.1.1.1.1",
@@ -531,7 +744,7 @@ describe("lo que cada tarjeta dice de sí misma", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     // Cinco gastos y el corte está en quince: no hay nada que declarar fuera de la lista.
-    expect(cards[2].note).toBeUndefined();
+    expect(cards[3].note).toBeUndefined();
   });
 });
 
@@ -665,6 +878,62 @@ describe("la vista predeterminada de líneas de negocio", () => {
     ]);
   });
 
+  /* ------------------------------------------------------------------ la leyenda */
+
+  it("apagar una línea la saca de las barras y la nota lo DICE", () => {
+    const sinLavanderia = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: BUSINESS_LINES_PRESET }),
+      { hiddenLines: ["lavanderia"] },
+    ).cards[0];
+
+    expect(sinLavanderia.table.rows.map((row) => row.label)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Otros ingresos ordinarios",
+    ]);
+    expect(sinLavanderia.note).toContain("Apagadas en la leyenda: Lavandería");
+    // Y el cuadre sigue cerrando: lo apagado cuenta como diferencia, no como un agujero.
+    expect(sinLavanderia.note).not.toContain("sin clasificar");
+  });
+
+  it("ofrece la leyenda con las líneas del plan, también la apagada", () => {
+    // Es donde se vuelve a encender: una leyenda que perdiera el ítem al apagarlo no tendría
+    // ningún sitio desde el que reponerlo.
+    expect(lines.lines.map((line) => line.label)).toEqual([
+      "Hospedaje",
+      "Restaurante",
+      "Lavandería",
+      "Otros ingresos ordinarios",
+    ]);
+    expect(
+      buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+        hiddenLines: ["lavanderia"],
+      }).lines.map((line) => line.id),
+    ).toContain("lavanderia");
+  });
+
+  it("fuera de la vista no hay leyenda que ofrecer", () => {
+    expect(plain.lines).toEqual([]);
+  });
+
+  it("apagarlas TODAS no dibuja un gráfico vacío: lo dice", () => {
+    const todas = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+      hiddenLines: ["hospedaje", "restaurante", "lavanderia", "bar", "tours", "otros"],
+    }).cards[0];
+
+    expect(todas.title).toBe("Ventas por línea de negocio");
+    expect(todas.option).toBeNull();
+    expect(todas.note).toContain("Todas las líneas están apagadas");
+  });
+
+  it("una marca huérfana no vacía la pantalla", () => {
+    const conHuerfana = buildGraficosCards(MANOR, withFilters({ preset: BUSINESS_LINES_PRESET }), {
+      hiddenLines: ["spa"],
+    }).cards[0];
+    expect(JSON.stringify(conHuerfana)).toBe(JSON.stringify(lines.cards[0]));
+  });
+
   it("se queda inerte con un plan que no declara líneas", () => {
     const encendido = buildGraficosCards(SIN_HOTEL, withFilters({ preset: BUSINESS_LINES_PRESET }));
     const apagado = buildGraficosCards(SIN_HOTEL, emptyFilters());
@@ -792,36 +1061,34 @@ describe("la vista predeterminada de costos y gastos", () => {
   const conAnexo = () =>
     buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }));
 
-  it("solo se ofrece en MicroPlus, donde el plan da un anexo legible", () => {
-    // No es que el cálculo falle en otros: es que reparte sobre las cuentas de movimiento, y otros
-    // planes bajan mucho más y devuelven más de cien rubros — una tarta que no reparte nada.
-    const source = activeSource(SIN_HOTEL);
-    const conMicroplus = availablePresets({ source, systemId: MICROPLUS_SYSTEM });
-    const conOtro = availablePresets({ source, systemId: DINGOO_SYSTEM });
+  it("se ofrece con CUALQUIER plan que declare cuentas de gasto, venga de donde venga", () => {
+    // Estuvo atada a MicroPlus por legibilidad, y quien la da hoy es el CORTE de la tarjeta
+    // —catorce rubros y «Otros»—, que no depende del sistema. Los dos planes de este archivo son
+    // de formatos distintos y los dos la reciben.
+    for (const context of [SIN_HOTEL, MANOR]) {
+      const ids = availablePresets({ source: activeSource(context) }).map((preset) => preset.id);
 
-    expect(conMicroplus.map((preset) => preset.id)).toContain(EXPENSE_DISTRIBUTION_PRESET);
-    expect(conOtro.map((preset) => preset.id)).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
+      expect(ids).toContain(EXPENSE_DISTRIBUTION_PRESET);
+    }
   });
 
-  it("sin sistema —el consolidado entre clientes— tampoco se ofrece", () => {
-    // Allí los planes de varios clientes se UNEN, así que «las cuentas más específicas» son de
-    // varios sistemas a la vez y el anexo dejaría de ser el anexo de nadie.
-    const ids = availablePresets({ source: activeSource(MANOR), systemId: null }).map((p) => p.id);
+  it("un plan sin cuentas de gasto que repartir no la recibe", () => {
+    // La única condición que queda, y es estructural: con menos de dos rubros «distribución» es la
+    // cuenta con otro nombre.
+    const ids = availablePresets({ source: undefined }).map((preset) => preset.id);
 
     expect(ids).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
   });
 
-  it("«Ventas» sigue dependiendo del PLAN y no del sistema", () => {
-    // Las dos condiciones son distintas a propósito: una mira los rótulos del árbol, la otra el
-    // formato del que salió el archivo.
-    const sinHotel = availablePresets({
-      source: activeSource(SIN_HOTEL),
-      systemId: MICROPLUS_SYSTEM,
-    });
-    const conHotel = availablePresets({ source: activeSource(MANOR), systemId: DINGOO_SYSTEM });
+  it("«Ventas» sigue dependiendo del PLAN, y las dos condiciones son distintas", () => {
+    // Una mira los rótulos del árbol (hospedaje, restaurante); la otra, que haya gasto que
+    // repartir. Un plan sin líneas de hotelería recibe el anexo y no «Ventas».
+    const sinHotel = availablePresets({ source: activeSource(SIN_HOTEL) }).map((p) => p.id);
+    const conHotel = availablePresets({ source: activeSource(MANOR) }).map((p) => p.id);
 
-    expect(sinHotel.map((preset) => preset.id)).not.toContain(BUSINESS_LINES_PRESET);
-    expect(conHotel.map((preset) => preset.id)).toContain(BUSINESS_LINES_PRESET);
+    expect(sinHotel).not.toContain(BUSINESS_LINES_PRESET);
+    expect(sinHotel).toContain(EXPENSE_DISTRIBUTION_PRESET);
+    expect(conHotel).toContain(BUSINESS_LINES_PRESET);
   });
 
   it("ocupa dos ranuras y RINDE la de «Distribución», que hablaba de ingresos", () => {
@@ -849,8 +1116,8 @@ describe("la vista predeterminada de costos y gastos", () => {
     expect(cards.map((card) => card.title)).toEqual([
       "Ingresos contra Costos y Gastos",
       "Distribución de Ventas",
-      "Ranking de gastos",
       "Composición de los ingresos",
+      "Ranking de gastos",
       "Del ingreso a la utilidad",
     ]);
   });
@@ -1026,34 +1293,52 @@ describe("el anexo se dibuja como la hoja del contador", () => {
   });
 });
 
-describe("las cuentas que la vista del anexo siembra", () => {
-  it("son las MISMAS que dibuja: las de movimiento del árbol de gastos", () => {
+describe("el anexo no siembra cuentas, pero se deja acotar por ellas", () => {
+  it("ninguna vista siembra cuentas: el anexo son más de cien y serían más de cien chips", () => {
+    // Lo hizo, y era la forma de ver cuáles entran; pero las que dibuja son TODAS las de
+    // movimiento del árbol de gastos, y un plan real declara ciento treinta y una. Sembrar solo
+    // las catorce dibujadas tampoco vale: cuáles son depende de los montos, y una marca acota lo
+    // que el anexo suma, así que se llevaría por delante el «Otros» que agrupa el resto.
+    for (const preset of PRESET_VIEWS) {
+      expect(preset).not.toHaveProperty("seedCodes");
+    }
+  });
+
+  it("entrar en la vista BORRA las marcas de cuenta que hubiera", () => {
+    const conMarcas = { ...emptyFilters(), codes: ["5.1.1.1.1"] };
+
+    expect(withPresetSelected(conMarcas, EXPENSE_DISTRIBUTION_PRESET).codes).toEqual([]);
+  });
+
+  it("sin marcas reparte el árbol de gastos ENTERO", () => {
     const source = activeSource(MANOR);
-    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
-    const sembradas = anexo?.seedCodes?.(source) ?? [];
+    const universo = leavesOfAny(source, expenseRootsOf(source));
     const { cards } = buildGraficosCards(
       MANOR,
       withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
     );
     const dibujadas = cards[0].table.rows.filter((row) => row.id !== "__total__").map((r) => r.id);
 
-    // Lo dibujado es un subconjunto de lo sembrado: solo se cae lo que no se movió en el tramo.
-    expect(sembradas.length).toBeGreaterThan(0);
+    // Lo dibujado es un subconjunto del universo: solo se cae lo que no se movió en el tramo.
+    expect(dibujadas.length).toBeGreaterThan(0);
     for (const code of dibujadas) {
-      expect(sembradas).toContain(code);
+      expect(universo).toContain(code);
     }
   });
 
-  it("«Ventas» NO puede sembrar cuentas: sus categorías no son cuentas del plan", () => {
+  it("es la vista la que declara que marcar ACOTA en vez de apagarla", () => {
+    // «Ventas» agrupa ramas enteras y parte una cuenta en dos por el nombre de sus hijas, así que
+    // no hay marca que represente lo que dibuja y marcar una sí la contradice.
+    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
     const ventas = PRESET_VIEWS.find((preset) => preset.id === BUSINESS_LINES_PRESET);
 
-    expect(ventas?.seedCodes).toBeUndefined();
+    expect(anexo?.narrowedByCodes).toBe(true);
+    expect(ventas?.narrowedByCodes).toBeUndefined();
   });
 
-  it("desmarcar un rubro lo quita del reparto y del cuadre a la vez", () => {
+  it("marcar rubros a mano acota el reparto y el cuadre lo dice", () => {
     const source = activeSource(MANOR);
-    const todas =
-      PRESET_VIEWS.find((p) => p.id === EXPENSE_DISTRIBUTION_PRESET)?.seedCodes?.(source) ?? [];
+    const todas = leavesOfAny(source, expenseRootsOf(source));
     const sinUna = todas.filter((code) => code !== "5.1.1.1.1");
     const { cards } = buildGraficosCards(
       MANOR,

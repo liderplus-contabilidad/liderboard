@@ -236,24 +236,27 @@ export function colorForDistributionSlot(index: number): string {
 }
 
 /**
- * La tarta de «Composición de los ingresos», y NADA más. Seis tonos cálidos por el TAMAÑO de la
- * porción, pedidos por la firma sobre una tarta de referencia que trajeron.
+ * «Composición de los ingresos», y NADA más. Seis tonos cálidos por el TAMAÑO de la parte, pedidos
+ * por la firma sobre una tarta de referencia que trajeron. La tarjeta dejó de ser una tarta —hoy
+ * son barras horizontales, como el ranking que tiene debajo— y el set se queda: lo que lo justifica
+ * no es el círculo sino el reparto.
  *
  * Que sea un set propio y no `CHART_PALETTE` no es capricho: allí el color sigue a la ENTIDAD para
  * que filtrar una serie no repinte a las demás, y aquí no hay entidades que vayan y vengan —
  * `toPieSlices` devuelve el reparto entero, siempre completo y siempre ordenado de mayor a menor,
  * y el color ya seguía a ese orden. Es el mismo argumento de `CHART_DISTRIBUTION_RAMP`, con una
  * diferencia que cambia la forma: una pila necesita una RAMPA porque sus vecinos se tocan y hay que
- * leer «este trozo pesa más», mientras que una tarta reparte el círculo y lo que necesita es que
- * seis porciones se distingan. Por eso esto son hues y no pasos de una escala.
+ * leer «este trozo pesa más», mientras que un reparto de seis partes que no se tocan solo necesita
+ * que las seis se distingan. Por eso esto son hues y no pasos de una escala.
  *
  * **Los tonos de la referencia NO son estos, y la razón está medida.** Aquellos —`#ff0000`,
  * `#ff5600`, `#ff8500`, `#99aa27`, `#00836f`— reprueban dos veces, y la que importa no es la de
  * daltonismo: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL, o sea que la porción del 30 % y la
  * del 20 % son casi el mismo rojo para cualquiera (`#99aa27`↔`#ff8500` dan además ΔE 3.9 protan).
  * En la referencia eso no se nota porque cada porción lleva su «20%» impreso DENTRO: el número es
- * lo que desambigua, no el color. Aquí los rótulos van fuera con línea guía y hay leyenda al lado,
- * así que ese relieve no existe y dos rojos casi iguales sí se confunden. Se conserva entonces el
+ * lo que desambigua, no el color. Aquí no: en barras el tono es lo que empareja una fila de la
+ * tabla gemela con su barra —un punto de color de 8 px, sin cifra dentro que desambigüe—, así que
+ * dos rojos casi iguales sí se confunden. Se conserva entonces el
  * CARÁCTER —el rojo, el naranja y el teal, que son tres de sus cinco tonos y los que dan el aire—
  * y se ensancha el arco: rojo, naranja y ámbar viven en unos 60° de tono, y tres de ellos no llegan
  * al piso de visión normal sin separarse en luminosidad, lo que saca al ámbar de la banda por
@@ -262,7 +265,7 @@ export function colorForDistributionSlot(index: number): string {
  *
  * Ninguno de los seis es una ranura de `CHART_PALETTE`, la misma regla que cumple la rampa de
  * distribución: son dos trabajos distintos y compartir un hex invitaría a leer un parentesco entre
- * una porción de esta tarta y una serie de la tarjeta de al lado. El azul se desplazó a `#0f5bb5`
+ * una fila de este reparto y una serie de la tarjeta de al lado. El azul se desplazó a `#0f5bb5`
  * justamente por eso, porque `#1466c8` es la primera ranura de identidad.
  *
  * Lo que dice el validador de este orden, para que nadie lo re-derive: banda de luminosidad PASS
@@ -284,14 +287,14 @@ export const CHART_COMPOSITION_PALETTE = [
 ] as const;
 
 /**
- * Cuántas porciones dibuja la tarta antes de plegar la cola en «Otros»: los tonos de su propia
+ * Cuántas partes dibuja la composición antes de plegar la cola en «Otros»: los tonos de su propia
  * escala. `toPieSlices` recibe este número en vez de llevar un 6 suelto, que es lo que garantiza
- * que «Otros» caiga siempre en la última ranura y ninguna porción se quede sin color.
+ * que «Otros» caiga siempre en la última ranura y ninguna fila se quede sin color.
  */
 export const CHART_COMPOSITION_MAX = CHART_COMPOSITION_PALETTE.length;
 
 /**
- * El tono por el LUGAR en el reparto, que es el tamaño de la porción. No pasa por `colorForEntity`
+ * El tono por el LUGAR en el reparto, que es el tamaño de la parte. No pasa por `colorForEntity`
  * por lo dicho arriba: aquí el color no distingue entidades, ordena un reparto.
  */
 export function colorForCompositionSlot(index: number): string {

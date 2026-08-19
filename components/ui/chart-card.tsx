@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
 import type { ChartCardSpec, ChartOption, ChartTable } from "@/lib/charts/types";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { ChartGuideTip } from "@/components/ui/chart-guide-tip";
 
 /**
  * What the card DRAWS comes from `ChartCardSpec`, so the pure layer and this component cannot
@@ -24,8 +25,20 @@ export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
   onSelect?: (dataIndex: number) => void;
   /** Default true. The account ficha turns it off: its numbers already sit above the chart. */
   tableToggle?: boolean;
+  /**
+   * Default true. El informe imprimible lo apaga por la misma razón por la que apaga el toggle de
+   * tabla: un ⓘ en papel es un botón que nadie puede pulsar.
+   */
+  showGuide?: boolean;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
+  /**
+   * Lo que va PEGADO al gráfico y bajo él: una leyenda propia, que es un control de lectura y no
+   * de encuadre. Va aquí y no en `headerSlot` porque se lee junto a las barras que nombra, y sigue
+   * dibujándose cuando no hay nada que dibujar — una leyenda que desapareciera al apagar el último
+   * ítem no tendría desde dónde volver a encenderlo.
+   */
+  footerSlot?: ReactNode;
 }
 
 /**
@@ -43,15 +56,21 @@ export const ChartCard = memo(function ChartCard({
   table,
   warnings = [],
   note,
+  guide,
   height = 260,
   empty = false,
   tableToggle = true,
+  showGuide = true,
   headerSlot,
+  footerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
   const showToggle = hasSeries && tableToggle;
+  // La guía se dibuja aunque no haya nada que dibujar: una tarjeta vacía es justo donde el lector
+  // pregunta qué tendría que marcar para llenarla.
+  const helper = showGuide ? guide : undefined;
 
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[13px] border border-border bg-surface">
@@ -60,9 +79,10 @@ export const ChartCard = memo(function ChartCard({
           <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
           {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
         </div>
-        {(headerSlot || showToggle) && (
+        {(headerSlot || showToggle || helper) && (
           <div className="flex shrink-0 items-center gap-2.5">
             {headerSlot}
+            {helper && <ChartGuideTip title={title} guide={helper} />}
             {showToggle && (
               <button
                 type="button"
@@ -125,6 +145,8 @@ export const ChartCard = memo(function ChartCard({
               </EmptyState>
             )}
 
+            {footerSlot}
+
             {note && <p className="mt-3 text-[11.5px] leading-snug text-faint">{note}</p>}
           </>
         )}
@@ -153,6 +175,7 @@ export function SpecCard({
       table={spec.table}
       warnings={spec.warnings}
       note={spec.note}
+      guide={spec.guide}
       height={spec.height}
       {...rest}
     />
