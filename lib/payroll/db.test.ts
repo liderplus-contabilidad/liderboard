@@ -7,6 +7,7 @@ import { computePeriodFinancials } from "./period-detail";
 import type { PayrollEmployeeLine } from "./types";
 import {
   addEmployee,
+  deleteEmployee,
   createClient,
   createPeriod,
   db,
@@ -58,6 +59,8 @@ function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmpl
     sectorCode: "S001",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 12,
     ...overrides,
   };
@@ -513,6 +516,169 @@ describe("migración v1 → v2 (aditiva)", () => {
     await db.periods.clear();
     await db.employees.clear();
     await db.active.clear();
+  });
+});
+
+describe("updateEmployee · el parche de FICHA", () => {
+  // Es la garantía que hace segura la edición: alguien arregla una cédula y lo capturado —las
+  // horas, los descuentos, lo pagado— sigue exactamente donde estaba.
+  it("corrige la identidad sin tocar la captura del mes", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const capture = { ...emptyCapture(), bonus: 40, paid: 561.89 };
+    const stored = await addEmployee(period.id, {
+      ...employeeLine({ name: "Ana Torrez", idCard: "0102030499" }),
+      capture,
+    });
+
+    await updateEmployee(stored.id, { name: "Ana Torres", idCard: "0102030405" });
+
+    const [line] = await listEmployees(period.id);
+    expect(line.name).toBe("Ana Torres");
+    expect(line.idCard).toBe("0102030405");
+    expect(line.capture).toEqual(capture);
+  });
+
+  it("escribe las dos provisiones, y el motor las recoge", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const stored = await addEmployee(period.id, employeeLine());
+
+    await updateEmployee(stored.id, { provisionsThirteenth: true });
+
+    const [line] = await listEmployees(period.id);
+    expect(
+      computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS).thirteenthProvision,
+    ).toBeGreaterThan(0);
+  });
+
+  it("alcanza SOLO al empleado de su período: el mismo de otro mes no se toca", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    const febrero = await createPeriod(clientId, 2026, 1);
+    const enMarzo = await addEmployee(marzo.id, employeeLine({ role: "Recepcionista" }));
+    await addEmployee(febrero.id, employeeLine({ role: "Recepcionista" }));
+
+    await updateEmployee(enMarzo.id, { role: "Cajera" });
+
+    expect((await listEmployees(marzo.id))[0].role).toBe("Cajera");
+    expect((await listEmployees(febrero.id))[0].role).toBe("Recepcionista");
+  });
+});
+
+describe("deleteEmployee", () => {
+  it("quita solo a ese empleado y deja la nómina del período intacta", async () => {
+    const period = await createPeriod(clientId, 2026, 2);
+    const uno = await addEmployee(period.id, employeeLine({ name: "Ana Torres" }));
+    await addEmployee(period.id, employeeLine({ name: "Luis Vera" }));
+
+    await deleteEmployee(uno.id);
+
+    expect((await listEmployees(period.id)).map((l) => l.name)).toEqual(["Luis Vera"]);
+  });
+
+  it("no toca la nómina de otro período", async () => {
+    const marzo = await createPeriod(clientId, 2026, 2);
+    const febrero = await createPeriod(clientId, 2026, 1);
+    const enMarzo = await addEmployee(marzo.id, employeeLine());
+    await addEmployee(febrero.id, employeeLine());
+
+    await deleteEmployee(enMarzo.id);
+
+    expect(await listEmployees(marzo.id)).toHaveLength(0);
+    expect(await listEmployees(febrero.id)).toHaveLength(1);
+  });
+
+  it("un id que no existe no rompe nada", async () => {
+    await expect(deleteEmployee(crypto.randomUUID())).resolves.toBeUndefined();
+  });
+});
+
+describe("migración v3 → v4: las provisiones suben de la captura a la ficha", () => {
+  /** La ficha como la v3 la guardaba: SIN las dos banderas, que vivían dentro de la captura.
+   *  Quitarlas del factory es lo que hace que estos tests fallen si la migración desaparece. */
+  function v3Line(overrides: Partial<PayrollEmployeeLine> = {}): Record<string, unknown> {
+    const {
+      provisionsThirteenth: _t,
+      provisionsFourteenth: _f,
+      capture: _c,
+      ...ficha
+    } = employeeLine(overrides);
+    return ficha;
+  }
+
+  /** Una base tal como la v3 la dejaba, con las dos banderas DENTRO de la captura. */
+  async function seedV3(lines: readonly Record<string, unknown>[]): Promise<void> {
+    db.close();
+    await Dexie.delete("liderboard-payroll");
+
+    const legacy = new Dexie("liderboard-payroll");
+    legacy.version(1).stores({
+      clients: "id",
+      periods: "id, clientId, &[clientId+year+monthIndex]",
+      active: "key",
+    });
+    legacy.version(2).stores({ employees: "id, periodId" });
+    legacy.version(3).stores({});
+    await legacy.open();
+    await legacy.table("employees").bulkAdd(lines as never[]);
+    legacy.close();
+  }
+
+  async function reseed(): Promise<void> {
+    await db.clients.clear();
+    await db.periods.clear();
+    await db.employees.clear();
+    await db.active.clear();
+  }
+
+  it("una bandera encendida sobrevive, y sale de la captura", async () => {
+    await seedV3([
+      {
+        ...v3Line({ id: "e1", periodId: "p1" }),
+        capture: { ...emptyCapture(), provisionsThirteenth: true, provisionsFourteenth: false },
+      },
+    ]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    expect(migrated.provisionsThirteenth).toBe(true);
+    expect(migrated.provisionsFourteenth).toBe(false);
+    expect(migrated.capture).not.toHaveProperty("provisionsThirteenth");
+    expect(migrated.capture).not.toHaveProperty("provisionsFourteenth");
+
+    await reseed();
+  });
+
+  it("y el motor la lee desde ahí: el costo empresa sigue llevando su provisión", async () => {
+    // Es lo que hace que la migración importe. Sin ella la bandera se leería como apagada y el
+    // único síntoma sería un costo total más bajo, que nadie compara contra el mes anterior.
+    await seedV3([
+      {
+        ...v3Line({ id: "e1", periodId: "p1" }),
+        capture: { ...emptyCapture(), provisionsThirteenth: true, provisionsFourteenth: false },
+      },
+    ]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    const computed = computeLinePayroll(migrated, DEFAULT_PAYROLL_PARAMETERS);
+    expect(computed.thirteenthProvision).toBeGreaterThan(0);
+    expect(computed.fourteenthProvision).toBe(0);
+
+    await reseed();
+  });
+
+  it("un empleado SIN captura llega con las dos apagadas, no con `undefined`", async () => {
+    await seedV3([v3Line({ id: "e2", periodId: "p1" })]);
+
+    await db.open();
+
+    const [migrated] = await listEmployees("p1");
+    expect(migrated.provisionsThirteenth).toBe(false);
+    expect(migrated.provisionsFourteenth).toBe(false);
+    expect(migrated.capture).toBeUndefined();
+
+    await reseed();
   });
 });
 

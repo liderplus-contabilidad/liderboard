@@ -26,6 +26,8 @@ function employee(id: string, name: string): PayrollEmployeeLine {
     sectorCode: "",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     capture: emptyCapture(),
   };

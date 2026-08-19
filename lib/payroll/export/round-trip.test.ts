@@ -42,6 +42,8 @@ function employee(
     sectorCode: "1608551004134",
     hasReserveFund: true,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     capture: {
       ...emptyCapture(),

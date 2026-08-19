@@ -141,8 +141,6 @@ describe("parseRolGeneral — la captura del mes", () => {
         partTimeDeduction: 52,
         medicalLeaveDeduction: 53,
       },
-      provisionsThirteenth: false,
-      provisionsFourteenth: false,
       // `BZ` viaja también aquí, no solo a `figures`: es un valor tecleado y la pantalla lo deja
       // corregir sin tocar lo que el archivo declaró.
       paid: 550, // `BZ` del fixture de esta prueba
@@ -199,18 +197,31 @@ describe("parseRolGeneral — las provisiones de décimos se deducen de AS y AT"
     const morales = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
       (l) => l.name === "MORALES PEREZ ANA LUCIA",
     );
-    expect(morales?.capture?.provisionsThirteenth).toBe(false);
-    expect(morales?.capture?.provisionsFourteenth).toBe(false);
+    expect(morales?.provisionsThirteenth).toBe(false);
+    expect(morales?.provisionsFourteenth).toBe(false);
   });
 
   it("cada una se deduce de SU columna: AS con valor no enciende la de AT", () => {
     const lines = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
     const vega = lines.find((l) => l.name === "VEGA TORRES MARIA JOSE");
-    expect(vega?.capture?.provisionsThirteenth).toBe(true);
-    expect(vega?.capture?.provisionsFourteenth).toBe(false);
+    expect(vega?.provisionsThirteenth).toBe(true);
+    expect(vega?.provisionsFourteenth).toBe(false);
     const sandoval = lines.find((l) => l.name === "SANDOVAL RUIZ PEDRO JOSE");
-    expect(sandoval?.capture?.provisionsThirteenth).toBe(false);
-    expect(sandoval?.capture?.provisionsFourteenth).toBe(true);
+    expect(sandoval?.provisionsThirteenth).toBe(false);
+    expect(sandoval?.provisionsFourteenth).toBe(true);
+  });
+
+  /**
+   * Aterrizan en la FICHA y no en la captura, que es lo que hace que `copyRoster` las arrastre.
+   * Sin este test, moverlas de vuelta a la captura seguiría pasando todos los de arriba con solo
+   * cambiar el sitio donde se leen.
+   */
+  it("aterrizan en la ficha, no en la captura", () => {
+    const vega = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
+      (l) => l.name === "VEGA TORRES MARIA JOSE",
+    );
+    expect(vega?.capture).not.toHaveProperty("provisionsThirteenth");
+    expect(vega?.capture).not.toHaveProperty("provisionsFourteenth");
   });
 });
 

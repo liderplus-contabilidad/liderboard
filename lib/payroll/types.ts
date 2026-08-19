@@ -152,10 +152,6 @@ export interface PayrollMonthlyCapture {
   /** `Y`…`AN` · los doce egresos con nombre. El aporte al IESS (`X`) no está aquí: lo deriva
    *  el motor. */
   deductions: CapturedDeductions;
-  /** `AS`, `AT` · si el mes provisiona los décimos. Apagados en todo el archivo real, porque
-   *  ya se mensualizan en `N` y `O`. */
-  provisionsThirteenth: boolean;
-  provisionsFourteenth: boolean;
   /**
    * `BZ` · PAGADO. `null` mientras nadie lo declare — y eso NO es cero: sin él el empleado no
    * está ni conciliado ni con diferencia.
@@ -185,6 +181,22 @@ export interface PayrollEmployeeLine {
   /** `AZ` · AC FR — ¿lo acumula en el IESS en vez de cobrarlo mensual? También de la ficha:
    *  es una elección del empleado, no del mes. */
   accumulatesReserveFund: boolean;
+  /**
+   * `AS`, `AT` · si se provisionan los décimos.
+   *
+   * Están en la FICHA por la misma razón que las dos de arriba, y no es una analogía: cobrar los
+   * décimos mensualizados o acumularlos es una elección del EMPLEADO —la del SUT—, estable mes a
+   * mes. Viviendo en la captura no sobrevivían a `copyRoster`, así que había que volver a
+   * marcarlas cada mes empleado por empleado, y olvidarse un mes dejaba de provisionar sin que
+   * nada lo dijera.
+   *
+   * Apagadas en todo el archivo real, porque los décimos ya se mensualizan en `N` y `O` y
+   * provisionarlos otra vez los contaría dos veces. Que estén aquí no las hace menos del mes para
+   * el motor: cada período guarda su propia ficha, así que el importador las sigue deduciendo del
+   * archivo mes a mes.
+   */
+  provisionsThirteenth: boolean;
+  provisionsFourteenth: boolean;
   /** E · días pagados del mes. Es del MES, no de la ficha, pero tiene un default natural: se
    *  copia como 30 y se corrige al capturar (ingreso a mitad de mes, salida, licencia). */
   days: number;

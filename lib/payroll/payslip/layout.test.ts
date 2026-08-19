@@ -36,6 +36,8 @@ const LINE: PayrollEmployeeLine = {
   sectorCode: "",
   hasReserveFund: false,
   accumulatesReserveFund: false,
+  provisionsThirteenth: false,
+  provisionsFourteenth: false,
   days: 30,
   capture: { ...emptyCapture(), deductions: { ...emptyCapture().deductions, salaryAdvance: 200 } },
 };

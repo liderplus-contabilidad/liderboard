@@ -75,12 +75,8 @@ function deduceApprovedOvertime(row: RolGeneralEmployeeRow): number | null {
   return sameToTheCentavo(row.overtimeTotal, worked) ? null : row.overtimeTotal;
 }
 
-/**
- * Lo capturado del mes de un empleado. Las dos provisiones de décimos se deducen igual que `M` y
- * por el mismo motivo: el libro las apaga con un `*0`, así que un importe distinto de cero es la
- * única huella que queda de que ese mes SÍ provisiona. En el archivo real están en cero las seis
- * veces, que es lo coherente con mensualizarlos ya en `N` y `O`.
- */
+/** Lo capturado del mes de un empleado. Las dos provisiones de décimos NO están aquí: son de la
+ *  ficha (ver `toProvisions`). */
 function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
   return {
     overtimeHours50: row.overtimeHours50,
@@ -107,10 +103,28 @@ function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
       partTimeDeduction: row.partTimeDeduction,
       medicalLeaveDeduction: row.medicalLeaveDeduction,
     },
-    provisionsThirteenth: row.thirteenthProvisionRaw !== 0,
-    provisionsFourteenth: row.fourteenthProvisionRaw !== 0,
     // `BZ` entra como un capturado más: es un valor TECLEADO, y la pantalla lo deja corregir.
     paid: row.paid,
+  };
+}
+
+/**
+ * Las dos banderas de provisión de décimos, que van a la FICHA y no a la captura porque son una
+ * elección del empleado (ver `PayrollEmployeeLine`). Que vivan en la ficha no impide leerlas de
+ * cada archivo: un período guarda su propia ficha, así que el archivo de marzo declara las de
+ * marzo.
+ *
+ * Se deducen igual que `M` y por el mismo motivo: el libro las apaga con un `*0`, así que un
+ * importe distinto de cero es la única huella que queda de que ese mes SÍ provisiona. En el
+ * archivo real están en cero las seis veces, que es lo coherente con mensualizarlos ya en `N` y
+ * `O`.
+ */
+function toProvisions(
+  row: RolGeneralEmployeeRow,
+): Pick<ParsedPayrollEmployeeLine, "provisionsThirteenth" | "provisionsFourteenth"> {
+  return {
+    provisionsThirteenth: row.thirteenthProvisionRaw !== 0,
+    provisionsFourteenth: row.fourteenthProvisionRaw !== 0,
   };
 }
 
@@ -167,6 +181,7 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
       sectorCode: row.sectorCode,
       hasReserveFund: readsAsYes(row.hasReserveFundRaw),
       accumulatesReserveFund: readsAsYes(row.accumulatesReserveFundRaw),
+      ...toProvisions(row),
       days: row.days,
       capture: toCapture(row),
     };

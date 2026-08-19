@@ -21,6 +21,7 @@ import type {
   PayrollClient,
   PayrollEmployeeLine,
   PayrollExtraConceptKind,
+  PayrollMonthlyCapture,
   PayrollPeriod,
   PayrollRosterSummary,
 } from "./types";
@@ -101,6 +102,31 @@ class PayrollDb extends Dexie {
           }
         }
       });
+    // v4: las dos banderas de provisión de décimos suben de la CAPTURA a la FICHA — son una
+    // elección del empleado y no un dato del mes, la misma razón por la que las dos del fondo de
+    // reserva ya estaban ahí (ver `PayrollEmployeeLine`). Ningún índice cambia, así que esta
+    // versión existe SOLO para correr su `upgrade`.
+    //
+    // Con el archivo real de marzo 2026 es un no-op —apagadas en los seis empleados—, pero el caso
+    // contrario existe y perderlo sería invisible: una bandera encendida dejaría de provisionar y
+    // lo único que se movería es el costo total empresa, que nadie compara contra el mes anterior.
+    // Por eso se migra el dato en vez de leerlo con un `??` desde el sitio viejo, que dejaría las
+    // dos formas vivas para siempre.
+    this.version(4)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx
+          .table<LegacyLineWithProvisions>("employees")
+          .toCollection()
+          .modify((line) => {
+            line.provisionsThirteenth = line.capture?.provisionsThirteenth ?? false;
+            line.provisionsFourteenth = line.capture?.provisionsFourteenth ?? false;
+            if (line.capture) {
+              delete line.capture.provisionsThirteenth;
+              delete line.capture.provisionsFourteenth;
+            }
+          });
+      });
   }
 }
 
@@ -111,6 +137,16 @@ interface LegacyExtraConcept {
   label: string;
   kind: PayrollExtraConceptKind;
 }
+
+/** La ficha tal como la v3 la guardaba: con las dos provisiones DENTRO de la captura. Aquí y no en
+ *  `types.ts` por lo mismo — es una forma muerta, y darle sitio entre los tipos vivos invitaría a
+ *  leerla como una alternativa vigente. */
+type LegacyLineWithProvisions = PayrollEmployeeLine & {
+  capture?: PayrollMonthlyCapture & {
+    provisionsThirteenth?: boolean;
+    provisionsFourteenth?: boolean;
+  };
+};
 
 export const db = new PayrollDb();
 
@@ -338,14 +374,37 @@ export async function listEmployees(periodId: string): Promise<PayrollEmployeeLi
  * quiere: el archivo trae su propia ficha y es la del contador.
  */
 /**
- * Lo que la pantalla de detalle puede reescribir de un empleado: los dos campos de ficha que se
- * corrigen al capturar el mes, y la captura entera.
+ * Lo que se puede reescribir de un empleado, por las DOS puertas que la pantalla tiene:
  *
- * El nombre, el cargo, la cédula y el código sectorial NO están: son identidad, se corrigen en la
- * ficha y no en el rol de un mes.
+ *   - **el mes**, en línea en el detalle: `days`, `baseSalary` y la captura entera. Se escribe
+ *     campo a campo, al salir de cada input, para que el líquido se mueva a la vista.
+ *   - **la ficha**, desde el diálogo de edición: identidad, contrato, fondo de reserva y las dos
+ *     provisiones. Antes no estaban aquí y el comentario remitía a «la ficha», que no existía como
+ *     pantalla: una cédula mal tecleada solo se arreglaba borrando el período o recargando el
+ *     Excel.
+ *
+ * El parche alcanza SOLO al empleado de SU período: cada período guarda su propia copia de la
+ * nómina, igual que el contador tiene una hoja `GENERAL` por mes, así que corregir marzo no
+ * reescribe febrero. La corrección viaja hacia adelante sola cuando `copyRoster` crea abril.
  */
 export type PayrollEmployeePatch = Partial<
-  Pick<PayrollEmployeeLine, "days" | "baseSalary" | "capture">
+  Pick<
+    PayrollEmployeeLine,
+    | "days"
+    | "baseSalary"
+    | "capture"
+    | "name"
+    | "role"
+    | "area"
+    | "contractType"
+    | "idCard"
+    | "hireDate"
+    | "sectorCode"
+    | "hasReserveFund"
+    | "accumulatesReserveFund"
+    | "provisionsThirteenth"
+    | "provisionsFourteenth"
+  >
 >;
 
 /**
@@ -385,6 +444,21 @@ export async function addEmployee(
   const stored: PayrollEmployeeLine = { ...line, id: crypto.randomUUID(), periodId };
   await db.employees.add(stored);
   return stored;
+}
+
+/**
+ * Quita UN empleado de la nómina de su período. Una sola escritura, sin transacción, y sin tocar
+ * al resto de la nómina — al revés que `importRoster`, que reemplaza el mes entero porque un
+ * archivo ES el mes entero.
+ *
+ * Alcanza solo al período donde está: el mismo empleado en otro mes es otra fila, y darlo de baja
+ * en marzo no puede borrar el marzo que ya se pagó en enero.
+ *
+ * Un `id` que no existe no falla: `delete` no encuentra nada y se acabó. Es la respuesta correcta
+ * a un empleado borrado en otra pestaña mientras esta lo tenía abierto.
+ */
+export async function deleteEmployee(employeeId: string): Promise<void> {
+  await db.employees.delete(employeeId);
 }
 
 export async function importRoster(

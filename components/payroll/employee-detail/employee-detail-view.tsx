@@ -1,7 +1,9 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { monthBounds, formatDayMonthYear } from "@/lib/date";
 import {
   DEDUCTION_CONCEPTS,
@@ -13,7 +15,7 @@ import {
   type IncomeConcept,
   type OvertimeHoursField,
 } from "@/lib/payroll/concepts";
-import { listEmployees, updateEmployee } from "@/lib/payroll/db";
+import { deleteEmployee, listEmployees, updateEmployee } from "@/lib/payroll/db";
 import {
   extraCapBreaches,
   newExtraRow,
@@ -33,18 +35,20 @@ import { computeLinePayroll, emptyCapture } from "@/lib/payroll/employee-input";
 import { buildPayslipDocument } from "@/lib/payroll/payslip/document";
 import { downloadPayslips, payslipFilename } from "@/lib/payroll/payslip/download";
 import { reconciliationStatusOf } from "@/lib/payroll/period-detail";
+import { periodLongLabel } from "@/lib/payroll/periods";
 import type {
   PayrollEmployeeLine,
   PayrollExtraConceptKind,
   PayrollMonthlyCapture,
 } from "@/lib/payroll/types";
+import { EmployeeFormModal } from "../employee-form-modal";
 import { usePayrollData } from "../payroll-data-provider";
 import { PeriodNotFound } from "../period-detail/period-not-found";
 import { ConceptTable } from "./concept-table";
 import { EmployeeDetailCard, EmployeeDetailSection } from "./employee-detail-card";
 import { EmployeeDetailHeader } from "./employee-detail-header";
 import { EmployeeIdentityCards } from "./employee-identity-cards";
-import { EmployeeMonthAdjustments, type ProvisionFlag } from "./employee-month-adjustments";
+import { EmployeeOvertimeApproval } from "./employee-overtime-approval";
 import { EmployeePeriodFields } from "./employee-period-fields";
 import { EmployeeTotals } from "./employee-totals";
 
@@ -87,6 +91,16 @@ export function EmployeeDetailView({
    */
   const [added, setAdded] = useState<ReadonlySet<string>>(EMPTY_ADDED);
   useEffect(() => setAdded(EMPTY_ADDED), [employeeId]);
+
+  /** Los dos diálogos de esta pantalla. Se cierran al cambiar de empleado con las flechas: uno
+   *  abierto sobre otra ficha editaría a quien no se estaba mirando. */
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => {
+    setEditing(false);
+    setDeleting(false);
+  }, [employeeId]);
+  const router = useRouter();
 
   const period = periods.find((candidate) => candidate.id === periodId) ?? null;
   const index = lines.findIndex((line) => line.id === employeeId);
@@ -147,15 +161,30 @@ export function EmployeeDetailView({
     [patchCapture],
   );
 
-  const handleProvision = useCallback(
-    (flag: ProvisionFlag, checked: boolean) => patchCapture({ [flag]: checked }),
-    [patchCapture],
-  );
-
   const addConcept = useCallback(
     (code: string) => setAdded((current) => new Set(current).add(code)),
     [],
   );
+
+  /**
+   * Da de baja al empleado de ESTE período y vuelve al listado: sin él, esta pantalla se queda
+   * enseñando «no existe» sobre una URL que ya no lleva a nada.
+   *
+   * Se navega ANTES de que `useLiveQuery` relea, que es lo que evita ese parpadeo.
+   */
+  const [removing, setRemoving] = useState(false);
+  const confirmDelete = useCallback(async () => {
+    if (!line) {
+      return;
+    }
+    setRemoving(true);
+    try {
+      await deleteEmployee(line.id);
+      router.push(`/payroll/${periodId}`);
+    } finally {
+      setRemoving(false);
+    }
+  }, [line, periodId, router]);
 
   /**
    * Quita una fila del catálogo del rol de ESTE empleado: vacía lo tecleado y la deja de mostrar.
@@ -368,6 +397,8 @@ export function EmployeeDetailView({
         next={target(1)}
         onDownloadPayslip={() => void downloadPayslip()}
         downloading={downloading}
+        onEdit={() => setEditing(true)}
+        onDelete={() => setDeleting(true)}
       />
 
       <div className="mt-4">
@@ -387,6 +418,12 @@ export function EmployeeDetailView({
             hireDate={formatDayMonthYear(line.hireDate)}
             contractType={line.contractType}
             accumulatesReserveFund={line.accumulatesReserveFund}
+            thirteenthProvision={
+              line.provisionsThirteenth ? (computed?.thirteenthProvision ?? 0) : null
+            }
+            fourteenthProvision={
+              line.provisionsFourteenth ? (computed?.fourteenthProvision ?? 0) : null
+            }
             days={line.days}
             baseSalary={line.baseSalary}
             paid={line.capture?.paid ?? null}
@@ -435,13 +472,10 @@ export function EmployeeDetailView({
               </EmployeeDetailSection>
 
               <EmployeeDetailSection className="flex flex-wrap items-start justify-between gap-5">
-                <EmployeeMonthAdjustments
+                <EmployeeOvertimeApproval
                   approvedOvertime={capture.approvedOvertime}
-                  provisionsThirteenth={capture.provisionsThirteenth}
-                  provisionsFourteenth={capture.provisionsFourteenth}
                   computed={computed}
                   onApprovedOvertimeChange={handleApprovedOvertime}
-                  onProvisionChange={handleProvision}
                 />
                 <EmployeeTotals computed={computed} />
               </EmployeeDetailSection>
@@ -449,6 +483,31 @@ export function EmployeeDetailView({
           )}
         </EmployeeDetailCard>
       </div>
+
+      {editing && (
+        <EmployeeFormModal
+          period={period}
+          lines={lines}
+          employee={line}
+          onClose={() => setEditing(false)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={deleting}
+        variant="destructive"
+        title={`Eliminar a ${line.name}`}
+        description={
+          <>
+            Sale de la nómina de {periodLongLabel(period.year, period.monthIndex)} y el rol del mes
+            se recalcula sin él. Los otros períodos no cambian: cada uno guarda su propia nómina.
+          </>
+        }
+        confirmLabel="Eliminar empleado"
+        busy={removing}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleting(false)}
+      />
     </div>
   );
 }

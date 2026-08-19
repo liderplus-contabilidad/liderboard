@@ -33,6 +33,9 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
     sectorCode: "1608551004134",
     hasReserveFund: input.hasReserveFund,
     accumulatesReserveFund: input.accumulatesReserveFund,
+    // Las dos provisiones son de la FICHA, no de la captura: el motor las lee de aquí.
+    provisionsThirteenth: input.flags.provisionsThirteenth,
+    provisionsFourteenth: input.flags.provisionsFourteenth,
     days: input.days,
     capture: {
       overtimeHours50: input.overtimeHours50,
@@ -46,8 +49,6 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
       variableCommission: input.variableCommission,
       bonus: input.bonus,
       deductions: input.deductions,
-      provisionsThirteenth: input.flags.provisionsThirteenth,
-      provisionsFourteenth: input.flags.provisionsFourteenth,
       paid: input.paid,
     },
   };

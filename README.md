@@ -883,6 +883,34 @@ bajo su tabla—.
   el eje: la tarjeta es la cifra que alguien compara contra su hoja celda por celda, y el eje es una
   escala.
 
+## La ficha del empleado (Rol de Pagos)
+
+La ficha de un empleado —nombre, cédula, cargo, área, tipo de contrato, fecha de ingreso, código
+sectorial, fondo de reserva y la provisión de décimos— **se edita desde su propio detalle**, con
+«Editar ficha» en el encabezado, y se puede dar de baja con «Eliminar empleado». Antes no había
+ninguna pantalla que la corrigiera: una cédula mal tecleada solo se arreglaba borrando el período o
+volviendo a cargar el Excel.
+
+- **Un formulario, dos modos.** El mismo diálogo da de alta y edita, porque un campo que exista en
+  uno y falte en el otro es el fallo que nadie ve. El alta pide además sueldo base y días; la
+  edición no los ofrece: esos dos se corrigen en línea en la pantalla del mes, donde se ve moverse
+  el líquido, y una segunda puerta sería un sitio más donde decir otra cosa.
+- **Solo cambia el período abierto.** Cada período guarda su propia copia de la nómina, igual que el
+  contador tiene una hoja `GENERAL` por mes, así que corregir marzo no reescribe febrero — y la
+  corrección viaja hacia adelante sola cuando se copia la nómina al mes siguiente. El diálogo y la
+  confirmación de borrado lo dicen, porque es lo único que alguien podría suponer al revés.
+- **La provisión de décimos es de la ficha, no del mes.** Cobrar el décimo tercero y el cuarto
+  mensualizados o acumularlos es una elección del empleado, la misma clase de decisión que el fondo
+  de reserva. Estaba guardada con lo del mes, así que copiar la nómina la perdía y había que volver
+  a marcarla cada mes, persona por persona. Encendida suma al **costo total empresa** sin tocar el
+  líquido; apagada es lo normal, porque los décimos ya se mensualizan en el rol y provisionarlos
+  otra vez los contaría dos veces. Se lee en la rejilla del período, con su importe.
+- **El importe aprobado de horas extras es dinero, no horas.** Es lo único del mes que esa tarjeta
+  ajusta, así que se llama «Horas extras» y el campo lleva la marca `$` pegada — la misma
+  convención que las celdas de la tabla de conceptos, donde una `h` marca las horas y un `$` el
+  importe. En blanco se reconoce todo lo trabajado; `0` no reconoce nada. Salió del alta: allí no se
+  capturan las horas que ese importe recorta.
+
 ## Nombre propio de una fila del rol (Rol de Pagos)
 
 Toda fila del rol cuyo **importe se teclea** admite el nombre que quien captura le quiera poner, por

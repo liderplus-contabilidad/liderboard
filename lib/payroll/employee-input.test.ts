@@ -33,8 +33,6 @@ function capture(overrides: Partial<PayrollMonthlyCapture> = {}): PayrollMonthly
     variableCommission: 0,
     bonus: 0,
     deductions: { ...NO_DEDUCTIONS },
-    provisionsThirteenth: false,
-    provisionsFourteenth: false,
     paid: null,
     ...overrides,
   };
@@ -54,6 +52,8 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     sectorCode: "1608551004134",
     hasReserveFund: false,
     accumulatesReserveFund: true,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     ...overrides,
   };
@@ -118,11 +118,18 @@ describe("toEngineInput", () => {
     expect(toEngineInput(line()).paid).toBeNull();
   });
 
-  it("las provisiones viajan a las banderas del motor", () => {
+  it("las provisiones viajan a las banderas del motor desde la FICHA, no desde la captura", () => {
     const input = toEngineInput(
-      line({ capture: capture({ provisionsThirteenth: true, provisionsFourteenth: true }) }),
+      line({ provisionsThirteenth: true, provisionsFourteenth: true, capture: capture() }),
     );
     expect(input.flags).toEqual({ provisionsThirteenth: true, provisionsFourteenth: true });
+  });
+
+  it("una línea SIN captura conserva sus provisiones: no son del mes", () => {
+    // Es lo que hace que una nómina recién copiada provisione desde el primer render, sin que
+    // nadie vuelva a marcar nada.
+    const input = toEngineInput(line({ provisionsThirteenth: true }));
+    expect(input.flags).toEqual({ provisionsThirteenth: true, provisionsFourteenth: false });
   });
 
   it("no comparte referencias con la línea: mutar el resultado no toca lo guardado", () => {
@@ -160,7 +167,6 @@ describe("emptyCapture", () => {
     const empty = emptyCapture();
     expect(empty.approvedOvertime).toBeNull();
     expect(empty.overtimeHours50).toBe(0);
-    expect(empty.provisionsThirteenth).toBe(false);
     for (const value of Object.values(empty.deductions)) {
       expect(value).toBe(0);
     }

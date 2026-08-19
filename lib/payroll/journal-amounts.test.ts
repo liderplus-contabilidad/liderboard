@@ -21,6 +21,8 @@ function line(
     sectorCode: "",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     ...overrides,
     capture: { ...emptyCapture(), ...capture },

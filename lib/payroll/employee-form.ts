@@ -17,10 +17,9 @@
  * teclazo, que es el error frecuente; el dígito verificador atraparía además al empleado legítimo.
  */
 import { STANDARD_PAYROLL_AREAS } from "./areas";
-import { emptyCapture } from "./employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
-import { reserveFundFlags, type ReserveFundMode } from "./reserve-fund";
-import type { ParsedPayrollEmployeeLine } from "./types";
+import { reserveFundFlags, reserveFundMode, type ReserveFundMode } from "./reserve-fund";
+import type { ParsedPayrollEmployeeLine, PayrollEmployeeLine } from "./types";
 
 /**
  * Lo que el formulario tiene en la mano. Las cifras son `number | null` y no texto porque
@@ -42,9 +41,14 @@ export interface EmployeeFormValues {
   hireDate: string;
   sectorCode: string;
 
-  /** `M` · el importe reconocido. `null` = todas las trabajadas, `0` = ninguna (el `*0` del
-   *  libro), cualquier otro número = ese importe. Ver §6 y §11.1. */
-  approvedOvertime: number | null;
+  /**
+   * `AS`, `AT` · si se provisionan los décimos. Son de la FICHA (ver `PayrollEmployeeLine`), y por
+   * eso están aquí y no entre lo que se captura del mes.
+   *
+   * El `M` del libro —el importe aprobado de horas extras— NO está en este formulario, y es
+   * deliberado: es del MES, lo aprueba Gerencia según la ocupación, y este formulario no captura
+   * las horas que ese importe recorta. Se teclea en la pantalla del empleado, junto a ellas.
+   */
   provisionsThirteenth: boolean;
   provisionsFourteenth: boolean;
 }
@@ -53,7 +57,13 @@ export type EmployeeFormErrors = Partial<Record<keyof EmployeeFormValues, string
 
 /** Lo que hace falta saber de la nómina ya registrada para detectar un alta repetida. */
 export interface EmployeeFormContext {
-  existing?: readonly { name: string; idCard: string }[];
+  existing?: readonly { id?: string; name: string; idCard: string }[];
+  /**
+   * El empleado que se está EDITANDO, cuando lo hay. Sin él, abrir una ficha y guardarla sin
+   * tocar la cédula la acusaría de duplicada contra sí misma, y el formulario no se podría
+   * guardar sin cambiarla — que es justo lo contrario de lo que hace falta al corregir el cargo.
+   */
+  selfId?: string;
 }
 
 const MAX_DAYS = 31;
@@ -81,7 +91,6 @@ export function emptyEmployeeForm(): EmployeeFormValues {
     reserveFund: "sin-derecho",
     hireDate: "",
     sectorCode: "",
-    approvedOvertime: null,
     provisionsThirteenth: false,
     provisionsFourteenth: false,
   };
@@ -94,17 +103,6 @@ function isRealIsoDate(value: string): boolean {
   }
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-/** Una cantidad opcional del mes: vacía vale, negativa no. */
-function checkOptionalAmount(value: number | null, label: string): string | undefined {
-  if (value === null) {
-    return undefined;
-  }
-  if (!Number.isFinite(value)) {
-    return `${label} tiene que ser un número.`;
-  }
-  return value < 0 ? `${label} no puede ser negativo.` : undefined;
 }
 
 /**
@@ -135,7 +133,14 @@ export function validateEmployeeForm(
   } else if (!new RegExp(`^\\d{${ID_CARD_DIGITS}}$`).test(idCard)) {
     errors.idCard = `La cédula son ${ID_CARD_DIGITS} dígitos.`;
   } else {
-    const clash = context.existing?.find((line) => line.idCard.trim() === idCard);
+    // El `selfId === undefined` NO se puede omitir: sin él, un alta (que no lo trae) contra una
+    // nómina cuyas entradas tampoco traen `id` compararía `undefined !== undefined`, saltándose
+    // TODOS los duplicados en silencio.
+    const clash = context.existing?.find(
+      (line) =>
+        line.idCard.trim() === idCard &&
+        (context.selfId === undefined || line.id !== context.selfId),
+    );
     if (clash) {
       errors.idCard = `${clash.name} ya está registrado con esta cédula en el período.`;
     }
@@ -161,38 +166,25 @@ export function validateEmployeeForm(
     errors.hireDate = "La fecha de ingreso no es una fecha válida.";
   }
 
-  const approved = checkOptionalAmount(values.approvedOvertime, "El importe aprobado");
-  if (approved) {
-    errors.approvedOvertime = approved;
-  }
-
   return errors;
-}
-
-/** Si la sección del mes trae algo que guardar. Ver `toEmployeeLine`. */
-function hasMonthlyCapture(values: EmployeeFormValues): boolean {
-  return (
-    values.approvedOvertime !== null || values.provisionsThirteenth || values.provisionsFourteenth
-  );
 }
 
 /**
  * El formulario ya validado, como la ficha que `db.ts` escribe. No lleva `id` ni `periodId`: los
  * estampa la puerta, igual que con `copyRoster` y con el importador.
  *
- * **`capture` queda AUSENTE cuando nadie tocó la sección del mes**, que es la misma regla que
- * `copyRoster` — no es lo mismo «este mes no trae nada» que «este mes trae ceros», y un empleado
- * recién dado de alta tiene que leerse igual que uno copiado del mes anterior. En cuanto hay un
- * recorte tecleado o una provisión encendida, la captura se adjunta ENTERA (`emptyCapture()` como
- * base), porque lo que el motor consume es una captura completa — y con ella van las horas extras
- * en cero, que es lo que valen mientras nadie las teclee en la ficha.
+ * **`capture` queda SIEMPRE ausente**, y eso es lo correcto: lo único que este formulario tenía
+ * del mes era el importe aprobado de horas extras, y ya no lo pide. Un empleado dado de alta a
+ * mano nace por tanto exactamente igual que uno copiado del mes anterior — sin captura, no con
+ * una captura en ceros, que no es lo mismo: la segunda haría que la pantalla pintara un mes que
+ * nadie declaró.
  *
  * Sin captura no hay `PAGADO` declarado, así que el empleado nace «sin conciliar» — que es
  * exactamente lo que es. En cuanto alguien teclee lo transferido, concilia contra el rol que el
  * motor calcula, sin ningún archivo de por medio.
  */
 export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmployeeLine {
-  const line: ParsedPayrollEmployeeLine = {
+  return {
     name: values.name.trim(),
     role: values.role.trim(),
     area: values.area,
@@ -202,20 +194,85 @@ export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmploye
     hireDate: values.hireDate === "" ? null : values.hireDate,
     sectorCode: values.sectorCode.trim(),
     ...reserveFundFlags(values.reserveFund),
+    provisionsThirteenth: values.provisionsThirteenth,
+    provisionsFourteenth: values.provisionsFourteenth,
     days: values.days ?? 0,
   };
+}
 
-  if (!hasMonthlyCapture(values)) {
-    return line;
-  }
-
+/**
+ * La ficha guardada, de vuelta al formulario: lo que siembra el modo EDICIÓN.
+ *
+ * `days` y `baseSalary` se siembran aunque la edición no los pinte, para que UN solo tipo de
+ * valores y UNA sola validación sirvan a los dos modos — dos formularios distintos podrían
+ * separarse en qué exigen. `toEmployeePatch` es quien decide que no se escriban.
+ */
+export function employeeFormFrom(line: PayrollEmployeeLine): EmployeeFormValues {
   return {
-    ...line,
-    capture: {
-      ...emptyCapture(),
-      approvedOvertime: values.approvedOvertime,
-      provisionsThirteenth: values.provisionsThirteenth,
-      provisionsFourteenth: values.provisionsFourteenth,
-    },
+    name: line.name,
+    idCard: line.idCard,
+    role: line.role,
+    area: line.area,
+    baseSalary: line.baseSalary,
+    days: line.days,
+    contractType: line.contractType,
+    reserveFund: reserveFundMode(line),
+    hireDate: line.hireDate ?? "",
+    sectorCode: line.sectorCode,
+    provisionsThirteenth: line.provisionsThirteenth,
+    provisionsFourteenth: line.provisionsFourteenth,
+  };
+}
+
+/** Lo que una edición de ficha escribe. Es `Partial` por el fondo de reserva — ver abajo. */
+export type EmployeePatch = Partial<
+  Pick<
+    PayrollEmployeeLine,
+    | "name"
+    | "role"
+    | "area"
+    | "contractType"
+    | "idCard"
+    | "hireDate"
+    | "sectorCode"
+    | "hasReserveFund"
+    | "accumulatesReserveFund"
+    | "provisionsThirteenth"
+    | "provisionsFourteenth"
+  >
+>;
+
+/**
+ * El formulario ya validado, como el parche que una edición escribe.
+ *
+ * **No lleva `days` ni `baseSalary`**, aunque el formulario los tenga: los dos se editan en línea
+ * en la pantalla del mes, donde se ve moverse el líquido al corregirlos, y una segunda puerta a
+ * los mismos campos sería un sitio más donde decir otra cosa. En el ALTA sí viajan, porque ahí no
+ * hay ficha previa de la que salir.
+ *
+ * **Las dos banderas del fondo de reserva solo se escriben si el MODO cambió**, y eso no es una
+ * optimización: la traducción de `reserve-fund.ts` es asimétrica a propósito —`(FR=N, AC FR=S)` se
+ * lee «sin derecho» y volvería como `(N, N)`— y MORALES MENA SILVIA JIMENA trae exactamente esa
+ * combinación en el rol real de marzo 2026. Escribirlas siempre corregiría, al guardar cualquier
+ * otro campo, un archivo que nadie pidió corregir: las cifras no se moverían (con `FR=N` las dos
+ * ramas dan cero) pero el Excel descargado dejaría de coincidir con el que entró.
+ */
+export function toEmployeePatch(
+  values: EmployeeFormValues,
+  original: Pick<PayrollEmployeeLine, "hasReserveFund" | "accumulatesReserveFund">,
+): EmployeePatch {
+  return {
+    name: values.name.trim(),
+    role: values.role.trim(),
+    area: values.area,
+    contractType: values.contractType,
+    idCard: values.idCard.trim(),
+    hireDate: values.hireDate === "" ? null : values.hireDate,
+    sectorCode: values.sectorCode.trim(),
+    ...(reserveFundMode(original) === values.reserveFund
+      ? {}
+      : reserveFundFlags(values.reserveFund)),
+    provisionsThirteenth: values.provisionsThirteenth,
+    provisionsFourteenth: values.provisionsFourteenth,
   };
 }

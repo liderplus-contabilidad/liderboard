@@ -10,7 +10,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { pluralize } from "@/lib/format";
 import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 import { type EmployeeRowData, EmployeeRow } from "./employee-row";
-import { RegisterEmployeeModal } from "./register-employee-modal";
+import { EmployeeFormModal } from "../employee-form-modal";
 
 interface EmployeeTableProps {
   /** El período al que va a parar un alta — también es lo que el modal nombra en su subtítulo. */
@@ -91,11 +91,7 @@ export function EmployeeTable({
       )}
 
       {registering && (
-        <RegisterEmployeeModal
-          period={period}
-          lines={lines}
-          onClose={() => setRegistering(false)}
-        />
+        <EmployeeFormModal period={period} lines={lines} onClose={() => setRegistering(false)} />
       )}
     </div>
   );

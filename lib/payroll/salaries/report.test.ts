@@ -20,6 +20,8 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     sectorCode: "",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 30,
     ...overrides,
   };

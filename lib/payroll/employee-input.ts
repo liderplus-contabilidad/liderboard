@@ -47,8 +47,6 @@ export function emptyCapture(): PayrollMonthlyCapture {
       partTimeDeduction: 0,
       medicalLeaveDeduction: 0,
     },
-    provisionsThirteenth: false,
-    provisionsFourteenth: false,
     paid: null,
   };
 }
@@ -71,9 +69,10 @@ export function emptyCapture(): PayrollMonthlyCapture {
  * mismo que cuadrado.
  *
  * Reparto de responsabilidades entre las dos mitades, que es lo que decide qué campo sale de
- * dónde: el fondo de reserva (`hasReserveFund`, `accumulatesReserveFund`) es de la FICHA porque
- * depende de la antigüedad y de una elección del empleado, no del mes — si viajara en la
- * captura, copiar la nómina del mes anterior lo perdería. `paid` es del MES y por eso vive en la
+ * dónde: el fondo de reserva (`hasReserveFund`, `accumulatesReserveFund`) y las dos banderas de
+ * provisión de décimos (`provisionsThirteenth`, `provisionsFourteenth`) son de la FICHA porque
+ * dependen de la antigüedad y de una elección del empleado, no del mes — si viajaran en la
+ * captura, copiar la nómina del mes anterior las perdería. `paid` es del MES y por eso vive en la
  * captura, la teclee quien arma el rol o la traiga el `BZ` de un archivo: para el motor son
  * indistinguibles, que es lo que permite conciliar un alta a mano sin ningún Excel de por medio.
  *
@@ -109,9 +108,11 @@ export function toEngineInput(line: ParsedPayrollEmployeeLine): PayrollEmployeeI
     // cambio sin que eso toque lo guardado hasta que alguien decida escribirlo.
     deductions: { ...capture.deductions },
     paid: capture.paid,
+    // De la LÍNEA y no de la captura: provisionar los décimos o mensualizarlos es una elección del
+    // empleado, igual que las dos del fondo de reserva de arriba. Ver `PayrollEmployeeLine`.
     flags: {
-      provisionsThirteenth: capture.provisionsThirteenth,
-      provisionsFourteenth: capture.provisionsFourteenth,
+      provisionsThirteenth: line.provisionsThirteenth,
+      provisionsFourteenth: line.provisionsFourteenth,
     },
   };
 }

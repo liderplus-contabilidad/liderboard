@@ -8,10 +8,12 @@ import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
 import { areaOptions } from "@/lib/payroll/areas";
-import { addEmployee } from "@/lib/payroll/db";
+import { addEmployee, updateEmployee } from "@/lib/payroll/db";
 import {
+  employeeFormFrom,
   emptyEmployeeForm,
   toEmployeeLine,
+  toEmployeePatch,
   validateEmployeeForm,
   type EmployeeFormValues,
 } from "@/lib/payroll/employee-form";
@@ -20,7 +22,21 @@ import { RESERVE_FUND_OPTIONS } from "@/lib/payroll/reserve-fund";
 import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 
 /**
- * El alta de un empleado en un período.
+ * El alta y la EDICIÓN de un empleado: el mismo formulario en dos modos.
+ *
+ * Es un solo componente y no dos porque un campo de ficha que exista en uno y falte en el otro es
+ * exactamente el fallo que nadie ve — el alta lo pide, la edición no lo deja corregir, y la
+ * pantalla no dice nada. Lo que cambia entre modos es de dónde salen los valores, adónde se
+ * escriben y dos campos que la edición NO pinta.
+ *
+ * **La edición no ofrece sueldo base ni días.** Los dos se editan en línea en la pantalla del mes,
+ * donde se ve moverse el líquido al corregirlos, y una segunda puerta a los mismos campos sería un
+ * sitio más donde decir otra cosa. En el ALTA sí se piden: ahí no hay ficha previa de la que salir.
+ *
+ * **Una edición alcanza solo al período abierto.** Cada período guarda su propia copia de la
+ * nómina, igual que el contador tiene una hoja `GENERAL` por mes, así que corregir marzo no
+ * reescribe febrero — y la corrección viaja hacia adelante sola cuando se copia la nómina a abril.
+ * El subtítulo lo DICE, porque es lo único de esta pantalla que alguien podría suponer al revés.
  *
  * Mismo armazón que `RolUploadModal` y `DeletePeriodDialog` —capa `fixed inset-0` sobre `bg-ink/40`,
  * tarjeta de `surface`— porque es la convención de diálogo de este módulo.
@@ -49,22 +65,32 @@ const CONTRACT_OPTIONS = [
   { value: "TP", label: "TP · Tiempo parcial" },
 ];
 
-interface RegisterEmployeeModalProps {
+interface EmployeeFormModalProps {
   period: PayrollPeriod;
   /** La nómina que el período ya tiene: de ahí salen las áreas que este cliente usa de verdad y el
    *  rechazo de una cédula repetida. */
   lines: readonly PayrollEmployeeLine[];
+  /** La ficha que se está editando. AUSENTE es un alta — no hay un `mode` aparte porque el modo ES
+   *  tener o no una ficha de la que partir, y dos campos que pudieran contradecirse serían un
+   *  estado imposible más que representar. */
+  employee?: PayrollEmployeeLine;
   onClose: () => void;
 }
 
-export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmployeeModalProps) {
-  const [values, setValues] = useState<EmployeeFormValues>(emptyEmployeeForm);
+export function EmployeeFormModal({ period, lines, employee, onClose }: EmployeeFormModalProps) {
+  const editing = employee !== undefined;
+  const [values, setValues] = useState<EmployeeFormValues>(() =>
+    employee ? employeeFormFrom(employee) : emptyEmployeeForm(),
+  );
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
   const areas = useMemo(() => areaOptions(lines), [lines]);
-  const errors = useMemo(() => validateEmployeeForm(values, { existing: lines }), [values, lines]);
+  const errors = useMemo(
+    () => validateEmployeeForm(values, { existing: lines, selfId: employee?.id }),
+    [values, lines, employee?.id],
+  );
   const shown = submitted ? errors : {};
 
   const set = useCallback(
@@ -82,26 +108,37 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
     setSaving(true);
     setFailure(null);
     try {
-      await addEmployee(period.id, toEmployeeLine(values));
+      if (employee) {
+        await updateEmployee(employee.id, toEmployeePatch(values, employee));
+      } else {
+        await addEmployee(period.id, toEmployeeLine(values));
+      }
       onClose();
     } catch {
       // La tabla la refresca `useLiveQuery`, así que si la escritura falla nadie lo notaría: el
-      // modal se cerraría y el empleado no estaría. Mejor quedarse abierto y decirlo.
-      setFailure("No se pudo guardar el empleado. Inténtalo otra vez.");
+      // modal se cerraría y el cambio no estaría. Mejor quedarse abierto y decirlo.
+      setFailure(
+        employee
+          ? "No se pudo guardar la ficha. Inténtalo otra vez."
+          : "No se pudo guardar el empleado. Inténtalo otra vez.",
+      );
     } finally {
       setSaving(false);
     }
-  }, [errors, period.id, values, onClose]);
+  }, [errors, period.id, values, employee, onClose]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-6">
       <div className="flex max-h-full w-full max-w-[620px] flex-col overflow-hidden rounded-[13px] border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">Registrar empleado</h2>
+            <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">
+              {editing ? "Editar ficha" : "Registrar empleado"}
+            </h2>
             <p className="mt-0.5 text-[12.5px] text-faint">
-              Se agrega al período {periodLongLabel(period.year, period.monthIndex)} y se recalcula
-              el rol.
+              {editing
+                ? `Cambia solo el período ${periodLongLabel(period.year, period.monthIndex)} y se recalcula el rol.`
+                : `Se agrega al período ${periodLongLabel(period.year, period.monthIndex)} y se recalcula el rol.`}
             </p>
           </div>
           <button
@@ -148,30 +185,38 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
               onChange={(event) => set("area", event.target.value)}
               options={areas.map((area) => ({ value: area, label: area }))}
             />
-            <FormField label="Sueldo base" error={shown.baseSalary}>
-              <FieldBox invalid={Boolean(shown.baseSalary)}>
-                <NumericInput
-                  ariaLabel="Sueldo base"
-                  value={values.baseSalary}
-                  nullable
-                  align="left"
-                  onCommit={(value) => set("baseSalary", value)}
-                />
-              </FieldBox>
-            </FormField>
+            {/* Los dos campos del MES. La edición no los pinta: se corrigen en línea en la
+                pantalla del empleado, donde se ve moverse el líquido. Sus valores siguen en el
+                formulario —sembrados de la ficha— para que una sola validación sirva a los dos
+                modos, y `toEmployeePatch` es quien decide no escribirlos. */}
+            {!editing && (
+              <>
+                <FormField label="Sueldo base" error={shown.baseSalary}>
+                  <FieldBox invalid={Boolean(shown.baseSalary)}>
+                    <NumericInput
+                      ariaLabel="Sueldo base"
+                      value={values.baseSalary}
+                      nullable
+                      align="left"
+                      onCommit={(value) => set("baseSalary", value)}
+                    />
+                  </FieldBox>
+                </FormField>
 
-            <FormField label="Días trabajados" error={shown.days}>
-              <FieldBox invalid={Boolean(shown.days)}>
-                <NumericInput
-                  ariaLabel="Días trabajados"
-                  format="plain"
-                  value={values.days}
-                  nullable
-                  align="left"
-                  onCommit={(value) => set("days", value)}
-                />
-              </FieldBox>
-            </FormField>
+                <FormField label="Días trabajados" error={shown.days}>
+                  <FieldBox invalid={Boolean(shown.days)}>
+                    <NumericInput
+                      ariaLabel="Días trabajados"
+                      format="plain"
+                      value={values.days}
+                      nullable
+                      align="left"
+                      onCommit={(value) => set("days", value)}
+                    />
+                  </FieldBox>
+                </FormField>
+              </>
+            )}
             <Select
               label="Fondo de reserva"
               value={values.reserveFund}
@@ -212,47 +257,39 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
             />
           </div>
 
+          {editing && (
+            <p className="mt-3 text-[11.5px] leading-relaxed text-faint">
+              El sueldo base y los días trabajados se corrigen en la pantalla del empleado, junto al
+              líquido que mueven.
+            </p>
+          )}
+
+          {/* Los DÉCIMOS son de la ficha y no del mes: cobrarlos mensualizados o acumularlos es una
+              elección del empleado, la misma clase de decisión que el fondo de reserva de arriba.
+              Por eso están aquí y no en la pantalla del mes, y por eso la copia de nómina se los
+              lleva a abril sin que nadie los vuelva a marcar. */}
           <div className="mt-4 overflow-hidden rounded-[9px] border border-border">
             <div className="flex items-baseline gap-2 border-b border-border bg-surface-muted px-3.5 py-2.5">
-              <span className="text-[12px] font-semibold text-ink">Ajustes del mes</span>
-              <span className="text-[11.5px] text-faint">opcional</span>
+              <span className="text-[12px] font-semibold text-ink">Décimos</span>
+              <span className="text-[11.5px] text-faint">provisión</span>
             </div>
 
-            <div className="px-3.5 py-3.5">
-              <FormField
-                label="Importe aprobado de horas extras"
-                error={shown.approvedOvertime}
-                hint="En blanco se reconocen todas las trabajadas; 0 no reconoce ninguna. Lo aprueba Gerencia cada mes."
-                className="block max-w-[280px]"
-              >
-                <FieldBox invalid={Boolean(shown.approvedOvertime)}>
-                  <NumericInput
-                    ariaLabel="Importe aprobado de horas extras"
-                    value={values.approvedOvertime}
-                    nullable
-                    align="left"
-                    placeholder="Todas"
-                    onCommit={(value) => set("approvedOvertime", value)}
-                  />
-                </FieldBox>
-              </FormField>
-
-              <div className="mt-4 flex flex-col gap-2.5">
-                <ProvisionToggle
-                  label="Provisiona décimo tercero"
-                  checked={values.provisionsThirteenth}
-                  onChange={(checked) => set("provisionsThirteenth", checked)}
-                />
-                <ProvisionToggle
-                  label="Provisiona décimo cuarto"
-                  checked={values.provisionsFourteenth}
-                  onChange={(checked) => set("provisionsFourteenth", checked)}
-                />
-                <p className="text-[11px] leading-relaxed text-faint">
-                  Apagadas por defecto: los décimos ya se mensualizan en el rol, y provisionarlos
-                  otra vez los contaría dos veces.
-                </p>
-              </div>
+            <div className="flex flex-col gap-2.5 px-3.5 py-3.5">
+              <ProvisionToggle
+                label="Provisiona décimo tercero"
+                checked={values.provisionsThirteenth}
+                onChange={(checked) => set("provisionsThirteenth", checked)}
+              />
+              <ProvisionToggle
+                label="Provisiona décimo cuarto"
+                checked={values.provisionsFourteenth}
+                onChange={(checked) => set("provisionsFourteenth", checked)}
+              />
+              <p className="text-[11px] leading-relaxed text-faint">
+                Apagadas por defecto: los décimos ya se mensualizan en el rol, y provisionarlos otra
+                vez los contaría dos veces. Encendidas suman al costo total empresa sin tocar el
+                líquido del empleado.
+              </p>
             </div>
           </div>
 
@@ -261,15 +298,16 @@ export function RegisterEmployeeModal({ period, lines, onClose }: RegisterEmploy
 
         <div className="flex items-center justify-between gap-4 border-t border-border px-5 py-4">
           <p className="text-[11.5px] leading-relaxed text-faint">
-            Los valores calculados (unificado, décimos, IESS) se generan solos. Las horas extras y
-            los descuentos se capturan en la ficha del empleado.
+            {editing
+              ? "Los meses anteriores no cambian: cada período guarda su propia nómina."
+              : "Los valores calculados (unificado, décimos, IESS) se generan solos. Las horas extras y los descuentos se capturan en la ficha del empleado."}
           </p>
           <div className="flex shrink-0 items-center gap-2.5">
             <Button variant="secondary" size="sm" disabled={saving} onClick={onClose}>
               Cancelar
             </Button>
             <Button size="sm" disabled={saving} onClick={() => void save()}>
-              {saving ? "Guardando…" : "Guardar empleado"}
+              {saving ? "Guardando…" : editing ? "Guardar ficha" : "Guardar empleado"}
             </Button>
           </div>
         </div>

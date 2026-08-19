@@ -3,9 +3,12 @@
  * otro y qué no — la frontera de la operación, para que nadie tenga que deducirla leyendo `db.ts`.
  *
  * LO QUE SOBREVIVE (la ficha, estable mes a mes): nombre, cargo, área, sueldo base, tipo de
- * contrato, cédula, fecha de ingreso, código sectorial, y las dos banderas del fondo de reserva
- * (`FR` y `AC FR`) — que son de la ficha porque dependen de la antigüedad y de una elección del
- * empleado, no del mes.
+ * contrato, cédula, fecha de ingreso, código sectorial, las dos banderas del fondo de reserva
+ * (`FR` y `AC FR`) y las dos de provisión de décimos (`AS` y `AT`) — que son de la ficha porque
+ * dependen de la antigüedad y de una elección del empleado, no del mes. Provisionar los décimos o
+ * mensualizarlos es lo mismo que acumular el fondo de reserva o cobrarlo: se decide una vez con
+ * cada persona, y volver a marcarlo cada mes era una forma segura de que un mes se quedara sin
+ * provisión sin que nada avisara.
  *
  * LO QUE NO: todo lo que vive en `PayrollMonthlyCapture` —horas extras (`G`, `H`, `I`), el
  * importe aprobado (`M`), comisiones/viáticos/bonos (`P`–`V`), anticipos, multas, préstamos y
@@ -53,6 +56,8 @@ export function copyRoster(source: readonly PayrollEmployeeLine[]): ParsedPayrol
     sectorCode: line.sectorCode,
     hasReserveFund: line.hasReserveFund,
     accumulatesReserveFund: line.accumulatesReserveFund,
+    provisionsThirteenth: line.provisionsThirteenth,
+    provisionsFourteenth: line.provisionsFourteenth,
     days: COPIED_DAYS,
     ...(line.capture?.extras?.length
       ? {

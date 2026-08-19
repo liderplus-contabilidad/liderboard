@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  employeeFormFrom,
   emptyEmployeeForm,
   toEmployeeLine,
+  toEmployeePatch,
   validateEmployeeForm,
   type EmployeeFormValues,
 } from "./employee-form";
+import type { PayrollEmployeeLine } from "./types";
 
 function form(overrides: Partial<EmployeeFormValues> = {}): EmployeeFormValues {
   return {
@@ -12,6 +15,28 @@ function form(overrides: Partial<EmployeeFormValues> = {}): EmployeeFormValues {
     name: "MORALES MENA SILVIA JIMENA",
     idCard: "1002030405",
     role: "Camarera",
+    ...overrides,
+  };
+}
+
+/** Una ficha guardada, la de MORALES tal como el rol real de marzo 2026 la trae. */
+function storedLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
+  return {
+    id: "e1",
+    periodId: "p1",
+    name: "MORALES MENA SILVIA JIMENA",
+    role: "CAMARERA DE PISOS",
+    area: "HOSPEDAJE",
+    baseSalary: 487.21,
+    contractType: "CT",
+    idCard: "1002030405",
+    hireDate: "2025-10-01",
+    sectorCode: "1608551004134",
+    hasReserveFund: false,
+    accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
+    days: 30,
     ...overrides,
   };
 }
@@ -31,12 +56,6 @@ describe("emptyEmployeeForm", () => {
     expect(values.provisionsFourteenth).toBe(false);
   });
 
-  // `null` es «se reconocen todas», que es lo que hace un empleado nuevo del que nadie recortó
-  // nada. Un cero por defecto apagaría las horas extras sin que nadie lo pidiera.
-  it("no recorta las horas extras por defecto", () => {
-    expect(emptyEmployeeForm().approvedOvertime).toBeNull();
-  });
-
   it("devuelve un objeto nuevo en cada llamada", () => {
     expect(emptyEmployeeForm()).not.toBe(emptyEmployeeForm());
   });
@@ -47,8 +66,8 @@ describe("validateEmployeeForm · un formulario correcto", () => {
     expect(validateEmployeeForm(form())).toEqual({});
   });
 
-  it("acepta los ajustes del mes enteros vacíos", () => {
-    expect(validateEmployeeForm(form({ approvedOvertime: null }))).toEqual({});
+  it("acepta una ficha sin fecha de ingreso ni código sectorial", () => {
+    expect(validateEmployeeForm(form({ hireDate: "", sectorCode: "" }))).toEqual({});
   });
 });
 
@@ -150,21 +169,6 @@ describe("validateEmployeeForm · la fecha de ingreso", () => {
   });
 });
 
-describe("validateEmployeeForm · los ajustes del mes", () => {
-  // Los tres estados de `approvedOvertime` (§6): `null` todas, `0` ninguna, un número ese importe.
-  it("admite los tres estados del importe aprobado", () => {
-    expect(validateEmployeeForm(form({ approvedOvertime: null })).approvedOvertime).toBeUndefined();
-    expect(validateEmployeeForm(form({ approvedOvertime: 0 })).approvedOvertime).toBeUndefined();
-    expect(
-      validateEmployeeForm(form({ approvedOvertime: 16.75 })).approvedOvertime,
-    ).toBeUndefined();
-  });
-
-  it("no admite un importe aprobado negativo", () => {
-    expect(validateEmployeeForm(form({ approvedOvertime: -1 })).approvedOvertime).toBeTruthy();
-  });
-});
-
 describe("validateEmployeeForm · varios errores a la vez", () => {
   // La pantalla tiene que poder señalar CADA campo que falla, no rendirse en el primero.
   it("señala todos los campos que fallan", () => {
@@ -227,29 +231,141 @@ describe("toEmployeeLine", () => {
     expect(toEmployeeLine(form()).capture).toBeUndefined();
   });
 
-  // `0` en el importe aprobado es el `*0` del libro: apaga las horas extras. Es una decisión
-  // tecleada y tiene que sobrevivir aunque no haya ninguna hora capturada todavía.
-  it("adjunta la captura cuando se recortan las horas extras a cero", () => {
-    expect(toEmployeeLine(form({ approvedOvertime: 0 })).capture?.approvedOvertime).toBe(0);
+  // El alta ya NO tiene nada del mes que guardar: el importe aprobado se teclea en la pantalla del
+  // empleado, junto a las horas que recorta. Así que la captura queda ausente SIEMPRE, encienda lo
+  // que encienda el formulario.
+  it("tampoco adjunta captura al encender una provisión: las provisiones son de la ficha", () => {
+    const line = toEmployeeLine(form({ provisionsThirteenth: true, provisionsFourteenth: true }));
+    expect(line.capture).toBeUndefined();
+    expect(line.provisionsThirteenth).toBe(true);
+    expect(line.provisionsFourteenth).toBe(true);
   });
 
-  it("adjunta la captura cuando se enciende una provisión de décimos", () => {
-    expect(toEmployeeLine(form({ provisionsThirteenth: true })).capture).toMatchObject({
+  // Sin captura no hay `PAGADO`, y eso es lo que hace que un alta nazca «sin conciliar» en vez de
+  // cuadrada contra un cero que nadie transfirió.
+  it("no declara un PAGADO que nadie tecleó: el alta nace sin conciliar", () => {
+    expect(toEmployeeLine(form()).capture).toBeUndefined();
+  });
+});
+
+describe("employeeFormFrom · la ficha guardada, de vuelta al formulario", () => {
+  it("siembra los diez campos de ficha", () => {
+    const values = employeeFormFrom(
+      storedLine({
+        hasReserveFund: true,
+        accumulatesReserveFund: true,
+        provisionsThirteenth: true,
+      }),
+    );
+    expect(values).toEqual({
+      name: "MORALES MENA SILVIA JIMENA",
+      idCard: "1002030405",
+      role: "CAMARERA DE PISOS",
+      area: "HOSPEDAJE",
+      baseSalary: 487.21,
+      days: 30,
+      contractType: "CT",
+      reserveFund: "acumula",
+      hireDate: "2025-10-01",
+      sectorCode: "1608551004134",
       provisionsThirteenth: true,
       provisionsFourteenth: false,
     });
   });
 
-  // El alta ya no captura las cantidades de horas —se teclean en la ficha, junto al importe que
-  // producen—, así que salen de aquí en CERO y no en nulo: nadie trabajó horas que no se declararon.
-  it("las horas extras nacen en cero, que es lo que valen sin declarar", () => {
-    const capture = toEmployeeLine(form({ approvedOvertime: 0 })).capture;
-    expect(capture?.overtimeHours50).toBe(0);
-    expect(capture?.overtimeHours100).toBe(0);
-    expect(capture?.overtimeHours25).toBe(0);
+  // El formulario habla en texto y la ficha en `null`: sembrar `null` pondría la palabra en el
+  // campo de fecha.
+  it("una fecha de ingreso ausente se siembra vacía, no como `null`", () => {
+    expect(employeeFormFrom(storedLine({ hireDate: null })).hireDate).toBe("");
   });
 
-  it("no declara un PAGADO que nadie tecleó: el alta nace sin conciliar", () => {
-    expect(toEmployeeLine(form({ approvedOvertime: 0 })).capture?.paid).toBeNull();
+  it("siembra `days` y `baseSalary` aunque la edición no los pinte", () => {
+    // Es lo que permite UNA sola validación para los dos modos: sin ellos, editar señalaría dos
+    // campos obligatorios que el diálogo ni siquiera enseña.
+    const values = employeeFormFrom(storedLine({ days: 15, baseSalary: 600 }));
+    expect(validateEmployeeForm(values)).toEqual({});
+  });
+});
+
+describe("toEmployeePatch · lo que una edición escribe", () => {
+  it("no escribe `days` ni `baseSalary`: los dos se editan en la pantalla del mes", () => {
+    const patch = toEmployeePatch(employeeFormFrom(storedLine({ days: 15 })), storedLine());
+    expect(patch).not.toHaveProperty("days");
+    expect(patch).not.toHaveProperty("baseSalary");
+  });
+
+  it("no escribe `capture`: una edición de ficha no toca el mes", () => {
+    expect(toEmployeePatch(employeeFormFrom(storedLine()), storedLine())).not.toHaveProperty(
+      "capture",
+    );
+  });
+
+  it("escribe los campos de identidad recortados", () => {
+    const values = employeeFormFrom(storedLine());
+    const patch = toEmployeePatch(
+      { ...values, name: "  ANA TORRES  ", role: " Cajera " },
+      storedLine(),
+    );
+    expect(patch.name).toBe("ANA TORRES");
+    expect(patch.role).toBe("Cajera");
+  });
+
+  it("escribe las dos provisiones, que son de la ficha", () => {
+    const values = employeeFormFrom(storedLine());
+    const patch = toEmployeePatch({ ...values, provisionsFourteenth: true }, storedLine());
+    expect(patch.provisionsThirteenth).toBe(false);
+    expect(patch.provisionsFourteenth).toBe(true);
+  });
+
+  /**
+   * La asimetría de `reserve-fund.ts` con un caso real: MORALES trae `(FR=N, AC FR=S)`, que se lee
+   * «sin derecho» y volvería como `(N, N)`. Guardar cualquier otro campo no puede corregir un
+   * archivo que nadie pidió corregir — las cifras no se moverían, pero el Excel descargado dejaría
+   * de coincidir con el que entró.
+   */
+  it("NO reescribe las banderas del fondo de reserva si el modo no cambió", () => {
+    const line = storedLine({ hasReserveFund: false, accumulatesReserveFund: true });
+    const patch = toEmployeePatch({ ...employeeFormFrom(line), role: "Otro" }, line);
+    expect(patch).not.toHaveProperty("hasReserveFund");
+    expect(patch).not.toHaveProperty("accumulatesReserveFund");
+  });
+
+  it("SÍ las reescribe cuando el modo cambia", () => {
+    const line = storedLine();
+    const patch = toEmployeePatch({ ...employeeFormFrom(line), reserveFund: "acumula" }, line);
+    expect(patch.hasReserveFund).toBe(true);
+    expect(patch.accumulatesReserveFund).toBe(true);
+  });
+});
+
+describe("validateEmployeeForm · la cédula al EDITAR", () => {
+  it("la cédula propia no se acusa de duplicada", () => {
+    const values = employeeFormFrom(storedLine());
+    const errors = validateEmployeeForm(values, {
+      existing: [{ id: "e1", name: "MORALES MENA SILVIA JIMENA", idCard: "1002030405" }],
+      selfId: "e1",
+    });
+    expect(errors.idCard).toBeUndefined();
+  });
+
+  it("la de OTRO empleado sí, nombrándolo", () => {
+    const values = employeeFormFrom(storedLine({ idCard: "0908070605" }));
+    const errors = validateEmployeeForm(values, {
+      existing: [
+        { id: "e1", name: "MORALES MENA SILVIA JIMENA", idCard: "1002030405" },
+        { id: "e2", name: "VEGA GARCIA MARIANA DE JESUS", idCard: "0908070605" },
+      ],
+      selfId: "e1",
+    });
+    expect(errors.idCard).toContain("VEGA GARCIA MARIANA DE JESUS");
+  });
+
+  // Sin `selfId` —un ALTA— la comparación no puede saltarse ningún duplicado, ni siquiera cuando
+  // la nómina llega sin `id`, que es como la escriben varios llamadores.
+  it("sin `selfId` sigue atrapando el duplicado aunque la nómina no traiga `id`", () => {
+    const errors = validateEmployeeForm(form({ idCard: "1002030405" }), {
+      existing: [{ name: "MORALES MENA SILVIA JIMENA", idCard: "1002030405" }],
+    });
+    expect(errors.idCard).toBeTruthy();
   });
 });

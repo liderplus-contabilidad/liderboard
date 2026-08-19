@@ -24,6 +24,9 @@ interface GoldenCase {
   form: Partial<EmployeeFormValues>;
   /** Lo que se teclea DESPUÉS en la ficha; el alta no lo pide. */
   hours?: Partial<CapturedHours>;
+  /** `M` · el importe aprobado. También se teclea en la ficha, junto a las horas que recorta: el
+   *  alta salió de pedirlo justamente porque no captura esas horas. */
+  approvedOvertime?: number | null;
   deductions?: Partial<CapturedDeductions>;
   /** Ausente en los casos que no comparan los cinco totales sino una derivación suelta. */
   expected?: {
@@ -44,7 +47,8 @@ interface GoldenCase {
 const GOLDEN: GoldenCase[] = [
   {
     name: "MORALES MENA SILVIA JIMENA",
-    form: { baseSalary: 487.21, approvedOvertime: 0 },
+    form: { baseSalary: 487.21 },
+    approvedOvertime: 0,
     hours: { overtimeHours50: 5.5 },
     deductions: { iessLoans: 64.25 },
     expected: {
@@ -68,7 +72,8 @@ const GOLDEN: GoldenCase[] = [
   },
   {
     name: "SANDOVAL COLIMBA PEDRO MANUEL",
-    form: { baseSalary: 488.66, approvedOvertime: 0 },
+    form: { baseSalary: 488.66 },
+    approvedOvertime: 0,
     hours: { overtimeHours50: 26 },
     expected: {
       grossIncome: 569.5500000000001,
@@ -80,7 +85,8 @@ const GOLDEN: GoldenCase[] = [
   },
   {
     name: "ACOSTA MARIA PASTORA",
-    form: { baseSalary: 486.25, approvedOvertime: 0 },
+    form: { baseSalary: 486.25 },
+    approvedOvertime: 0,
     hours: { overtimeHours50: 13 },
     expected: {
       grossIncome: 566.9399999999999,
@@ -130,7 +136,7 @@ function registered(entry: GoldenCase): PayrollEmployeeLine {
     periodId: "period-1",
   };
 
-  if (!entry.hours && !entry.deductions) {
+  if (!entry.hours && !entry.deductions && entry.approvedOvertime === undefined) {
     return line;
   }
   // Lo que hace la ficha al teclear unas horas o un descuento: parte de la captura que haya, o de
@@ -141,6 +147,7 @@ function registered(entry: GoldenCase): PayrollEmployeeLine {
     capture: {
       ...capture,
       ...entry.hours,
+      ...(entry.approvedOvertime === undefined ? {} : { approvedOvertime: entry.approvedOvertime }),
       deductions: { ...capture.deductions, ...entry.deductions },
     },
   };
@@ -190,7 +197,8 @@ describe("bajar los días trabajados a 15", () => {
   // porque es el único sitio donde alguien teclea unos días distintos de 30.
   const base: GoldenCase = {
     name: "Media jornada",
-    form: { baseSalary: 487.21, approvedOvertime: null },
+    form: { baseSalary: 487.21 },
+    approvedOvertime: null,
     hours: { overtimeHours50: 5.5 },
   };
 

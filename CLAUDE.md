@@ -1058,6 +1058,38 @@ motor, y existe porque estaba escrita a mano en cada consumidor: la de la tabla 
 declaró el archivo mientras la del motor comparaba lo tecleado, y el badge de conciliación y la
 cifra de al lado podían discrepar.
 
+**Qué es de la FICHA y qué del MES es la línea que decide dónde se edita cada cosa.** La ficha
+(`PayrollEmployeeLine`) guarda lo estable —identidad, área, tipo de contrato, sueldo base, las dos
+banderas del fondo de reserva (`FR`/`AC FR`) y **las dos de provisión de décimos** (`AS`/`AT`)— y la
+captura, lo que se declara cada mes. Las provisiones vivían en la captura y son el mismo tipo de
+decisión que el fondo de reserva —cobrar los décimos mensualizados o acumularlos es una elección del
+EMPLEADO, la del SUT—, así que no sobrevivían a `copyRoster`: había que volver a marcarlas cada mes,
+persona por persona, y olvidarse un mes dejaba de provisionar sin que nada avisara. Mudarlas no
+cambió la granularidad de nada —una `PayrollEmployeeLine` ya se guarda POR PERÍODO, así que el
+importador las sigue deduciendo del archivo mes a mes (`AS`/`AT` ≠ 0)— ni tocó el motor:
+`PayrollComputationFlags` es la misma entrada y solo cambió quién la compone. La v4 de Dexie las
+sube de `capture` a la línea; con el archivo real es un no-op (apagadas en los seis), pero una
+encendida perdida solo se notaría en el costo total empresa, que nadie compara contra el mes
+anterior. **`employee-form-modal.tsx` es UN formulario con dos modos**, alta y edición: un campo de
+ficha que existiera en uno y faltara en el otro es el fallo que nadie ve. La edición NO pinta sueldo
+base ni días —se corrigen en línea en la pantalla del mes, donde se ve moverse el líquido, y una
+segunda puerta sería un sitio más donde decir otra cosa—, aunque `EmployeeFormValues` los conserve
+sembrados para que UNA validación sirva a los dos modos; `toEmployeePatch` es quien decide no
+escribirlos. **Y NO reescribe las banderas del fondo de reserva si el modo no cambió**: la
+traducción de `reserve-fund.ts` es asimétrica a propósito (`(FR=N, AC FR=S)` se lee «sin derecho» y
+volvería como `(N, N)`) y MORALES trae esa combinación en el rol real, así que guardar el cargo
+corregiría un archivo que nadie pidió corregir y el Excel descargado dejaría de coincidir con el que
+entró. **Una edición —y un borrado— alcanzan SOLO al período abierto**, que es lo que el
+almacenamiento ya dice y lo que dice el libro: una hoja `GENERAL` por mes. Corregir marzo no
+reescribe febrero, y la corrección viaja hacia adelante sola cuando `copyRoster` crea abril. La
+tarjeta del mes quedó solo con el importe aprobado de horas extras y por eso se llama «Horas
+extras»; su campo lleva la marca `$` PEGADA —la convención de `concept-table.tsx`, donde una `h`
+marca las horas y un `$` el importe—, porque «Importe aprobado de horas extras» con un placeholder
+«Todas» se lee como una cantidad de horas. Las dos provisiones se leen en la rejilla del período en
+SOLO LECTURA, con su importe cuando están encendidas: son las dos únicas cifras de `AS` y `AT` en
+toda la pantalla —`EmployeeTotals` no desglosa ninguna de las cinco provisiones— y sacar las
+casillas sin reemplazo las habría perdido.
+
 **La CONCILIACIÓN es la clasificación del `difference` del motor** (`CA = AP − BZ`), no una segunda
 resta: `reconciliationStatusOf` (`period-detail.ts`) solo mira si es `null` (nadie declaró lo
 pagado → «sin conciliar»), cero («conciliado») o cualquier otra cosa («con diferencia»). El colapso

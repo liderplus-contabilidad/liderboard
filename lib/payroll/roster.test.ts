@@ -17,6 +17,8 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     sectorCode: "S001",
     hasReserveFund: false,
     accumulatesReserveFund: false,
+    provisionsThirteenth: false,
+    provisionsFourteenth: false,
     days: 15, // un ingreso a mitad de mes: NO debe sobrevivir a la copia
     ...overrides,
   };
@@ -49,7 +51,7 @@ describe("copyRoster", () => {
     expect(copied).not.toHaveProperty("periodId");
   });
 
-  it("no arrastra nada de lo que es del mes: la ficha copiada solo tiene sus 11 campos", () => {
+  it("no arrastra nada de lo que es del mes: la ficha copiada solo tiene sus 13 campos", () => {
     // Este test es la frontera de la copia escrita como lista cerrada, a propósito: cualquier
     // campo nuevo de `PayrollEmployeeLine` obliga a decidir aquí, explícitamente, si es de la
     // ficha o del mes. Sin él, un campo del MES entraría en la copia sin que nada lo delate y
@@ -66,6 +68,8 @@ describe("copyRoster", () => {
         "hireDate",
         "idCard",
         "name",
+        "provisionsFourteenth",
+        "provisionsThirteenth",
         "role",
         "sectorCode",
       ].sort(),
@@ -102,8 +106,6 @@ describe("copyRoster", () => {
             partTimeDeduction: 0,
             medicalLeaveDeduction: 0,
           },
-          provisionsThirteenth: false,
-          provisionsFourteenth: false,
           paid: null,
         },
       }),
@@ -115,6 +117,25 @@ describe("copyRoster", () => {
     const [copied] = copyRoster([line({ hasReserveFund: true, accumulatesReserveFund: true })]);
     expect(copied.hasReserveFund).toBe(true);
     expect(copied.accumulatesReserveFund).toBe(true);
+  });
+
+  /**
+   * El motivo por el que las dos provisiones se mudaron de la captura a la ficha: viviendo en la
+   * captura, abril nacía sin ellas y había que volver a marcarlas empleado por empleado — y
+   * olvidarse un mes dejaba de provisionar sin que nada avisara.
+   */
+  it("SÍ copia las dos banderas de provisión de décimos, que también son de la ficha", () => {
+    const [copied] = copyRoster([line({ provisionsThirteenth: true, provisionsFourteenth: true })]);
+    expect(copied.provisionsThirteenth).toBe(true);
+    expect(copied.provisionsFourteenth).toBe(true);
+  });
+
+  it("las copia con su valor, no encendidas: una apagada sigue apagada", () => {
+    const [copied] = copyRoster([
+      line({ provisionsThirteenth: true, provisionsFourteenth: false }),
+    ]);
+    expect(copied.provisionsThirteenth).toBe(true);
+    expect(copied.provisionsFourteenth).toBe(false);
   });
 
   it("copia varias líneas manteniendo el orden", () => {
