@@ -125,8 +125,8 @@ const CONSOLIDADO_COLOR = "#334155";
 export interface PresetSeeding {
   seeds?: { centers?: boolean; periods?: boolean };
   frequency?: Frequency;
-  /** Las cuentas que la vista deja marcadas; presentes solo si sus categorías SON del plan. */
-  codes?: string[];
+  /** Si marcar una cuenta ACOTA la vista en vez de apagarla; solo cuando sus rubros SON del plan. */
+  narrowedByCodes?: boolean;
 }
 
 export interface MonthlyBatchOutcome {
@@ -623,10 +623,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [allowed],
   );
 
-  // Desmarcar una cuenta APAGA la vista predeterminada abierta —son dos respuestas a «qué dibujo»—
-  // salvo cuando la vista es la dueña de esas marcas: en el anexo de gastos los rubros SON cuentas,
-  // así que quitar uno acota el reparto en vez de contradecirlo, y apagar la vista entera sería lo
-  // contrario de para lo que están las marcas.
+  // Marcar una cuenta APAGA la vista predeterminada abierta —son dos respuestas a «qué dibujo»—
+  // salvo cuando la vista declara dejarse acotar por ellas: en el anexo de gastos los rubros SON
+  // cuentas, así que marcar una acota el reparto en vez de contradecirlo, y apagar la vista entera
+  // sería lo contrario de para lo que están las marcas.
   const toggleCode = useCallback(
     (code: string) => {
       setRawFilters(
@@ -691,7 +691,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // QUÉ siembra cada vista y con qué granularidad se lee lo declara la vista (`preset-views.ts`),
   // no este callback: lo que hay que marcar depende de lo que se dibuja, la misma razón por la que
   // `isAvailable` vive allí. «Ventas» reparte por establecimiento y mes y por eso los marca; el
-  // anexo de gastos es una columna por rubro y no tiene nada que repartir, así que no siembra.
+  // anexo de gastos es una columna por rubro sobre el tramo entero, así que no siembra nada.
   const selectPreset = useCallback(
     (id: string, view: PresetSeeding = {}) => {
       const turningOn = filters.preset !== id;
@@ -708,10 +708,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         "mensual",
         next,
       );
-      // Las cuentas que la vista dibuja quedan MARCADAS, para que se vea cuáles entran y se quite
-      // un rubro desmarcándolo. Solo las trae una vista cuyas categorías son cuentas del plan.
-      const seededCodes = turningOn ? (view.codes ?? []) : [];
-      setPresetOwnsCodes(seededCodes.length > 0);
+      // Ninguna vista siembra CUENTAS —el anexo lo hizo y eran más de cien chips—, pero la suya
+      // sigue pudiendo acotarse marcándolas, y eso lo declara ella: sin este pase, marcar una
+      // apagaría la vista, que es la regla general y aquí sería la contraria.
+      setPresetOwnsCodes(turningOn && (view.narrowedByCodes ?? false));
       setRawFilters(
         withPresetSelected(
           filters,
@@ -722,7 +722,6 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
                 .map((view) => view.id)
             : [],
           view?.seeds?.periods ? periodSlots(next).filter((slot) => covered.has(slot.index)) : [],
-          seededCodes,
         ),
       );
     },

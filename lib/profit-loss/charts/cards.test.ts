@@ -17,7 +17,7 @@ import type { ChartCardSpec } from "@/lib/charts/types";
 import type { AnalyticsSource } from "../analytics/types";
 import { OTHERS_CODE } from "../analytics/structure";
 import { ANNEX_MAX_SLICES } from "./expense-distribution";
-import { emptyFilters, type PygFilters } from "../filters";
+import { emptyFilters, type PygFilters, withPresetSelected } from "../filters";
 import { formatCurrency } from "@/lib/format";
 import type { Frequency } from "../types";
 import { buildSeries } from "../analytics/series";
@@ -28,8 +28,7 @@ import {
   EXPENSE_DISTRIBUTION_PRESET,
   PRESET_VIEWS,
 } from "./preset-views";
-import { expenseRootsOf, presetQuery, sumOver } from "./presets";
-import { DINGOO_SYSTEM, MICROPLUS_SYSTEM } from "../upload/systems";
+import { expenseRootsOf, leavesOfAny, presetQuery, sumOver } from "./presets";
 import { activeSource, type SelectionContext } from "./selection";
 
 /**
@@ -1021,36 +1020,34 @@ describe("la vista predeterminada de costos y gastos", () => {
   const conAnexo = () =>
     buildGraficosCards(MANOR, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }));
 
-  it("solo se ofrece en MicroPlus, donde el plan da un anexo legible", () => {
-    // No es que el cálculo falle en otros: es que reparte sobre las cuentas de movimiento, y otros
-    // planes bajan mucho más y devuelven más de cien rubros — una tarta que no reparte nada.
-    const source = activeSource(SIN_HOTEL);
-    const conMicroplus = availablePresets({ source, systemId: MICROPLUS_SYSTEM });
-    const conOtro = availablePresets({ source, systemId: DINGOO_SYSTEM });
+  it("se ofrece con CUALQUIER plan que declare cuentas de gasto, venga de donde venga", () => {
+    // Estuvo atada a MicroPlus por legibilidad, y quien la da hoy es el CORTE de la tarjeta
+    // —catorce rubros y «Otros»—, que no depende del sistema. Los dos planes de este archivo son
+    // de formatos distintos y los dos la reciben.
+    for (const context of [SIN_HOTEL, MANOR]) {
+      const ids = availablePresets({ source: activeSource(context) }).map((preset) => preset.id);
 
-    expect(conMicroplus.map((preset) => preset.id)).toContain(EXPENSE_DISTRIBUTION_PRESET);
-    expect(conOtro.map((preset) => preset.id)).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
+      expect(ids).toContain(EXPENSE_DISTRIBUTION_PRESET);
+    }
   });
 
-  it("sin sistema —el consolidado entre clientes— tampoco se ofrece", () => {
-    // Allí los planes de varios clientes se UNEN, así que «las cuentas más específicas» son de
-    // varios sistemas a la vez y el anexo dejaría de ser el anexo de nadie.
-    const ids = availablePresets({ source: activeSource(MANOR), systemId: null }).map((p) => p.id);
+  it("un plan sin cuentas de gasto que repartir no la recibe", () => {
+    // La única condición que queda, y es estructural: con menos de dos rubros «distribución» es la
+    // cuenta con otro nombre.
+    const ids = availablePresets({ source: undefined }).map((preset) => preset.id);
 
     expect(ids).not.toContain(EXPENSE_DISTRIBUTION_PRESET);
   });
 
-  it("«Ventas» sigue dependiendo del PLAN y no del sistema", () => {
-    // Las dos condiciones son distintas a propósito: una mira los rótulos del árbol, la otra el
-    // formato del que salió el archivo.
-    const sinHotel = availablePresets({
-      source: activeSource(SIN_HOTEL),
-      systemId: MICROPLUS_SYSTEM,
-    });
-    const conHotel = availablePresets({ source: activeSource(MANOR), systemId: DINGOO_SYSTEM });
+  it("«Ventas» sigue dependiendo del PLAN, y las dos condiciones son distintas", () => {
+    // Una mira los rótulos del árbol (hospedaje, restaurante); la otra, que haya gasto que
+    // repartir. Un plan sin líneas de hotelería recibe el anexo y no «Ventas».
+    const sinHotel = availablePresets({ source: activeSource(SIN_HOTEL) }).map((p) => p.id);
+    const conHotel = availablePresets({ source: activeSource(MANOR) }).map((p) => p.id);
 
-    expect(sinHotel.map((preset) => preset.id)).not.toContain(BUSINESS_LINES_PRESET);
-    expect(conHotel.map((preset) => preset.id)).toContain(BUSINESS_LINES_PRESET);
+    expect(sinHotel).not.toContain(BUSINESS_LINES_PRESET);
+    expect(sinHotel).toContain(EXPENSE_DISTRIBUTION_PRESET);
+    expect(conHotel).toContain(BUSINESS_LINES_PRESET);
   });
 
   it("ocupa dos ranuras y RINDE la de «Distribución», que hablaba de ingresos", () => {
@@ -1255,34 +1252,52 @@ describe("el anexo se dibuja como la hoja del contador", () => {
   });
 });
 
-describe("las cuentas que la vista del anexo siembra", () => {
-  it("son las MISMAS que dibuja: las de movimiento del árbol de gastos", () => {
+describe("el anexo no siembra cuentas, pero se deja acotar por ellas", () => {
+  it("ninguna vista siembra cuentas: el anexo son más de cien y serían más de cien chips", () => {
+    // Lo hizo, y era la forma de ver cuáles entran; pero las que dibuja son TODAS las de
+    // movimiento del árbol de gastos, y un plan real declara ciento treinta y una. Sembrar solo
+    // las catorce dibujadas tampoco vale: cuáles son depende de los montos, y una marca acota lo
+    // que el anexo suma, así que se llevaría por delante el «Otros» que agrupa el resto.
+    for (const preset of PRESET_VIEWS) {
+      expect(preset).not.toHaveProperty("seedCodes");
+    }
+  });
+
+  it("entrar en la vista BORRA las marcas de cuenta que hubiera", () => {
+    const conMarcas = { ...emptyFilters(), codes: ["5.1.1.1.1"] };
+
+    expect(withPresetSelected(conMarcas, EXPENSE_DISTRIBUTION_PRESET).codes).toEqual([]);
+  });
+
+  it("sin marcas reparte el árbol de gastos ENTERO", () => {
     const source = activeSource(MANOR);
-    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
-    const sembradas = anexo?.seedCodes?.(source) ?? [];
+    const universo = leavesOfAny(source, expenseRootsOf(source));
     const { cards } = buildGraficosCards(
       MANOR,
       withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
     );
     const dibujadas = cards[0].table.rows.filter((row) => row.id !== "__total__").map((r) => r.id);
 
-    // Lo dibujado es un subconjunto de lo sembrado: solo se cae lo que no se movió en el tramo.
-    expect(sembradas.length).toBeGreaterThan(0);
+    // Lo dibujado es un subconjunto del universo: solo se cae lo que no se movió en el tramo.
+    expect(dibujadas.length).toBeGreaterThan(0);
     for (const code of dibujadas) {
-      expect(sembradas).toContain(code);
+      expect(universo).toContain(code);
     }
   });
 
-  it("«Ventas» NO puede sembrar cuentas: sus categorías no son cuentas del plan", () => {
+  it("es la vista la que declara que marcar ACOTA en vez de apagarla", () => {
+    // «Ventas» agrupa ramas enteras y parte una cuenta en dos por el nombre de sus hijas, así que
+    // no hay marca que represente lo que dibuja y marcar una sí la contradice.
+    const anexo = PRESET_VIEWS.find((preset) => preset.id === EXPENSE_DISTRIBUTION_PRESET);
     const ventas = PRESET_VIEWS.find((preset) => preset.id === BUSINESS_LINES_PRESET);
 
-    expect(ventas?.seedCodes).toBeUndefined();
+    expect(anexo?.narrowedByCodes).toBe(true);
+    expect(ventas?.narrowedByCodes).toBeUndefined();
   });
 
-  it("desmarcar un rubro lo quita del reparto y del cuadre a la vez", () => {
+  it("marcar rubros a mano acota el reparto y el cuadre lo dice", () => {
     const source = activeSource(MANOR);
-    const todas =
-      PRESET_VIEWS.find((p) => p.id === EXPENSE_DISTRIBUTION_PRESET)?.seedCodes?.(source) ?? [];
+    const todas = leavesOfAny(source, expenseRootsOf(source));
     const sinUna = todas.filter((code) => code !== "5.1.1.1.1");
     const { cards } = buildGraficosCards(
       MANOR,

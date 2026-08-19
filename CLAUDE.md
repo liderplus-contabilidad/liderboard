@@ -787,18 +787,18 @@ llegar. **Y al revés que «Ventas», no necesita vocabulario ninguno.** Aquella
 por rótulo y por eso solo se ofrece a un plan de hotelería; las de aquí están a distinta profundidad
 según la rama (`5.2.02` junto a `5.3.03.01`) justamente porque son las cuentas de MOVIMIENTO del
 árbol de gastos, que es lo que `leavesOfAny` ya devuelve — regla estructural y no de dominio, sin
-una lista que mantener por cliente. **Pero se ofrece SOLO en MicroPlus**, y eso es una restricción de
-LEGIBILIDAD y no de que el cálculo falle: el reparto se hace sobre las cuentas de movimiento, y ahí
-cada plan da un número muy distinto — el de MicroPlus se queda en unas decenas, que es un anexo,
-mientras que otros formatos bajan mucho más y devuelven más de cien rubros, donde una tarta no
-reparte nada y las barras son una alfombra; con esos planes la pregunta hay que hacerla un nivel más
-arriba, y ese nivel no es el mismo en todos. Por eso `isAvailable` pasó a recibir un `PresetContext`
-(`{source, systemId}`) en vez de la fuente a secas: hay vistas que dependen del PLAN —«Ventas» mira
-los rótulos del árbol— y otras del SISTEMA del que salió el archivo, que es un dato del workspace y
-no del árbol; el consolidado entre clientes, cuyo `systemId` es `null` porque une planes de varios
-sistemas, tampoco la recibe. El precio, escrito en su entrada, es que un plan nuevo tan legible como
-el de MicroPlus no la hereda solo y hay que añadirlo ahí — se prefirió a un tope de cuentas porque es
-lo que la firma pidió. `lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
+una lista que mantener por cliente. **Y por eso se ofrece con CUALQUIER plan que declare cuentas de
+gasto**, sin mirar de qué sistema salió el archivo. Estuvo atada a MicroPlus, y era una restricción
+de LEGIBILIDAD y no de que el cálculo fallara: el reparto se hace sobre las cuentas de movimiento, y
+ahí cada plan da un número muy distinto —el de MicroPlus se queda en unas decenas, otros bajan mucho
+más y devuelven más de cien rubros—. Lo que hace legible ese caso no es el candado sino el CORTE, que
+es de la tarjeta y vale igual para todos: catorce rubros y un «Otros» que agrupa la cola, con la
+tabla gemela listándolos uno a uno con su cifra. El plan real de MicroPlus trae diecisiete rubros,
+así que ese cliente ya venía leyendo el pliegue, y el candado protegía en realidad la SIEMBRA —ver
+abajo—, que es lo que se quitó con él. `isAvailable` recibe igualmente un `PresetContext` y no la
+fuente a secas, porque lo que decide no tiene por qué estar en el árbol —el anexo dependió del
+SISTEMA, que es un dato del workspace— y la vista que venga puede necesitar otro dato así.
+`lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
 pequeña porque el motor ya existía: reusa la MISMA tanda del ranking en vez de pedir la suya —dos
 consultas para el mismo reparto podrían acabar cuadrando contra tramos distintos, que es justo lo
 que la nota afirma que no pasa—. **Lo que la define son sus DOS denominadores**: el total del gasto,
@@ -810,20 +810,30 @@ distintas; un total `null` o `0` da `null` y jamás `0 %`. El denominador es el 
 la suma de lo que haya en pantalla, de modo que con cuentas marcadas la columna suma menos de 100 %
 — que es lo correcto, y es lo que dice que se está mirando un trozo.
 
-**Y SIEMBRA sus propias cuentas**, que es lo que la separa de «Ventas»: al encenderse deja marcadas
-en «Cuenta contable» las mismas que dibuja (`PresetView.seedCodes`), así que se ve cuáles entran y se
-quita un rubro desmarcándolo. Eso obligó a abrir una excepción a la exclusividad entre marcas y
-vistas: normalmente marcar una cuenta apaga el predeterminado —son dos respuestas a «qué dibujo» y
-nada las arbitra—, pero eso vale cuando la vista dibuja algo que NO es un conjunto de cuentas; aquí
-los rubros SON cuentas del plan, así que la marca y la vista dicen lo mismo y desmarcar ACOTA el
-reparto en vez de contradecirlo (`withCodeToggled`, opción `keepPreset`). Quien sabe cuál es cuál es
+**NO siembra cuentas, pero se deja ACOTAR por ellas**, y las dos mitades de esa frase son la misma
+decisión. Sembró las que dibuja —al encenderse quedaban marcadas en «Cuenta contable», así se veía
+cuáles entran y se quitaba un rubro desmarcándolo—, y eso es justo lo que ataba la vista a MicroPlus:
+las que dibuja son TODAS las de movimiento del árbol de gastos, y un plan real declara ciento treinta
+y una, o sea ciento treinta y un chips en la tira de filtros, que no es ver nada. Sembrar solo las
+catorce dibujadas tampoco vale, por dos motivos independientes: cuáles son depende de los MONTOS, que
+salen del motor y del tramo, así que calcularlos en la siembra sería una segunda suma capaz de marcar
+catorce distintas de las catorce dibujadas; y una marca ACOTA lo que el anexo suma, de modo que
+marcar catorce se llevaría por delante el «Otros» que agrupa el resto. Sin siembra la barra queda con
+un chip, el anexo lee el árbol de gastos entero y la tabla gemela sigue listando cada rubro.
+Lo que SÍ sobrevive es la excepción a la exclusividad entre marcas y vistas: normalmente marcar una
+cuenta apaga el predeterminado —son dos respuestas a «qué dibujo» y nada las arbitra—, pero eso vale
+cuando la vista dibuja algo que NO es un conjunto de cuentas; aquí los rubros SON cuentas del plan,
+así que la marca y la vista dicen lo mismo y marcar ACOTA el reparto en vez de contradecirlo
+(`withCodeToggled`, opción `keepPreset`). Ahora lo DECLARA la vista (`PresetView.narrowedByCodes`) en
+vez de heredarlo de la siembra, que es lo que lo dejaba en pie al quitarla: son dos cosas distintas,
+y una vista puede no sembrar nada y aun así dejarse acotar por cuentas. Quien sabe cuál es cuál es
 el catálogo, que vive en `charts/`, y `PygDataProvider` no importa de ahí — así que lo que cada vista
-declara (`seeds`, `seedCodes`, `frequency`) viaja al proveedor como ARGUMENTO desde el botón de la
-barra, que sí lo conoce, y el proveedor solo recuerda si las marcas son suyas. La vista se lee además
+declara (`seeds`, `narrowedByCodes`, `frequency`) viaja al proveedor como ARGUMENTO desde el botón de
+la barra, que sí lo conoce, y el proveedor solo recuerda si la vista abierta se deja acotar. Se lee además
 en **ANUAL** y también lo declara ella: el anexo es una columna por rubro sobre el tramo entero, y en
 mensual saldrían seis barras por rubro, que es su evolución y no su reparto; se aplica al encender y
 no se deshace al apagar, porque «Ver por» está a la vista y se vuelve de un clic, al revés que las
-marcas, que dejarían chips que el usuario no puso. No siembra centros ni periodos — el anexo no
+marcas, que dejarían chips que el usuario no puso. Tampoco siembra centros ni periodos — el anexo no
 reparte por eso, y marcar los centros abriría una columna por establecimiento de algo que se lee como
 un total.
 

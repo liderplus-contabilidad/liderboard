@@ -288,37 +288,42 @@ describe("saneamiento de los filtros", () => {
   });
 });
 
-describe("una vista que SIEMBRA sus propias cuentas", () => {
+describe("una vista que se deja ACOTAR por cuentas", () => {
   const RUBROS = ["5.1.1", "5.1.2", "5.2.1"];
 
-  it("deja marcadas las cuentas que dibuja, para que se vea cuáles entran", () => {
-    const next = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
+  it("entrar en ella borra las marcas de cuenta: ninguna vista las siembra", () => {
+    // El anexo de gastos las sembró —sus rubros SON cuentas del plan—, y no salía: son todas las
+    // de movimiento del árbol de gastos, más de cien en un plan real, o sea más de cien chips.
+    const conMarcas = { ...emptyFilters(), codes: ["4.1"] };
+    const next = withPresetSelected(conMarcas, "anexo");
 
     expect(next.preset).toBe("anexo");
-    expect(next.codes).toEqual(RUBROS);
+    expect(next.codes).toEqual([]);
   });
 
-  it("desmarcar un rubro ACOTA el reparto en vez de apagar la vista", () => {
-    // Sin `keepPreset`, quitar una cuenta apagaría la vista entera — lo contrario de para lo que
-    // están las marcas. Solo lo puede pedir una vista cuyas categorías SON cuentas del plan.
-    const conVista = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
+  it("marcar un rubro ACOTA el reparto en vez de apagar la vista", () => {
+    // Sin `keepPreset`, acotar apagaría la vista entera — lo contrario de para lo que están las
+    // marcas. Solo lo puede declarar una vista cuyas categorías SON cuentas del plan.
+    const conVista = withPresetSelected(emptyFilters(), "anexo");
     const next = withCodeToggled(conVista, "5.1.2", RUBROS, { keepPreset: true });
 
     expect(next.preset).toBe("anexo");
-    expect(next.codes).toEqual(["5.1.1", "5.2.1"]);
+    expect(next.codes).toEqual(["5.1.2"]);
   });
 
   it("sin esa salida sigue siendo excluyente, que es la regla de «Ventas»", () => {
-    const conVista = withPresetSelected(emptyFilters(), "lineas", [], [], []);
+    const conVista = withPresetSelected(emptyFilters(), "lineas");
     const next = withCodeToggled(conVista, "4.1", ["4.1"]);
 
     expect(next.preset).toBeNull();
     expect(next.codes).toEqual(["4.1"]);
   });
 
-  it("apagarla limpia sus marcas: eran suyas y no las puso el usuario", () => {
-    const conVista = withPresetSelected(emptyFilters(), "anexo", [], [], RUBROS);
-    const apagada = withPresetSelected(conVista, "anexo", [], [], RUBROS);
+  it("apagarla limpia las marcas que se hubieran puesto dentro", () => {
+    const conVista = withCodeToggled(withPresetSelected(emptyFilters(), "anexo"), "5.1.2", RUBROS, {
+      keepPreset: true,
+    });
+    const apagada = withPresetSelected(conVista, "anexo");
 
     expect(apagada.preset).toBeNull();
     expect(apagada.codes).toEqual([]);
