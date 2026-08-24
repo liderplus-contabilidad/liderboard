@@ -618,7 +618,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 18 ago 2026</span>
+      <span><b>Actualizado</b> 24 ago 2026</span>
       <span><b>Rama</b> main</span>
       <span><b>Repositorio</b> liderplboard</span>
     </div>
@@ -1358,7 +1358,7 @@
             </text>
             <text x="44" y="105" class="er-field">clientId : string | null</text>
 
-            <rect x="30" y="168" width="210" height="104" rx="10" class="er-box" />
+            <rect x="30" y="168" width="210" height="140" rx="10" class="er-box" />
             <rect x="30" y="168" width="210" height="28" rx="10" class="er-box er-box-head" />
             <rect x="30" y="186" width="210" height="10" class="er-box er-box-head" stroke="none" />
             <line x1="30" y1="196" x2="240" y2="196" class="er-rule" />
@@ -1369,6 +1369,8 @@
             </text>
             <text x="44" y="233" class="er-field">name : string</text>
             <text x="44" y="251" class="er-field">logo? : EntityLogo</text>
+            <text x="44" y="269" class="er-field">company? : CompanyProfile</text>
+            <text x="44" y="287" class="er-field">costCenter? : CostCenter</text>
 
             <rect x="305" y="150" width="240" height="172" rx="10" class="er-box" />
             <rect x="305" y="150" width="240" height="28" rx="10" class="er-box er-box-head" />
@@ -1392,7 +1394,7 @@
             </text>
             <text x="319" y="233" class="er-field">year · monthIndex (0–11)</text>
             <text x="319" y="251" class="er-field">kind : "ordinario"</text>
-            <text x="319" y="269" class="er-field">extraConcepts? : […]</text>
+            <text x="319" y="269" class="er-field">sin conceptos declarados</text>
             <text x="319" y="299" class="er-field" style="font-size: 10px">
               UQ [clientId+year+monthIndex]
             </text>
@@ -1431,10 +1433,13 @@
           </svg>
         </div>
         <figcaption>
-          <code>liderboard-payroll</code> v2. El índice único impide que un cliente tenga dos veces
+          <code>liderboard-payroll</code> v4. El índice único impide que un cliente tenga dos veces
           el mismo (año, mes): Dexie rechaza el segundo <code>add</code> en vez de sobrescribir. Un
           empleado es una fila por período, porque su ficha (área, cargo, sueldo) puede cambiar mes
-          a mes y la histórica debe conservarse.
+          a mes y la histórica debe conservarse. El período <strong>no declara nada</strong>: v3
+          mudó las filas de bono —rótulo, clase e importe juntos— a <code>capture.extras</code>, y
+          v4 subió las dos banderas de provisión de décimos de la captura a la ficha. Ninguna de las
+          dos tocó un índice: existen solo para correr su <code>upgrade</code>.
         </figcaption>
       </figure>
     </section>
@@ -1932,6 +1937,68 @@
 
       <div class="card">
         <div class="card-head">
+          <h4>clients</h4>
+          <span>Cliente de nómina · <code>id</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>uuid.</td>
+              </tr>
+              <tr>
+                <td class="k">name</td>
+                <td class="t">string</td>
+                <td>
+                  El nombre que eligió el usuario. Es el único módulo que
+                  <strong>admite repetidos</strong>: la firma lleva la nómina de varias unidades de
+                  una misma empresa y las llama a todas igual, y lo que las distingue en el selector
+                  es el rótulo compuesto con su centro.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">logo?</td>
+                <td class="t">EntityLogo</td>
+                <td>Encabeza el papel por la <strong>izquierda</strong>. No indexado.</td>
+              </tr>
+              <tr>
+                <td class="k">company?</td>
+                <td class="t">CompanyProfile</td>
+                <td>
+                  El MEMBRETE: razón social, RUC, provincia, cantón, parroquia, dirección, teléfonos
+                  y correo. Opcional en el tipo aunque el alta exija sus seis campos obligatorios,
+                  porque los clientes guardados antes no lo tienen. No se dibuja en ninguna
+                  pantalla: existe para el comprobante en PDF y para la hoja <code>GENERAL</code>.
+                  No indexado, así que no costó versión de Dexie.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">costCenter?</td>
+                <td class="t">CostCenter</td>
+                <td>
+                  <code>{ name, logo? }</code>, y nada más. <strong>No</strong> es la estructura de
+                  centros de P&amp;G ni de Ocupaciones —aquí no hay nada de dónde derivarlo, es uno
+                  y lo declara el cliente—. Su efecto es entero del papel: el encabezado pasa a
+                  «Cliente · Centro» y su logo cierra el membrete por la <strong>derecha</strong>.
+                  Ninguna cifra lo mira. No indexado.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
           <h4>periods</h4>
           <span>Cliente × año × mes · <code>id</code></span>
         </div>
@@ -1964,16 +2031,6 @@
                 <td class="k">kind</td>
                 <td class="t">"ordinario"</td>
                 <td>Único tipo por ahora; el tipo deja sitio a décimos y liquidaciones.</td>
-              </tr>
-              <tr>
-                <td class="k">extraConcepts?</td>
-                <td class="t">PayrollExtraConcept[]</td>
-                <td>
-                  Conceptos de ingreso que <em>este</em> período declara además de los trece del
-                  libro: <code>{ id, label, kind: "aportable" | "noAportable" }</code>. El rótulo
-                  vive en el período porque un concepto extra es una <strong>columna</strong> del
-                  rol, compartida por toda la nómina.
-                </td>
               </tr>
               <tr>
                 <td colspan="3" style="color: var(--muted)">
@@ -2085,6 +2142,17 @@
                 <td>¿Lo acumula en el IESS en vez de cobrarlo mensual? Elección del empleado.</td>
               </tr>
               <tr>
+                <td class="k">provisionsThirteenth/Fourteenth</td>
+                <td class="t">boolean</td>
+                <td class="t">AS AT</td>
+                <td>
+                  Si se provisionan los décimos. Están en la FICHA —v4 los subió desde la captura—
+                  por la misma razón que las dos banderas de arriba: cobrarlos mensualizados o
+                  acumularlos es una elección del empleado, estable mes a mes, y viviendo en la
+                  captura no sobrevivían a <code>copyRoster</code>.
+                </td>
+              </tr>
+              <tr>
                 <td class="k">capture?</td>
                 <td class="t">PayrollMonthlyCapture</td>
                 <td class="t">—</td>
@@ -2157,12 +2225,25 @@
                 <td>Bono.</td>
               </tr>
               <tr>
-                <td class="k">extraAmounts?</td>
-                <td class="t">Record&lt;string, number&gt;</td>
+                <td class="k">extras?</td>
+                <td class="t">PayrollExtraRow[]</td>
                 <td class="t">—</td>
                 <td>
-                  Importe de cada concepto extra que declara el período, por <code>id</code>. Solo
-                  el importe: el rótulo vive en el período.
+                  Las filas de BONO que este empleado declara este mes:
+                  <code>{ id, label, kind: "aportable" | "noAportable", amount }</code>. El rótulo,
+                  la clase y el importe viajan <strong>juntos</strong>, así que un importe huérfano
+                  no puede existir y quitar la fila se lleva las tres cosas. Ausente = ningún bono.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">labels?</td>
+                <td class="t">Record&lt;string, string&gt;</td>
+                <td class="t">—</td>
+                <td>
+                  El rótulo propio que este empleado le puso a una fila del catálogo, por código de
+                  concepto (<code>"E-11"</code> → <code>"Uniformes"</code>). Pisa los dos rótulos
+                  del catálogo —el de pantalla y el del comprobante—; las filas calculadas no se
+                  renombran.
                 </td>
               </tr>
               <tr>
@@ -2176,12 +2257,6 @@
                   descuento por permiso médico. <strong>El aporte al IESS (X) no está aquí</strong>:
                   lo deriva el motor.
                 </td>
-              </tr>
-              <tr>
-                <td class="k">provisionsThirteenth/Fourteenth</td>
-                <td class="t">boolean</td>
-                <td class="t">AS AT</td>
-                <td>Si el mes provisiona los décimos.</td>
               </tr>
               <tr>
                 <td class="k">paid</td>
@@ -2285,14 +2360,35 @@
                   Se agrega <code>employees</code>. Puramente aditiva: nada de la v1 se re-declara.
                 </td>
               </tr>
+              <tr>
+                <td class="k">payroll</td>
+                <td class="t">3</td>
+                <td>
+                  Las filas de bono se mudan del PERÍODO a la captura del empleado: se lee la
+                  declaración de <code>periods.extraConcepts</code> y el importe de
+                  <code>capture.extraAmounts</code> y se escribe la fila entera en
+                  <code>capture.extras</code>. Ningún índice cambia — la versión existe solo para
+                  correr su <code>upgrade</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">payroll</td>
+                <td class="t">4</td>
+                <td>
+                  Las dos banderas de provisión de décimos suben de <code>capture</code> a la ficha
+                  (<code>employees</code>). Con el archivo real es un no-op —van apagadas en los
+                  seis—, pero una encendida perdida solo se notaría en el costo total empresa.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
       <p>
-        Las migraciones se prueban: <code>lib/profit-loss/db.migration.test.ts</code> y
-        <code>lib/occupancy/db.test.ts</code> las ejecutan sobre <code>fake-indexeddb</code>.
+        Las migraciones se prueban: <code>lib/profit-loss/db.migration.test.ts</code>,
+        <code>lib/occupancy/db.test.ts</code> y <code>lib/payroll/db-migration.test.ts</code> las
+        ejecutan sobre <code>fake-indexeddb</code>.
       </p>
     </section>
 
