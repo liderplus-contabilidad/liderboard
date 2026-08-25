@@ -205,7 +205,14 @@ apartado por una marca de centro tampoco tiene hoja. «Ocultar ceros» se sigue 
 —las piezas incluidas—, de modo que todas las hojas comparten plan de cuentas y columnas; y el
 membrete es por hoja, con el logo del cliente a la izquierda y el de su centro a la derecha (la del
 total no lleva ninguno, porque son varias empresas), lo que hizo que `StatementSheet` ganara un
-`logo` propio además del del libro. **Qué clientes entran
+`logo` propio además del del libro. **La banda de `writeLetterhead` (`lib/excel-logo.ts`) mide lo que
+mide la TABLA**, no el bloque de rótulos: acabó ahí, y era defendible —así el logo derecho se veía sin
+desplazarse—, pero un membrete es la cabeza de su tabla y uno que para a 390 px se lee como algo
+flotando entre las cifras. El precio está aceptado: en Ocupaciones (~35 columnas) y en Rol de Pagos
+(ochenta), el logo derecho y el centro del título caen fuera de la primera pantalla. El bloque de
+título se combina y se centra **desde la columna del propio módulo** —la A en PyG y Ocupaciones, la B
+en Rol de Pagos— porque el valor de una celda combinada vive en su esquina superior izquierda y ahí es
+donde cada lector lo busca: eso es lo único que deja re-entrar los tres archivos sin tocar un parser. **Qué clientes entran
 se elige en la barra**, no en un control propio: `client-filter.tsx` es el primer desplegable y no se
 rinde fuera del consolidado, igual que `center-filter.tsx` no se rinde en modo estado único.
 `PygFilters` gana `clientIds` con las mismas reglas que el resto —ninguno marcado es TODOS, orden del
@@ -1271,7 +1278,7 @@ con sus veinte columnas al bit, y aquí exige además que cada una caiga en su L
 escribiendo el patronal en la columna de al lado sigue dando un archivo que no cuadra— y que el
 `SUMAN` reproduzca la fila 39 del libro. **Y el archivo VUELVE a entrar**, que es lo que cobró dos
 precios en el importador, los dos por el mismo motivo: la app ahora GENERA el formato que lee. El
-membrete del logo (`writeLogoHeader`, el de PyG y Ocupaciones) empuja el preámbulo, así que el período
+membrete (`writeLetterhead`, el de PyG y Ocupaciones) empuja el preámbulo, así que el período
 dejó de leerse en `B2` fijo —la única coordenada de un módulo que declara localizarlo todo por
 rótulo— y pasó a localizarse por su FORMA entre las filas anteriores a la cabecera (`findPeriod`); y
 una celda de `PAGADO` en blanco pasó a leerse `null` y no `0`, porque el rol descargado deja en blanco
@@ -1332,18 +1339,24 @@ PDF, la columna `B` de la hoja `GENERAL`, el informe de Sueldos y el selector de
 va a la derecha**, el mismo reparto con el que PyG y Ocupaciones timbran sus hojas, así que un logo
 en el borde izquierdo quiere decir lo mismo en los tres módulos. Sin centro —o con un centro que no
 subió logo— no hay segundo logo y el del cliente se queda donde siempre, de modo que todo cliente
-que no declare ninguno imprime exactamente lo que imprimía. `writeLogoHeader` nombra sus parámetros
+que no declare ninguno imprime exactamente lo que imprimía. `writeLetterhead` nombra sus parámetros
 por su SITIO (`leftLogo`/`rightLogo`) porque es lo único que ese archivo sabe de ellos: de dónde
 sale cada uno sí cambia por módulo —en PyG el centro es una fila derivada de los datos, aquí lo
 declara el cliente—, y un `centerLogo` allí sería un nombre que solo vale para dos de los tres. Un logo SIN nombre se rechaza en vez de descartarse en silencio —una imagen sin
 rótulo no se puede nombrar en ninguna pantalla—, y vaciar el nombre es cómo se quita el centro
 entero (`null` en `updateClient`; `undefined` sigue siendo «esta llamada no habla del centro», el
-mismo contrato del perfil). En el PDF el logo de la derecha es una PILA —logo, título, mes—, así que
-el título baja en vez de compartir renglón con él; y el rótulo de la empresa pasó a ser el único
-bloque de jerarquía que se deja ENCOGER (15 → 13,5 → 12 → 11): desde que tiene dos mitades,
-truncarlo se lleva justo la que dice de qué centro es el papel. Su tope se MIDE contra el bloque
-derecho en vez de estimarse con la fracción del ancho útil que se usaba antes — esa estimación
-sobraba (el título ya se medía) y era lo que truncaba teniendo sitio libre al lado. En el Excel el
+mismo contrato del perfil). En el PDF los dos logos son PARES —mismo hueco, pegados a sus márgenes y
+centrados contra la banda entera— y entre ellos va el bloque CENTRADO: empresa, membrete, título y
+mes, en ese orden. Vivió a dos columnas, con el título a la derecha, y el precio era que cada bloque
+tenía que MEDIR al otro para no invadirlo; centrado no hay dos que se disputen un renglón, así que
+todas las líneas ceden lo mismo y el tope es uno solo. Lo que ese tope cobra está MEDIDO: la
+ubicación del cliente real son 324,7 pt a 8 pt y una más larga baja a 6,5 pt (357,7), así que el
+hueco del logo bajó de 76 a 58 pt para que las dos sigan entrando enteras — con 76 la larga se
+truncaba, que es justo lo que la firma dijo que no puede pasar. El rótulo de la empresa sigue siendo
+el único bloque de jerarquía que se deja ENCOGER (15 → 13,5 → 12 → 11) —desde que tiene dos mitades,
+truncarlo se lleva justo la que dice de qué centro es el papel—, pero su renglón RESERVA siempre el
+primer escalón: si no, añadirle el nombre del centro subiría el membrete, el título y el logo, y dos
+comprobantes del mismo cliente dejarían de superponerse. En el Excel el
 viaje de vuelta sigue intacto: `findCompany` toma esa primera celda de `B` con texto, así que lo que
 recupera es el rótulo compuesto, y ninguna cifra ni ninguna letra de columna se mueve. **Y es el único módulo que admite NOMBRES REPETIDOS** (`allowDuplicateNames` en
 `useEntityNaming`, apagado por defecto): la firma lleva la nómina de varias unidades de una misma
@@ -1543,7 +1556,12 @@ uno imprimiera la app entera detrás del otro), Escape, el título de impresión
 toma el nombre sugerido del PDF, restaurado al cerrar aunque se cierre sin imprimir) y la barra con
 «Guardar PDF»/«Cerrar»; `ReportSheet` aporta la hoja, A4 vertical o apaisada a su ancho real. No
 importa nada de `profit-loss/` ni de `payroll/`: lo propio de cada informe —el `Detalle` de PyG, sus
-avisos de cuántas hojas trae— entra por los huecos `controls`/`note`. El informe de PyG
+avisos de cuántas hojas trae— entra por los huecos `controls`/`note`. **`ReportBand` es el MEMBRETE
+en papel** —logo del cliente pegado al borde izquierdo, título centrado, logo del centro pegado al
+derecho—, el mismo reparto que encabeza los Excel, y vive aquí porque lo usan la portada de PyG, cada
+tabla de estado, el análisis vertical y la cabecera de Sueldos: cuatro versiones de «dónde va el logo»
+acabarían poniéndolo en cuatro sitios. Centra con dos columnas `1fr` iguales a los lados y no con un
+`ml-auto`, que habría centrado el título en lo que sobra en vez de en el eje de la tabla. El informe de PyG
 (`pyg-report-preview.tsx`) se portó a él sin cambiar una línea de lo que imprime, y el de Sueldos por
 Áreas nació sobre él directamente. `statementFit` —qué orientación y qué cuerpo de letra caben según
 el número de columnas— vive por eso en `lib/report/page-fit.ts` y no en `profit-loss/`, y

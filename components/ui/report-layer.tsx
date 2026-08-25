@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import type { EntityLogo } from "@/lib/logos";
 
 /**
  * The shared mechanism every printable report in the app mounts on — today PyG's Informe PDF and
@@ -88,6 +89,77 @@ export function ReportSheet({ children, landscape }: { children: ReactNode; land
         {children}
       </article>
     </div>
+  );
+}
+
+/**
+ * LA BANDA DE UN INFORME — el mismo membrete que encabeza los Excel, en papel: el logo del cliente
+ * pegado al borde izquierdo, el bloque de título CENTRADO y el logo del centro pegado al borde
+ * derecho de lo que encabeza.
+ *
+ * Vive aquí y no en `profit-loss/` porque la usan los dos informes y los tres sitios de uno de
+ * ellos —la portada, cada estado y el análisis vertical—, y tres versiones de «dónde va el logo»
+ * acabarían poniéndolo en tres sitios distintos. No sabe nada de lo que encabeza: el título entra
+ * como `children` y el cromado, como `className`, que es lo que deja a la portada ir sin relleno y
+ * a una tabla llevarlo.
+ *
+ * **Centra de verdad**: las dos columnas de los logos son `1fr` iguales, así que el título cae en
+ * el eje de la tabla aunque los logos midan distinto — con un `ml-auto` se habría centrado en lo
+ * que sobra, que es otra cosa.
+ */
+export function ReportBand({
+  leftLogo,
+  rightLogo,
+  logoHeight = 22,
+  className,
+  children,
+}: {
+  /** El del CLIENTE, a la izquierda. */
+  leftLogo?: EntityLogo | undefined;
+  /** El del CENTRO que se encabeza, a la derecha. El Consolidado no tiene. */
+  rightLogo?: EntityLogo | undefined;
+  /** El alto del logo, en px. El de una tabla es el de su cabecera y ni uno más: un membrete que
+   *  engorda la banda le quita al estado las filas que la página tenía justas. */
+  logoHeight?: number;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <header className={cn("grid grid-cols-[1fr_auto_1fr] items-center gap-3", className)}>
+      <span className="flex justify-start">
+        <BandLogo logo={leftLogo} height={logoHeight} />
+      </span>
+      <span className="flex min-w-0 flex-col items-center justify-center">{children}</span>
+      <span className="flex justify-end">
+        <BandLogo logo={rightLogo} height={logoHeight} />
+      </span>
+    </header>
+  );
+}
+
+/**
+ * Un logo de la banda, o nada. El ancho lo pone la proporción del propio logo (`w-auto` con el alto
+ * fijo), que es el mismo `contain` que `fitLogoBox` aplica en el Excel y en el PDF del comprobante
+ * — aquí lo resuelve el navegador porque hay caja donde resolverlo.
+ *
+ * El `alt` va VACÍO: el nombre del cliente está en el título de al lado y el del centro, en su
+ * rótulo, así que un texto alternativo lo repetiría en voz alta.
+ */
+function BandLogo({ logo, height }: { logo: EntityLogo | undefined; height: number }) {
+  if (!logo) {
+    return null;
+  }
+  return (
+    // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta.
+    // oxlint-disable-next-line next/no-img-element
+    <img
+      src={logo.dataUrl}
+      alt=""
+      width={logo.width}
+      height={logo.height}
+      style={{ height }}
+      className="w-auto max-w-[180px] shrink-0 object-contain"
+    />
   );
 }
 

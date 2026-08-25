@@ -12,7 +12,7 @@
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
-import { writeLogoHeader } from "@/lib/excel-logo";
+import { writeLetterhead, type LetterheadLine } from "@/lib/excel-logo";
 import { centerLogoOf, type CenterLogos, type EntityLogo } from "@/lib/logos";
 import { formatCurrency } from "@/lib/format";
 import { sectionTone } from "./datos-sections";
@@ -205,15 +205,20 @@ function writeStatementSheet(
   // has always had, and the one it keeps whenever the switch is off.
   const written = isMonthly ? (months ?? MONTHS_FULL_ES.map((_, index) => index)) : [];
 
+  const valueCols = written.length + (isMonthly ? 1 : 0);
   // Los anchos van ANTES del membrete porque de ellos sale el ancla del logo derecho, y poner un
   // ancho no escribe ninguna fila: nada más de la hoja se entera del adelanto.
-  setColumnWidths(ws, written.length + (isMonthly ? 1 : 0));
-  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. Las dos
-  // columnas de rótulos —el código y el nombre de la cuenta— son las que marcan el borde derecho
-  // de la banda, que es donde acaba el preámbulo escrito justo debajo.
-  writeLogoHeader(wb, ws, logo, centerLogo, LABEL_COLS);
-
-  writePreamble(ws, dataset);
+  setColumnWidths(ws, valueCols);
+  // Con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. La banda mide lo que mide la
+  // TABLA —los rótulos más las columnas de cifras—, que es donde cae la esquina a la que se pega
+  // el logo del centro.
+  writeLetterhead(wb, ws, {
+    leftLogo: logo,
+    rightLogo: centerLogo,
+    columns: LABEL_COLS + Math.max(1, valueCols),
+    lines: statementLines(dataset),
+  });
+  ws.addRow([]);
   const headerRowNumber = writeHeader(ws, isMonthly, written);
   freeze(ws, headerRowNumber);
 
@@ -280,22 +285,31 @@ function newWorkbook(): ExcelJS.Workbook {
   return wb;
 }
 
-function writePreamble(ws: ExcelJS.Worksheet, dataset?: PygDataset): void {
-  ws.addRow([dataset?.companyName || "LiderPlus"]).getCell(CODE_COL).font = {
-    bold: true,
-    size: 14,
-  };
-  ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
-    bold: true,
-    color: { argb: "FF64748B" },
-  };
+/** La tinta de las líneas secundarias del membrete: el gris con el que la app escribe un dato
+ *  que acompaña al título en vez de competir con él. */
+const LETTERHEAD_INK = "FF64748B";
+
+/** El título de una hoja de estado, en el orden en que se lee: quién, qué, de qué centro y de
+ *  cuándo. Se compone aquí y lo CENTRA `writeLetterhead`, para que ninguna hoja decida por su
+ *  cuenta dónde va su membrete. */
+function statementLines(dataset?: PygDataset): LetterheadLine[] {
+  const lines: LetterheadLine[] = [
+    { text: dataset?.companyName || "LiderPlus", font: { bold: true, size: 14 } },
+    { text: "Estado de Resultados", font: { bold: true, color: { argb: LETTERHEAD_INK } } },
+  ];
   if (dataset?.costCenterName) {
-    ws.addRow([`Centro de Costo: ${dataset.costCenterName}`]);
+    lines.push({
+      text: `Centro de Costo: ${dataset.costCenterName}`,
+      font: { color: { argb: LETTERHEAD_INK } },
+    });
   }
   if (dataset?.year != null) {
-    ws.addRow([`Desde el 01/01/${dataset.year} hasta el 31/12/${dataset.year}`]);
+    lines.push({
+      text: `Desde el 01/01/${dataset.year} hasta el 31/12/${dataset.year}`,
+      font: { color: { argb: LETTERHEAD_INK } },
+    });
   }
-  ws.addRow([]);
+  return lines;
 }
 
 function writeHeader(ws: ExcelJS.Worksheet, isMonthly: boolean, months: readonly number[]): number {
@@ -652,27 +666,31 @@ export interface MonthSliceExportInput {
 export function buildMonthSliceWorkbook(input: MonthSliceExportInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
-  writeLogoHeader(wb, ws, input.logo);
-
-  ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
-  ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
-    bold: true,
-    color: { argb: "FF64748B" },
-  };
-  ws.addRow([]);
 
   const centerLabels = input.centers.map((c) => c.name);
+  // Los anchos, antes del membrete: de ellos sale el ancla del logo y el ancho de la banda.
+  ws.getColumn(CODE_COL).width = 12;
+  ws.getColumn(NAME_COL).width = 42;
+  for (let i = 0; i < 1 + centerLabels.length; i++) {
+    ws.getColumn(FIRST_VALUE_COL + i).width = 16;
+  }
+
+  writeLetterhead(wb, ws, {
+    leftLogo: input.logo,
+    columns: LABEL_COLS + 1 + centerLabels.length,
+    lines: [
+      { text: input.companyName || "LiderPlus", font: { bold: true, size: 14 } },
+      { text: "Estado de Resultados", font: { bold: true, color: { argb: LETTERHEAD_INK } } },
+    ],
+  });
+  ws.addRow([]);
+
   const headerRow = ws.addRow(["", "", "GENERAL", ...centerLabels]);
   headerRow.font = { bold: true };
   headerRow.eachCell((cell) => {
     cell.alignment = { horizontal: "center" };
   });
 
-  ws.getColumn(CODE_COL).width = 12;
-  ws.getColumn(NAME_COL).width = 42;
-  for (let i = 0; i < 1 + centerLabels.length; i++) {
-    ws.getColumn(FIRST_VALUE_COL + i).width = 16;
-  }
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: headerRow.number }];
 
   // Each center's own grid at "mensual" already has rollups + edits applied — flattening it
@@ -743,18 +761,28 @@ export interface SingleMonthSliceInput {
 export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): ExcelJS.Workbook {
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
-  writeLogoHeader(wb, ws, input.logo);
 
-  ws.addRow([input.companyName || "LiderPlus"]).getCell(CODE_COL).font = { bold: true, size: 14 };
-  ws.addRow(["Estado de Resultados"]).getCell(CODE_COL).font = {
-    bold: true,
-    color: { argb: "FF64748B" },
-  };
+  // Los anchos, antes del membrete: de ellos sale el ancla del logo y el ancho de la banda.
+  ws.getColumn(CODE_COL).width = 12;
+  ws.getColumn(NAME_COL).width = 42;
+  ws.getColumn(FIRST_VALUE_COL).width = 16;
+
   const mm = String(input.month + 1).padStart(2, "0");
   const lastDay = new Date(input.year, input.month + 1, 0).getDate();
-  ws.addRow([
-    `Desde el 01/${mm}/${input.year} hasta el ${String(lastDay).padStart(2, "0")}/${mm}/${input.year}`,
-  ]);
+  writeLetterhead(wb, ws, {
+    leftLogo: input.logo,
+    columns: LABEL_COLS + 1,
+    lines: [
+      { text: input.companyName || "LiderPlus", font: { bold: true, size: 14 } },
+      { text: "Estado de Resultados", font: { bold: true, color: { argb: LETTERHEAD_INK } } },
+      {
+        // La línea del periodo es la que `monthly-single` lee de vuelta; combinada, su valor sigue
+        // viviendo en la columna A, que es donde ese lector la busca.
+        text: `Desde el 01/${mm}/${input.year} hasta el ${String(lastDay).padStart(2, "0")}/${mm}/${input.year}`,
+        font: { color: { argb: LETTERHEAD_INK } },
+      },
+    ],
+  });
   ws.addRow([]);
 
   const headerRow = ws.addRow(["", "", "Total"]);
@@ -763,9 +791,6 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
     cell.alignment = { horizontal: "center" };
   });
 
-  ws.getColumn(CODE_COL).width = 12;
-  ws.getColumn(NAME_COL).width = 42;
-  ws.getColumn(FIRST_VALUE_COL).width = 16;
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: headerRow.number }];
 
   // The dataset's "mensual" grid already has rollups + edits applied — flattening it gives

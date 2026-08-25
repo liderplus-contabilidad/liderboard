@@ -8,7 +8,7 @@
  */
 import type ExcelJS from "exceljs";
 import { letterheadLogos } from "@/lib/cost-center";
-import { writeLogoHeader } from "@/lib/excel-logo";
+import { writeLetterhead, type LetterheadLine } from "@/lib/excel-logo";
 import type { EntityLogo } from "@/lib/logos";
 import { columnIndexOf, type RolCellFormat, type RolExportColumn } from "./columns";
 import { buildRolGrid, type RolExportInput, type RolExportRow } from "./rol-grid";
@@ -35,21 +35,26 @@ const LETTERHEAD_INK = "FF64748B";
 /** Ancho de una columna que el catálogo no declara (los huecos del libro). */
 const GAP_WIDTH = 6;
 
+/** La columna en la que vive el bloque de título: la **B**, que es donde `findCompany` lo busca. */
+const COMPANY_COLUMN = 2;
+
+/**
+ * Una fila de membrete de la rejilla, en la línea que `writeLetterhead` centra. El nombre manda y
+ * las líneas del membrete son su pie de identidad —cuerpo pequeño, tinta suave—, el mismo escalón
+ * que en el comprobante en PDF.
+ */
+function letterheadLineOf(row: RolExportRow): LetterheadLine {
+  const text = String(row.cells[COMPANY_COLUMN - 1] ?? "");
+  return row.kind === "company"
+    ? { text, font: { bold: true, size: 13 } }
+    : { text, font: { size: 9, color: { argb: LETTERHEAD_INK } } };
+}
+
 function paintRow(
   row: ExcelJS.Row,
   kind: RolExportRow["kind"],
   columns: readonly RolExportColumn[],
 ): void {
-  if (kind === "company") {
-    row.getCell(2).font = { bold: true, size: 13 };
-    return;
-  }
-  // El membrete, en cuerpo pequeño y tinta suave: es el pie de identidad del nombre de arriba, no
-  // otro título. El mismo escalón que en el comprobante en PDF.
-  if (kind === "letterhead") {
-    row.getCell(2).font = { size: 9, color: { argb: LETTERHEAD_INK } };
-    return;
-  }
   if (kind === "labels") {
     row.font = { bold: true, size: 9 };
     row.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
@@ -104,11 +109,35 @@ export async function buildRolWorkbook(
   // El del cliente a la izquierda y el de su centro a la derecha, la misma regla —y la misma
   // función— que coloca los del comprobante en PDF. Sin centro con logo, uno solo a la izquierda,
   // exactamente como antes.
+  // El del cliente a la izquierda y el de su centro a la derecha, la misma regla —y la misma
+  // función— que coloca los del comprobante en PDF. Sin centro con logo, uno solo a la izquierda,
+  // exactamente como antes.
+  //
+  // El bloque de título se combina desde la **columna B**, no desde la A: `findCompany` busca ahí
+  // la empresa al releer el archivo, y el valor de una celda combinada vive en su esquina superior
+  // izquierda. Combinar desde la A dejaría el rótulo compuesto en una columna que ese lector no
+  // mira, y un rol descargado volvería a entrar sin empresa.
   const logos = letterheadLogos(logo, input.costCenter);
-  writeLogoHeader(wb, ws, logos.left, logos.right, 3);
+  const head = grid.rows.filter((row) => row.kind === "company" || row.kind === "letterhead");
+  writeLetterhead(wb, ws, {
+    leftLogo: logos.left,
+    rightLogo: logos.right,
+    columns: lastColumn,
+    firstColumn: COMPANY_COLUMN,
+    lines: head.map(letterheadLineOf),
+  });
 
+  /** La última fila de rótulos, contada sobre lo que se ESCRIBE y no sobre la rejilla: el membrete
+   *  ya no viaja en ella, así que un índice de la rejilla ya no es un número de fila. */
+  let lastLabelRow = 0;
   for (const row of grid.rows) {
+    if (row.kind === "company" || row.kind === "letterhead") {
+      continue;
+    }
     const written = ws.addRow([...row.cells]);
+    if (row.kind === "labels") {
+      lastLabelRow = written.number;
+    }
     if (row.kind === "employee" || row.kind === "subtotal" || row.kind === "suman") {
       for (const column of grid.columns) {
         const format = NUMBER_FORMATS[column.format];
@@ -122,15 +151,9 @@ export async function buildRolWorkbook(
 
   // Ochenta columnas se leen desplazándose a la derecha, así que el nombre tiene que quedarse a la
   // vista; y por debajo de los rótulos, para saber qué se está mirando. Dónde acaban los rótulos se
-  // CUENTA sobre la rejilla y no se estima: el preámbulo mide distinto según cuántas líneas de
-  // membrete traiga el cliente, y una fila congelada de más taparía la primera área.
-  const lastLabelRow = grid.rows.reduce(
-    (last, row, index) => (row.kind === "labels" ? index + 1 : last),
-    0,
-  );
-  ws.views = [
-    { state: "frozen", xSplit: 3, ySplit: ws.rowCount - grid.rows.length + lastLabelRow },
-  ];
+  // CUENTA mientras se escribe y no se estima: el membrete mide distinto según cuántas líneas
+  // traiga el cliente, y una fila congelada de más taparía la primera área.
+  ws.views = [{ state: "frozen", xSplit: 3, ySplit: lastLabelRow }];
 
   return wb.xlsx.writeBuffer() as Promise<ArrayBuffer>;
 }

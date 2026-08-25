@@ -777,19 +777,21 @@ describe("buildMultiCenterWorkbook — el membrete de cada hoja", () => {
   });
 
   /**
-   * Lo que pidió la firma: pegado al final de la columna del nombre, no flotando sobre las cifras.
+   * Lo que pidió la firma: la esquina de la TABLA. Acabó antes en la columna del nombre, y era
+   * defendible —así se veía sin desplazarse—, pero un membrete que para a 390 px no se lee como el
+   * borde de nada sino como algo flotando entre las cifras.
    *
    * Se afirma sobre `nativeCol` + `nativeColOff`, que es lo que se escribe en el `.xlsx`, y NO
    * sobre el `col` fraccionario de exceljs: ese getter reconvierte los EMU con `caracteres ×
    * 10000` y devuelve una cifra que no es la que Excel dibuja — es el mismo error que dejaba el
    * logo al principio de la columna, y un test escrito contra él lo habría dado por bueno.
    */
-  it("el del centro muere donde muere la columna del nombre, no sobre los meses", () => {
+  it("el del centro se pega a la esquina derecha de la tabla, no al bloque de rótulos", () => {
     const [, center] = imagesOf(workbook({ norte: NORTE_LOGO }), "SUCURSAL NORTE");
-    // Código (89 px) + nombre (299 px) = 388; el logo mide 56 de ancho, así que empieza en 332,
-    // o sea 243 px dentro de la columna del nombre.
-    expect(center.range.tl.nativeCol).toBe(1);
-    expect(center.range.tl.nativeColOff).toBe(243 * 9525);
+    // Código (89) + nombre (299) + doce meses y el Total a 96 = 1.636 px de tabla; el logo mide 56
+    // de ancho, así que empieza en 1.580 — dentro de la última columna, que arranca en 1.540.
+    expect(center.range.tl.nativeCol).toBe(14);
+    expect(center.range.tl.nativeColOff).toBe(40 * 9525);
   });
 
   // El Consolidado no es un centro: no hay logo que le corresponda, y `centerLogoOf` lo responde
