@@ -2,10 +2,10 @@
  * LOS COMPROBANTES DE UN PERÍODO ENTERO: la nómina guardada → un `PayslipDocument` por empleado.
  *
  * Es `buildPayslipDocument` en bucle, y existe como función propia porque lo pide MÁS DE UNA
- * pantalla: la del período (`/payroll/[periodId]`) y la fila del historial, que baja el mismo PDF
+ * pantalla: la del período (`/payroll/[periodId]`) y la fila del historial, que baja el mismo .zip
  * sin abrir el período. Escrito a mano en las dos, «los comprobantes de este período» tendría dos
  * definiciones capaces de separarse —el orden, el `Codigo:`, el logo y el membrete del cliente— y nada lo
- * delataría: los dos PDF se abren por separado y cada uno parece correcto.
+ * delataría: los dos archivos se abren por separado y cada uno parece correcto.
  *
  * Recibe las LÍNEAS y no un rol ya calculado, así que un consumidor no necesita el motor para pedir
  * su papel. Que la pantalla de detalle calcule su propio `rows` para los KPIs y la tabla no abre

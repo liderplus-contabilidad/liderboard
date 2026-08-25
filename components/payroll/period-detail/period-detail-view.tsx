@@ -10,7 +10,7 @@ import { computeLinePayroll } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
 import { journalAmountsFor } from "@/lib/payroll/journal-amounts";
-import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
+import { downloadPayslipZip } from "@/lib/payroll/payslip/download";
 import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import {
   computePeriodFinancials,
@@ -104,7 +104,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   /**
    * Los comprobantes de la nómina entera, uno por página y en el orden en que se lee la tabla.
    *
-   * `buildPeriodPayslips` es el MISMO constructor que usa la fila del historial, que baja este PDF
+   * `buildPeriodPayslips` es el MISMO constructor que usa la fila del historial, que baja este mismo .zip
    * sin abrir el período. Nada se persiste — cada cifra sale del motor en este instante.
    */
   const [downloading, setDownloading] = useState(false);
@@ -114,7 +114,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     }
     setDownloading(true);
     try {
-      await downloadPayslips(
+      await downloadPayslipZip(
         buildPeriodPayslips({
           period,
           lines,
@@ -124,7 +124,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
           ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
         }),
-        payslipBatchFilename(period.year, period.monthIndex),
+        period,
       );
     } finally {
       setDownloading(false);

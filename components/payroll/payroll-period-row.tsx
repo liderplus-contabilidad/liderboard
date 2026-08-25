@@ -10,7 +10,7 @@ import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber, pluralize } from "@/lib/format";
 import { listEmployees } from "@/lib/payroll/db";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
-import { downloadPayslips, payslipBatchFilename } from "@/lib/payroll/payslip/download";
+import { downloadPayslipZip, PAYSLIP_ZIP_LABEL } from "@/lib/payroll/payslip/download";
 import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
 import { periodKindLabel, periodLongLabel } from "@/lib/payroll/periods";
@@ -74,7 +74,7 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
   }, []);
 
   /**
-   * Los comprobantes del período, sin abrirlo. Es el MISMO PDF que baja su pantalla de detalle,
+   * Los comprobantes del período, sin abrirlo. Es el MISMO .zip que baja su pantalla de detalle,
    * por el mismo constructor: desde el historial se bajan los roles de varios meses seguidos sin
    * entrar y salir de cada uno.
    *
@@ -89,7 +89,7 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
       if (lines.length === 0) {
         return;
       }
-      await downloadPayslips(
+      await downloadPayslipZip(
         buildPeriodPayslips({
           period,
           lines,
@@ -99,7 +99,7 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
           ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
           ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
         }),
-        payslipBatchFilename(period.year, period.monthIndex),
+        period,
       );
     } finally {
       setDownloading(false);
@@ -178,8 +178,8 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
             <button
               type="button"
               disabled={!hasFinancials || downloading}
-              title={hasFinancials ? "Descargar roles (PDF)" : NO_DATA_REASON}
-              aria-label={hasFinancials ? "Descargar roles (PDF)" : NO_DATA_REASON}
+              title={hasFinancials ? PAYSLIP_ZIP_LABEL : NO_DATA_REASON}
+              aria-label={hasFinancials ? PAYSLIP_ZIP_LABEL : NO_DATA_REASON}
               aria-busy={downloading}
               onClick={() => void downloadRoles()}
               className={ROW_ACTION_CLASS}

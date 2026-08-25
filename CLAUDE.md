@@ -1239,6 +1239,16 @@ hasta `Valores` si no, que es el desbordamiento hacia celdas vacías que el Exce
 escrito como regla. El encabezado imprime el nombre del CLIENTE: el parser lee la razón social de
 `GENERAL!B1` pero nadie la persiste todavía. Nada se guarda — el comprobante se arma en la descarga
 desde la ficha y el motor, la misma regla que el asiento y los totales del período.
+**La descarga del PERÍODO son N archivos, no uno**: `downloadPayslipZip` saca un PDF por empleado y
+los mete en un .zip (`Rol-2026-03-comprobantes.zip`), porque el papel existe para REPARTIRSE —cada
+empleado firma el suyo— y un PDF de treinta páginas hay que partirlo a mano antes de entregarlo.
+Cada uno pasa por `renderPayslips` con UNA entrada, el caso `N = 1` que la ficha de un empleado ya
+usaba, así que no hay una segunda forma de dibujar un comprobante. El sobre lo escribe `lib/zip.ts`
+(puro + testeado, vecino de `lib/download.ts`): `store` sin comprimir y sin dependencia nueva,
+porque lo que va dentro —PDF, xlsx— ya viene comprimido y desinflarlo otra vez no quita un
+kilobyte. Los nombres los decide `payslipZipEntryNames`, que desempata a dos empleados del mismo
+nombre con su POSICIÓN en la nómina —la que el comprobante imprime en `Codigo:`—: un extractor pisa
+el archivo repetido en silencio, y una de las dos personas se quedaría sin papel.
 **Todo importe lleva el `$`** de `formatCurrency`, filas incluidas, aunque el libro las deje sin
 símbolo y solo ponga `US$` en sus tres totales: un solo dialecto del dólar entre la pantalla y el
 papel. `formatPayslipAmount` no sube a `lib/format.ts` por dos razones que siguen en pie — dos

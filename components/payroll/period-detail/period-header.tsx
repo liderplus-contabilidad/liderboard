@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
+import { PAYSLIP_ZIP_LABEL } from "@/lib/payroll/payslip/download";
 import { periodLongLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
 
@@ -35,9 +36,9 @@ interface PeriodHeaderProps {
   employeeCount: number;
   financials: PayrollPeriodFinancials | undefined;
   onDelete: () => void;
-  /** Baja los comprobantes de toda la nómina, uno por página. */
+  /** Baja los comprobantes de toda la nómina: un PDF por empleado, en un .zip. */
   onDownloadPayslips: () => void;
-  /** Mientras `pdf-lib` se carga y el PDF se arma. Con nóminas de treinta empleados eso son unas
+  /** Mientras `pdf-lib` se carga y se arma un PDF por empleado. Con nóminas de treinta empleados eso son unas
    *  décimas: sin el aviso, el botón parece no haber respondido y se pulsa otra vez. */
   downloading: boolean;
 }
@@ -106,7 +107,7 @@ export function PeriodHeader({
               icon={<FileText size={15} />}
               onClick={onDownloadPayslips}
             >
-              {downloading ? "Generando…" : "Descargar roles (PDF)"}
+              {downloading ? "Generando…" : PAYSLIP_ZIP_LABEL}
             </Button>
           </span>
         </div>
