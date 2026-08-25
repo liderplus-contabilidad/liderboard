@@ -1,4 +1,4 @@
-# liderboard
+# LiderPlus sistema
 
 **LiderPlus** — panel financiero para una firma contable. La interfaz está en **español**;
 el código (identificadores, slugs de rutas) en **inglés**. Es una app **solo para escritorio**
