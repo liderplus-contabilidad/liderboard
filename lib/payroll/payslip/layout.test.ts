@@ -7,7 +7,7 @@ import type { PayrollEmployeeLine } from "../types";
 import { buildPayslipDocument } from "./document";
 import { PAGE_HEIGHT, PAGE_WIDTH, PAYSLIP_COLUMNS, layoutPayslip, wrapText } from "./layout";
 import { PAYSLIP_COLORS } from "./palette";
-import type { MeasureText, PayslipDocument } from "./types";
+import type { MeasureText, PayslipBox, PayslipDocument } from "./types";
 
 /**
  * Se mide con la Helvetica REAL, la que `render.ts` acaba usando, en vez de con anchos inventados:
@@ -15,12 +15,22 @@ import type { MeasureText, PayslipDocument } from "./types";
  * un rótulo que se sale de su columna en el PDF de verdad.
  */
 let measure: MeasureText;
+let edgesOf: (box: PayslipBox) => [left: number, right: number];
 
 beforeAll(async () => {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   measure = (text, size, isBold) => (isBold ? bold : regular).widthOfTextAtSize(text, size);
+  // Los dos bordes de una caja, con su alineación resuelta. Escrito UNA vez: desde que el
+  // encabezado va centrado, un test que dé por hecho que `x` es el borde izquierdo mide la caja en
+  // un sitio en el que no está, y lo hace en silencio.
+  edgesOf = (box) => {
+    const width = measure(box.text, box.size, box.bold);
+    const left =
+      box.align === "right" ? box.x - width : box.align === "center" ? box.x - width / 2 : box.x;
+    return [left, left + width];
+  };
 });
 
 const LINE: PayrollEmployeeLine = {
@@ -127,10 +137,9 @@ describe("el comprobante cabe en la hoja", () => {
   it("ninguna caja se sale del ancho útil", () => {
     const { boxes } = layoutPayslip(documentFor(FULL), measure);
     for (const box of boxes) {
-      const width = measure(box.text, box.size, box.bold);
-      const left = box.align === "right" ? box.x - width : box.x;
+      const [left, right] = edgesOf(box);
       expect(left, box.text).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft - 0.5);
-      expect(left + width, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
+      expect(right, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
     }
   });
 
@@ -288,25 +297,32 @@ describe("el membrete del cliente", () => {
     logo: logo(width, height),
   });
 
-  it("sin logo el comprobante queda EXACTAMENTE como estaba", () => {
+  /** El eje de la hoja, contra el que se centra el bloque del encabezado. */
+  const pageCenter = (PAYSLIP_COLUMNS.pageLeft + PAYSLIP_COLUMNS.pageRight) / 2;
+
+  it("sin logo el bloque del encabezado sigue centrado en la hoja", () => {
     const { images, boxes, fills, rules } = layoutPayslip(documentFor(), measure);
     expect(images).toEqual([]);
-    // La regresión que importa: el encabezado no se movió ni un punto por existir esta función.
+    // Centrado en la HOJA y no en lo que sobra: es lo que hace que un comprobante con logo y otro
+    // sin él se superpongan.
     const company = boxes[0];
-    expect(company?.x).toBe(PAYSLIP_COLUMNS.pageLeft);
+    expect(company?.align).toBe("center");
+    expect(company?.x).toBeCloseTo(pageCenter, 6);
     expect(fills.length).toBeGreaterThan(0);
     expect(rules.length).toBeGreaterThan(0);
   });
 
-  it("con logo, el nombre de la empresa le cede el sitio y ninguno pisa al otro", () => {
-    const { images, boxes } = layoutPayslip(withLogo(640, 160), measure);
-    expect(images).toHaveLength(1);
+  it("con logo, el bloque no se mueve y ninguno de los dos pisa al otro", () => {
+    const conLogo = layoutPayslip(withLogo(640, 160), measure);
+    expect(conLogo.images).toHaveLength(1);
 
-    const mark = images[0]!;
-    const company = boxes[0]!;
+    const mark = conLogo.images[0]!;
+    const company = conLogo.boxes[0]!;
     expect(mark.x).toBe(PAYSLIP_COLUMNS.pageLeft);
-    // El nombre empieza DESPUÉS de donde acaba el logo: es lo que evita que se solapen.
-    expect(company.x).toBeGreaterThanOrEqual(mark.x + mark.width);
+    // El eje del bloque no depende de que haya logo — los dos lados reservan lo mismo.
+    expect(company.x).toBeCloseTo(pageCenter, 6);
+    // Y el rótulo empieza DESPUÉS de donde acaba el logo, que es lo que evita que se solapen.
+    expect(edgesOf(company)[0]).toBeGreaterThanOrEqual(mark.x + mark.width);
   });
 
   it("el logo no se sale de la hoja por ningún lado, sea cual sea su forma", () => {
@@ -322,9 +338,9 @@ describe("el membrete del cliente", () => {
       expect(mark.x + mark.width).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight);
       expect(mark.y).toBeGreaterThanOrEqual(0);
 
-      // Y no invade el título de la derecha, que es la otra mitad del encabezado.
+      // Y no invade el bloque centrado, que es lo que tiene al lado.
       const title = boxes.find((box) => box.text === "ROL DE PAGOS");
-      expect(mark.x + mark.width).toBeLessThan(title!.x);
+      expect(mark.x + mark.width).toBeLessThanOrEqual(edgesOf(title!)[0]);
     }
   });
 
@@ -359,12 +375,32 @@ describe("el membrete del cliente", () => {
     }
 
     for (const box of layout.boxes) {
-      const width = measure(box.text, box.size, box.bold);
-      const left = box.align === "right" ? box.x - width : box.x;
+      const [left, right] = edgesOf(box);
       expect(left, box.text).toBeGreaterThanOrEqual(PAYSLIP_COLUMNS.pageLeft - 0.5);
-      expect(left + width, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
+      expect(right, box.text).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight + 0.5);
       expect(box.y + box.size, box.text).toBeLessThanOrEqual(PAGE_HEIGHT);
     }
+  });
+
+  // El reparto entero, en un test: todo el encabezado comparte eje, y el título va DEBAJO del
+  // membrete y no a su derecha, que es lo que cambió.
+  it("empresa, membrete, título y mes comparten el eje de la hoja, en ese orden", () => {
+    const { boxes, rules } = layoutPayslip(
+      documentFor(FULL, { company: COMPANY, logo: LOGO }),
+      measure,
+    );
+    const center = (PAYSLIP_COLUMNS.pageLeft + PAYSLIP_COLUMNS.pageRight) / 2;
+    const header = boxes.filter((box) => box.y < rules[0]!.y);
+
+    for (const box of header) {
+      expect(box.align, box.text).toBe("center");
+      expect(box.x, box.text).toBeCloseTo(center, 6);
+    }
+
+    const at = (text: string) => header.find((box) => box.text === text)!.y;
+    expect(at("HOTEL BOUTIQUE CULTURA MANOR")).toBeLessThan(at("nomina@delicmar.com"));
+    expect(at("nomina@delicmar.com")).toBeLessThan(at("ROL DE PAGOS"));
+    expect(at("ROL DE PAGOS")).toBeLessThan(at("MARZO 2026"));
   });
 
   // La línea que decide el diseño: la ubicación del archivo real son setenta y pico caracteres, y
@@ -406,11 +442,13 @@ describe("el membrete del cliente", () => {
     expect(centro(conMembrete)).toBeGreaterThan(centro(sinMembrete) + 8);
   });
 
-  // La regresión que importa: un cliente sin perfil tiene que imprimir el comprobante de siempre.
-  // 78 = margen superior (44) + el bloque de dos líneas de antes (15 + 9) + su aire (10).
-  it("sin perfil, el encabezado mide lo que medía", () => {
+  // El encabezado más corto que existe, y el que fija el alto del hueco del logo (44): un cliente
+  // sin perfil imprime empresa, título y mes, nada más.
+  // 103 = margen superior (44) + empresa (15) + aire del título (8) + título (13) + su aire (4) +
+  // mes (9) + el aire de la raya (10).
+  it("sin perfil, el encabezado es el bloque mínimo", () => {
     const layout = layoutPayslip(documentFor(FULL), measure);
-    expect(layout.rules[0]?.y).toBe(78);
+    expect(layout.rules[0]?.y).toBe(103);
   });
 });
 
@@ -447,19 +485,19 @@ describe("el centro de costo", () => {
     expect(izquierda.x + izquierda.width).toBeLessThan(derecha.x);
   });
 
-  it("ninguna caja del encabezado se cruza con el logo de la derecha", () => {
+  it("ninguna caja del encabezado se cruza con ninguno de los dos logos", () => {
     const layout = conCentro();
+    const izquierda = layout.images.find((image) => image.dataUrl === LOGO.dataUrl)!;
     const derecha = layout.images.find((image) => image.dataUrl === CENTER_LOGO.dataUrl)!;
-    const titulo = layout.boxes.find((box) => box.text === "ROL DE PAGOS")!;
+    const raya = layout.rules[0]!.y;
 
-    // El título BAJA lo que ocupa el logo, en vez de compartir renglón con él.
-    expect(titulo.y).toBeGreaterThanOrEqual(derecha.y + derecha.height);
-    // Y el nombre de la empresa y su membrete se quedan a la izquierda del bloque derecho.
-    for (const box of layout.boxes.filter((candidate) => candidate.align !== "right")) {
-      if (box.y > derecha.y + derecha.height) {
-        continue;
-      }
-      expect(box.x + measure(box.text, box.size, box.bold)).toBeLessThanOrEqual(derecha.x);
+    // Lo único que un encabezado de dos logos puede hacer mal en silencio: que el bloque centrado
+    // se meta debajo de uno de ellos. Se comprueba sobre TODAS las cajas del encabezado, no solo
+    // sobre el título, porque la línea larga del membrete es la que llega más lejos.
+    for (const box of layout.boxes.filter((candidate) => candidate.y < raya)) {
+      const [left, right] = edgesOf(box);
+      expect(left, box.text).toBeGreaterThanOrEqual(izquierda.x + izquierda.width);
+      expect(right, box.text).toBeLessThanOrEqual(derecha.x);
     }
   });
 

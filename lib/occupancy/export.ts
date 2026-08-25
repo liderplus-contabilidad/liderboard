@@ -7,7 +7,7 @@
  */
 import ExcelJS from "exceljs";
 import { MONTHS_FULL_ES } from "@/lib/date";
-import { writeLogoHeader } from "@/lib/excel-logo";
+import { writeLetterhead } from "@/lib/excel-logo";
 import type { EntityLogo } from "@/lib/logos";
 import { toOccupancyGrid, type OccupancyGrid } from "./derive";
 import { DEFAULT_CENTER_ID, type OccupancyDataset } from "./types";
@@ -65,17 +65,26 @@ export function buildOccupancyWorkbook(
   // El ancho va antes del membrete porque de él sale el ancla del logo derecho; poner un ancho no
   // escribe ninguna fila, así que adelantarlo no cambia nada más de la hoja.
   ws.getColumn(1).width = 40;
-  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. Aquí la
-  // banda la marca UNA sola columna de rótulos: las demás son un día cada una.
-  writeLogoHeader(wb, ws, logo, centerLogo, 1);
-
-  ws.addRow([`Ocupación  - ${year.year}`]).getCell(1).font = { bold: true, size: 14 };
-  // Read BY POSITION. The cost-center line is omitted for `principal`: writing it would turn a
-  // hotel with no centers into one named after itself.
-  ws.addRow([year.hotelName]).getCell(1).font = { bold: true };
-  if (year.centerId !== DEFAULT_CENTER_ID) {
-    ws.addRow([year.centerName]).getCell(1).font = { bold: true };
-  }
+  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. La banda
+  // llega hasta donde llega el BLOQUE DE UN MES —los días, el TOTAL, el Porcentaje y el Promedio—,
+  // que es la tabla que encabeza.
+  //
+  // Las tres líneas siguen leyéndose BY POSITION: `readNames` cuenta las no vacías de la columna A
+  // por encima del primer bloque, y una celda combinada guarda su valor en esa misma columna. La
+  // del centro se omite para `principal`: escribirla convertiría un hotel sin sucursales en uno
+  // nombrado por sí mismo.
+  writeLetterhead(wb, ws, {
+    leftLogo: logo,
+    rightLogo: centerLogo,
+    columns: TOTAL_COL + 2,
+    lines: [
+      { text: `Ocupación  - ${year.year}`, font: { bold: true, size: 14 } },
+      { text: year.hotelName, font: { bold: true } },
+      ...(year.centerId !== DEFAULT_CENTER_ID
+        ? [{ text: year.centerName, font: { bold: true } }]
+        : []),
+    ],
+  });
   ws.addRow([]);
 
   for (let index = 0; index < 12; index++) {

@@ -1,6 +1,7 @@
 /**
- * EL MEMBRETE DE UN LIBRO — un logo arriba a la IZQUIERDA de cada hoja, encima del nombre de la
- * empresa, como en un papel con hoja timbrada, y otro a la DERECHA.
+ * EL MEMBRETE DE UN LIBRO — una banda del ANCHO DE LA TABLA al principio de cada hoja: el logo del
+ * cliente pegado al borde izquierdo, el bloque de título CENTRADO sobre las columnas, y el logo del
+ * centro pegado al borde derecho.
  *
  * **Quién ocupa cada lado lo decide el llamador, no este archivo.** Los tres módulos reparten
  * igual —el del workspace abre por la izquierda, el del centro de esa hoja cierra por la derecha—,
@@ -8,32 +9,37 @@
  * datos, y en Rol de Pagos lo declara el cliente (`letterheadLogos`, en `lib/cost-center.ts`). Los
  * parámetros se llaman por su SITIO porque es lo único que este archivo sabe de ellos.
  *
- * Vive aparte y no dentro de cada `export.ts` porque los dos módulos que descargan Excel —PyG y
- * Ocupaciones— quieren exactamente lo mismo, y dos versiones de «dónde va el logo» acabarían
- * poniéndolo en sitios distintos.
+ * Vive aparte y no dentro de cada `export.ts` porque los tres módulos que descargan Excel quieren
+ * exactamente lo mismo, y dos versiones de «dónde va el membrete» acabarían poniéndolo en sitios
+ * distintos.
  *
  * **El hueco se reserva ESCRIBIENDO, no desplazando.** Se intentó estampar el logo sobre el libro
  * ya terminado, abriendo sitio con `spliceRows`; se descartó porque exceljs pierde las NOTAS de
  * celda al mover filas (medido: `spliceRows` e `insertRows` las borran las dos), y en esas notas
  * viajan los comentarios del contador y el «Valor original» de cada ajuste — o sea, justo lo que
- * hace que el libro descargado explique sus propias cifras. Por eso `writeLogoHeader` se llama al
+ * hace que el libro descargado explique sus propias cifras. Por eso `writeLetterhead` se llama al
  * principio de cada hoja, cuando todavía está vacía y no hay ninguna nota que perder.
+ *
+ * **La banda llega hasta el final de la TABLA.** Acabó antes en el bloque de rótulos —el código y
+ * el nombre de la cuenta—, y era defendible: así el logo derecho se veía sin desplazarse. Pero un
+ * membrete es la cabeza de la tabla, y uno que para a 390 px no se lee como su esquina sino como
+ * algo flotando entre las cifras. El precio está aceptado y es real: en Ocupaciones (unas 35
+ * columnas de días) y en Rol de Pagos (ochenta) tanto el logo derecho como el centro del título
+ * caen fuera de la primera pantalla y hay que desplazarse hasta ellos. En PyG con trece meses la
+ * banda mide ~1.640 px, que sí entra en un monitor normal. Y como sale de los ANCHOS REALES de las
+ * columnas, cambiar el ancho de una mueve el membrete con ella.
+ *
+ * **El bloque de título se combina desde la columna del PROPIO MÓDULO, no siempre desde la A**, y
+ * eso es lo único que sostiene el viaje de vuelta: el valor de una celda combinada vive en su
+ * esquina superior izquierda, y cada lector busca el suyo en una columna concreta —`findCompany`
+ * lee la B en Rol de Pagos, `readNames` y `readCompanyName` leen la A—. Combinando desde la columna
+ * que ese lector ya mira, los tres archivos re-entran sin tocar ni un parser.
  *
  * **Desplazar el preámbulo es seguro, y no por casualidad.** Ningún lector de esta app lo busca en
  * una fila fija: `findFirstDataRow` localiza la primera fila con código de cuenta, `findHeaderRow`
- * retrocede desde ella y `readCompanyName` toma la primera celda no vacía de la COLUMNA A por
- * encima de esa cabecera. Unas filas en blanco delante no cambian ninguna de las tres respuestas.
- * La imagen tampoco estorba: el libro se relee con SheetJS, que ignora las imágenes flotantes.
- *
- * **La banda llega hasta donde llega el BLOQUE DE RÓTULOS, no hasta el final de la hoja.** Anclar el
- * logo del centro a la última columna lo dejaría fuera de la primera pantalla en cuanto la hoja
- * tuviera trece meses, y en Ocupaciones —treinta y pico columnas, un día cada una— no se vería
- * nunca; anclarlo a un ancho fijo en píxeles lo deja flotando en medio de las cifras, con un hueco
- * vacío entre el nombre y él. Lo que sí es un borde de verdad es donde acaban las columnas de
- * rótulos —el código y el nombre de la cuenta en PyG, la única columna de etiquetas en
- * Ocupaciones—: es el margen derecho del preámbulo que ya está escrito debajo, así que el membrete
- * queda alineado con lo que encabeza. Y como sale de los ANCHOS REALES de esas columnas, cambiar el
- * ancho del nombre mueve el logo con él.
+ * retrocede desde ella, `readNames` cuenta líneas no vacías y `findCompany`/`findPeriod` localizan
+ * lo suyo por su forma. Unas filas de membrete delante no cambian ninguna de esas respuestas. La
+ * imagen tampoco estorba: el libro se relee con SheetJS, que ignora las imágenes flotantes.
  */
 import type ExcelJS from "exceljs";
 import { fitLogoBox, logoBase64, logoExtension, type EntityLogo } from "@/lib/logos";
@@ -45,7 +51,7 @@ import { fitLogoBox, logoBase64, logoExtension, type EntityLogo } from "@/lib/lo
  */
 const LOGO_SLOT = { width: 240, height: 56 };
 
-/** Aire mínimo entre los dos logos cuando el bloque de rótulos es más estrecho que ellos dos. */
+/** Aire mínimo entre los dos logos cuando la tabla es más estrecha que ellos dos. */
 const LOGO_GAP = 16;
 
 /** Alto por defecto de una fila de Excel, en píxeles. Es lo que convierte el alto del logo en filas. */
@@ -56,6 +62,11 @@ const ROW_HEIGHT = 20;
  * creada, que es lo que mide una hoja en blanco de Excel.
  */
 const DEFAULT_COLUMN_WIDTH = 8.43;
+
+/** El relleno de la banda y la raya que la cierra — los grises con los que las tres descargas ya
+ *  pintan sus cabeceras, para que el membrete no estrene un dialecto propio. */
+const BAND_FILL = "FFF1F5F9";
+const BAND_RULE = "FF94A3B8";
 
 /**
  * Un ancho de columna en píxeles. Una hoja mide en caracteres de su fuente por defecto, y la
@@ -112,28 +123,28 @@ export function columnAnchorAt(widths: readonly (number | undefined)[], px: numb
 }
 
 /**
- * Dónde acaba la banda del membrete, en píxeles: el borde derecho del bloque de rótulos, salvo que
- * los dos logos no quepan en él, en cuyo caso la banda se ensancha lo justo para que no se pisen.
+ * Dónde acaba la banda del membrete, en píxeles: el borde derecho de la TABLA, salvo que los dos
+ * logos no quepan en ella, en cuyo caso la banda se ensancha lo justo para que no se pisen.
  *
- * Esa segunda mitad no es defensiva de más: la columna de etiquetas de Ocupaciones mide unos 285 px
- * y un logo apaisado puede pedir 240, así que sin ella dos logos anchos se solaparían — y un logo
- * encima de otro no es un membrete, es un borrón.
+ * Esa segunda mitad no es defensiva de más: un estado de modo único son tres columnas y un logo
+ * apaisado puede pedir 240, así que sin ella dos logos anchos se solaparían — y un logo encima de
+ * otro no es un membrete, es un borrón.
  *
  * Puro, porque es la aritmética que decide dónde acaba el logo y esa es exactamente la que no se
  * puede comprobar leyendo el código: se comprueba abriendo el .xlsx.
  */
 export function bandWidthFor(
   widths: readonly (number | undefined)[],
-  /** Cuántas columnas de la izquierda son rótulos: 2 en PyG (código + nombre), 1 en Ocupaciones. */
-  labelColumns: number,
+  /** Cuántas columnas mide la TABLA que se encabeza. */
+  tableColumns: number,
   leftWidth: number,
   rightWidth: number,
 ): number {
-  let labels = 0;
-  for (let index = 0; index < labelColumns; index++) {
-    labels += columnWidthPx(widths[index]);
+  let table = 0;
+  for (let index = 0; index < tableColumns; index++) {
+    table += columnWidthPx(widths[index]);
   }
-  return Math.max(labels, leftWidth + LOGO_GAP + rightWidth);
+  return Math.max(table, leftWidth + LOGO_GAP + rightWidth);
 }
 
 /**
@@ -159,55 +170,107 @@ function imageIdFor(wb: ExcelJS.Workbook, logo: EntityLogo): number {
   return id;
 }
 
+/** Una línea del bloque de título, con la tinta que le toque. */
+export interface LetterheadLine {
+  text: string;
+  font?: Partial<ExcelJS.Font>;
+}
+
+export interface Letterhead {
+  /** El que encabeza a la izquierda, pegado al borde. */
+  leftLogo?: EntityLogo | null;
+  /** El de la derecha. El Consolidado, el mes en crudo y un cliente sin centro no tienen. */
+  rightLogo?: EntityLogo | null;
+  /** Cuántas columnas mide la TABLA. Es lo que fija el borde derecho de la banda. */
+  columns: number;
+  /**
+   * Desde qué columna (1-based) se combina el bloque de título. La A salvo en Rol de Pagos, cuyo
+   * lector busca la empresa en la B — ver la cabecera del archivo.
+   */
+  firstColumn?: number;
+  /** Las líneas del título, ya compuestas por el módulo. */
+  lines?: readonly LetterheadLine[];
+}
+
 /**
- * Abre el hueco del membrete al principio de una hoja RECIÉN CREADA y ancla en él los logos: el del
- * cliente pegado al borde izquierdo, el del centro alineado contra el borde derecho de la banda.
- * Se llama antes del preámbulo; sin ningún logo no hace nada, que es lo que permite llamarlo
- * incondicionalmente.
+ * Escribe la banda del membrete al principio de una hoja RECIÉN CREADA: las filas del bloque de
+ * título centradas sobre la tabla, el relleno que las hace parecer una cabecera y no texto suelto
+ * en A1, la raya que las separa de lo que viene debajo, y los dos logos anclados a los bordes.
+ * Sin logos y sin líneas no hace nada, que es lo que permite llamarla incondicionalmente.
  *
- * Los ANCHOS DE COLUMNA de la hoja tienen que estar ya puestos cuando se llama, porque es de ellos
- * de donde sale el ancla del logo derecho. Ponerlos no escribe ninguna fila, así que adelantarlos
- * no cambia nada más.
+ * Los ANCHOS DE COLUMNA de la hoja tienen que estar ya puestos cuando se llama, porque de ellos
+ * sale el ancla del logo derecho. Ponerlos no escribe ninguna fila, así que adelantarlos no cambia
+ * nada más.
  */
-export function writeLogoHeader(
+export function writeLetterhead(
   wb: ExcelJS.Workbook,
   ws: ExcelJS.Worksheet,
-  /** El que encabeza a la izquierda, pegado al borde. */
-  leftLogo: EntityLogo | null | undefined,
-  /** El de la derecha. El Consolidado, el mes en crudo y un cliente sin centro no tienen. */
-  rightLogo?: EntityLogo | null | undefined,
-  /**
-   * Cuántas columnas de la izquierda son rótulos y no cifras. Es lo que fija el borde derecho de la
-   * banda, así que solo importa cuando hay un segundo logo.
-   */
-  labelColumns = 2,
+  band: Letterhead,
 ): void {
-  if (!leftLogo && !rightLogo) {
+  const { columns, firstColumn = 1, lines = [] } = band;
+  const left = band.leftLogo ? fitLogoBox(band.leftLogo, LOGO_SLOT) : null;
+  const right = band.rightLogo ? fitLogoBox(band.rightLogo, LOGO_SLOT) : null;
+  if (!left && !right && lines.length === 0) {
     return;
   }
-  const left = leftLogo ? fitLogoBox(leftLogo, LOGO_SLOT) : null;
-  const right = rightLogo ? fitLogoBox(rightLogo, LOGO_SLOT) : null;
 
-  // El hueco lo pide el más alto de los dos: con filas para uno solo, el otro se derramaría sobre
-  // el preámbulo.
-  const height = Math.max(left?.height ?? 0, right?.height ?? 0);
-  const rows = Math.max(1, Math.ceil(height / ROW_HEIGHT));
-  for (let i = 0; i < rows; i++) {
-    ws.addRow([]);
+  // El alto lo pide el más alto de los dos lados: el bloque de título y el logo. Con filas para uno
+  // solo, el otro se derramaría sobre lo que viene debajo.
+  const logoHeight = Math.max(left?.height ?? 0, right?.height ?? 0);
+  const rows = Math.max(lines.length, Math.ceil(logoHeight / ROW_HEIGHT), 1);
+  const lastColumn = Math.max(columns, firstColumn);
+
+  // Las filas se pintan ANTES de combinarlas: exceljs propaga a todo el rango el estilo de la
+  // celda maestra, así que combinar al final es lo que reparte el relleno y la raya sin que haya
+  // que volver a escribirlos celda a celda dentro del rango.
+  const written: ExcelJS.Row[] = [];
+  for (let index = 0; index < rows; index++) {
+    const row = ws.addRow([]);
+    written.push(row);
+    for (let column = 1; column <= lastColumn; column++) {
+      const cell = row.getCell(column);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BAND_FILL } };
+      if (index === rows - 1) {
+        cell.border = { bottom: { style: "thin", color: { argb: BAND_RULE } } };
+      }
+    }
   }
 
-  if (leftLogo && left) {
-    ws.addImage(imageIdFor(wb, leftLogo), {
-      tl: topLeftAt({ nativeCol: 0, nativeColOff: 0 }),
+  lines.forEach((line, index) => {
+    const row = written[index];
+    if (!row) {
+      return;
+    }
+    const cell = row.getCell(firstColumn);
+    cell.value = line.text;
+    if (line.font) {
+      cell.font = line.font;
+    }
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    if (lastColumn > firstColumn) {
+      ws.mergeCells(row.number, firstColumn, row.number, lastColumn);
+    }
+  });
+
+  // Centrados contra la banda ENTERA y no colgados de su primera fila: un logo alineado por arriba
+  // sobre un membrete de cuatro líneas deja un hueco bajo él que se lee como un error de
+  // composición. Es la misma regla que el encabezado del comprobante en PDF.
+  const bandHeight = rows * ROW_HEIGHT;
+  if (band.leftLogo && left) {
+    ws.addImage(imageIdFor(wb, band.leftLogo), {
+      tl: topLeftAt({ nativeCol: 0, nativeColOff: 0 }, (bandHeight - left.height) / 2),
       ext: left,
       editAs: "oneCell",
     });
   }
-  if (rightLogo && right) {
+  if (band.rightLogo && right) {
     const widths = (ws.columns ?? []).map((column) => column?.width);
-    const band = bandWidthFor(widths, labelColumns, left?.width ?? 0, right.width);
-    ws.addImage(imageIdFor(wb, rightLogo), {
-      tl: topLeftAt(columnAnchorAt(widths, Math.max(0, band - right.width))),
+    const width = bandWidthFor(widths, columns, left?.width ?? 0, right.width);
+    ws.addImage(imageIdFor(wb, band.rightLogo), {
+      tl: topLeftAt(
+        columnAnchorAt(widths, Math.max(0, width - right.width)),
+        (bandHeight - right.height) / 2,
+      ),
       ext: right,
       editAs: "oneCell",
     });
@@ -215,13 +278,17 @@ export function writeLogoHeader(
 }
 
 /**
- * El ancla en la fila 0, en la forma que `addImage` acepta.
+ * El ancla en la primera fila, `offsetPx` dentro de ella, en la forma que `addImage` acepta.
  *
  * El cast es a los TIPOS de exceljs, no a su comportamiento: su `Anchor` lee `nativeCol`/
  * `nativeColOff` desde siempre —y son los que escribe tal cual en `<xdr:col>`/`<xdr:colOff>`—, pero
  * sus `.d.ts` solo declaran la pareja `{col, row}`, que es justo la que convierte mal. Se aísla en
  * una función para que el cast esté escrito UNA vez y con su motivo al lado.
  */
-function topLeftAt(anchor: ColumnAnchor): { col: number; row: number } {
-  return { ...anchor, nativeRow: 0, nativeRowOff: 0 } as unknown as { col: number; row: number };
+function topLeftAt(anchor: ColumnAnchor, offsetPx = 0): { col: number; row: number } {
+  return {
+    ...anchor,
+    nativeRow: 0,
+    nativeRowOff: Math.round(Math.max(0, offsetPx) * EMU_PER_PIXEL),
+  } as unknown as { col: number; row: number };
 }

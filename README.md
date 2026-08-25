@@ -955,9 +955,11 @@ obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaci
   cliente ya lo dicen el selector del header y la ficha del empleador, y repetirlo solo gasta el
   alto que las cifras necesitan.
 - **Dónde se imprime.** En el comprobante en PDF, bajo el nombre del cliente, y en el preámbulo de
-  la hoja `GENERAL` del Excel del período. El archivo sigue volviendo a entrar a la app: el lector
-  localiza el período por su forma y la empresa por ser la primera celda con texto de la columna
-  `B` sobre la cabecera, sin coordenadas fijas.
+  la hoja `GENERAL` del Excel del período. En los dos va **centrado entre los dos logos** — el del
+  cliente pegado al margen izquierdo y el de su centro de costo al derecho —, que es el mismo
+  membrete con el que PyG y Ocupaciones encabezan sus hojas. El archivo sigue volviendo a entrar a
+  la app: el lector localiza el período por su forma y la empresa por ser la primera celda con texto
+  de la columna `B` sobre la cabecera, sin coordenadas fijas.
 - **Un cliente sin esos datos no bloquea nada**: descarga igual, con el logo y el nombre. Qué falta
   lo dice el diálogo del cliente, que es donde se llena.
 
@@ -972,7 +974,9 @@ navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación 
   `globals.css` — atada a la clase y no a un id, para que un segundo informe no imprima la app
   entera detrás del otro), el cierre con Escape, el título del documento (de donde el navegador
   toma el nombre sugerido del PDF) y la barra «Guardar PDF» / «Cerrar»; `ReportSheet` dibuja la
-  hoja A4, vertical o apaisada a su ancho real. Los gráficos se miden bien porque la vista previa
+  hoja A4, vertical o apaisada a su ancho real; y `ReportBand` dibuja el **membrete** de cada
+  bloque — logo del cliente a la izquierda, título centrado y logo del centro de costo a la
+  derecha, el mismo reparto que encabeza los Excel. Los gráficos se miden bien porque la vista previa
   los monta **visibles y a su ancho real** — uno oculto se mide contra un ancho de cero.
 - **PyG** (`components/profit-loss/report/`): portada con cliente, sistema de origen y todos los
   filtros aplicados (incluidos los que nadie marcó), resumen del periodo, gráficos y análisis,

@@ -169,6 +169,10 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const columnCount = Math.max(0, ...tables.map((table) => table.grid.columns.length));
   const fit = statementFit(columnCount);
 
+  /** El análisis vertical es del centro que resolvió la barra, así que su banda lleva el logo de
+   *  ESE centro; el Consolidado no tiene ninguno y `centerLogoOf` lo responde sin caso aparte. */
+  const verticalCenterLogo = centerLogoOf(activeClient?.centerLogos, activeCenterId);
+
   const periodRefs = useMemo(
     () => expandSlots(filters.periods, [context.year]),
     [filters.periods, context.year],
@@ -348,6 +352,8 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
               baseRow={statement.base}
               centerName={centerName(views, activeCenterId)}
               collapsed={reportCollapsed}
+              {...(!isConsolidated && activeClient?.logo ? { logo: activeClient.logo } : {})}
+              {...(verticalCenterLogo ? { centerLogo: verticalCenterLogo } : {})}
             />
           </ReportSection>
         )}

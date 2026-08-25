@@ -73,12 +73,12 @@ export interface PayslipDocument {
   idCardLine: string;
 }
 
-export type PayslipAlign = "left" | "right";
+export type PayslipAlign = "left" | "right" | "center";
 
 export interface PayslipBox {
   text: string;
   /** Puntos desde el borde IZQUIERDO de la página. Con `align: "right"` es el borde derecho de la
-   *  caja, no el izquierdo. */
+   *  caja, y con `align: "center"`, su eje. */
   x: number;
   /** Puntos desde el borde SUPERIOR de la página — al revés que pdf-lib, que mide desde abajo.
    *  La conversión la hace `render.ts`, que es donde vive el sistema de coordenadas del formato;

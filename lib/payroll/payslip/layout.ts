@@ -55,7 +55,6 @@ const COLUMN_RATIO = { label: 163, quantity: 84, value: 108 } as const;
 const BODY_SIZE = 9;
 /** Los escalones a los que baja un texto que no cabe, antes de truncarse. */
 const SIZE_STEPS = [9, 8, 7] as const;
-const COMPANY_SIZE = 15;
 /**
  * Los escalones del rótulo de la empresa. Es el ÚNICO bloque de jerarquía que se deja encoger, y
  * la razón es que desde que existe el centro de costo su texto tiene DOS mitades («Delicmar ·
@@ -67,6 +66,13 @@ const COMPANY_SIZE = 15;
  * (8) y del mes (9), que son los que no puede igualar.
  */
 const COMPANY_SIZE_STEPS = [15, 13.5, 12, 11] as const;
+/**
+ * El alto que RESERVA el renglón de la empresa, que es el primer escalón y no el que acabe
+ * usándose. Un rótulo largo se dibuja más pequeño pero no sube lo que tiene debajo: si no, añadirle
+ * el nombre del centro de costo movería el membrete, el título y hasta el logo, y dos comprobantes
+ * del mismo cliente dejarían de superponerse.
+ */
+const COMPANY_SIZE = COMPANY_SIZE_STEPS[0];
 const TITLE_SIZE = 13;
 const SUBTITLE_SIZE = 9;
 const SECTION_SIZE = 8.5;
@@ -83,27 +89,31 @@ const PAD_X = 7;
 const ELLIPSIS = "…";
 
 /**
- * El ancho del hueco del logo. Se queda holgadamente dentro del 55% que el nombre de la empresa ya
- * tenía asignado, así que un logo apaisado no puede empujar al nombre contra el título de la
- * derecha. El ALTO no es constante: es el del bloque de encabezado, que crece con las líneas del
- * membrete, y se calcula en `layoutPayslip`.
+ * El hueco de CADA logo — el del cliente a la izquierda y el del centro de costo a la derecha. Es
+ * el MISMO para los dos porque son pares: el mismo reparto con el que se encabezan los Excel y el
+ * informe de PyG. Constante, y no derivado del alto del encabezado, porque el bloque centrado ya
+ * depende de él: descontar su ancho es lo que fija cuánto sitio le queda al texto, y hacerlo al
+ * revés sería una definición circular.
+ *
+ * **El ancho está MEDIDO, no elegido.** Centrar el bloque le cobra a cada línea del membrete los
+ * dos huecos de logo, y la que decide es la ubicación: la del cliente real mide 324,7 pt a 8 pt, y
+ * una más larga baja a 6,5 pt, donde mide 357,7. Con los 76 pt que tenía el hueco cuando el título
+ * vivía a la derecha, al bloque le quedaban 327 pt — la real entraba raspando y la larga se
+ * truncaba, que es justo lo que la firma dijo que no puede pasar. A 58 quedan 363, así que las dos
+ * entran enteras y con holgura. El ALTO (44) se queda por debajo del encabezado más corto que
+ * existe —empresa, título y mes sin membrete, 49 pt—, de modo que un logo nunca se sale de la banda
+ * contra la que se centra.
  */
-const LOGO_SLOT_WIDTH = 76;
+const LOGO_SLOT = { width: 58, height: 44 } as const;
 
-/** Aire entre el logo y el nombre de la empresa. */
+/** Aire entre un logo y el bloque centrado del encabezado. */
 const LOGO_GAP = 10;
 
-/**
- * El hueco del logo de la DERECHA — el del centro de costo, cuando el cliente declaró uno.
- * El ALTO sí es constante aquí, al revés que el de la izquierda: ese bloque lleva debajo el título
- * y el mes, así que un logo que creciera con el encabezado los empujaría fuera de su renglón. 30 pt
- * son las dos líneas que tiene debajo, que es lo que lo deja leerse como su par y no como un
- * segundo título.
- */
-const RIGHT_LOGO_SLOT = { width: 76, height: 30 } as const;
+/** Aire entre el membrete y el título del documento, que abre el segundo escalón del encabezado. */
+const TITLE_GAP = 8;
 
-/** Aire entre el logo de la derecha y el título que va debajo. */
-const RIGHT_LOGO_GAP = 6;
+/** Aire entre el título y el mes que va debajo. */
+const TITLE_PERIOD_GAP = 4;
 
 /** El cuerpo de las líneas del membrete y los escalones a los que baja antes de truncarse. Empiezan
  *  por debajo del nombre —son su pie de identidad, no otro título— y llegan a 6.5 porque la línea de
@@ -115,9 +125,6 @@ const HEADER_LINE_PITCH = 9.6;
 
 /** Aire entre el nombre de la empresa y la primera línea del membrete. */
 const HEADER_LINE_GAP = 3;
-
-/** Aire entre la línea más larga del membrete y el bloque de la derecha, cuando comparten renglón. */
-const HEADER_RIGHT_GAP = 14;
 
 const contentWidth = PAGE_WIDTH - MARGIN_X * 2;
 const ratioTotal = COLUMN_RATIO.label + COLUMN_RATIO.quantity + COLUMN_RATIO.value;
@@ -230,120 +237,83 @@ export function layoutPayslip(
   };
 
   // ── Encabezado ──────────────────────────────────────────────────────────────────────────────
-  // La empresa manda; a su derecha, qué documento es y de qué mes. El mes va en su propia línea
-  // bajo el título porque es lo que distingue un comprobante de otro en una carpeta con doce.
+  // El membrete de la firma, con el mismo reparto que encabeza sus Excel y el informe de PyG: el
+  // logo del cliente pegado al margen izquierdo, el bloque de identidad CENTRADO —la empresa, sus
+  // líneas de membrete, qué documento es y de qué mes— y el logo del centro de costo pegado al
+  // margen derecho. El mes va en su propia línea bajo el título porque es lo que distingue un
+  // comprobante de otro en una carpeta con doce.
   //
-  // El logo, si lo hay, va DELANTE del nombre y le cede su ancho: el nombre no se centra ni se
-  // encoge, solo empieza más a la derecha, así que el escalón entre empresa y título se conserva
-  // igual con logo que sin él. La caja se calcula de las dimensiones que el logo trae guardadas,
-  // sin decodificar la imagen — que es lo que mantiene puro este archivo.
-  // El alto del encabezado lo pide el bloque de la IZQUIERDA cuando hay membrete —el nombre más sus
-  // líneas—, y el de siempre cuando no lo hay, así que un comprobante sin perfil sale exactamente
-  // como salía. `SUBTITLE_SIZE` está aquí porque a la derecha, bajo el título, va el mes.
+  // Vivió a dos columnas —la empresa a la izquierda, el título a la derecha— y el precio de aquello
+  // era que cada bloque tenía que MEDIR al otro para no invadirlo: el nombre cedía el ancho del
+  // título, la primera línea del membrete cedía uno distinto del resto, y un rótulo con centro de
+  // costo se truncaba teniendo sitio libre al lado. Centrado no hay dos bloques que se disputen un
+  // renglón, así que todas las líneas ceden LO MISMO y el tope es uno solo.
   //
-  // Con logo a la DERECHA el bloque de ese lado es una pila —logo, título, mes—, así que el título
-  // baja lo que ocupa el logo y el encabezado entero puede crecer por ese lado. Sin él, no cambia
-  // ni un punto: `rightLogoBox` es `null` y todos los términos que introduce valen cero.
-  const rightLogoBox = document.rightLogo ? fitLogoBox(document.rightLogo, RIGHT_LOGO_SLOT) : null;
-  const rightLogoOffset = rightLogoBox ? rightLogoBox.height + RIGHT_LOGO_GAP : 0;
+  // **Los dos lados reservan lo mismo aunque haya un solo logo**, y eso es lo que centra de verdad:
+  // descontando solo el lado que existe, el bloque quedaría centrado en lo que sobra y no en la
+  // hoja, y un comprobante con logo y otro sin él dejarían de alinearse entre sí. Las cajas salen
+  // de las dimensiones que cada logo trae guardadas, sin decodificar la imagen — que es lo que
+  // mantiene puro este archivo.
+  const leftLogoBox = document.logo ? fitLogoBox(document.logo, LOGO_SLOT) : null;
+  const rightLogoBox = document.rightLogo ? fitLogoBox(document.rightLogo, LOGO_SLOT) : null;
+  const logoSide = Math.max(leftLogoBox?.width ?? 0, rightLogoBox?.width ?? 0);
+  /** Lo que le queda al bloque centrado: la hoja menos los dos huecos de logo. */
+  const centerLimit = contentWidth - 2 * (logoSide > 0 ? logoSide + LOGO_GAP : 0);
+  const centerX = MARGIN_X + contentWidth / 2;
 
-  const headerHeight = Math.max(
-    rightLogoOffset + COMPANY_SIZE + SUBTITLE_SIZE,
-    document.companyLines.length > 0
-      ? COMPANY_SIZE + HEADER_LINE_GAP + document.companyLines.length * HEADER_LINE_PITCH
-      : 0,
-  );
+  /** El mes tal como se imprime, sin su prefijo: se mide y se dibuja, así que se resuelve una vez. */
+  const periodText = document.period.replace(/^MES:\s*/, "");
 
-  const logoBox = document.logo
-    ? fitLogoBox(document.logo, { width: LOGO_SLOT_WIDTH, height: headerHeight })
-    : null;
-  if (document.logo && logoBox) {
+  // El rótulo de la empresa es el ÚNICO bloque de jerarquía que se deja encoger — ver
+  // `COMPANY_SIZE_STEPS`, y el motivo es su segunda mitad, la que dice de qué centro es el papel.
+  const companyText = fit(document.company, centerLimit, true, measure, COMPANY_SIZE_STEPS);
+  let headerY = y;
+  push(companyText.text, centerX, companyText.size, true, PAYSLIP_COLORS.ink, "center", headerY);
+  headerY += COMPANY_SIZE;
+
+  // El membrete, bajo el nombre y en tinta suave: la razón social con su RUC, la ubicación, los
+  // teléfonos y el correo. Llegan ya compuestos (`letterheadLines`), así que aquí solo se colocan.
+  if (document.companyLines.length > 0) {
+    headerY += HEADER_LINE_GAP;
+    for (const line of document.companyLines) {
+      const shaped = fit(line, centerLimit, false, measure, HEADER_LINE_STEPS);
+      push(shaped.text, centerX, shaped.size, false, PAYSLIP_COLORS.muted, "center", headerY);
+      headerY += HEADER_LINE_PITCH;
+    }
+  }
+
+  headerY += TITLE_GAP;
+  push(document.title, centerX, TITLE_SIZE, true, PAYSLIP_COLORS.ink, "center", headerY);
+  headerY += TITLE_SIZE + TITLE_PERIOD_GAP;
+  push(periodText, centerX, SUBTITLE_SIZE, false, PAYSLIP_COLORS.muted, "center", headerY);
+
+  /** Lo que ocupa el encabezado, contado sobre lo que se COLOCÓ y no estimado aparte: dos cuentas
+   *  del mismo alto acabarían separándose la primera vez que una línea cambie de sitio. */
+  const headerHeight = headerY + SUBTITLE_SIZE - y;
+
+  // Los dos logos, centrados contra el bloque ENTERO del encabezado y no colgados de su primera
+  // línea: alineados por arriba sobre un membrete de cuatro líneas dejan debajo un hueco que se lee
+  // como un error de composición. Es la misma regla que la banda de los Excel.
+  if (document.logo && leftLogoBox) {
     images.push({
       dataUrl: document.logo.dataUrl,
       mime: document.logo.mime,
       x: MARGIN_X,
-      // Centrado contra el bloque ENTERO del encabezado, no colgado de la primera línea: un logo
-      // alineado por arriba sobre un membrete de cuatro líneas deja un hueco bajo él que se lee
-      // como un error de composición.
-      y: y + (headerHeight - logoBox.height) / 2,
-      width: logoBox.width,
-      height: logoBox.height,
+      y: y + (headerHeight - leftLogoBox.height) / 2,
+      width: leftLogoBox.width,
+      height: leftLogoBox.height,
     });
   }
-  const companyX = logoBox ? MARGIN_X + logoBox.width + LOGO_GAP : MARGIN_X;
-  /** El mes tal como se imprime, sin su prefijo: se mide y se dibuja, así que se resuelve una vez. */
-  const periodText = document.period.replace(/^MES:\s*/, "");
-  /** El sitio que se lleva el bloque de la derecha —título, mes y, si lo hay, el logo del cliente—.
-   *  Se MIDE, no se estima, y lo acotan tanto el nombre de la empresa como la primera línea del
-   *  membrete, que son las dos que comparten renglón con él. */
-  const rightBlockWidth =
-    Math.max(
-      measure(document.title, TITLE_SIZE, true),
-      measure(periodText, SUBTITLE_SIZE, false),
-      rightLogoBox?.width ?? 0,
-    ) + HEADER_RIGHT_GAP;
-  // Lo que le queda al rótulo: desde donde acaba el logo hasta donde empieza el bloque de la
-  // derecha. Ese borde se MIDE (`rightBlockWidth`) en vez de estimarse con la fracción del ancho
-  // útil que se usaba antes: la estimación sobraba —el título ya se mide— y era justo lo que
-  // truncaba un rótulo con centro de costo teniendo sitio libre a su derecha.
-  const companyLimit = MARGIN_X + contentWidth - rightBlockWidth - companyX;
-  const companyText = fit(document.company, companyLimit, true, measure, COMPANY_SIZE_STEPS);
-  push(companyText.text, companyX, companyText.size, true, PAYSLIP_COLORS.ink);
-  // El membrete, bajo el nombre y en tinta suave: la razón social con su RUC, la ubicación, los
-  // teléfonos y el correo. Llegan ya compuestos (`letterheadLines`), así que aquí solo se colocan.
-  //
-  // **Solo la PRIMERA cede sitio al bloque de la derecha**, porque es la única que comparte renglón
-  // con el mes; de la segunda para abajo el encabezado está despejado y la línea corre hasta el
-  // margen. Esa distinción no es un detalle: la ubicación es la línea larga —«TUNGURAHUA / AMBATO /
-  // AMBATO / LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA» mide 325 pt— y con un tope común habría que
-  // dibujarla a 6.5 pt en cuanto el cliente tuviera logo. El sitio del bloque derecho se MIDE, no se
-  // estima: es la mayor de sus dos líneas.
-
-  document.companyLines.forEach((line, index) => {
-    const limit = index === 0 ? contentWidth - rightBlockWidth : contentWidth;
-    const shaped = fit(line, MARGIN_X + limit - companyX, false, measure, HEADER_LINE_STEPS);
-    push(
-      shaped.text,
-      companyX,
-      shaped.size,
-      false,
-      PAYSLIP_COLORS.muted,
-      "left",
-      y + COMPANY_SIZE + HEADER_LINE_GAP + index * HEADER_LINE_PITCH,
-    );
-  });
-
-  // El logo de la derecha, pegado al margen y arriba del todo: es el par del de la izquierda, así
-  // que los dos arrancan en el mismo renglón y lo que baja es el texto que va debajo de él.
   if (document.rightLogo && rightLogoBox) {
     images.push({
       dataUrl: document.rightLogo.dataUrl,
       mime: document.rightLogo.mime,
       x: MARGIN_X + contentWidth - rightLogoBox.width,
-      y,
+      y: y + (headerHeight - rightLogoBox.height) / 2,
       width: rightLogoBox.width,
       height: rightLogoBox.height,
     });
   }
-
-  push(
-    document.title,
-    MARGIN_X + contentWidth,
-    TITLE_SIZE,
-    true,
-    PAYSLIP_COLORS.ink,
-    "right",
-    y + rightLogoOffset,
-  );
-  push(
-    periodText,
-    MARGIN_X + contentWidth,
-    SUBTITLE_SIZE,
-    false,
-    PAYSLIP_COLORS.muted,
-    "right",
-    y + rightLogoOffset + TITLE_SIZE + 4,
-  );
 
   y += headerHeight + 10;
   rules.push({

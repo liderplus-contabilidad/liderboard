@@ -1,3 +1,4 @@
+import { ReportBand } from "@/components/ui/report-layer";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { EntityLogo } from "@/lib/logos";
@@ -10,38 +11,6 @@ import { flattenSorted } from "../datos-utils";
 
 const INDENT_STEP = 13;
 const BASE_INDENT = 10;
-
-/**
- * El alto del logo en la banda de una tabla, en px. Es el alto de la cabecera y ni uno más: un
- * membrete que engorda la banda le quita al estado las filas que la página tenía justas.
- */
-const BAND_LOGO_HEIGHT = 22;
-
-/**
- * Un logo de la banda, o nada. El ancho lo pone la proporción del propio logo (`w-auto` con el alto
- * fijo), que es el mismo `contain` que `fitLogoBox` aplica en el Excel y en el PDF del comprobante
- * — aquí lo resuelve el navegador porque hay caja donde resolverlo.
- *
- * El `alt` va VACÍO: el nombre del cliente está en la portada y el del centro, en el rótulo de al
- * lado, así que un texto alternativo lo repetiría en voz alta.
- */
-function ReportBandLogo({ logo }: { logo: EntityLogo | undefined }) {
-  if (!logo) {
-    return null;
-  }
-  return (
-    // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta.
-    // oxlint-disable-next-line next/no-img-element
-    <img
-      src={logo.dataUrl}
-      alt=""
-      width={logo.width}
-      height={logo.height}
-      style={{ height: BAND_LOGO_HEIGHT }}
-      className="w-auto shrink-0 object-contain"
-    />
-  );
-}
 
 /**
  * The widest a numeric column is allowed to get, in % of the table. Below four columns the extra
@@ -149,21 +118,23 @@ export function ReportStatement({
       )}
     >
       {(caption || logo || centerLogo) && (
-        <header className="flex items-center gap-2 border-b border-border bg-surface-header px-3 py-2">
-          <ReportBandLogo logo={logo} />
-          {captionColor && (
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-              style={{ backgroundColor: captionColor }}
-            />
-          )}
-          <span className="text-[12.5px] font-semibold text-ink">{caption}</span>
-          {/* Empuja al logo del centro contra el borde derecho aunque el rótulo sea corto: es la
-              mitad derecha de la banda, no algo que siga al texto. */}
-          <span className="ml-auto flex shrink-0 items-center">
-            <ReportBandLogo logo={centerLogo} />
+        <ReportBand
+          {...(logo ? { leftLogo: logo } : {})}
+          {...(centerLogo ? { rightLogo: centerLogo } : {})}
+          className="border-b border-border bg-surface-header px-3 py-2"
+        >
+          {/* El rótulo y su punto de color van en un renglón, centrados sobre la tabla: es la
+              cabecera de lo que hay debajo, no una etiqueta pegada al logo. */}
+          <span className="flex min-w-0 items-center gap-2">
+            {captionColor && (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                style={{ backgroundColor: captionColor }}
+              />
+            )}
+            <span className="truncate text-[12.5px] font-semibold text-ink">{caption}</span>
           </span>
-        </header>
+        </ReportBand>
       )}
       {/*
         `table-layout: fixed` con `<colgroup>` fija el reparto: sin él cada columna reclama el

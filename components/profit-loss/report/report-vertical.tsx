@@ -1,8 +1,10 @@
+import { ReportBand } from "@/components/ui/report-layer";
 import { cn } from "@/lib/cn";
 import { formatPercent, formatPoints } from "@/lib/format";
 import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import type { AccumulatedPeriod } from "@/lib/profit-loss/report/accumulate";
 import { sharePct } from "@/lib/profit-loss/report/accumulate";
+import type { EntityLogo } from "@/lib/logos";
 import type { DatosGrid, DatosRow } from "@/lib/profit-loss/datos-types";
 import { flattenSorted } from "../datos-utils";
 
@@ -33,6 +35,8 @@ export function ReportVertical({
   baseRow,
   centerName,
   collapsed,
+  logo,
+  centerLogo,
 }: {
   /** The accumulated, pruned grid — the same one the statement prints. */
   grid: DatosGrid;
@@ -42,6 +46,10 @@ export function ReportVertical({
   baseRow: DatosRow | undefined;
   centerName: string;
   collapsed: ReadonlySet<string>;
+  /** El logo del CLIENTE, a la izquierda de la banda — el mismo membrete que lleva el estado. */
+  logo?: EntityLogo | undefined;
+  /** El del CENTRO que esta tabla es, a la derecha. El Consolidado no tiene. */
+  centerLogo?: EntityLogo | undefined;
 }) {
   const rows = flattenSorted(grid.rows, new Set(collapsed), null).filter(
     // Las filas de resumen no son cuentas del plan: «Utilidad» sobre Ingresos es el margen, que
@@ -66,10 +74,14 @@ export function ReportVertical({
 
   return (
     <div className="print-keep overflow-hidden rounded-[13px] border border-border bg-surface">
-      <header className="border-b border-border bg-surface-header px-[18px] py-2.5">
+      <ReportBand
+        {...(logo ? { leftLogo: logo } : {})}
+        {...(centerLogo ? { rightLogo: centerLogo } : {})}
+        className="border-b border-border bg-surface-header px-[18px] py-2.5 text-center"
+      >
         <h3 className="text-[13px] font-semibold text-ink">Análisis vertical</h3>
         <p className="mt-0.5 text-[11px] text-muted">{caption}</p>
-      </header>
+      </ReportBand>
 
       {(!baseRow || blind.length > 0) && (
         <ul className="border-b border-border-soft bg-surface-muted px-[18px] py-2 text-[10.5px] text-warning">

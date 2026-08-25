@@ -472,7 +472,7 @@ export function ActiveClient({
             className="flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1.5 text-left text-[12.5px] font-semibold text-ink transition-colors hover:bg-canvas"
           >
             <Pencil size={14} className="text-muted" />
-            Renombrar
+            Editar
           </button>
           <button
             type="button"

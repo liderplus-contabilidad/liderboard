@@ -1,3 +1,4 @@
+import { ReportBand } from "@/components/ui/report-layer";
 import { pluralize } from "@/lib/format";
 import type { SalariesReportHeader as SalariesReportHeaderSpec } from "@/lib/payroll/salaries/report";
 
@@ -13,41 +14,24 @@ import type { SalariesReportHeader as SalariesReportHeaderSpec } from "@/lib/pay
 export function SalariesReportHeader({ header }: { header: SalariesReportHeaderSpec }) {
   return (
     <header className="print-section flex flex-col gap-5 border-b border-border pb-6">
-      <div className="flex items-start gap-5">
-        {header.logo && (
-          // oxlint-disable-next-line next/no-img-element
-          <img
-            src={header.logo.dataUrl}
-            alt=""
-            width={header.logo.width}
-            height={header.logo.height}
-            className="mt-1 max-h-[56px] w-auto max-w-[160px] shrink-0 object-contain"
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-            Sueldos por Áreas · Informe
-          </p>
-          <h1 className="mt-2 text-[24px] font-semibold leading-tight text-ink">
-            {header.clientName}
-          </h1>
-        </div>
+      {/* El logo del cliente a la izquierda, el título centrado y el del centro de costo a la
+          derecha: el mismo reparto con el que se encabezan el comprobante en PDF, el Excel del
+          período y el informe de PyG. */}
+      <ReportBand
+        {...(header.logo ? { leftLogo: header.logo } : {})}
+        {...(header.rightLogo ? { rightLogo: header.rightLogo } : {})}
+        logoHeight={56}
+        className="text-center"
+      >
+        <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+          Sueldos por Áreas · Informe
+        </p>
+        <h1 className="mt-2 text-[24px] font-semibold leading-tight text-ink">
+          {header.clientName}
+        </h1>
+      </ReportBand>
 
-        {/* El de la DERECHA — el del centro de costo —, el mismo reparto con el que se encabezan
-            el comprobante en PDF y el Excel del período. */}
-        {header.rightLogo && (
-          // oxlint-disable-next-line next/no-img-element
-          <img
-            src={header.rightLogo.dataUrl}
-            alt=""
-            width={header.rightLogo.width}
-            height={header.rightLogo.height}
-            className="mt-1 max-h-[56px] w-auto max-w-[160px] shrink-0 object-contain"
-          />
-        )}
-      </div>
-
-      <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[12.5px]">
+      <dl className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[12.5px]">
         <Field label="Periodo" value={header.rangeLabel} />
         <Field label="Áreas" value={pluralize(header.areaCount, "área")} />
         <Field label="Generado el" value={header.generatedAt} />
