@@ -4,6 +4,7 @@ import {
   LineChart,
   Microscope,
   Receipt,
+  ShoppingBag,
   Table2,
   Users,
   type LucideIcon,
@@ -64,6 +65,22 @@ export const MODULES: DashboardModule[] = [
     title: "Pérdidas y Ganancias",
     icon: LineChart,
     tabs: [TAB_GRAFICOS, TAB_DATOS, TAB_ANALISIS],
+    // Ventas por servicio cuelga de aquí y no es un módulo hermano por el mismo motivo que Sueldos
+    // por Áreas cuelga de Rol de Pagos: sus ventas necesitan un CLIENTE, y el cliente lo guarda
+    // PyG. Como módulo de primer nivel estrenaría su propia lista de clientes —lo que Ocupaciones
+    // hace con «hotel»— y el usuario acabaría manteniendo dos listas para la misma firma.
+    //
+    // Se ve SIEMPRE, para todo cliente: un ítem del sidebar que aparece y desaparece según qué
+    // cliente esté abierto no se puede descubrir. Lo que el archivo decide es quién puede subir,
+    // no quién ve el menú.
+    children: [
+      {
+        slug: "sales",
+        label: "Ventas por servicio",
+        title: "Ventas por servicio",
+        icon: ShoppingBag,
+      },
+    ],
   },
   {
     slug: "occupancy",

@@ -176,7 +176,7 @@ export const ChartCard = memo(function ChartCard({
 
             {hasSeries ? (
               asTable ? (
-                <TableTwin table={table} />
+                <TableTwin table={table} maxHeight={height} />
               ) : (
                 <Chart
                   option={option as ChartOption}
@@ -238,20 +238,34 @@ export function SpecCard({
  * Two optional fields shape a row: `sublabel` hangs under the name (the role beside an employee),
  * and `emphasis` gives it the weight a TOTAL needs to stop reading as one more entity. A table
  * whose rows declare neither renders exactly as it did before they existed.
+ *
+ * **The box is capped at the CHART's own height and scrolls inside itself.** Some twins are short
+ * (five services) and some are not: Ventas' concentración lists 956 pagadores, and uncapped it
+ * pushed the rest of the page a screenful away, so getting back to the card below meant scrolling
+ * past a thousand rows. Capping at `height` — rather than at some number of its own — buys the
+ * property that matters: **the card does not change size when you toggle**, so «Ver como tabla»
+ * stops moving everything under it. A table shorter than the cap is untouched, which is why this
+ * changes nothing for the twins that already fit.
+ *
+ * Both edges of the header STICK, and that is what makes the cap usable rather than merely tidy: a
+ * column of figures scrolled away from «2024 · 2025 · 2026 · Total» is a column of numbers that
+ * mean nothing. The separator is an inset shadow and not a `border`, because a border on a sticky
+ * cell of a `border-collapse` table is painted by the row and scrolls away with it.
  */
-function TableTwin({ table }: { table: ChartTable }) {
+function TableTwin({ table, maxHeight }: { table: ChartTable; maxHeight: number }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto" style={{ maxHeight }}>
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 border-b border-border bg-surface px-2 py-1.5 text-left font-semibold text-muted">
+            {/* La esquina va por encima de las dos bandas pegajosas que cruza. */}
+            <th className="sticky left-0 top-0 z-30 bg-surface px-2 py-1.5 text-left font-semibold text-muted shadow-[inset_0_-1px_0_var(--color-border)]">
               Serie
             </th>
             {table.columns.map((column) => (
               <th
                 key={column}
-                className="border-b border-border px-2 py-1.5 text-right font-semibold text-muted"
+                className="sticky top-0 z-20 bg-surface px-2 py-1.5 text-right font-semibold text-muted shadow-[inset_0_-1px_0_var(--color-border)]"
               >
                 {column}
               </th>

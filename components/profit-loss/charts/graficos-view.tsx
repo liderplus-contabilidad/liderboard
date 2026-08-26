@@ -14,6 +14,7 @@ import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
 import { BusinessLineLegend } from "./business-line-legend";
+import { SalesCrossLink } from "../sales/sales-cross-link";
 import { buildAccountBreakdown } from "@/lib/profit-loss/charts/account-breakdown";
 import { amountsOver, childrenOf, compositionQuery } from "@/lib/profit-loss/charts/presets";
 import { activeSource, expandSlots } from "@/lib/profit-loss/charts/selection";
@@ -217,7 +218,13 @@ export function GraficosView() {
           las demás una barra no tiene un «dentro» al que entrar, y un gráfico que a veces reacciona
           y a veces no enseña a no pulsarlo. */}
       {/* La leyenda de líneas cuelga de la PRIMERA tarjeta, la única que las dibuja, y se rinde
-          fuera de esa vista: `lines` llega vacío y no hay nada que ofrecer. */}
+          fuera de esa vista: `lines` llega vacío y no hay nada que ofrecer.
+
+          La cabecera se decide en UNA sola expresión y no en dos spreads: la tarjeta del anexo y
+          `composicion` nunca son la misma, así que hoy no pueden coincidir, pero dos `headerSlot`
+          sueltos se pisarían en silencio el día que eso cambie. El cruce hacia Ventas por servicio
+          se monta aquí y no viaja en el `ChartCardSpec` porque el informe imprimible lee esa misma
+          lista, y un enlace en papel es un botón que nadie puede pulsar. */}
       {visibleCards.map((card, index) => (
         <SpecCard
           key={card.id}
@@ -246,7 +253,9 @@ export function GraficosView() {
                   </span>
                 ),
               }
-            : {})}
+            : card.id === "composicion"
+              ? { headerSlot: <SalesCrossLink /> }
+              : {})}
           {...(index === 0 && lines.length > 0
             ? {
                 footerSlot: (

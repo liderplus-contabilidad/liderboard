@@ -802,10 +802,248 @@ sintéticos.
   de miles**, pone el **punto final** en el código de las cuentas padre y mueve la columna del valor
   según la profundidad (\`SALDO\` solo rotula la del nivel 3).
 - El formato por centros **no declara periodo**: lo declara el nombre del archivo.
+- El reporte de **ventas por servicio** (solo la clínica, bajo \`ventas/\`) reparte su preámbulo por
+  celdas sueltas, escribe \`Desde:\` / \`Hasta:\` en celdas separadas de su rótulo, **repite la
+  cabecera en cada página** con su pie \`Pagina:\`, abre cada servicio con su \`\\NN\` y cierra con el
+  subtotal de cada uno y un \`TOTAL GENERAL\`. Las cifras van como texto con separador de miles.
+  Su total NO es el ingreso del estado del mismo mes, sino ese ingreso ±4 %: **lo facturado no es
+  lo contabilizado**, y un set donde coincidieran enseñaría lo contrario de lo que la app declara.
 - Los planes traen hojas a distinta profundidad, cadenas de un solo hijo, cuentas de contrapartida
   en negativo, cuentas que existen pero nunca se mueven, códigos SALTADOS (\`5.3\` cuelga \`5.3.02\` y
   \`5.3.03\`, sin \`5.3.01\`) y un nivel que el informe se salta entero.
 `;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ventas por servicio — el reporte de FACTURACIÓN, que no es el estado de resultados.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Los cinco servicios del reporte real, con su código verbatim y el peso con el que reparten la
+ * facturación del mes. Los pesos son los del abril real de la clínica (46,7 % / 14,5 % / 13,5 % /
+ * 12,7 % / 12,6 %), así que el set enseña la misma forma que la firma reconoce.
+ */
+const SERVICIOS: { code: string; name: string; weight: number }[] = [
+  { code: "\\01", name: "HONORARIOS", weight: 0.467 },
+  { code: "\\02", name: "MEDICINAS", weight: 0.145 },
+  { code: "\\03", name: "EXAMENES DE LABORATORIO", weight: 0.135 },
+  { code: "\\04", name: "INSUMOS", weight: 0.127 },
+  { code: "\\05", name: "IMAGENES", weight: 0.126 },
+];
+
+/** Aseguradoras: nombres INVENTADOS con la forma de las reales (una palabra, o dos con una marca
+ *  del ramo), que es lo que la heurística de `lib/sales/payer.ts` tiene que reconocer. */
+const ASEGURADORAS = [
+  "SALUDVIDA",
+  "BMI IGUALAS MEDICAS",
+  "MEDIANDES HUMANA",
+  "PLAN VITAL",
+  "CONFIAMED",
+  "SEGUROS DEL PACIFICO",
+  "ECUASALUD S.A.",
+  "PREPAGADA ANDINA",
+];
+
+/** Apellidos y nombres para componer pagadores PARTICULARES con la forma ecuatoriana —dos
+ *  apellidos y dos nombres—, que es la que la heurística clasifica como persona. Inventados: un
+ *  archivo versionado no es sitio para el nombre de un paciente. */
+const APELLIDOS = [
+  "MENDOZA",
+  "PARRA",
+  "VILLACIS",
+  "ANDRADE",
+  "ZAMBRANO",
+  "CEDENO",
+  "LOOR",
+  "PONCE",
+];
+const NOMBRES = [
+  "LUIS ALBERTO",
+  "MARIA JOSE",
+  "JUAN CARLOS",
+  "ANA LUCIA",
+  "PEDRO ANDRES",
+  "SOFIA ELENA",
+];
+
+/**
+ * Cuántos pagadores DISTINTOS ve un mes. Varía por (rubro, año, mes) para que el set no sea doce
+ * copias del mismo tamaño: lo que hay que poder probar es que la tarjeta de concentración cuenta
+ * bien su cola —«los diez mayores son el N %»— con listas de tamaños distintos, y que el número de
+ * pagadores no se confunda con el de líneas.
+ */
+function pagadoresDelMes(rubro: Rubro, year: number, month: number): number {
+  return 40 + Math.floor(rand(`${rubro.slug}|${year}|${month}|pagadores`) * 80);
+}
+
+/**
+ * Qué fracción de esos pagadores usó UN servicio. No todo el mundo compra de todo —en el archivo
+ * real hay 2.774 líneas para 956 pagadores, o sea unos tres servicios por pagador—, y esto es lo
+ * que hace que las líneas de un mes no sean pagadores × servicios y que dos meses traigan un
+ * número de filas distinto.
+ */
+function cobertura(rubro: Rubro, year: number, month: number, code: string): number {
+  return 0.3 + rand(`${rubro.slug}|${year}|${month}|${code}|cobertura`) * 0.6;
+}
+
+/**
+ * Un servicio del catálogo que este mes NO se movió: sale con importe CERO en un solo pagador, que
+ * es como un sistema contable declara una línea sin venta. Existe para que el set ejercite el aviso
+ * «N servicios del catálogo no se movió en el periodo y no se dibuja», que de otro modo no se
+ * dispararía nunca — un servicio ausente del todo no se puede contar.
+ */
+function servicioParado(rubro: Rubro, year: number, month: number): string | null {
+  return rand(`${rubro.slug}|${year}|${month}|parado`) < 0.25
+    ? SERVICIOS[SERVICIOS.length - 1].code
+    : null;
+}
+
+function pagadorAt(index: number): string {
+  if (index < ASEGURADORAS.length) {
+    return ASEGURADORAS[index];
+  }
+  const offset = index - ASEGURADORAS.length;
+  // Los tres componentes varían en ESCALAS distintas —unidades, ochos, sesenta y cuatros— para que
+  // cada índice dé un nombre distinto. Con los tres tomando `offset` en la misma escala, el par de
+  // apellidos quedaba determinado por `offset % 8` y sesenta pagadores se colapsaban en treinta y
+  // dos: la cola que la tarjeta de concentración cuenta desaparecía a la mitad.
+  const apellido1 = APELLIDOS[offset % APELLIDOS.length];
+  const apellido2 = APELLIDOS[Math.floor(offset / APELLIDOS.length) % APELLIDOS.length];
+  const nombre =
+    NOMBRES[Math.floor(offset / (APELLIDOS.length * APELLIDOS.length)) % NOMBRES.length];
+  return `${apellido1} ${apellido2} ${nombre}`;
+}
+
+/**
+ * El reporte «Venta de Servicios por FACTURA» de un mes.
+ *
+ * **La facturación NO es el ingreso contable del mes, y eso es deliberado**: sale del ingreso del
+ * estado más un desfase determinista de ±4 %, que es la diferencia que en la realidad producen los
+ * tiempos de reconocimiento, las notas de crédito y el IVA. Un set en el que las dos cifras
+ * coincidieran enseñaría lo contrario de lo que la app declara en esa pantalla.
+ *
+ * La forma reproduce la del archivo real, y lo que hay que reproducir es esto:
+ *
+ *   - preámbulo repartido por celdas sueltas, con la paginación a veinte columnas de la empresa;
+ *   - `Desde:` / `Hasta:` con su fecha en una celda SEPARADA del rótulo;
+ *   - la cabecera de cuatro rótulos **desalineada de sus propios datos**, porque va centrada sobre
+ *     celdas combinadas: `CANTIDAD` cae una columna a la derecha de las cantidades y `VENTA TOTAL`
+ *     una a la derecha de los importes;
+ *   - filas PLANAS: cada una es una línea completa que repite el código de su servicio. No hay
+ *     agrupación por servicio, ni subtotales, ni la cabecera reimpresa por página — el archivo dice
+ *     «1 de 53» y aun así sale como un bloque corrido;
+ *   - el cierre en dos filas: `TOTAL ITEMS` con el RECUENTO de líneas, y debajo el total en dólares
+ *     SIN NINGÚN RÓTULO, alineado bajo las columnas de cantidad e importe.
+ */
+function writeVentas(
+  rubro: Rubro,
+  accounts: FlatAccount[],
+  year: number,
+  month: number,
+  dir: string,
+): void {
+  const values = rollup(accounts, leafValues(rubro, accounts, year, month));
+  const ingreso = rootTotal(values, "4");
+  const facturado = round2(
+    ingreso * randRange(`${rubro.slug}|${year}|${month}|facturado`, 0.96, 1.04),
+  );
+
+  // Las columnas del archivo real. Los rótulos van en OTRAS —ver el bloque de la cabecera—, y esa
+  // desalineación es justo lo que un parser que leyera por la columna del rótulo no sobreviviría.
+  const CODE_COL = 1;
+  const SERVICE_COL = 7;
+  const PAYER_COL = 14;
+  const QUANTITY_COL = 18;
+  const AMOUNT_COL = 24;
+  const WIDTH = 27;
+  const at = (cells: Record<number, Cell>): Cell[] =>
+    Array.from({ length: WIDTH }, (_unused, index) => cells[index] ?? null);
+
+  const rows: Cell[][] = [
+    at({ 3: rubro.company, 23: "Página:", 26: "1 de 12" }),
+    at({ 23: "Fecha:", 26: excelSerial(year, month, 5) }),
+    // Con el espacio sobrante que el reporte real escribe tras «FACTURA».
+    at({ 3: "Venta de Servicios por FACTURA " }),
+    at({}),
+    at({
+      8: "Desde:",
+      11: dmy(1, month, year),
+      15: "Hasta:",
+      16: dmy(lastDayOfMonth(year, month), month, year),
+    }),
+    at({}),
+    at({ 2: "CODIGO", 10: "NOMBRE", 19: "CANTIDAD", 25: "VENTA TOTAL" }),
+  ];
+
+  const pagadores = pagadoresDelMes(rubro, year, month);
+  const parado = servicioParado(rubro, year, month);
+  // Los servicios que SÍ se mueven reparten el mes ENTERO entre ellos: si uno queda parado, su peso
+  // se redistribuye, de modo que lo facturado no dependa de cuántos se movieron.
+  const activos = SERVICIOS.filter((servicio) => servicio.code !== parado);
+  const pesoActivo = activos.reduce((acc, servicio) => acc + servicio.weight, 0);
+
+  let total = 0;
+  let items = 0;
+  let cantidadTotal = 0;
+
+  const emit = (servicio: (typeof SERVICIOS)[number], payerIndex: number, monto: number): void => {
+    const cantidad = 1 + Math.floor(rand(`${servicio.code}|${payerIndex}|${month}|cant`) * 9);
+    cantidadTotal += cantidad;
+    items += 1;
+    total = round2(total + monto);
+    rows.push(
+      at({
+        [CODE_COL]: servicio.code,
+        [SERVICE_COL]: servicio.name,
+        [PAYER_COL]: pagadorAt(payerIndex),
+        [QUANTITY_COL]: cantidad,
+        [AMOUNT_COL]: monto,
+      }),
+    );
+  };
+
+  activos.forEach((servicio) => {
+    const objetivo = round2((facturado * servicio.weight) / pesoActivo);
+    // Cuántos de los pagadores del mes compraron ESTE servicio — nunca todos.
+    const cuantos = Math.max(
+      1,
+      Math.round(pagadores * cobertura(rubro, year, month, servicio.code)),
+    );
+    // El reparto decae, así que unos pocos concentran — que es justo la lectura que la tarjeta de
+    // concentración existe para dar.
+    const pesos = Array.from(
+      { length: cuantos },
+      (_unused, index) =>
+        randRange(`${rubro.slug}|${year}|${month}|${servicio.code}|${index}`, 0.2, 1) /
+        Math.pow(index + 1, 0.9),
+    );
+    const suma = pesos.reduce((acc, peso) => acc + peso, 0);
+    let repartido = 0;
+    pesos.forEach((peso, index) => {
+      // El último absorbe el redondeo, para que las líneas sumen su objetivo AL CENTAVO y el cuadre
+      // del parser no dispare un aviso que no es un hallazgo.
+      const monto =
+        index === pesos.length - 1
+          ? round2(objetivo - repartido)
+          : round2((objetivo * peso) / suma);
+      repartido = round2(repartido + monto);
+      emit(servicio, index, monto);
+    });
+  });
+
+  if (parado) {
+    const servicio = SERVICIOS.find((entry) => entry.code === parado);
+    if (servicio) {
+      emit(servicio, 0, 0);
+    }
+  }
+
+  // El recuento de LÍNEAS, que no son dólares…
+  rows.push(at({ 0: "TOTAL ITEMS", 5: items }));
+  // …y el total de verdad, sin rótulo, bajo sus columnas.
+  rows.push(at({ [QUANTITY_COL]: cantidadTotal, [AMOUNT_COL]: total }));
+
+  writeWorkbook(rows, "Sheet1", join(dir, `Ventas-${year}-${mm(month)}.xlsx`));
 }
 
 function main(): void {
@@ -824,10 +1062,26 @@ function main(): void {
         writeMicroplus(rubro, accounts, year, month, dirOf("microplus"));
         writeDingoo(rubro, accounts, year, month, dirOf("dingoo"));
         files += 4;
+        // El reporte de ventas por servicio existe solo donde la app lo lee: es el reporte de
+        // FACTURACIÓN de la clínica, no un cuarto formato del estado de resultados, y un hotel no
+        // lo emite.
+        if (rubro.slug === "rubro-c-clinica") {
+          // Fuera de `dirOf`, que se tipa contra `SystemId`: ventas no es un cuarto sistema que
+          // emita el estado de resultados, es OTRO reporte del mismo sistema contable, y meterlo
+          // en esa unión lo dejaría pareciendo un formato de carga de PyG.
+          writeVentas(
+            rubro,
+            accounts,
+            year,
+            month,
+            join(OUT_DIR, rubro.slug, "ventas", String(year)),
+          );
+          files += 1;
+        }
       }
     }
     manifests.push(buildManifest(rubro, accounts));
-    console.log(`  ${rubro.slug}: ${accounts.length} cuentas, ${YEARS.length * 12 * 4} archivos`);
+    console.log(`  ${rubro.slug}: ${accounts.length} cuentas`);
   }
 
   writeFileSync(

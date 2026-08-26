@@ -8,14 +8,14 @@ import { cn } from "@/lib/cn";
 import type { EntityLogo } from "@/lib/logos";
 
 /**
- * The shared mechanism every printable report in the app mounts on — today PyG's Informe PDF and
- * Sueldos por Áreas'. It owns the portal over `document.body`, the full-screen layer `@media
- * print` keys off (the `.report-layer` class, not an id: with two reports an id ties the print
- * rule to one of them and the other prints the whole app behind it), Escape-to-close, the
- * printed-file title, and the bar with «Guardar PDF» / «Cerrar».
+ * The shared mechanism every printable report in the app mounts on — today PyG's Informe PDF,
+ * Sueldos por Áreas' and Ventas por servicio's. It owns the portal over `document.body`, the
+ * full-screen layer `@media print` keys off (the `.report-layer` class, not an id: with more than
+ * one report an id ties the print rule to one of them and the others print the whole app behind
+ * them), Escape-to-close, the printed-file title, and the bar with «Guardar PDF» / «Cerrar».
  *
- * It knows NOTHING about what it prints: no import from `profit-loss/` or `payroll/`. What each
- * report needs beyond the shared bar — PyG's «Detalle» level picker, a note about how many
+ * It knows NOTHING about what it prints: no import from `profit-loss/`, `payroll/` or `sales/`.
+ * What each report needs beyond the shared bar — PyG's «Detalle» level picker, a note about how many
  * sheets a report produced — arrives as `controls`/`note` from the caller, which is what lets a
  * second report reuse this file without editing it.
  *

@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { deleteSalesForClient } from "@/lib/sales/db";
 import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
@@ -942,7 +943,15 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     ) => updateClientRow(clientId, name, logo, centerLogos),
     [],
   );
-  const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
+  // Borrar un cliente se lleva TODO lo que cuelga de él, incluida la facturación que «Ventas por
+  // servicio» guarda en su propia base particionada por este mismo id. La llamada va desde aquí y
+  // no desde `lib/profit-loss/db.ts` para que la dependencia apunte del módulo nuevo al que ya
+  // existía y nunca al revés; sin ella, esas ventas quedarían en una partición que ninguna
+  // pantalla lista y ningún borrado alcanza.
+  const deleteClient = useCallback(async (clientId: string) => {
+    await deleteClientRow(clientId);
+    await deleteSalesForClient(clientId);
+  }, []);
   const selectClient = useCallback((clientId: string) => setActiveClient(clientId), []);
 
   const saveEdit = useCallback(

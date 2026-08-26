@@ -64,3 +64,33 @@ describe("statementFit", () => {
     expect(statementFit(MAX + 1).fits).toBe(false);
   });
 });
+
+describe("la cota de la cifra más ancha", () => {
+  it("por defecto son diez caracteres, y ningún llamador existente cambia de encaje", () => {
+    expect(statementFit(5)).toEqual(statementFit(5, 10));
+  });
+
+  it("una cifra más ancha ENSANCHA la columna", () => {
+    // Trece caracteres son `$1,446,789.21`: centavos sobre millones, que es lo que imprime la
+    // comparación entre años de Ventas.
+    expect(statementFit(5, 13).columnWidth).toBeGreaterThan(statementFit(5, 10).columnWidth);
+  });
+
+  it("la columna cabe la cifra que dice caber", () => {
+    // El fallo real: la columna salía más estrecha que su contenido y `overflow-hidden` se comía
+    // los últimos dígitos sin marca ninguna.
+    const fit = statementFit(5, 13);
+    const textWidth = 13 * fit.fontSize * 0.6;
+    expect(fit.columnWidth).toBeGreaterThanOrEqual(textWidth);
+  });
+
+  it("con cifras anchas baja el cuerpo de letra antes que desbordar la hoja", () => {
+    expect(statementFit(5, 13).fontSize).toBeLessThan(statementFit(5, 10).fontSize);
+    expect(statementFit(5, 13).orientation).toBe("portrait");
+  });
+
+  it("y las columnas de una tabla ancha siguen cabiendo en la hoja", () => {
+    const fit = statementFit(5, 13);
+    expect(5 * fit.columnWidth).toBeLessThanOrEqual(fit.sheetWidth - 190);
+  });
+});

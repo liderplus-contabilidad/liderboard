@@ -1535,6 +1535,167 @@ en papel la barra ya no está. Un área sin ninguna ficha en el rango visible no
 tabla Y la gráfica JUNTAS, sin el interruptor de pantalla —un control impreso es un botón que nadie
 puede pulsar—, montadas por `components/payroll/salaries/report/`.
 
+**VENTAS POR SERVICIO** (`/profit-loss/sales`, subitem del sidebar) lee el reporte de FACTURACIÓN
+que el sistema contable emite aparte del estado: 2.774 líneas de factura por mes, cinco servicios y
+956 pagadores. Ninguna marca, ningún predeterminado y ningún desglose de PyG puede producir esa
+lectura, porque ese dato no está en el plan de cuentas — el estado parte el ingreso de la clínica en
+DOS cuentas y este reporte lo parte en cinco servicios con las aseguradoras y los particulares que
+los pagan. **Es subitem de PyG y no módulo hermano** por el mismo motivo que Sueldos por Áreas lo es
+de Rol de Pagos: sus ventas necesitan un CLIENTE, y el cliente lo guarda PyG; como hermano estrenaría
+su propia lista —lo que Ocupaciones hace con «hotel»— y la firma acabaría manteniendo dos listas para
+la misma empresa. Se descartó también como cuarta PESTAÑA de PyG, por lo contrario: las tres
+comparten la barra de filtros y leen el mismo estado, y «Cuenta contable» o «Centro de costo» no
+significan nada sobre una factura. Se ve SIEMPRE, para todo cliente: un ítem del sidebar que aparece
+y desaparece según qué cliente esté abierto no se puede descubrir; lo que el archivo decide es quién
+puede subir, no quién ve el menú. En el CONSOLIDADO ENTRE CLIENTES se rinde con su propio vacío,
+porque escribir contra el centinela crearía una partición fantasma —la misma defensa de
+`assertRealClient`—. Al crearlo se retiró la ruta dormida `app/(dashboard)/sales/`, que nunca estuvo
+en `MODULES` y era una segunda puerta a lo mismo.
+
+**LO FACTURADO NO ES LO CONTABILIZADO, y por eso estas ventas no entran en NINGUNA lectura de PyG.**
+Los $229.616 de un abril facturado no son el ingreso contable de abril: hay tiempos de
+reconocimiento, notas de crédito e IVA de por medio. Dos cifras de ingreso que no cuadran en la
+misma pantalla no se leen como dos fuentes, se leen como un error, así que Gráficos, Datos y Análisis
+dibujan exactamente lo mismo con ventas cargadas y sin ellas — y el silencio se DECLARA donde se
+produce, en una línea al pie de la pantalla y en la cabecera del informe, que es donde más pesa
+porque un PDF viaja sin la app al lado. Conciliar las dos es una lectura legítima y va aparte.
+
+**La carga es siempre de UN MES CALENDARIO y el periodo lo declara el ARCHIVO.** `lib/sales/upload/`
+localiza todo por RÓTULO y jamás por coordenada —la regla de `microplus-grid.ts` y `dingoo-grid.ts`—.
+Se exigen las DOS señas para reconocerlo, el título y la cabecera de CUATRO rótulos (`CODIGO` ·
+`NOMBRE` · `CANTIDAD` · `VENTA TOTAL`): con solo `CODIGO`+`NOMBRE` este parser habría reclamado los
+balances de MicroPlus, que es el error que MicroPlus cometió una vez con los archivos de Dingoo. El
+rango sale de `Desde:` / `Hasta:` y pasa por `toCalendarMonth`, la MISMA regla del estado único y de
+MicroPlus, sin excepción por formato; el NOMBRE del archivo no participa, así que renombrarlo no
+puede cambiar dónde aterriza el mes. Un mes recargado se reemplaza POR COMPLETO —el reporte es la
+foto entera del mes— y un mes que nunca llegó se lee `null` y jamás `0`, la distinción sobre la que
+descansan la evolución y su aviso.
+
+**La cabecera identifica el FORMATO; no localiza los datos**, y esa distinción se aprendió con el
+archivo real en la mano. Sus cuatro rótulos van CENTRADOS sobre celdas combinadas, así que caen en
+columnas distintas de las de sus propios valores —`CANTIDAD` en la 19 y las cantidades en la 18,
+`VENTA TOTAL` en la 25 y los importes en la 24—: leer los datos por la columna del rótulo devolvía
+una celda vacía en las 2.774 filas, y el fallo se veía como «el archivo se reconoce, el periodo se
+lee, y el reporte no trae ninguna línea». Quien localiza una línea es `readSalesRow`, por posición
+RELATIVA: el código del servicio y las CUATRO celdas no vacías que le siguen — la misma regla con la
+que `microplus-grid.ts` lee su valor como «la siguiente celda con algo». **Cada fila es una línea
+COMPLETA** y repite el código de su servicio: no hay agrupación, ni subtotales, ni cabecera
+reimpresa por página (el archivo dice «1 de 53» y sale como un bloque corrido), así que el preámbulo
+y el cierre se caen solos por no cumplir esa forma, sin reconocer cada uno por su rótulo. **El total
+del reporte se lee por su COLUMNA y no por un rótulo**, porque su fila no lleva ninguno: es la
+cantidad y el importe a secas bajo sus columnas. Buscar la palabra `TOTAL` habría encontrado la fila
+`TOTAL ITEMS` de encima, que cuenta LÍNEAS y no dólares, y el cuadre del mes se habría comparado
+contra un recuento. La suma de las líneas se CUADRA contra ese total y una diferencia se AVISA
+nombrándola, sin rechazar la carga: la diferencia puede ser del reporte, y quedarse sin los datos no
+ayuda a averiguarlo.
+
+**Base Dexie propia (`liderboard-sales`), particionada por el `clientId` de PyG**, y `db.ts` es la
+ÚNICA puerta a la tabla — no es orden, es la mitigación del único riesgo real de este diseño: con
+varios clientes en una tabla, una consulta sin `clientId` mezcla la facturación de dos empresas en
+silencio y nada aguas abajo puede notarlo. Base SEPARADA de la de PyG aunque comparta su identidad de
+cliente: el grano de esto es la LÍNEA DE FACTURA, y meterla en la base del estado obligaría a esa
+base a guardar algo que no es una cuenta. `ParsedSalesMonth` es lo que produce el parser —un mes que
+no pertenece a nadie— y `db.ts` ESTAMPA el dueño en la puerta, porque a qué cliente pertenece un
+archivo lo decide qué cliente está abierto y nunca el archivo. Borrar un cliente se lleva sus ventas
+en cascada, y esa llamada vive en `PygDataProvider` y no en `lib/profit-loss/db.ts` para que la
+dependencia apunte del módulo nuevo al que ya existía. La IDENTIDAD (`identity.ts`) es la razón
+social que declaran sus archivos, DERIVADA y no guardada —como en Ocupaciones—, que es lo que hace
+gratis «un cliente sin ventas no tiene identidad»: la primera carga la ADOPTA y no puede chocar. El
+nombre del CLIENTE no entra nunca en esa comparación, porque el usuario llama «Clínica Durán» a lo
+que el archivo llama `HOSPITAL GENERAL PRIVADO DURAN S.A.`.
+
+**Los PAGADORES PARTICULARES se guardan enteros y no se nombran en pantalla.** El nombre se persiste
+tal cual —una cifra cuyo dueño no se guardó deja de ser trazable contra el reporte— y quién se rotula
+lo decide `payer.ts`, una sola función, que es lo que impide que una vista se salte la regla: la
+tarjeta, su gemela en tabla y el informe pasan todos por ella. La heurística está SESGADA a
+propósito: se clasifica como PERSONA por defecto y solo se sale de ahí con evidencia positiva de
+empresa —una palabra suelta, una marca societaria o una del sector—, porque los dos errores no
+cuestan lo mismo: una aseguradora tomada por paciente sale sin nombre, y un paciente tomado por
+aseguradora sale con su nombre en la pantalla y en el papel, que es justo lo que esto existe para
+impedir. Se equivocará en algún caso; si resulta insuficiente, la salida es un interruptor explícito
+y no más heurística. El ordinal de «Particular · 3» cuenta solo entre particulares y sigue al MONTO,
+no al orden del archivo, y ni siquiera el `id` de una fila lleva el nombre —es la clave de React y
+viaja al informe—.
+
+**TRES lecturas, descritas como DATOS** (`cards.ts`: `option` + `table`), que es lo que deja al
+informe leer la MISMA construcción que la pantalla en vez de reconstruir sus cifras. La composición
+por servicio NOMBRA su denominador con su cifra; la concentración por pagador dibuja los diez mayores
+y dice en UNA cifra qué parte del periodo son, con el resto contado y sumado —la cola no se pliega en
+una barra «Otros», que sería la más larga del gráfico y taparía justo la lectura de concentración—
+mientras la tabla gemela no corta; y la evolución dibuja el eje de meses con una MARCA de ausencia
+(`silent`, fuera del hover, porque su alto no es un dato) para que un mes que nunca llegó no se
+dibuje igual que uno cargado en cero. El color de una barra de PAGADOR dice su CLASE y no su
+identidad —aseguradora contra particular—, la cuarta vez que el color deja de seguir a la entidad:
+diez entidades no caben en las ocho ranuras de la paleta, y cada barra ya lleva su rótulo y su cifra.
+Ninguna vista recorre líneas sueltas: `derive.ts` agrega antes por servicio, por pagador y por mes.
+
+**La barra son DOS controles, Año · Mes, y los dos admiten VARIAS marcas.** El año nació de elección
+única con el argumento de que dos años no tendrían eje sobre el que dibujarse, y eso era falso: el
+eje son los doce meses y cada AÑO es una SERIE, la figura que Ocupaciones y PyG ya usan. Lo que ese
+error costaba era la pregunta más útil de un informe de ventas —«abril de 2026 contra abril de
+2025»—, que la app no podía responder. El MES es independiente del año: una marca de «Abr» acota el
+eje de TODOS los años marcados en vez de elegir el abril de uno, que es lo que hace que la
+comparación signifique algo (la misma distinción que un `PeriodSlot` de PyG frente a un `PeriodRef`),
+y por eso cambiar de año ya no borra los meses.
+
+Donde el año se APARTA de la regla de la casa es en el vacío: «ninguna marca es todas» dejaría la
+pantalla de entrada sumando tres ejercicios bajo un tile que dice «Venta total», así que sin marcas
+se resuelve al MÁS RECIENTE — y por eso su atajo «Todos los años» tiene que POBLAR la lista en vez de
+vaciarla, al revés que el de meses. Tampoco deja chips: nunca está vacío, así que un chip suyo no
+siempre se podría quitar, y su rótulo ya enseña la selección entera. `periodLabel` ENUMERA un
+conjunto con huecos («Ene, Feb, Abr 2026») en vez de afirmar un rango —la regla de `periodRangeLabel`
+en PyG— y con varios años escribe los meses UNA vez y los años detrás («Abr · 2025, 2026»), porque
+repetir «abril» por cada año es lo que hace ilegible un rótulo de comparación. El estado vive en un
+proveedor montado DENTRO de la vista y no en el layout, porque de este subitem la cabecera no lee
+nada: el cliente lo da `PygDataProvider`, que ya está arriba.
+
+**Cada tarjeta tiene DOS formas y las elige el NÚMERO DE AÑOS MARCADOS, no un control.** Con uno
+dibuja el reparto del periodo; con varios pone un año por serie sobre el mismo eje. No es una cuarta
+tarjeta ni un interruptor —dos sitios donde elegir lo mismo—, es la misma pregunta respondida sobre
+lo que el usuario marcó, y por eso la comparación interanual no cuesta ningún control nuevo. Tres
+reglas la sostienen: un servicio o un pagador que un año no tocó vale `null` y **jamás `0`** —cero
+afirmaría que ese año no vendió eso—; los mayores pagadores se eligen sobre el AGREGADO y no sobre un
+año, porque un elenco que bailara al mover las marcas no se podría comparar consigo mismo, y de ahí
+sale también el ORDINAL, así que «Particular · 1» es la misma persona en las tres series; y el COLOR
+vuelve a ser identidad del AÑO, lo que deja la excepción del par empresa/particular solo en la forma
+de un año — teñir por clase pintaría del mismo tono los tres años de un mismo pagador, que es justo
+lo que hay que distinguir.
+
+**La evolución son BARRAS CON LÍNEA**: la barra dice cuánto —que es lo que se compara contra la del
+año de al lado— y la línea dice hacia dónde, que con barras agrupadas hay que reconstruir saltando de
+la primera de cada grupo a la siguiente. Son las dos mitades de «evolución» y ninguna sobra; el
+precedente de combo es la línea de total sobre la pila de «Distribución» en PyG. La línea va recta y
+no `smooth` —una curva inventa valores entre dos meses que nadie midió— y un hueco la PARTE en vez de
+unir enero con marzo. Se cae a barras solas con una sola columna, donde una línea es un punto suelto.
+**Y su eje obedece la marca de «Mes»**: sin marcas son los doce del ejercicio —es lo que hace visible
+un mes que nunca llegó— y con marcas es exactamente lo marcado, porque un eje que la ignorara dejaba
+al subtítulo diciendo «Ene–Feb» sobre doce columnas, que es una tarjeta contradiciéndose a sí misma.
+Las marcas de ausencia solo se dibujan con UN año: comparando, un hueco ya se ve porque la línea se
+parte y porque los otros años sí tienen barra ahí. Los huecos se dicen POR AÑO («2024: 6 meses»),
+nunca uno por mes, que con tres años a medias serían treinta avisos para una sola idea.
+
+**El informe es el TERCERO sobre `ReportLayer`** y no estrena nada: la capa `.report-layer` va atada
+a la CLASE y no a un id, que es exactamente lo que permite un tercero sin que uno imprima a los otros
+detrás. Recibe del proveedor la MISMA entrada con la que se construyeron las tarjetas de la pantalla
+(`cardsInput`), así que el papel no puede decir una cifra que la pantalla no diga. Va en DOS hojas y
+no en una: las dos primeras secciones son tablas de tres columnas y caben en vertical, y la evolución
+son doce meses, que se lleva su propia hoja apaisada — la figura que PyG ya usa, y a qué hoja va cada
+sección lo decide el número de columnas de su tabla y no una lista escrita a mano. Cada sección
+imprime su tabla Y su gráfica juntas, sin ningún control: un control impreso es un botón que nadie
+puede pulsar. **Lo ÚNICO en lo que el papel se separa de la pantalla es la cola de pagadores**
+(`PAYER_TABLE_PRINT_LIMIT`, treinta): en pantalla la tabla no corta —es el sitio donde un pagador
+que no se dibujó conserva su cifra, y buscarlo cuesta un scroll—, pero el archivo real trae 956, que
+son más de veinte páginas de nombres detrás de un informe de dos, y la mayoría son filas «Particular
+· 731 · $12,40», anónimas por diseño: un anexo que nadie puede usar para nada. Es el mismo tipo de
+regla que el informe de PyG ya aplica al podar por TABLA mientras su Excel poda por LIBRO — cada
+soporte poda como se lee. Lo que NO se hace es truncar a secas: la cola se PLIEGA en una fila con su
+suma, así que la columna sigue cerrando contra el TOTAL —una tabla recortada cuyas filas no suman su
+propio total es justo lo que hace desconfiar de un documento—, esa fila dice cuánto era el mayor de
+los que agrupa (que es la pregunta que un pliegue levanta), y la nota al pie cambia para declararlo
+en vez de prometer una lista completa que el papel ya no trae. **NO hay descarga de Excel**, y la forma del control lo refleja sola —`ExcelActions` la
+deriva de cuántas opciones recibe—: aquí el Excel es la FUENTE y la pantalla lee; lo que la firma
+entrega es este PDF.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind
@@ -1659,6 +1820,18 @@ UI are:
   como que algo no cargó, y el ranking además necesita el ancho completo porque a media pantalla
   los 150 px fijos del canal de rótulos truncan casi todos los nombres de cuenta.
 
+**La gemela en tabla se acota a la ALTURA DE SU GRÁFICA y se desplaza por dentro.** Unas tablas son
+cortas (cinco servicios) y otras no: la concentración de Ventas lista 956 pagadores, y sin tope
+empujaba el resto de la página una pantalla entera hacia abajo, así que volver a la tarjeta de abajo
+costaba pasar mil filas. Que el tope sea `height` —y no un número propio— compra lo que de verdad
+importa: **la tarjeta no cambia de tamaño al alternar**, así que «Ver como tabla» deja de mover todo
+lo que tiene debajo. Una tabla más corta que el tope no se entera, que es por lo que esto no cambia
+nada en las gemelas que ya cabían. Los DOS bordes de la cabecera se quedan PEGADOS, y eso es lo que
+hace el tope usable en vez de solo ordenado: una columna de cifras separada de su «2024 · 2025 ·
+2026 · Total» son números que no dicen nada. La divisoria es una sombra `inset` y no un `border`,
+porque un borde sobre una celda pegajosa de una tabla `border-collapse` lo pinta la fila y se va con
+ella al desplazarse.
+
 **Reusable side panel.** `components/ui/side-panel.tsx` is a right-anchored, non-modal drawer
 (no scrim, Escape/outside-click to close, focus in on open and back to the opener on close). It's
 what the PyG account ficha mounts on; reuse it for any future lateral detail view rather than
@@ -1679,7 +1852,7 @@ aporta el portal sobre `document.body`, la capa `.report-layer` que `@media prin
 uno imprimiera la app entera detrás del otro), Escape, el título de impresión (de donde el navegador
 toma el nombre sugerido del PDF, restaurado al cerrar aunque se cierre sin imprimir) y la barra con
 «Guardar PDF»/«Cerrar»; `ReportSheet` aporta la hoja, A4 vertical o apaisada a su ancho real. No
-importa nada de `profit-loss/` ni de `payroll/`: lo propio de cada informe —el `Detalle` de PyG, sus
+importa nada de `profit-loss/`, `payroll/` ni `sales/`: lo propio de cada informe —el `Detalle` de PyG, sus
 avisos de cuántas hojas trae— entra por los huecos `controls`/`note`. **`ReportBand` es el MEMBRETE
 en papel** —logo del cliente pegado al borde izquierdo, título centrado, logo del centro pegado al
 derecho—, el mismo reparto que encabeza los Excel, y vive aquí porque lo usan la portada de PyG, cada
