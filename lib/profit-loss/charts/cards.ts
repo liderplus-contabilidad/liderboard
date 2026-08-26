@@ -51,7 +51,7 @@ import {
 } from "./business-lines";
 import { BUSINESS_LINES_PRESET, EXPENSE_DISTRIBUTION_PRESET } from "./preset-views";
 import {
-  ANNEX_MAX_SLICES,
+  annexPlanOf,
   buildExpenseDistribution,
   describeExpenseDistribution,
   shareOf,
@@ -461,11 +461,15 @@ function expenseDistributionCards(
   // barras por la escala del ranking, la tarta por la suya— y podían enseñar distinto número de
   // rubros del mismo reparto, que es la clase de desacuerdo que nadie lee como un error.
   // Ordenar antes de cortar es lo que hace que el que se pliega sea siempre el más pequeño.
-  const slices = toPieSlices(distribution.categories, { maxSlices: ANNEX_MAX_SLICES });
+  // El corte lo trae el reparto: quince con el universo de cuentas de movimiento, y TODOS los
+  // rubros cuando el plan declara su anexo, donde plegar los tres más pequeños esconde justo las
+  // filas que el contador coteja contra su hoja.
+  const slices = toPieSlices(distribution.categories, { maxSlices: distribution.maxSlices });
   const drawn = slices.slices;
-  const grouped = drawn.some((slice) => slice.code === OTHERS_CODE)
-    ? distribution.categories.length - (ANNEX_MAX_SLICES - 1)
-    : 0;
+  const grouped =
+    !distribution.residual && drawn.some((slice) => slice.code === OTHERS_CODE)
+      ? distribution.categories.length - (distribution.maxSlices - 1)
+      : 0;
   // UN SOLO color para las diecisiete barras, y es el que la app ya tiene para este bloque: el
   // celeste con el que Datos pinta la raíz 5, muestreado del propio libro del contador. Aquí el
   // color no distingue nada —cada barra lleva su rubro rotulado en el eje y su cifra al lado—, así
@@ -765,8 +769,16 @@ export function buildGraficosCards(
 
   // Ranking of expenses: sorted BEFORE the cut, so the largest cannot fall off the list — and
   // before the colors, so the first bar drawn takes the first slot.
+  // El anexo no reparte por cuentas de MOVIMIENTO cuando el plan abierto es el que declara el
+  // suyo: pregunta por los DIECISIETE códigos de esa hoja y por ninguno más. Se decide con la
+  // vista encendida y no siempre porque el ranking, que comparte esta tanda, cede su ranura a la
+  // tarjeta del anexo — así que ninguna otra tarjeta de Gráficos llega a ver este universo.
+  const annexPlan =
+    filters.preset === EXPENSE_DISTRIBUTION_PRESET ? annexPlanOf(source, filters.codes) : null;
   const expenseLeaves = leavesOfAny(source, defaultCodes.slice(1));
-  const rankingCodes = intersectWithMarked(expenseLeaves, filters.codes);
+  const rankingCodes = annexPlan
+    ? annexPlan.rows.map((row) => row.code)
+    : intersectWithMarked(expenseLeaves, filters.codes);
   const expenses = runQuery(compositionQuery(rankingCodes, context, { periods: periodRefs }));
   const ranking = topEntries(amountsOver(expenses), EXPENSE_RANKING_SIZE);
   const rankingColor = rankingColorOf(ranking.entries.map((entry) => entry.code));
@@ -775,7 +787,13 @@ export function buildGraficosCards(
   // contra tramos distintos, que es justo lo que la nota afirma que no pasa.
   const annex =
     filters.preset === EXPENSE_DISTRIBUTION_PRESET
-      ? buildExpenseDistribution(amountsOver(expenses), { expenses: expense, revenue })
+      ? buildExpenseDistribution(
+          amountsOver(expenses),
+          { expenses: expense, revenue },
+          // Sin plan declarado va `null` y el reparto es el de siempre: cada cuenta de movimiento
+          // por su cuenta, con su nombre del plan y la cola plegada por tamaño.
+          { annex: annexPlan },
+        )
       : null;
   const rankingEmptyNote =
     expenseLeaves.length > 0 && rankingCodes.length === 0

@@ -46,6 +46,7 @@ import {
   type PieResult,
 } from "../analytics/structure";
 import { seriesKeyId, type PeriodRef, type Series, type SeriesKey } from "../analytics/types";
+import type { BreakdownRow } from "./account-breakdown";
 import type { ChartType } from "./selection";
 import type { MarkedShare } from "./share";
 import { RESULT_CODE, type WaterfallStep } from "./waterfall";
@@ -586,20 +587,24 @@ export function comboOption(
  */
 export function horizontalBarOption(
   entries: AmountEntry[],
-  context: EntryOptionContext,
+  context: EntryOptionContext & { labelWidth?: number },
 ): ChartOption {
   const ranked = [...entries].sort((a, b) => b.value - a.value);
   const unit = context.unit;
+  // El canal de rótulos es fijo por lo de siempre —medir el texto real exigiría un canvas—, pero
+  // no es el MISMO en todas partes: el ranking vive a ancho completo y el desglose en una ventana
+  // que se puede hacer más ancha, así que quien dibuja declara cuánto le cabe.
+  const labelWidth = context.labelWidth ?? ROW_LABEL_WIDTH;
 
   return {
     ...chrome(1),
-    grid: CATEGORY_ROW_GRID,
+    grid: { ...CATEGORY_ROW_GRID, left: labelWidth + 14 },
     xAxis: valueAxis(unit),
     yAxis: {
       ...categoryAxis(ranked.map((entry) => entry.label)),
       // Category axes run bottom-up; inverting puts the largest bar on the first row.
       inverse: true,
-      axisLabel: ROW_AXIS_LABEL,
+      axisLabel: { ...ROW_AXIS_LABEL, width: labelWidth },
     },
     tooltip: axisTooltip("shadow", unit, undefined, categoryCodes(ranked)),
     series: [
@@ -801,6 +806,33 @@ export function shareOfTotalOption(
 }
 
 /** La gemela en tabla: el monto, su parte y el todo contra el que se mide. */
+/**
+ * La tabla gemela del DESGLOSE de una cuenta: código, monto y qué parte del padre es.
+ *
+ * No corta —recibe `all` y no `rows`—, que es lo que hace que el corte del dibujo no esconda una
+ * cifra: la misma división del trabajo que el anexo, donde las barras reducen y la tabla es la
+ * lista entera. Y no lleva punto de color, porque ahí todas las barras van del mismo tono y un
+ * punto por fila prometería una distinción que no existe.
+ */
+export function breakdownTable(rows: readonly BreakdownRow[], base: string): ChartTable {
+  return {
+    // La cabecera NOMBRA el denominador en vez de decir «% de la cuenta»: un porcentaje que no
+    // dice contra qué se mide obliga a deducirlo del título de la ventana, y esa es exactamente la
+    // clase de cuenta que nadie hace y todos dan por hecha. Es la regla que el anexo ya aplica en
+    // sus dos columnas («% del gasto», «% del ingreso»).
+    columns: ["Valor", `% de ${base}`],
+    rows: rows.map((row) => ({
+      id: row.code,
+      label: row.label,
+      sublabel: row.code,
+      values: [
+        formatCurrency(row.value, { cents: true }),
+        row.share === null ? null : formatChartValue(row.share, "porcentaje"),
+      ],
+    })),
+  };
+}
+
 export function shareOfTotalTable(
   rows: readonly ShareOfTotalRow[],
   context: { colorOf: (id: string) => string },

@@ -13,7 +13,10 @@ import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { PygEmptyState } from "../pyg-empty-state";
 import { BusinessLineLegend } from "./business-line-legend";
-import { ExpenseSharePanel } from "./expense-share-panel";
+import { buildAccountBreakdown } from "@/lib/profit-loss/charts/account-breakdown";
+import { amountsOver, childrenOf, compositionQuery } from "@/lib/profit-loss/charts/presets";
+import { activeSource, expandSlots } from "@/lib/profit-loss/charts/selection";
+import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
 
 /**
  * Gráficos answers *how much and of what*: amounts per period, comparisons between accounts
@@ -31,7 +34,7 @@ import { ExpenseSharePanel } from "./expense-share-panel";
  */
 export function GraficosView() {
   const { dataset, filters, frequency } = usePygData();
-  const { context } = usePygAnalytics();
+  const { context, runQuery } = usePygAnalytics();
   /**
    * Los meses del eje en los que el estado no movió nada —los que el archivo nunca trajo y los que
    * trajo en cero, que en pantalla son la misma columna vacía—. Es estado local de esta pantalla y no un
@@ -75,6 +78,45 @@ export function GraficosView() {
    */
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const openCategory = openIndex === null ? undefined : annex?.categories[openIndex];
+  /**
+   * El camino abierto dentro de esa cuenta, del rubro hacia dentro. Es una PILA y no un código
+   * suelto porque el plan baja varios niveles —`5.5.01.02` cuelga veintisiete secciones y cada una
+   * sus cuentas— y la miga de pan de la ventana necesita saber de dónde se viene. Se vacía al
+   * cerrar y al cambiar de rubro, así que nunca habla de una cuenta que no está abierta.
+   */
+  const [drill, setDrill] = useState<readonly AccountStep[]>([]);
+  const path = useMemo<AccountStep[]>(
+    () =>
+      openCategory
+        ? [
+            { code: openCategory.code, label: openCategory.label, value: openCategory.value },
+            ...drill,
+          ]
+        : [],
+    [openCategory, drill],
+  );
+  /**
+   * El desglose del último tramo. Sale de la MISMA consulta que dibujan las tarjetas —mismo centro,
+   * año, frecuencia y periodos marcados—, que es lo que hace que las hijas sumen exactamente la
+   * barra que se pulsó; pedirlo por otra puerta podría cuadrar contra otro tramo.
+   */
+  const breakdown = useMemo(() => {
+    const current = path[path.length - 1];
+    if (!current) {
+      return null;
+    }
+    const source = activeSource(context);
+    const children = childrenOf(source, current.code);
+    if (children.length === 0) {
+      return null;
+    }
+    const periods = expandSlots(filters.periods, [context.year]);
+    const bundle = runQuery(compositionQuery(children, context, { periods }));
+    return buildAccountBreakdown(amountsOver(bundle), {
+      total: current.value,
+      hasChildren: (code) => childrenOf(source, code).length > 0,
+    });
+  }, [path, context, filters.periods, runQuery]);
 
   if (!dataset) {
     return <PygEmptyState />;
@@ -147,7 +189,14 @@ export function GraficosView() {
           spec={card}
           collapsed={isCollapsed(card.id)}
           onToggleCollapsed={() => toggle(card.id)}
-          {...(annex && index === 0 ? { onSelect: setOpenIndex } : {})}
+          {...(annex && index === 0
+            ? {
+                onSelect: (next: number) => {
+                  setOpenIndex(next);
+                  setDrill([]);
+                },
+              }
+            : {})}
           {...(index === 0 && lines.length > 0
             ? {
                 footerSlot: (
@@ -158,13 +207,19 @@ export function GraficosView() {
         />
       ))}
 
-      {annex && openCategory && (
+      {annex && path.length > 0 && (
         <ExpenseSharePanel
-          category={openCategory}
+          path={path}
+          breakdown={breakdown}
           totalExpenses={annex.totalExpenses}
           totalRevenue={annex.totalRevenue}
           periodName={periodName}
-          onClose={() => setOpenIndex(null)}
+          onOpen={(step) => setDrill((current) => [...current, step])}
+          onBack={(depth) => setDrill((current) => current.slice(0, depth - 1))}
+          onClose={() => {
+            setOpenIndex(null);
+            setDrill([]);
+          }}
         />
       )}
     </div>

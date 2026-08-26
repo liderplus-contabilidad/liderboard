@@ -238,6 +238,55 @@ export function DropdownOption({
   );
 }
 
+/**
+ * A single-choice row: no checkbox, and the picked one is the filled one. It is `DropdownOption`'s
+ * sibling and the difference is the QUESTION each answers — a checkbox row marks one of many, this
+ * one picks THE value, so two of them can never be on at once.
+ *
+ * `disabled` renders the row unavailable IN PLACE rather than dropping it from the list: a
+ * frequency below the open statement's own is a real option of the control that this file cannot
+ * serve, and a list that simply omits it sends the user looking for what is missing.
+ */
+export function DropdownChoice({
+  selected,
+  disabled = false,
+  onSelect,
+  children,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-colors",
+        disabled && "cursor-not-allowed opacity-40",
+        selected ? "bg-brand-soft font-medium text-brand" : "text-ink",
+        !selected && !disabled && "hover:bg-canvas",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A closing line of plain Spanish under a panel's options — why an option is off, what a list
+ * leaves out. Separated by the same hairline as the footer, but it carries no controls. */
+export function DropdownNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-1.5 border-t border-border-soft pt-[9px] text-[11.5px] leading-snug text-faint">
+      {children}
+    </p>
+  );
+}
+
 /** Footer slot separated by a hairline — e.g. "Quitar selección" / "Listo". */
 export function DropdownFooter({ children }: { children: ReactNode }) {
   return (

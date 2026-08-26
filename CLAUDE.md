@@ -617,9 +617,18 @@ the rule `occupancy-two-decimals` proposes for the rest of the module), and the 
 carries a micro-bar on a FIXED 0–100 % scale: scaled to the best month, a flat year would paint a
 full bar and read as a full hotel.
 
-**PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders, in
-order, Cuenta contable · Nivel · Centro de costo · Año · Periodo, "Ver por" pinned right, and an
-active-filter chip strip (`active-filter-chips.tsx`) below — reflected identically by Datos,
+**PyG's filter bar is the module's only selection surface.** `pyg-toolbar.tsx` renders it in
+TRES TRAMOS separados por una línea, y esa partición es lo único que la hace legible con siete
+controles: a la izquierda lo que ACOTA quién se compara (Cliente · Cuenta contable · Nivel · Centro
+de costo), en medio el TIEMPO (Año · Periodo · Ver por) y a la derecha «Predeterminados», que no
+acota nada sino que SUSTITUYE la lectura entera. Los tres controles del tiempo gobiernan el mismo
+eje —los dos primeros eligen qué tramo, «Ver por» con qué grano— y estaban partidos a los dos
+extremos de la fila, con «Ver por» anclado a la derecha en un track de píldoras que era además la
+única forma distinta de toda la barra; ahora es un desplegable como sus dos vecinos
+(`frequency-filter.tsx`), lo que de paso le da sitio para decir POR QUÉ una frecuencia está
+apagada —un estado trimestral no puede enseñar meses, y en una píldora gris eso había que
+adivinarlo—. Sigue en la barra y no en la cabecera de una tarjeta porque lo leen las TRES
+pestañas. Bajo la fila, una tira de chips de lo marcado (`active-filter-chips.tsx`) — reflected identically by Datos,
 Gráficos and Análisis, with no second place (no "Comparar" box, no Datos-only center pills) to
 pick the same things differently. The comparison axis is never declared: marking several
 accounts and/or several centers is itself what produces a comparison, so `lib/profit-loss/
@@ -731,15 +740,43 @@ acotar «Periodo» reaparece el monto encima. Nada de lo que se veía antes deja
 sin parentesco dejan la gráfica exactamente igual. La tabla gemela sigue siendo montos y el informe
 imprimible lo hereda sin tocarlo, porque lee el mismo `buildGraficosCards`.
 
-**«PREDETERMINADOS» es una SECCIÓN propia de la barra**, con su rótulo y separada por una línea de
-los cinco desplegables: aquellos ACOTAN lo que ya hay en pantalla y este lo SUSTITUYE por otra
-lectura, de las que la firma presenta siempre. `lib/profit-loss/charts/preset-views.ts` es el
-catálogo —una lista y no un `if`—, cada entrada con su `isAvailable`, porque quién puede dibujar una
-vista es de la vista; añadir la siguiente es una entrada ahí más su rama en `cards.ts`, sin tocar la
-barra ni los filtros. Cada vista es un INTERRUPTOR a la vista y no una opción dentro de un menú —se
-presentan de un clic, y un menú esconde tras un rótulo genérico lo único que hay que leer—, y la
-sección **se rinde entera** cuando el plan abierto no admite ninguna, ya que un rótulo sobre un
-control muerto enseña a no leer ninguno de los dos.
+**«PREDETERMINADOS» es UN BOTÓN al extremo derecho de la barra que abre su galería**, separado por
+una línea de los cinco desplegables: aquellos ACOTAN lo que ya hay en pantalla y este lo SUSTITUYE
+por otra lectura, de las que la firma presenta siempre. `lib/profit-loss/charts/preset-views.ts` es
+el catálogo —una lista y no un `if`—, cada entrada con su `isAvailable`, porque quién puede dibujar
+una vista es de la vista; añadir la siguiente es una entrada ahí más su rama en `cards.ts`, sin
+tocar la barra ni los filtros.
+
+Fue un INTERRUPTOR por vista puesto en la propia barra, y el argumento era que se presentaran de un
+clic en vez de esconderse tras un rótulo genérico. Lo que ese diseño no podía pagar es que una vista
+NO CABE en su rótulo: lo único que decía qué iba a pasar al pulsar «Ventas» era un `title=` que solo
+existe si dejas el ratón encima y esperas. Y estas vistas no solo dibujan: mueven marcas que el
+usuario no puso —«Ventas» siembra centros y meses, el anexo fuerza la frecuencia—, así que un botón
+que hace eso en silencio se lee como un fallo la primera vez. En una tarjeta caben las tres cosas
+que hay que saber antes de pulsar: el nombre, la pregunta que responde (`description`, que antes era
+invisible) y **qué filtros va a mover**, que sale de `presetEffects` —derivado de lo que la entrada
+ya DECLARA (`seeds`, `frequency`, `narrowedByCodes`) y no de una lista escrita por tarjeta, o la
+siguiente siembra que alguien añada dejaría la tarjeta prometiendo lo de antes sin que ninguna cifra
+lo delatara—. La objeción del rótulo genérico se paga aparte: el botón dice qué hay puesto («✨
+Ventas», no «✨ Predeterminados») igual que «Año · 2026», así que la vista abierta se lee sin abrir
+nada. La galería **cuelga del botón** (`DropdownPanel`, el mismo que posicionan los cinco
+desplegables) y no se planta en el centro de la pantalla: fue una ventana, y una ventana apaga el
+fondo, que es lo correcto para algo que se lee SOLO — esto es lo contrario, se elige mirando lo que
+ya hay dibujado, que es justo lo que la vista va a sustituir. El botón tiene TRES estados y no dos,
+que es lo que lo separa de sus vecinos: apagado es uno más de la fila, abierto toma el `brand-soft`
+con el que todo control dice «me estás usando», y con una vista puesta se RELLENA de `brand` —la
+única cosa maciza de la barra, porque mientras está encendida es el dato más importante de la fila y
+pintarla como un filtro con marcas la dejaba indistinguible de «Año · 2026»—, y ahí son DOS botones
+en una píldora partida por una divisoria: el rótulo abre la galería y la **✕** quita la vista. Sin
+esa ✕ no había forma de apagarla a la vista —los interruptores por vista se apagaban pulsando el
+encendido, y al plegarlos en uno solo ese gesto se perdió—, y es además el mismo gesto de los chips
+de la tira, que es donde el usuario ya aprendió a quitar cosas. Cada tarjeta abre con
+un GLIFO que dice la forma de su lectura (barras contra reparto), con los tonos de
+`lib/charts/palette.ts` y de los dos sets que le tocan —identidad para lo que compara entidades, el
+set cálido de composición para lo que reparte—, así que se parece a lo que sale al pulsarlo; es una
+miniatura fija y no una previa de las cifras, porque dibujarla de verdad costaría una consulta al
+motor por tarjeta para adornar un menú. Y **se rinde entero** cuando el plan abierto no admite
+ninguna vista, ya que un botón que abre una galería vacía enseña a no pulsar el de al lado.
 
 **Su primera vista, «Ventas», es la primera vez que una serie NO es una cuenta, y la única tarjeta
 con el EJE GIRADO.** La primera tarjeta de Gráficos pasa a comparar SEIS CATEGORÍAS —Hospedaje,
@@ -797,21 +834,50 @@ aparte**, y es la prueba de que el catálogo de predeterminados es un punto de e
 una entrada en `preset-views.ts` más su rama en `cards.ts`, sin tocar la barra ni `filters.ts`. Se
 consideró primero como marcas —las 17 categorías del anexo SON cuentas del plan, así que marcarlas
 las produce— y se descartó por lo único que importaba: marcar diecisiete cuentas a mano no es
-llegar. **Y al revés que «Ventas», no necesita vocabulario ninguno.** Aquella busca sus categorías
-por rótulo y por eso solo se ofrece a un plan de hotelería; las de aquí están a distinta profundidad
-según la rama (`5.2.02` junto a `5.3.03.01`) justamente porque son las cuentas de MOVIMIENTO del
-árbol de gastos, que es lo que `leavesOfAny` ya devuelve — regla estructural y no de dominio, sin
-una lista que mantener por cliente. **Y por eso se ofrece con CUALQUIER plan que declare cuentas de
-gasto**, sin mirar de qué sistema salió el archivo. Estuvo atada a MicroPlus, y era una restricción
-de LEGIBILIDAD y no de que el cálculo fallara: el reparto se hace sobre las cuentas de movimiento, y
-ahí cada plan da un número muy distinto —el de MicroPlus se queda en unas decenas, otros bajan mucho
-más y devuelven más de cien rubros—. Lo que hace legible ese caso no es el candado sino el CORTE, que
-es de la tarjeta y vale igual para todos: catorce rubros y un «Otros» que agrupa la cola, con la
-tabla gemela listándolos uno a uno con su cifra. El plan real de MicroPlus trae diecisiete rubros,
-así que ese cliente ya venía leyendo el pliegue, y el candado protegía en realidad la SIEMBRA —ver
-abajo—, que es lo que se quitó con él. `isAvailable` recibe igualmente un `PresetContext` y no la
-fuente a secas, porque lo que decide no tiene por qué estar en el árbol —el anexo dependió del
-SISTEMA, que es un dato del workspace— y la vista que venga puede necesitar otro dato así.
+llegar. **Y por eso se ofrece con CUALQUIER plan que declare cuentas de gasto**, sin mirar de qué
+sistema salió el archivo: el reparto es estructural y no de dominio, así que sirve para un hospital,
+un hotel y un comercio sin una línea de código por cliente. Estuvo atada a MicroPlus, y era una
+restricción de LEGIBILIDAD y no de que el cálculo fallara; lo que hace legible cada caso es el CORTE,
+que es de la tarjeta. `isAvailable` recibe igualmente un `PresetContext` y no la fuente a secas,
+porque lo que decide no tiene por qué estar en el árbol —el anexo dependió del SISTEMA, que es un
+dato del workspace— y la vista que venga puede necesitar otro dato así.
+
+**Reparte por los DIECISIETE RUBROS que la hoja del contador declara** (`DECLARED_ANNEX_ROWS`), y
+no por las cuentas de MOVIMIENTO, que es lo que hacía: por hojas, ese mismo plan da 131 cuentas
+cortadas a quince, que no es el anexo de nadie — la firma coteja fila por fila contra su libro, y
+ahí las filas son diecisiete. **Es una lista y no una regla, y eso se probó al revés primero.**
+Parecían un nivel derivable del árbol —el ancestro más profundo con hijas, que es la fila que un
+anexo suele subtotalizar— y contra el plan real no lo son: once lo cumplen y seis no (`5.2.02`,
+`5.3.02`, `5.3.03.12`, `5.5.01.01`, `5.5.01.02`, `5.5.02.01` tienen nietos y bisnietos), así que esa
+regla los habría partido en sus secciones y dejado once barras con un «Otros» enorme. Tampoco son un
+nivel fijo: conviven `5.2.02` (nivel 3) y `5.3.03.01` (nivel 4). Son una SELECCIÓN del contador, y lo
+que no lista —`5.2.03`, `5.2.04`, `5.3.03.05`, `.08`, `.10`, `.15`, `.16`, `.18`, `.20`— son las
+cuentas que no se mueven, que es lo que hace que los diecisiete sumen el gasto entero.
+
+**La lista es también la PUERTA y el RÓTULO.** Se abre solo si la mayoría de esos códigos está en el
+plan abierto, así que ningún otro cliente la cruza y el resto sigue repartiendo por cuentas de
+movimiento; se exige la MAYORÍA y no todos porque que el contador retire o renumere uno no puede
+cambiar la forma del gráfico que revisa cada mes, y no mira el SISTEMA, que identificaría a todo
+MicroPlus y no a este plan de cuentas. Y NOMBRA: el rótulo va atado al código y PISA al del plan,
+porque el archivo llama a `5.2.02` «MANO DE OBRA DIRECTA / FARMACIA/…», a `5.3.03.14` «AGUA, ENERGIA,
+LUZ Y TELECOMUNICACIONES» y a `5.5.01.01` «GASTOS NOMINA /ADMINISTRACION», y este gráfico se lee
+contra la hoja donde se llaman de otra manera. Van verbatim, con sus mayúsculas y sus espacios
+sobrantes (`FARMACIA/ LABORATORIO`), la misma regla con la que Rol de Pagos conserva las erratas del
+contador. Ninguno de los diecisiete cuelga de otro, así que el reparto no cuenta dos veces un dólar.
+
+**Con el anexo declarado «Otros» cambia de significado y las dos tarjetas dejan de plegar la cola.**
+Los diecisiete se dibujan SIEMPRE —los mismos rubros en el mismo sitio cada mes, que es para lo que
+existe el gráfico— y «Otros» pasa a ser el RESTO del gasto: `total − Σ(los diecisiete)`, restado
+contra el denominador y no sumando las cuentas que quedaron fuera, que ni siquiera se consultan —el
+anexo pregunta por diecisiete códigos, no por el árbol entero, y una segunda tanda podría cuadrar
+contra otro tramo—. Así las dos tarjetas cierran en 100 % por construcción con cualquier plan; con el
+de la clínica no falta nada y «Otros» sale en cero, así que no se dibuja. Puede salir NEGATIVO (el
+plan lleva un `(-) DESCUENTO EN COMPRAS` fuera de la lista) y entonces lo aparta la tarta con su nota
+de siempre. Con cuentas MARCADAS no hay residuo: se está mirando un trozo a propósito, y ahí la
+columna suma menos de 100 %, que es justo lo que lo dice. El corte viaja en el propio reparto
+(`ExpenseDistribution.maxSlices`) y no en la tarjeta, porque quince existe para un universo de ciento
+treinta y una cuentas y aquí escondería tres filas que su hoja lista.
+
 `lib/profit-loss/charts/expense-distribution.ts` es la capa pura y es
 pequeña porque el motor ya existía: reusa la MISMA tanda del ranking en vez de pedir la suya —dos
 consultas para el mismo reparto podrían acabar cuadrando contra tramos distintos, que es justo lo
@@ -846,7 +912,7 @@ declara (`seeds`, `narrowedByCodes`, `frequency`) viaja al proveedor como ARGUME
 la barra, que sí lo conoce, y el proveedor solo recuerda si la vista abierta se deja acotar. Se lee además
 en **ANUAL** y también lo declara ella: el anexo es una columna por rubro sobre el tramo entero, y en
 mensual saldrían seis barras por rubro, que es su evolución y no su reparto; se aplica al encender y
-no se deshace al apagar, porque «Ver por» está a la vista y se vuelve de un clic, al revés que las
+no se deshace al apagar, porque «Ver por» lleva su valor escrito en el rótulo y se vuelve a mano, al revés que las
 marcas, que dejarían chips que el usuario no puso. Tampoco siembra centros ni periodos — el anexo no
 reparte por eso, y marcar los centros abriría una columna por establecimiento de algo que se lee como
 un total.
@@ -875,8 +941,9 @@ deja de seguir a la entidad y aquí por el motivo más simple: con cada barra ro
 encima, el color no distingue nada, así que repartir diecisiete tonos gastaría el canal de identidad
 en re-decir lo que la longitud ya dice. Por lo mismo las filas de la tabla no llevan punto de color:
 diecisiete puntos iguales prometerían una distinción que no existe. **Las dos tarjetas cortan en el
-MISMO sitio y por una sola reducción**: quince rubros (`ANNEX_MAX_SLICES`) con la cola plegada en
-«Otros». Antes cada una cortaba por su cuenta —las barras por la escala del ranking, la tarta por la
+MISMO sitio y por una sola reducción**: el corte que traiga el reparto —todos los rubros con el anexo
+declarado, quince (`ANNEX_MAX_SLICES`) con la cola plegada en «Otros» sin él—. Antes cada una cortaba
+por su cuenta —las barras por la escala del ranking, la tarta por la
 suya— y podían enseñar distinto número de rubros del mismo reparto, que es la clase de desacuerdo que
 nadie lee como un error. **Y esa segunda tarjeta es una TARTA y no un anillo**: el hueco de un anillo
 existe para poner el TOTAL en medio —lo único que una tarta no puede decir—, y aquí el total vive en
@@ -886,7 +953,8 @@ firma dibuja en su propio anexo. `pieOption` perdió con eso su interruptor `don
 sin ningún llamador. Quince es un límite de LEGIBILIDAD y no de color: las barras van todas del
 mismo tono, así que por ahí no hay tope, y la tarta tiene tonos para más; lo que no da para más es la
 lectura — un plan de gastos puede traer 133 cuentas de movimiento, y ahí las porciones caen bajo el
-0,1 %, donde no se ven ni se pueden rotular. La nota dice cuántos agrupó «Otros» y dónde están
+0,1 %, donde no se ven ni se pueden rotular. Es por eso el corte de un universo de cuentas de
+MOVIMIENTO, y no del anexo declarado, cuyos diecisiete rubros son la lista entera que la firma coteja. La nota dice cuántos agrupó «Otros» y dónde están
 enteros, porque si no ese pliegue se lee como una cuenta más del plan. Pero **la tabla gemela no corta**: ES el anexo entero —código de `sublabel`, valor, % del gasto, % del ingreso
 y una fila de TOTAL con `emphasis`—, que es el sitio donde un rubro plegado conserva su cifra. Los
 tests transcriben el archivo real del Hospital General Privado Durán y reproducen los porcentajes
@@ -896,6 +964,41 @@ de ese archivo** es su fila repetida: `5.5.01.01` aparece dos veces —«Emplead
 «Empleados Administración»—, un corte a mano de UNA cuenta que su propio gráfico de barras vuelve a
 fundir; aquí un código es una fila, y ese corte es del plan de cuentas o de una segmentación, no de
 esta tarjeta.
+
+**Y al pulsar una barra del anexo se abre lo que la COMPONE**, en la misma ventana que ya decía su
+peso (`expense-share-panel.tsx`). La pregunta nace mirando el gráfico —«tengo tanto en honorarios
+médicos, ¿pero qué lo compone?»— y por eso el gesto es el clic y no un control. Reparte las hijas
+DIRECTAS y no las hojas del fondo: `5.5.01.02` cuelga veintisiete secciones que a su vez cuelgan
+noventa cuentas, y enseñar las noventa no es un desglose sino otra lista ilegible; al nivel
+siguiente se llega BAJANDO, con una miga de pan que es la vuelta. `lib/profit-loss/charts/
+account-breakdown.ts` es la capa pura y es pequeña porque el motor ya existía: ordena, corta el
+DIBUJO (doce filas) sin cortar la tabla, cuenta las paradas, conserva las negativas —una nota de
+crédito dentro de un gasto es un hallazgo— y comprueba que **las hijas sumen el padre**. Eso último
+debería ser siempre cierto, porque el motor recalcula todo padre desde sus hijas
+(`computeRollups`), y justamente por eso se comprueba: si dejara de serlo, el desglose estaría
+contradiciendo a la barra que lo abrió, y la nota lo dice en vez de dejar dos cifras que nadie suma
+a mano. El porcentaje pasa por `shareOf`, la misma definición que las dos columnas del anexo.
+
+**Y el denominador se NOMBRA siempre**, en los dos sitios: la cabecera de la columna dice «% de
+HONORARIOS MEDICOS» en vez de «% de la cuenta», y la nota abre declarándolo con su cifra. Un
+porcentaje que no dice contra qué se mide obliga a deducirlo del título de la ventana, y esa es la
+clase de cuenta que nadie hace y todos dan por hecha — la misma regla por la que el anexo rotula
+«% del gasto» y «% del ingreso» y por la que `describeShares` nombra la base de cada porcentaje
+anotado sobre una barra. El canal de rótulos de estas barras es más ancho que los 150 px del
+ranking (`labelWidth` en `horizontalBarOption`, que hasta ahora era una constante compartida):
+aquí las filas son nombres de cuenta enteros, y truncados obligan a abrir la tabla para saber cuál
+es cuál, que es pedirle al lector justo el trabajo que la gráfica existe para ahorrarle.
+
+**Se baja en la VENTANA y no en la gráfica de atrás**, y eso es lo que mantiene al anexo siendo el
+anexo: sus diecisiete filas son la hoja que el contador coteja, y sustituirlas al pulsar una
+costaría la comparación que se estaba haciendo. Se probó el drill-down en la propia tarjeta —el
+gesto que Ocupaciones sí usa para bajar de mes a día— y aquí cobra dos precios que allí no: el chip
+que lo deshace significaría «desciende» donde todos los demás significan «acota», y bajar dos
+niveles pediría chips encadenados. La consulta sale del MISMO `SelectionContext` que dibujan las
+tarjetas (centro, año, frecuencia y periodos marcados), que es lo que hace que las hijas cuadren
+con la barra; pedirla por otra puerta podría cuadrar contra otro tramo. «Peso en el estado» sigue
+midiendo contra el gasto y el ingreso del ESTADO según se baja, no contra el padre: a tres niveles
+de hondo la pregunta que no se puede perder es cuánto de todo el gasto es esta subcuenta.
 
 **Y «seleccionar un gasto X» ya era un gesto que existía**: la ficha de cuenta. Gana
 `shareOfExpenses` y `shareOfRevenue`, que NO sustituyen a `shareOfContainer` sino que responden otra

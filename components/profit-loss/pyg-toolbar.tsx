@@ -2,34 +2,36 @@
 
 import { Layers, SlidersHorizontal } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Dropdown, DropdownPanel, DropdownTrigger } from "@/components/ui/dropdown";
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Dropdown, DropdownChoice, DropdownPanel, DropdownTrigger } from "@/components/ui/dropdown";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { cn } from "@/lib/cn";
-import { FREQUENCY_ORDER, frequencyLabel } from "@/lib/period";
 import { periodSlots } from "@/lib/profit-loss/filters";
 import { deepestLevel, matchExpandLevel } from "@/lib/profit-loss/filter";
-import type { AccountRow, Frequency } from "@/lib/profit-loss/types";
+import type { AccountRow } from "@/lib/profit-loss/types";
 import { AccountFilter } from "./account-filter";
 
 import { ActiveFilterChips } from "./active-filter-chips";
 import { CenterFilter } from "./center-filter";
 import { ClientFilter } from "./client-filter";
+import { FrequencyFilter } from "./frequency-filter";
 import { PeriodFilter } from "./period-filter";
 import { PresetFilter } from "./preset-filter";
 import { YearFilter } from "./year-filter";
 import { usePygData } from "./pyg-data-provider";
 
-const GRANULARITIES: { value: Frequency; label: string }[] = FREQUENCY_ORDER.map((value) => ({
-  value,
-  label: frequencyLabel(value),
-}));
-
 /**
- * PyG's filter row: Cuenta contable · Nivel · Centro de costo · Año · Periodo, with "Ver por" pinned
- * to the right and the active-filter chip strip below. It is the ONLY place PyG selects data —
- * there is no separate "Comparar" box — and the same row (and the same marks) reaches Datos,
- * Gráficos and Análisis alike.
+ * PyG's filter row. It is the ONLY place PyG selects data — there is no separate "Comparar" box —
+ * and the same row (and the same marks) reaches Datos, Gráficos and Análisis alike.
+ *
+ * Se lee en TRES TRAMOS separados por una línea, porque siete controles seguidos y todos iguales no
+ * dicen cuál va con cuál. A la izquierda lo que ACOTA quién se compara (Cliente · Cuenta · Nivel ·
+ * Centro); en medio el TIEMPO, que son tres controles del mismo eje —«Año» y «Periodo» eligen qué
+ * tramo y «Ver por» con qué grano— y que estaban partidos a los dos extremos de la fila; y a la
+ * derecha «Predeterminados», que no acota nada sino que SUSTITUYE la lectura entera.
+ *
+ * Los tres tramos son del mismo material —desplegables de 34 px— y eso incluye a «Ver por», que era
+ * el único con otra forma. El único botón que no es un desplegable es el de predeterminados, y no
+ * lo es porque abre una ventana en vez de un panel.
  */
 export function PygToolbar() {
   const {
@@ -59,11 +61,6 @@ export function PygToolbar() {
     collapsed,
     setExpandLevel,
   } = usePygData();
-  const granularityOptions = GRANULARITIES.map((option) => ({
-    ...option,
-    disabled: !allowed.includes(option.value),
-  }));
-
   const centerOptions = views.filter((view) => view.role !== "consolidado");
   const periods = dataset ? periodSlots(frequency) : [];
 
@@ -102,33 +99,27 @@ export function PygToolbar() {
           onSelectAll={clearCenters}
           consolidated={isConsolidated}
         />
-        <YearFilter
-          years={loadedYears}
-          selected={filters.years}
-          onToggle={toggleYear}
-          onSelectAll={clearYears}
-          // Los años del consolidado son de los clientes que lo componen: se borran allí.
-          {...(isConsolidated ? {} : { onDelete: removeYear })}
-        />
-        <PeriodFilter
-          periods={periods}
-          selected={filters.periods}
-          onToggle={togglePeriod}
-          onClear={clearPeriods}
-        />
-        <PresetFilter />
-
-        <div className="ml-auto flex items-center gap-2.5">
-          <ToolbarLabel>Ver por</ToolbarLabel>
-          <SegmentedControl
-            variant="track"
-            className="bg-border-faint"
-            ariaLabel="Frecuencia"
-            options={granularityOptions}
-            value={frequency}
-            onChange={setFrequency}
+        <div className="flex items-center gap-2.5 border-l border-border-soft pl-3">
+          <YearFilter
+            years={loadedYears}
+            selected={filters.years}
+            onToggle={toggleYear}
+            onSelectAll={clearYears}
+            // Los años del consolidado son de los clientes que lo componen: se borran allí.
+            {...(isConsolidated ? {} : { onDelete: removeYear })}
           />
+          <PeriodFilter
+            periods={periods}
+            selected={filters.periods}
+            onToggle={togglePeriod}
+            onClear={clearPeriods}
+          />
+          <FrequencyFilter value={frequency} allowed={allowed} onChange={setFrequency} />
         </div>
+
+        {/* Se pone a sí mismo contra el borde derecho: se rinde entero cuando el plan abierto no
+            admite ninguna vista, y una línea suelta ahí sería el resto de un control que no está. */}
+        <PresetFilter />
       </Toolbar>
 
       <ActiveFilterChips />
@@ -186,46 +177,22 @@ function NivelFilter({
               Mostrar hasta nivel
             </div>
             <div className="-mx-1">
-              <NivelOption
-                label="Todos los niveles"
-                active={active === "all"}
-                onClick={() => onSelect("all")}
-              />
+              <DropdownChoice selected={active === "all"} onSelect={() => onSelect("all")}>
+                Todos los niveles
+              </DropdownChoice>
               {levels.map((level) => (
-                <NivelOption
+                <DropdownChoice
                   key={level}
-                  label={`Nivel ${level}`}
-                  active={active === level}
-                  onClick={() => onSelect(level)}
-                />
+                  selected={active === level}
+                  onSelect={() => onSelect(level)}
+                >
+                  {`Nivel ${level}`}
+                </DropdownChoice>
               ))}
             </div>
           </>
         )}
       </DropdownPanel>
     </Dropdown>
-  );
-}
-
-function NivelOption({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-colors",
-        active ? "bg-brand-soft font-medium text-brand" : "text-ink hover:bg-canvas",
-      )}
-    >
-      {label}
-    </button>
   );
 }

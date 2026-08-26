@@ -16,7 +16,7 @@ import {
 import type { ChartCardSpec } from "@/lib/charts/types";
 import type { AnalyticsSource } from "../analytics/types";
 import { OTHERS_CODE } from "../analytics/structure";
-import { ANNEX_MAX_SLICES } from "./expense-distribution";
+import { ANNEX_MAX_SLICES, DECLARED_ANNEX_ROWS } from "./expense-distribution";
 import { emptyFilters, type PygFilters, withPresetSelected } from "../filters";
 import { formatCurrency } from "@/lib/format";
 import type { Frequency } from "../types";
@@ -1376,6 +1376,84 @@ describe("el reparto en crudo, para la ventana que abre una barra", () => {
 
   it("es null fuera de la vista: nada que abrir donde no hay reparto", () => {
     expect(buildGraficosCards(MANOR, emptyFilters()).annex).toBeNull();
+  });
+});
+
+describe("el anexo declarado llega hasta las dos tarjetas", () => {
+  /**
+   * Un plan que declara el anexo de la clínica: la costura entera —la puerta, la consulta por sus
+   * diecisiete códigos y el rótulo forzado— vista desde donde la mira el usuario. La capa pura ya
+   * está probada aparte; lo que esto cubre es el cableado, que es donde un campo mal leído no lo
+   * delata ninguna cifra.
+   */
+  const MESES = (value: number) => Array.from({ length: 12 }, () => value);
+  const RUBROS = DECLARED_ANNEX_ROWS.map((row, index) => ({
+    code: row.code,
+    // El plan de cuentas los llama de OTRA manera; el anexo tiene que taparlo.
+    name: `Como lo llama el sistema ${index + 1}`,
+    monthly: (DECLARED_ANNEX_ROWS.length - index) * 100,
+  }));
+  const CLINICA = ctx(
+    [
+      {
+        centerId: "clinica",
+        centerName: "Clínica",
+        year: 2026,
+        baseFrequency: "mensual",
+        valuesByCode: new Map<string, number[]>([
+          ["4", MESES(50_000)],
+          ["5", MESES(RUBROS.reduce((total, rubro) => total + rubro.monthly, 0))],
+          ...RUBROS.map((rubro): [string, number[]] => [rubro.code, MESES(rubro.monthly)]),
+        ]),
+        namesByCode: new Map<string, string>([
+          ["4", "INGRESOS"],
+          ["5", "COSTOS Y GASTOS"],
+          ...RUBROS.map((rubro): [string, string] => [rubro.code, rubro.name]),
+        ]),
+        parentByCode: new Map<string, string>(
+          RUBROS.map((rubro): [string, string] => [rubro.code, "5"]),
+        ),
+        coverage: new Set(Array.from({ length: 12 }, (_, index) => index)),
+      },
+    ],
+    "clinica",
+    { frequency: "anual" },
+  );
+
+  it("las dos tarjetas dibujan los diecisiete rubros con el rótulo de la hoja", () => {
+    const { cards } = buildGraficosCards(
+      CLINICA,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const barras = cards[0].option?.xAxis;
+    const eje = (Array.isArray(barras) ? barras[0] : barras)?.data ?? [];
+
+    expect(eje).toEqual(DECLARED_ANNEX_ROWS.map((row) => row.label));
+    expect(cards[1].table.rows.map((row) => row.label)).toEqual(eje);
+    // Ni un «Como lo llama el sistema» en pantalla.
+    expect(eje.some((label) => String(label).startsWith("Como lo llama"))).toBe(false);
+  });
+
+  it("no pliega la cola: son diecisiete y no catorce más «Otros»", () => {
+    const { cards } = buildGraficosCards(
+      CLINICA,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+
+    expect(cards[0].option?.series[0].data).toHaveLength(DECLARED_ANNEX_ROWS.length);
+    expect(cards[1].table.rows.map((row) => row.id)).not.toContain(OTHERS_CODE);
+  });
+
+  it("un plan que no lo declara sigue repartiendo por cuentas de movimiento", () => {
+    const { cards } = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const eje = cards[0].option?.xAxis;
+    const labels = (Array.isArray(eje) ? eje[0] : eje)?.data ?? [];
+
+    expect(labels).not.toContain("HONORARIOS MEDICOS");
+    expect(labels).toContain("Sueldo Básico");
   });
 });
 

@@ -22,6 +22,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
+import { CLINICA_2026 } from "./test-data/clinica-2026.mts";
 import { RUBROS, type AccountSpec, type Rubro } from "./test-data/rubros.mts";
 
 type Cell = string | number | null;
@@ -69,6 +70,9 @@ interface FlatAccount {
   /** Segmentos numéricos, sin formato: `[4, 1, 1, 1, 1]`. */
   path: number[];
   key: string;
+  /** El padre por ANIDAMIENTO, que no siempre es el código menos su último segmento — ver
+   * `segment`. `undefined` en las dos raíces. */
+  parentKey: string | undefined;
   name: string;
   level: number;
   root: "4" | "5";
@@ -77,18 +81,34 @@ interface FlatAccount {
   weight: number;
 }
 
-function flatten(spec: AccountSpec, path: number[], out: FlatAccount[]): void {
+/**
+ * Los segmentos que una cuenta añade al código de su padre: su POSICIÓN entre las hermanas, salvo
+ * que el plan declare otra cosa (`segment`). Varios segmentos son un nivel que el informe SALTA,
+ * como el `4.1.01.01` que cuelga directamente de `4.1` en el plan de la clínica.
+ */
+function segmentsOf(spec: AccountSpec, position: number): number[] {
+  if (spec.segment === undefined) {
+    return [position];
+  }
+  return Array.isArray(spec.segment) ? [...spec.segment] : [spec.segment];
+}
+
+function flatten(spec: AccountSpec, path: number[], out: FlatAccount[], parentKey?: string): void {
   const isLeaf = !spec.children?.length;
+  const key = path.join(".");
   out.push({
     path: [...path],
-    key: path.join("."),
+    key,
+    parentKey,
     name: spec.name,
     level: path.length,
     root: String(path[0]) as "4" | "5",
     isLeaf,
     weight: isLeaf ? (spec.weight ?? 1) : 0,
   });
-  spec.children?.forEach((child, index) => flatten(child, [...path, index + 1], out));
+  spec.children?.forEach((child, index) =>
+    flatten(child, [...path, ...segmentsOf(child, index + 1)], out, key),
+  );
 }
 
 function accountsOf(rubro: Rubro): FlatAccount[] {
@@ -173,15 +193,71 @@ function leafValues(
   return values;
 }
 
+/**
+ * Las cifras REALES que un (rubro, año) tiene transcritas, y que sustituyen a las sintéticas —
+ * solo en MICROPLUS, que es el sistema del que salieron. Los otros tres siguen sacando ese mismo
+ * año del PRNG, así que para ese par se rompe a propósito el eje del set («los cuatro sistemas dan
+ * las mismas cifras»): lo que se gana a cambio es un archivo que reproduce el anexo de la firma, y
+ * lo dice el README.
+ */
+const TRANSCRITAS: Record<string, Record<number, Record<string, number[]>>> = {
+  "rubro-c-clinica": { 2026: CLINICA_2026 },
+};
+
+/**
+ * Las hojas del mes tomadas de una transcripción, en la convención del generador: la tabla llega
+ * VERBATIM del reporte —el gasto en negativo— y aquí es donde se vuelve del derecho, una sola vez.
+ * Una hoja que la tabla no nombra vale 0, y una clave que no sea hoja de ESTE plan es un error: un
+ * código mal escrito valdría si no como «esa cuenta no se movió», sin que ninguna cifra lo delate.
+ */
+function transcribedLeafValues(
+  accounts: FlatAccount[],
+  table: Record<string, number[]>,
+  month: number,
+): Map<string, number> {
+  const byCode = new Map(
+    accounts
+      .filter((account) => account.isLeaf)
+      .map((account) => [formatCode(account.path, "microplus"), account] as const),
+  );
+  for (const code of Object.keys(table)) {
+    if (!byCode.has(code)) {
+      throw new Error(`Transcripción: ${code} no es una cuenta de movimiento de este plan.`);
+    }
+  }
+  const values = new Map<string, number>();
+  for (const [code, account] of byCode) {
+    const amount = table[code]?.[month] ?? 0;
+    values.set(account.key, account.root === "5" ? -amount : amount);
+  }
+  return values;
+}
+
+/** Lo que MicroPlus escribe ese mes: la transcripción si el (rubro, año) la tiene, y si no, el PRNG. */
+function microplusLeafValues(
+  rubro: Rubro,
+  accounts: FlatAccount[],
+  year: number,
+  month: number,
+): Map<string, number> {
+  const table = TRANSCRITAS[rubro.slug]?.[year];
+  return table === undefined
+    ? leafValues(rubro, accounts, year, month)
+    : transcribedLeafValues(accounts, table, month);
+}
+
 /** Los padres, sumando hijos de abajo hacia arriba. Nunca se declaran: se derivan. */
 function rollup(accounts: FlatAccount[], leaves: Map<string, number>): Map<string, number> {
   const values = new Map(leaves);
   const childrenOf = new Map<string, string[]>();
   for (const account of accounts) {
-    if (account.level === 1) {
+    // Por el padre del ANIDAMIENTO y no por el código menos su último segmento: un plan puede
+    // saltarse un nivel (`4.1.01.01` cuelga de `4.1`), y ahí el padre por código no existe y su
+    // rama se quedaría sin sumar.
+    const parent = account.parentKey;
+    if (parent === undefined) {
       continue;
     }
-    const parent = account.path.slice(0, -1).join(".");
     childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), account.key]);
   }
   for (const account of [...accounts].sort((a, b) => b.level - a.level)) {
@@ -300,10 +376,19 @@ function mm(month: number): string {
   return String(month + 1).padStart(2, "0");
 }
 
-/** Los padres van en MAYÚSCULAS y las hojas como se declararon: así los imprimen los dos sistemas
- * ajenos, y así se ve en la app si un nivel se leyó mal. */
+/**
+ * El nombre VERBATIM, tal como el plan lo declara — ni una transformación.
+ *
+ * Los padres de un export real van en mayúsculas, y esto llegó a forzarlas aquí. Pero el plan real
+ * de MicroPlus enseña que la mayúscula es del PLAN y no del reporte: sus cuentas padre son
+ * mayúsculas salvo el paréntesis final de seis de ellas —`SEGUROS Y REASEGUROS (Primas y
+ * Cesiones)`, `APORTES A LA SEGURIDAD SOCIAL (Incluído Fondo Res`—, que un reporte que las
+ * transformara habría arrasado igual. Forzarlas aquí hacía imposible transcribir un plan tal cual,
+ * que es justo lo que el rubro de la clínica necesita; los planes sintéticos declaran sus padres en
+ * mayúsculas y salen igual que antes.
+ */
 function systemName(account: FlatAccount): string {
-  return account.isLeaf ? account.name : account.name.toUpperCase();
+  return account.name;
 }
 
 // ── Mensual por centros de costo ────────────────────────────────────────────
@@ -424,7 +509,7 @@ function writeMicroplus(
   month: number,
   dir: string,
 ): void {
-  const values = rollup(accounts, leafValues(rubro, accounts, year, month));
+  const values = rollup(accounts, microplusLeafValues(rubro, accounts, year, month));
   const rows: Cell[][] = [
     sparseRow({}),
     sparseRow({ 3: rubro.company, 23: "Página:", 26: "1 de 1" }),
@@ -562,33 +647,54 @@ interface RubroManifest {
   hojas: number;
   profundidadMaxima: number;
   /** Por año: los doce meses y el acumulado, en la convención de la app (4 suma, 5 resta). */
-  anios: Record<
-    string,
-    {
-      meses: { mes: number; ingresos: number; gastos: number; utilidad: number }[];
-      total: { ingresos: number; gastos: number; utilidad: number };
-    }
-  >;
+  anios: Record<string, YearManifest & { microplus?: YearManifest }>;
+}
+
+interface YearManifest {
+  meses: { mes: number; ingresos: number; gastos: number; utilidad: number }[];
+  total: { ingresos: number; gastos: number; utilidad: number };
+}
+
+/** Los doce meses de un año, resumidos, a partir de quien decida el valor de cada hoja. */
+function yearManifest(
+  rubro: Rubro,
+  accounts: FlatAccount[],
+  year: number,
+  leavesOf: (month: number) => Map<string, number>,
+): YearManifest {
+  const meses = Array.from({ length: 12 }, (_, month) => {
+    const values = rollup(accounts, leavesOf(month));
+    const ingresos = rootTotal(values, "4");
+    const gastos = rootTotal(values, "5");
+    return { mes: month + 1, ingresos, gastos, utilidad: round2(ingresos - gastos) };
+  });
+  const sum = (pick: (m: (typeof meses)[number]) => number): number =>
+    round2(meses.reduce((acc, item) => acc + pick(item), 0));
+  return {
+    meses,
+    total: {
+      ingresos: sum((m) => m.ingresos),
+      gastos: sum((m) => m.gastos),
+      utilidad: sum((m) => m.utilidad),
+    },
+  };
 }
 
 function buildManifest(rubro: Rubro, accounts: FlatAccount[]): RubroManifest {
   const anios: RubroManifest["anios"] = {};
   for (const year of YEARS) {
-    const meses = Array.from({ length: 12 }, (_, month) => {
-      const values = rollup(accounts, leafValues(rubro, accounts, year, month));
-      const ingresos = rootTotal(values, "4");
-      const gastos = rootTotal(values, "5");
-      return { mes: month + 1, ingresos, gastos, utilidad: round2(ingresos - gastos) };
-    });
-    const sum = (pick: (m: (typeof meses)[number]) => number): number =>
-      round2(meses.reduce((acc, item) => acc + pick(item), 0));
     anios[String(year)] = {
-      meses,
-      total: {
-        ingresos: sum((m) => m.ingresos),
-        gastos: sum((m) => m.gastos),
-        utilidad: sum((m) => m.utilidad),
-      },
+      ...yearManifest(rubro, accounts, year, (month) => leafValues(rubro, accounts, year, month)),
+      // El año que MicroPlus trae transcrito no cuadra con el de los otros tres sistemas, así que
+      // sale APARTE en vez de sustituir al de arriba: un test que fije cifras tiene que poder
+      // decir de qué archivo habla.
+      ...(TRANSCRITAS[rubro.slug]?.[year] === undefined
+        ? {}
+        : {
+            microplus: yearManifest(rubro, accounts, year, (month) =>
+              microplusLeafValues(rubro, accounts, year, month),
+            ),
+          }),
     };
   }
   return {
@@ -618,8 +724,8 @@ function readme(manifests: RubroManifest[]): string {
   return `# Datos de prueba de PyG
 
 Generado por \`pnpm gen:testdata\` (\`scripts/generate-test-data.mts\`). **No editar a mano**: el
-script borra y reescribe esta carpeta entera. Todo es sintético — ninguna cifra ni empresa sale de
-un cliente real.
+script borra y reescribe esta carpeta entera. Las empresas son inventadas y las cifras también,
+con UNA excepción declarada: la clínica en MicroPlus 2026 lleva las de un cliente real (ver abajo).
 
 ## Qué hay
 
@@ -635,6 +741,26 @@ Cada rubro tiene su PROPIO plan de cuentas — otros nombres, otra profundidad, 
 siempre colgando de \`4\` (ingresos) y \`5\` (costos y gastos), y siempre con una rama \`5.2\` para
 poder probar «Segmentar gastos».
 
+El de la **clínica** es el único que no se inventó: es el plan real de MicroPlus, transcrito con sus
+códigos y sus nombres. Es el que trae los diecisiete rubros que el predeterminado «Costos y gastos»
+reparte —sin un archivo con ESOS códigos esa vista no se puede abrir—, y sus pesos reproducen las
+proporciones del anexo de la firma: 27 % honorarios médicos, 15 % medicinas e insumos, 14 % nómina
+administrativa. Las doce ramas que su plan declara y nunca mueve (\`5.2.03\`, \`5.2.04\`,
+\`5.3.03.02\`, \`.05\`, \`.08\`, \`.10\`, \`.15\`, \`.16\`, \`.18\`, \`.20\`…) son deliberadas: son las
+que hacen que, **en los años sintéticos**, los diecisiete sumen el gasto entero y su «Otros» salga
+en cero.
+
+**Y su 2026 en MicroPlus lleva además las CIFRAS reales** (\`scripts/test-data/clinica-2026.mts\`,
+transcritas del \`BALANCE DE PERDIDAS Y GANANCIAS AL 30-06-2026\` de ese cliente), porque el anexo
+que la firma revisa no se puede reproducir con números inventados: ahí están los 307.005,37 de
+honorarios médicos y los 94.886,27 de otros gastos operacionales que \`expense-distribution.test.ts\`
+fija. La hoja llega hasta junio, así que **julio a diciembre salen en cero** — meses cargados y
+vacíos, que no es lo mismo que meses sin cargar. Con esas cifras el año se lee distinto y a
+propósito: cierra en rojo febrero, mayo y junio, y los diecisiete rubros ya NO suman el gasto entero
+(quedan 170.923,51 en «Otros», que es lo que este cliente mueve en \`5.2.04\`, \`5.2.05\` y
+\`5.3.03.16\` menos su descuento en compras). Los otros tres sistemas de ese mismo año siguen
+sintéticos.
+
 | Carpeta | Estrategia | Modo | Nombre de archivo | Periodo declarado en |
 | --- | --- | --- | --- | --- |
 | \`centros/\` | \`monthly-centers\` | centros | \`PyG-AAAA-MM.xlsx\` | el nombre del archivo |
@@ -648,12 +774,20 @@ poder probar «Segmentar gastos».
   escribe a su manera: MicroPlus guarda el gasto en negativo, Dingoo el ingreso, y los dos numeran
   con segmentos de dos dígitos (\`4.1.01.01\`, \`4.01.01\`) frente al \`4.1.1.1\` de los formatos
   propios. Cargar el mismo mes en dos sistemas y obtener la misma utilidad prueba la normalización.
+  **La excepción es la clínica en 2026**, donde MicroPlus lleva las cifras reales y los otros tres
+  las sintéticas; \`manifest.json\` saca ese año en dos bloques (\`meses\` y \`microplus\`) para que
+  un test pueda decir de qué archivo habla.
 - **\`GENERAL\` = el estado único del mismo mes**, cuenta por cuenta y al céntimo, y cuadra contra
   la suma de sus centros (que es lo que revisa \`merge-month.ts\`).
 - **Ningún archivo produce avisos** al cargarse: ni descuadre, ni cuenta huérfana, ni marcador de
-  padre contradictorio. Un aviso en un test es un hallazgo, no ruido del set.
+  padre contradictorio. Un aviso en un test es un hallazgo, no ruido del set. La ÚNICA excepción es
+  el plan de la clínica, que se salta el nivel \`4.1.0X\` —\`4.1.01.01\` cuelga directamente de
+  \`4.1\`— y produce por eso cuatro avisos de anidamiento en los tres formatos que leen el árbol por
+  código (unitario, MicroPlus y Dingoo). Son los mismos que produce el archivo real: el salto está
+  en el plan, no en el generador.
 - **Hay meses en pérdida y meses en utilidad**: el gasto tiene una parte fija, así que la
-  temporada baja se hunde sola. Hoteles y restaurante cierran algún mes en rojo; la clínica no.
+  temporada baja se hunde sola. Hoteles y restaurante cierran algún mes en rojo; la clínica solo en
+  su 2026 de MicroPlus, donde las cifras son las reales.
 - **Cambiar de rubro, de año o de sistema cambia la identidad del workspace**
   \`(sistema, empresa, año, modo)\`, así que sirve para probar la confirmación de reemplazo.
 - **\`manifest.json\`** trae, por rubro y año, los doce meses con \`ingresos\` / \`gastos\` /
@@ -669,7 +803,8 @@ poder probar «Segmentar gastos».
   según la profundidad (\`SALDO\` solo rotula la del nivel 3).
 - El formato por centros **no declara periodo**: lo declara el nombre del archivo.
 - Los planes traen hojas a distinta profundidad, cadenas de un solo hijo, cuentas de contrapartida
-  en negativo y cuentas que existen pero nunca se mueven.
+  en negativo, cuentas que existen pero nunca se mueven, códigos SALTADOS (\`5.3\` cuelga \`5.3.02\` y
+  \`5.3.03\`, sin \`5.3.01\`) y un nivel que el informe se salta entero.
 `;
 }
 

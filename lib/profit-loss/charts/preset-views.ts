@@ -12,6 +12,7 @@
  * vive en la entrada porque quién puede dibujar cada vista es de la vista: la de líneas necesita un
  * plan de hotelería, y la que venga después necesitará otra cosa.
  */
+import { frequencyLabel } from "@/lib/period";
 import type { AnalyticsSource } from "../analytics/types";
 import type { Frequency } from "../types";
 import { buildBusinessLines } from "./business-lines";
@@ -116,6 +117,38 @@ export const PRESET_VIEWS: readonly PresetView[] = [
     frequency: "anual",
   },
 ];
+
+/**
+ * Qué le pasa a la pantalla al encender una vista, en una frase por efecto.
+ *
+ * Sale de lo que la vista ya DECLARA (`seeds`, `frequency`, `narrowedByCodes`) y no de una lista
+ * escrita a mano por tarjeta, por el mismo motivo por el que `isAvailable` vive en la entrada:
+ * añadir la siguiente vista tiene que ser una entrada aquí y nada más. Una lista paralela en el
+ * componente se quedaría corta el día que alguien añada una siembra, y ninguna cifra lo delataría
+ * — la tarjeta seguiría prometiendo lo de antes.
+ *
+ * Existe porque estas vistas SUSTITUYEN la lectura y de paso mueven marcas que el usuario no puso:
+ * «Ventas» marca centros y meses, y el anexo fuerza la frecuencia. Un botón que hace eso sin
+ * decirlo se lee como un fallo la primera vez que se pulsa.
+ *
+ * `[]` es una respuesta legítima —una vista puede no tocar nada—, y la tarjeta no dibuja tira.
+ */
+export function presetEffects(view: PresetView): string[] {
+  const effects: string[] = [];
+  if (view.seeds?.centers) {
+    effects.push("Marca los centros");
+  }
+  if (view.seeds?.periods) {
+    effects.push("Marca los meses cargados");
+  }
+  if (view.frequency) {
+    effects.push(`Se lee en ${frequencyLabel(view.frequency).toLowerCase()}`);
+  }
+  if (view.narrowedByCodes) {
+    effects.push("Se acota marcando cuentas");
+  }
+  return effects;
+}
 
 /** Las que el estado abierto puede dibujar; `[]` deja la sección entera fuera de la barra. */
 export function availablePresets(context: PresetContext): PresetView[] {
