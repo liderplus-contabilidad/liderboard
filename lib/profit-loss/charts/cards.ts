@@ -183,6 +183,17 @@ export interface GraficosCards {
    */
   annex: ExpenseDistribution | null;
   /**
+   * Los ids de las DOS tarjetas del anexo, o `null` fuera de esa vista.
+   *
+   * Salen declarados porque las dos dibujan EXACTAMENTE el mismo reparto —una sola reducción, las
+   * mismas filas, el mismo corte— y quién decide cuántas se ven es el CONSUMIDOR: la pantalla
+   * enseña una con un interruptor «Barras · Pastel», y el informe imprimible las dos, porque un
+   * control impreso es un botón que nadie puede pulsar (la regla que Sueldos por Áreas ya aplica a
+   * su tabla y su gráfica). Emitir aquí una sola obligaría al informe a pedir la lista dos veces,
+   * y emitir dos sin decir que son pareja obligaría a la vista a reconocerlas por su rótulo.
+   */
+  annexShapes: { barras: string; pastel: string } | null;
+  /**
    * Cuántos periodos CUBIERTOS no movieron nada — lo que «Ocultar meses en 0» puede quitar del eje.
    * Se cuenta siempre sobre el eje SIN podar, así que no cambia al pulsar el botón: contarlo sobre
    * lo podado lo dejaría en cero y el control se esfumaría justo al usarlo, sin forma de volver.
@@ -907,6 +918,7 @@ export function buildGraficosCards(
     periodName,
     emptyPeriods,
     annex,
+    annexShapes: annexBars && annexPie ? { barras: annexBars.id, pastel: annexPie.id } : null,
     lines: lineLegend,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },

@@ -1379,6 +1379,27 @@ describe("el reparto en crudo, para la ventana que abre una barra", () => {
   });
 });
 
+describe("el anexo declara sus DOS formas para que la pantalla enseñe una", () => {
+  it("nombra las dos tarjetas del par", () => {
+    const { cards, annexShapes } = buildGraficosCards(
+      MANOR,
+      withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
+    );
+    const ids = cards.map((card) => card.id);
+
+    // Las dos SIGUEN saliendo: el informe imprimible las quiere juntas, porque un control impreso
+    // es un botón que nadie puede pulsar. Quien enseña una sola es la pantalla.
+    expect(annexShapes).not.toBeNull();
+    expect(ids).toContain(annexShapes?.barras);
+    expect(ids).toContain(annexShapes?.pastel);
+    expect(annexShapes?.barras).not.toBe(annexShapes?.pastel);
+  });
+
+  it("es null fuera de la vista: no hay par que colapsar", () => {
+    expect(buildGraficosCards(MANOR, emptyFilters()).annexShapes).toBeNull();
+  });
+});
+
 describe("el anexo declarado llega hasta las dos tarjetas", () => {
   /**
    * Un plan que declara el anexo de la clínica: la costura entera —la puerta, la consulta por sus

@@ -940,7 +940,18 @@ dos, y una barra sin nombre no se identifica por nada. **Y van todas del MISMO c
 deja de seguir a la entidad y aquí por el motivo más simple: con cada barra rotulada y con su cifra
 encima, el color no distingue nada, así que repartir diecisiete tonos gastaría el canal de identidad
 en re-decir lo que la longitud ya dice. Por lo mismo las filas de la tabla no llevan punto de color:
-diecisiete puntos iguales prometerían una distinción que no existe. **Las dos tarjetas cortan en el
+diecisiete puntos iguales prometerían una distinción que no existe. **En pantalla las dos son UNA
+tarjeta con un interruptor «Ver como · Barras · Pastel»**, en el `headerSlot` del `ChartCard`: dibujan
+el mismo reparto —una sola reducción, las mismas filas, el mismo corte—, así que enseñarlas a la vez
+es decir dos veces lo mismo, la regla que Ocupaciones ya aplica a su propio «Ver como». Abre en
+BARRAS porque son las que aguantan dieciocho rubros; la tarta a esa altura escribe los rótulos fuera,
+con líneas guía amontonadas en un borde y la leyenda paginada, que es exactamente lo que hizo que
+«Composición de los ingresos» dejara de ser tarta. Es estado LOCAL de Gráficos —no se guarda, no deja
+chip— y **el informe imprimible sigue sacando LAS DOS**, porque un control impreso es un botón que
+nadie puede pulsar (la regla de Sueldos por Áreas). Por eso `buildGraficosCards` emite siempre el par
+y DECLARA sus ids (`annexShapes`): quién enseña una sola es el consumidor, y la pantalla se ata al
+ID y no a la posición, porque al cambiar de forma la primera tarjeta deja de ser la del anexo y un
+clic atado al índice 0 abriría la ventana desde otra. **Las dos cortan en el
 MISMO sitio y por una sola reducción**: el corte que traiga el reparto —todos los rubros con el anexo
 declarado, quince (`ANNEX_MAX_SLICES`) con la cola plegada en «Otros» sin él—. Antes cada una cortaba
 por su cuenta —las barras por la escala del ranking, la tarta por la

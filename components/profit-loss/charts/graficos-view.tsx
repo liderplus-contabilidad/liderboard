@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/cn";
@@ -32,6 +33,12 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
  * here is where each one goes on screen. The printable report reads that same list, which is why
  * it cannot come back into this file.
  */
+/** Las dos lecturas del mismo reparto: el largo de una barra o el ángulo de una porción. */
+const ANNEX_SHAPES = [
+  { value: "barras" as const, label: "Barras" },
+  { value: "pastel" as const, label: "Pastel" },
+];
+
 export function GraficosView() {
   const { dataset, filters, frequency } = usePygData();
   const { context, runQuery } = usePygAnalytics();
@@ -51,7 +58,7 @@ export function GraficosView() {
    * que cambiar de cliente no deja nada colgando.
    */
   const [hiddenLines, setHiddenLines] = useState<readonly string[]>([]);
-  const { periodName, tiles, cards, annex, emptyPeriods, lines } = useMemo(
+  const { periodName, tiles, cards, annex, annexShapes, emptyPeriods, lines } = useMemo(
     () => buildGraficosCards(context, filters, { hideEmptyPeriods, hiddenLines }),
     [context, filters, hideEmptyPeriods, hiddenLines],
   );
@@ -68,7 +75,35 @@ export function GraficosView() {
   // Qué tarjetas están plegadas, y el «todos» que las mueve de una vez. Es estado local de esta
   // pantalla, como los dos interruptores de arriba: no se guarda, no produce chip y el informe
   // imprimible sigue sacando todas las tarjetas enteras.
-  const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
+  /**
+   * En qué FORMA se lee el anexo. Sus dos tarjetas dibujan el mismo reparto —una sola reducción,
+   * las mismas filas, el mismo corte— y enseñarlas a la vez es decir dos veces lo mismo, la regla
+   * que Ocupaciones ya aplica a su «Ver como». Abre en BARRAS porque son las que aguantan
+   * dieciocho rubros: la tarta a esa altura escribe los rótulos fuera, con líneas guía amontonadas
+   * en un borde y la leyenda paginada, que es justo lo que hizo que «Composición de los ingresos»
+   * dejara de ser tarta. Es estado local, como los dos interruptores de arriba: no se guarda, no
+   * deja chip, y el informe imprimible —que llama a `buildGraficosCards` por su cuenta— sigue
+   * sacando LAS DOS, porque un control impreso es un botón que nadie puede pulsar.
+   */
+  const [annexShape, setAnnexShape] = useState<"barras" | "pastel">("barras");
+  // La tarjeta del anexo que se está leyendo, y `null` fuera de esa vista. Es un ID y no una
+  // posición porque al cambiar de forma la lista se reordena: con la tarta puesta, la primera
+  // tarjeta ya no es la del anexo, y un clic atado al índice 0 abriría la ventana desde otra.
+  const visibleAnnexId = annexShapes
+    ? annexShape === "barras"
+      ? annexShapes.barras
+      : annexShapes.pastel
+    : null;
+  // La forma que NO se está leyendo se cae de la lista; con el anexo apagado no hay ninguna que
+  // quitar y esto es la lista entera.
+  const visibleCards = useMemo(() => {
+    if (!annexShapes) {
+      return cards;
+    }
+    const hidden = annexShape === "barras" ? annexShapes.pastel : annexShapes.barras;
+    return cards.filter((card) => card.id !== hidden);
+  }, [cards, annexShapes, annexShape]);
+  const cardIds = useMemo(() => visibleCards.map((card) => card.id), [visibleCards]);
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
   /**
@@ -183,18 +218,33 @@ export function GraficosView() {
           y a veces no enseña a no pulsarlo. */}
       {/* La leyenda de líneas cuelga de la PRIMERA tarjeta, la única que las dibuja, y se rinde
           fuera de esa vista: `lines` llega vacío y no hay nada que ofrecer. */}
-      {cards.map((card, index) => (
+      {visibleCards.map((card, index) => (
         <SpecCard
           key={card.id}
           spec={card}
           collapsed={isCollapsed(card.id)}
           onToggleCollapsed={() => toggle(card.id)}
-          {...(annex && index === 0
+          {...(annex && (visibleAnnexId ? card.id === visibleAnnexId : index === 0)
             ? {
                 onSelect: (next: number) => {
                   setOpenIndex(next);
                   setDrill([]);
                 },
+              }
+            : {})}
+          {...(card.id === visibleAnnexId
+            ? {
+                headerSlot: (
+                  <span className="flex items-center gap-2">
+                    <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+                    <SegmentedControl
+                      value={annexShape}
+                      options={ANNEX_SHAPES}
+                      onChange={setAnnexShape}
+                      ariaLabel="Ver como"
+                    />
+                  </span>
+                ),
               }
             : {})}
           {...(index === 0 && lines.length > 0
