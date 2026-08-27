@@ -43,6 +43,7 @@ import type {
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatNumber, formatPercent, pluralize } from "@/lib/format";
 import { shareOf, type MonthPoint, type PayerTotal, type SalesReading } from "./derive";
+import { GUIDE_SALES_EVOLUTION, GUIDE_SALES_PAYERS, GUIDE_SALES_SERVICES } from "./guides";
 
 /**
  * Cuántos pagadores DIBUJA la tarjeta de concentración. Diez es lo que la firma lee en su propio
@@ -119,18 +120,51 @@ export interface SalesCardsInput {
   payerTableLimit?: number;
 }
 
+/**
+ * Opciones de visualización para las tarjetas de ventas. No afectan los datos, solo qué columnas
+ * se muestran en el eje de evolución.
+ */
+export interface SalesCardsOptions {
+  /**
+   * Oculta meses sin facturación en el eje de evolución. Los meses sin datos (`null`) y en cero
+   * se tratan como columnas vacías.
+   */
+  hideEmptyMonths?: boolean;
+}
+
 export interface SalesCards {
   services: ChartCardSpec;
   payers: ChartCardSpec;
   evolution: ChartCardSpec;
+  /**
+   * Cuántas columnas del eje no mueven nada. Se cuenta SIEMPRE sobre el eje sin podar, que es lo
+   * que impide que el botón se esfume justo al pulsarlo.
+   */
+  emptyMonths: number;
 }
 
-export function buildSalesCards(input: SalesCardsInput): SalesCards {
+export function buildSalesCards(
+  input: SalesCardsInput,
+  options: SalesCardsOptions = {},
+): SalesCards {
   return {
     services: buildServicesCard(input),
     payers: buildPayersCard(input),
-    evolution: buildEvolutionCard(input),
+    evolution: buildEvolutionCard(input, options),
+    emptyMonths: emptyMonths(input.monthlyByYear).length,
   };
+}
+
+function emptyMonths(monthlyByYear: readonly YearMonths[]): number[] {
+  const axis = monthlyByYear[0]?.points ?? [];
+  return axis
+    .filter((point) =>
+      monthlyByYear.every((entry) => {
+        const found = entry.points.find((other) => other.monthIndex === point.monthIndex);
+        return found === undefined || found.amount === null || found.amount === 0;
+      }),
+    )
+    .map((point) => point.monthIndex);
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +435,7 @@ function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
     option,
     table,
     note: servicesNote(total, idle, comparing),
+    guide: GUIDE_SALES_SERVICES,
     height: SERVICES_HEIGHT,
   };
 }
@@ -584,6 +619,7 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
       folded.length,
       comparing,
     ),
+    guide: GUIDE_SALES_PAYERS,
     height: PAYERS_HEIGHT,
   };
 }
@@ -683,7 +719,15 @@ function foldedRow(
 // 3 · Evolución
 // ---------------------------------------------------------------------------
 
-function buildEvolutionCard({ monthlyByYear, period }: SalesCardsInput): ChartCardSpec {
+function buildEvolutionCard(
+  { monthlyByYear: full, period }: SalesCardsInput,
+  { hideEmptyMonths = false }: SalesCardsOptions = {},
+): ChartCardSpec {
+  const hidden = hideEmptyMonths ? emptyMonths(full) : [];
+  const monthlyByYear: YearMonths[] = full.map((entry) => ({
+    year: entry.year,
+    points: entry.points.filter((point) => !hidden.includes(point.monthIndex)),
+  }));
   const years = monthlyByYear.map((entry) => entry.year);
   const comparing = years.length > 1;
   // El eje sale de los PUNTOS y no de los doce meses: cuando «Mes» acota, la tarjeta dibuja lo
@@ -791,7 +835,8 @@ function buildEvolutionCard({ monthlyByYear, period }: SalesCardsInput): ChartCa
     subtitle: `Venta total · ${period}`,
     option,
     table,
-    note: evolutionNote(monthlyByYear, comparing),
+    note: evolutionNote(monthlyByYear, comparing, hidden.length),
+    guide: GUIDE_SALES_EVOLUTION,
     height: EVOLUTION_HEIGHT,
   };
 }
@@ -838,8 +883,16 @@ function absenceMarks(monthlyByYear: readonly YearMonths[]): ChartSeries[] {
   ];
 }
 
-function evolutionNote(monthlyByYear: readonly YearMonths[], comparing: boolean): string {
+function evolutionNote(
+  monthlyByYear: readonly YearMonths[],
+  comparing: boolean,
+  hidden: number,
+): string {
   const axisLength = monthlyByYear[0]?.points.length ?? 0;
+  const pruned =
+    hidden === 0
+      ? ""
+      : ` Se ocultaron ${pluralize(hidden, "mes", "meses")} sin facturación —los que nunca llegaron y los que llegaron en cero—; el interruptor los devuelve.`;
   const gaps = monthlyByYear
     .map((entry) => ({
       year: entry.year,
@@ -851,9 +904,11 @@ function evolutionNote(monthlyByYear: readonly YearMonths[], comparing: boolean)
     // Habla del EJE que está en pantalla y no de «los doce meses»: con «Mes» acotado, afirmar que
     // el año está completo sería decir algo que la tarjeta no está enseñando.
     const what = axisLength === 12 ? "los doce meses" : pluralize(axisLength, "mes", "meses");
-    return comparing
-      ? `Todos los años comparados tienen ${what} del eje cargados.`
-      : `Sin huecos: ${what} del eje tienen su archivo cargado.`;
+    return (
+      (comparing
+        ? `Todos los años comparados tienen ${what} del eje cargados.`
+        : `Sin huecos: ${what} del eje tienen su archivo cargado.`) + pruned
+    );
   }
   // Los huecos se dicen POR AÑO, nunca uno por mes: con tres años a medias, una línea por mes serían
   // treinta avisos para una sola idea.
@@ -865,7 +920,7 @@ function evolutionNote(monthlyByYear: readonly YearMonths[], comparing: boolean)
     )
     .join(" · ");
   const head = comparing ? `Meses sin cargar — ${detail}.` : `${detail}.`;
-  return `${head} Un mes que nunca llegó no es un mes en cero — la misma regla de cobertura de PyG.`;
+  return `${head} Un mes que nunca llegó no es un mes en cero — la misma regla de cobertura de PyG.${pruned}`;
 }
 
 /** Un importe de tabla, con la RAYA de «este periodo nunca llegó». */

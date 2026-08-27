@@ -1,10 +1,21 @@
 "use client";
 
-import { Building2, FileSpreadsheet, Info } from "lucide-react";
-import { useState } from "react";
+import {
+  Building2,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Eye,
+  EyeOff,
+  FileSpreadsheet,
+  Info,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatTile } from "@/components/ui/stat-tile";
+import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
+import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
@@ -28,9 +39,25 @@ export function SalesView() {
 }
 
 function SalesContent() {
-  const { clientId, isConsolidated, ready, months, reading, cards, periodName, universe } =
-    useSalesData();
+  const {
+    clientId,
+    isConsolidated,
+    ready,
+    months,
+    reading,
+    cards,
+    periodName,
+    universe,
+    hideEmptyMonths,
+    toggleEmptyMonths,
+  } = useSalesData();
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  const cardIds = useMemo(
+    () => [cards.services.id, cards.payers.id, cards.evolution.id],
+    [cards.services.id, cards.payers.id, cards.evolution.id],
+  );
+  const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
   // Antes de la primera lectura de Dexie no se sabe si hay meses: esperar evita el parpadeo del
   // vacío sobre un cliente que en realidad ya tiene su año cargado.
@@ -118,10 +145,56 @@ function SalesContent() {
             />
           </div>
 
+          <div className="mb-4 flex items-center">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={toggleAll}
+              icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+              className="font-medium"
+            >
+              {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
+            </Button>
+          </div>
+
           <div className="flex flex-col gap-4">
-            <ChartCard {...cards.services} />
-            <ChartCard {...cards.payers} />
-            <ChartCard {...cards.evolution} />
+            <ChartCard
+              {...cards.services}
+              collapsed={isCollapsed(cards.services.id)}
+              onToggleCollapsed={() => toggle(cards.services.id)}
+            />
+            <ChartCard
+              {...cards.payers}
+              collapsed={isCollapsed(cards.payers.id)}
+              onToggleCollapsed={() => toggle(cards.payers.id)}
+            />
+            <ChartCard
+              {...cards.evolution}
+              collapsed={isCollapsed(cards.evolution.id)}
+              onToggleCollapsed={() => toggle(cards.evolution.id)}
+              {...(cards.emptyMonths > 0
+                ? {
+                    headerSlot: (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-pressed={hideEmptyMonths}
+                        onClick={toggleEmptyMonths}
+                        icon={hideEmptyMonths ? <Eye size={14} /> : <EyeOff size={14} />}
+                        className={cn(
+                          "font-medium",
+                          hideEmptyMonths &&
+                            "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+                        )}
+                      >
+                        {hideEmptyMonths
+                          ? `Mostrar ${cards.emptyMonths} ${cards.emptyMonths === 1 ? "mes" : "meses"} en 0`
+                          : "Ocultar meses en 0"}
+                      </Button>
+                    ),
+                  }
+                : {})}
+            />
           </div>
 
           <BillingDisclaimer />

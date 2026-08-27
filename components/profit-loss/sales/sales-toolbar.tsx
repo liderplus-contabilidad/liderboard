@@ -15,16 +15,13 @@ import { activeMarkCount } from "@/lib/sales/filters";
 import { useSalesData } from "./sales-data-provider";
 
 /**
- * La ÚNICA superficie de selección de «Ventas por servicio»: **Año · Mes**, y debajo la tira de
- * marcas activas. Las mismas primitivas que la barra de PyG y la de Sueldos por Áreas, para que un
- * control de esta app se pulse igual esté donde esté.
+ * Superficie de selección de «Ventas por servicio»: **Año · Mes** y marcas activas. Usa las mismas
+ * primitivas que otras barras de la app para consistencia. No incluye «Cuenta contable» ni «Centro
+ * de costo» porque no aplican a facturas, evitando que sea una pestaña más de PyG.
  *
- * No hay «Cuenta contable» ni «Centro de costo»: ninguna de las dos significa nada sobre una
- * factura, y eso es justamente lo que impide que esto sea una cuarta pestaña de PyG.
- *
- * El AÑO es de elección ÚNICA —la evolución son los doce meses de un ejercicio, y dos años
- * marcados no tendrían eje sobre el que dibujarse—, así que sus filas son `DropdownChoice` y su
- * panel no ofrece «Todos». El MES sigue la regla de siempre: ninguna marca es todas.
+ * Ambos admiten varias marcas. El año permite comparar series por meses, y sin marcas selecciona
+ * el más reciente. «Todos los años» marca todos en lugar de vaciar, a diferencia de los meses, que
+ * siguen la regla de «ninguna marca es todas».
  */
 export function SalesToolbar() {
   const { universe, filters, toggleYear, selectAllYears, toggleMonth, clearMonths } =

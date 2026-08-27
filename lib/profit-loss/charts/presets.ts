@@ -36,10 +36,10 @@ export function leavesOfAny(source: AnalyticsSource | undefined, ancestors: stri
 export const RANKING_SIZE = 8;
 
 /**
- * El «Ranking de gastos» de Gráficos es el único que llega a quince, y el número no es suyo: son
- * los pasos de `CHART_RANKING_RAMP`, la escala ordinal con la que se pinta, igual que
- * `CHART_COMPOSITION_MAX` fija el corte de la tarta. Atarlo a la rampa es lo que garantiza que
- * ninguna barra dibujada se quede sin tono.
+ * El «Ranking de gastos» de Gráficos es el único que llega a quince, y el número no es suyo: es el
+ * corte de legibilidad que declara `CHART_RANKING_MAX`, junto a la secuencia con la que se pinta,
+ * igual que `CHART_COMPOSITION_MAX` fija el corte de la tarta. Atarlo allí es lo que garantiza que
+ * ninguna barra dibujada se quede sin tono — la secuencia da veinte, así que sobran cinco.
  *
  * Las demás siguen en `RANKING_SIZE`: las de Análisis se pintan con las ranuras de IDENTIDAD, que
  * son ocho, y ahí una novena barra sí caería en el neutro.

@@ -554,7 +554,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 24 ago 2026</span>
+      <span><b>Actualizado</b> 26 ago 2026</span>
       <span><b>Módulos</b> P&amp;G · Ocupaciones · Rol de Pagos</span>
     </div>
   </header>
@@ -603,7 +603,10 @@
         <div class="mod income">
           <span class="tag">P&amp;G</span>
           <h4>Pérdidas y Ganancias</h4>
-          <p>Estados de resultados por cliente, centro de costo y año.</p>
+          <p>
+            Estados de resultados por cliente, centro de costo y año. Y, aparte, lo
+            <b>facturado</b> por servicio y por pagador.
+          </p>
         </div>
         <div class="mod cost">
           <span class="tag">OCUPACIONES</span>
@@ -1011,9 +1014,14 @@
           · Cuando lo comparado son los <strong>bloques del estado</strong> —lo que entra contra lo
           que sale—, el color es el del libro del contador: <b>verde</b> los ingresos,
           <b>celeste</b> los costos y gastos, los mismos de la tabla de Datos.<br />
-          · Cuando lo dibujado es un <strong>reparto</strong> —una pila, un ranking largo—, el color
-          sigue al tamaño y no a la identidad: es una escala que va de oscuro a claro, y el tono
-          repite lo que ya dice la posición.
+          · Cuando lo dibujado es un <strong>reparto</strong> —los trozos de una pila apilada—, el
+          color sigue al <b>tamaño</b> y no a la identidad: es una escala que va de oscuro a claro,
+          y el tono repite lo que ya dice la posición.<br />
+          · Y en las listas <strong>largas</strong> —el ranking de quince gastos— el color sigue al
+          <b>puesto</b>: las ocho primeras barras llevan los tonos de siempre y de la novena en
+          adelante siguen tonos distintos, para que la cola no salga como una mancha de un solo
+          color. Ahí <b>el color no es la lectura</b>: cada barra lleva su cuenta escrita al lado y
+          su monto al final, y quien no distinga dos de esos tonos no se pierde nada.
         </p>
       </div>
 
@@ -1031,7 +1039,8 @@
     <section id="pyg">
       <h2><span class="num">03</span> Pérdidas y Ganancias</h2>
       <p class="section-note">
-        El estado de resultados: cargarlo, leerlo, corregirlo y sacarlo impreso.
+        El estado de resultados: cargarlo, leerlo, corregirlo y sacarlo impreso. Y, en su propio
+        subitem, lo facturado por servicio.
       </p>
 
       <h3>Cargar el estado de resultados</h3>
@@ -1291,6 +1300,12 @@
         Ninguna repite a otra: cada una contesta algo que las demás no contestan. Si solo vas a
         aprender dos, que sean la primera y la última.
       </p>
+      <p>
+        <strong>El orden en que están es el orden en que se lee un estado</strong>, y conviene
+        seguirlo: primero cómo cerró cada mes, después de qué está hecho lo que entró, en qué se
+        está yendo lo que sale, si ese reparto se está moviendo mes a mes, y al final el recorrido
+        completo del ingreso a la utilidad. El informe impreso las saca en ese mismo orden.
+      </p>
 
       <div class="card">
         <div class="scroller">
@@ -1325,22 +1340,6 @@
                 </td>
               </tr>
               <tr>
-                <td class="k">Distribución de <i>(una cuenta)</i></td>
-                <td>
-                  ¿Una cuenta está ganando o perdiendo peso dentro de su grupo, mes a mes? La tarta
-                  dice cómo está el reparto hoy; solo esta dice si está cambiando.
-                </td>
-                <td>
-                  Una barra apilada por mes, y cada trozo lleva escrito
-                  <b>qué porcentaje del mes es</b>. Sin marcar nada reparte los ingresos; marcando
-                  <b>una</b> cuenta reparte esa entre sus hijas.
-                </td>
-                <td>
-                  <b>La línea no es el borde de la pila, es el total de verdad.</b> Un descuento
-                  resta hacia abajo, así que la pila puede acabar más arriba que el total real.
-                </td>
-              </tr>
-              <tr>
                 <td class="k">Composición de los ingresos</td>
                 <td>¿De dónde viene la venta? Cuánto aporta cada cuenta al total del periodo.</td>
                 <td>
@@ -1356,13 +1355,33 @@
                 <td class="k">Ranking de gastos</td>
                 <td>¿En qué se está yendo la plata? Las cuentas de gasto más grandes, en orden.</td>
                 <td>
-                  Quince barras horizontales de mayor a menor. Las ocho primeras llevan cada una su
-                  color; de la novena en adelante son una <b>escala verde</b> que se va aclarando,
-                  porque ahí lo que importa es el puesto y no la identidad.
+                  Quince barras horizontales de mayor a menor, cada una con el nombre de su cuenta
+                  al lado y su monto al final. Las ocho primeras llevan los tonos de siempre y de la
+                  <b>novena en adelante siguen tonos distintos</b>, para que la cola —que es justo
+                  donde se mira para saber qué recortar— no salga como una mancha de un solo color.
+                  El color aquí no es la lectura: el orden lo dicen la posición de la fila y el
+                  largo de la barra.
                 </td>
                 <td>
                   Al pie dice cuántas cuentas quedaron fuera del corte. Si son muchas, baja el
                   <em class="ui">Nivel</em> para agrupar antes de leer.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Distribución de <i>(una cuenta)</i></td>
+                <td>
+                  ¿Una cuenta está ganando o perdiendo peso dentro de su grupo, <b>mes a mes</b>?
+                  Las dos de arriba dicen cómo está el reparto en todo el periodo; solo esta dice si
+                  está cambiando, y por eso se lee después de ellas.
+                </td>
+                <td>
+                  Una barra apilada por mes, y cada trozo lleva escrito
+                  <b>qué porcentaje del mes es</b>. Sin marcar nada reparte los ingresos; marcando
+                  <b>una</b> cuenta reparte esa entre sus hijas.
+                </td>
+                <td>
+                  <b>La línea no es el borde de la pila, es el total de verdad.</b> Un descuento
+                  resta hacia abajo, así que la pila puede acabar más arriba que el total real.
                 </td>
               </tr>
               <tr>
@@ -1492,9 +1511,16 @@
         </li>
         <li>
           Y sustituye la del ranking por la <b>tarta</b> del mismo reparto, que dice qué parte del
-          gasto total se lleva cada rubro. Las dos dibujan <b>quince rubros</b> y pliegan la cola en
-          «Otros», exactamente los mismos quince; <b>la tabla no pliega nada</b>, y es ahí donde un
-          rubro plegado conserva su cifra.
+          gasto total se lleva cada rubro. Las dos dibujan
+          <b>los mismos rubros y cortan en el mismo sitio</b>; <b>la tabla no pliega nada</b>, y es
+          ahí donde un rubro plegado conserva su cifra.
+        </li>
+        <li>
+          Y <b>se lleva la tarjeta de «Distribución»</b>, así que la pestaña queda con cuatro en vez
+          de cinco. No es un fallo: esa tarjeta reparte <b>una</b> cuenta entre sus hijas y aquí
+          resolvería <b>ingresos</b>, que no tiene nada que ver con el anexo de gastos que estás
+          leyendo. Las otras dos se quedan donde estaban —la composición de los ingresos, que es el
+          contexto de la columna <b>% del ingreso</b>, y la cascada cerrando—.
         </li>
       </ul>
 
@@ -1683,6 +1709,401 @@
           <b>Destino → Guardar como PDF</b>.
         </figcaption>
       </figure>
+
+      <h3>Ventas por servicio</h3>
+      <p>
+        Debajo de <em class="ui">Pérdidas y Ganancias</em>, en el menú de la izquierda, hay un
+        subitem: <em class="ui">Ventas por servicio</em>. Lee el reporte
+        <strong>«Venta de Servicios por FACTURA»</strong> que el sistema contable emite
+        <b>aparte</b> del estado de resultados —una línea por factura, con su servicio, quién la
+        paga, la cantidad y el importe— y responde tres preguntas que el estado no puede responder:
+        <b>en qué se factura</b>, <b>quién paga</b> y <b>cómo se mueve mes a mes</b>.
+      </p>
+      <p>
+        Esa lectura no cabe en el plan de cuentas, y por eso es una pantalla aparte y no una cuarta
+        pestaña: el estado parte el ingreso de la clínica en <b>dos cuentas</b> y este reporte lo
+        parte en <b>cinco servicios</b> con las aseguradoras y los particulares que los pagan.
+        Tampoco tiene <em class="ui">Cuenta contable</em> ni <em class="ui">Centro de costo</em>:
+        ninguno de los dos significa nada sobre una factura.
+      </p>
+
+      <div class="callout danger">
+        <span class="label">Lo más importante de esta pantalla</span>
+        <p>
+          <strong>Lo facturado no es lo contabilizado, y no tiene por qué cuadrar.</strong> Los
+          $229.616 de un abril facturado no son el ingreso contable de abril: hay tiempos de
+          reconocimiento, notas de crédito e IVA de por medio.
+        </p>
+        <p>
+          Por eso
+          <strong>estas cifras no entran en ninguna lectura de Pérdidas y Ganancias</strong>: Datos,
+          Gráficos y Análisis dibujan <b>exactamente lo mismo</b> con ventas cargadas y sin ellas.
+          Si comparas el total de aquí con los ingresos del estado y no coinciden, no es un error
+          del sistema —son dos fuentes distintas que miden cosas distintas—. La propia pantalla lo
+          dice en una línea al pie, y el informe lo repite en su cabecera, que es donde más falta
+          hace: un PDF viaja sin la app al lado.
+        </p>
+      </div>
+
+      <p>
+        El subitem está <strong>siempre visible</strong>, para todo cliente: lo que el archivo
+        decide es quién puede <b>subir</b>, no quién ve el menú. Necesita un cliente abierto —el
+        mismo del selector de la cabecera, el de Pérdidas y Ganancias—, y en el
+        <em class="ui">Consolidado</em> entre clientes no se usa: ahí lo que se suma son estados de
+        resultados, no facturación, así que la pantalla te pide elegir un cliente.
+      </p>
+
+      <h4>Cargar el mes</h4>
+      <ol class="steps">
+        <li>
+          <p>
+            Abre el cliente en el selector de la cabecera. Si <em class="ui">Cargar Excel</em>
+            aparece apagado, es que no hay ninguno abierto, y el propio botón lo dice.
+          </p>
+        </li>
+        <li>
+          <p>
+            Pulsa <em class="ui">Cargar Excel</em> y suelta ahí los archivos. Puedes soltar
+            <b>varios meses de una vez</b>; cada uno se lee al soltarlo y la lista te dice qué mes
+            declaró —o por qué no se pudo leer— antes de escribir nada.
+          </p>
+        </li>
+        <li>
+          <p>
+            Revisa la lista, quita con la <b>✕</b> lo que no quieras cargar y confirma. Lo que se
+            escribe es lo que quedó en la lista.
+          </p>
+        </li>
+      </ol>
+
+      <div class="card">
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width: 13rem">Regla</th>
+                <th>Qué significa en la práctica</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">Un archivo es un mes</td>
+                <td>
+                  Y tiene que ser un <b>mes calendario completo</b>. Un reporte del 1 al 20 de
+                  abril, o uno que cruce dos meses, se rechaza <b>diciendo por qué</b> en vez de
+                  aterrizar en un mes que no le corresponde.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">El mes lo declara el archivo</td>
+                <td>
+                  Se lee de sus propias líneas <code>Desde:</code> / <code>Hasta:</code>.
+                  <b>El nombre del archivo no participa</b>, así que renombrarlo no cambia dónde
+                  aterriza el mes —al revés que el Excel mensual por centros de PyG, donde el nombre
+                  sí manda—.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Recargar un mes lo reemplaza</td>
+                <td>
+                  <b>Por completo</b>, no se mezcla con lo anterior: el reporte es la foto entera
+                  del mes, así que quedarse con líneas de una carga previa dejaría facturas que el
+                  sistema contable ya no declara. Si corriges el reporte, vuelve a subirlo y listo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Se cuadra contra el total del reporte</td>
+                <td>
+                  La suma de las líneas leídas se compara con la <b>fila de cierre</b> del propio
+                  archivo. Si no coinciden, el mes <b>se carga igual</b> y sale un aviso con la
+                  diferencia: la diferencia puede ser del reporte, y quedarte sin los datos no ayuda
+                  a averiguarlo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Otra empresa, otro cliente</td>
+                <td>
+                  Los archivos declaran una razón social. Si contradice la de lo que ya cargaste en
+                  ese cliente, el sistema te avisa antes de escribir —igual que en Pérdidas y
+                  Ganancias—. El <b>nombre que tú le pusiste al cliente nunca se compara</b> con lo
+                  que dice el archivo: tú lo llamas «Clínica Durán» y él se llama
+                  <code>HOSPITAL GENERAL PRIVADO DURAN S.A.</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <h4>Las cuatro cifras de arriba</h4>
+      <p>
+        Son del <b>periodo que tengas marcado</b>, igual que en Gráficos, y el rótulo pequeño de
+        debajo de cada una lo repite para que no haya duda de qué estás mirando.
+      </p>
+      <ul>
+        <li><strong>Venta total</strong> — lo facturado en el periodo, con centavos.</li>
+        <li>
+          <strong>Líneas facturadas</strong> — cuántas filas trae el reporte. No son facturas ni
+          pacientes: son <b>líneas</b>, y un archivo real trae miles.
+        </li>
+        <li>
+          <strong>Ticket promedio</strong> — la venta dividida <b>por línea</b>, no por paciente ni
+          por factura.
+        </li>
+        <li>
+          <strong>Pagadores</strong> — cuántos distintos pagaron en el periodo, aseguradoras y
+          particulares juntos.
+        </li>
+      </ul>
+
+      <h4>La barra: Año · Mes</h4>
+      <p>
+        Solo dos controles, y <strong>los dos admiten varias marcas</strong>. Lo que hacen no es lo
+        mismo, y esa diferencia es lo que hace útil la pantalla:
+      </p>
+
+      <div class="card">
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width: 9rem">Control</th>
+                <th>Qué hace al marcar varios</th>
+                <th>Sin marcar nada</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k"><em class="ui">Año</em></td>
+                <td>
+                  Cada año marcado se dibuja como una <b>serie aparte</b> sobre los mismos meses. Es
+                  lo que responde «abril de 2026 contra abril de 2025». El atajo
+                  <em class="ui">Todos los años</em> los marca todos.
+                </td>
+                <td>
+                  Se lee el <b>año más reciente</b>. Aquí «nada marcado» no significa «todos»: un
+                  recuadro que dijera «Venta total» sumando tres ejercicios se leería mal.
+                </td>
+              </tr>
+              <tr>
+                <td class="k"><em class="ui">Mes</em></td>
+                <td>
+                  <b>Acota el eje</b> a esos meses, y lo hace en <b>todos</b> los años marcados a la
+                  vez: marcar «Abr» con 2025 y 2026 puestos da los dos abriles, no el abril de uno.
+                </td>
+                <td>
+                  Entran todos los meses <b>que tengan archivo cargado</b>. La lista solo ofrece
+                  esos, para que no marques uno que no va a dibujar nada.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p>
+        Debajo de la barra aparecen los <b>chips</b> de los meses marcados, y se quitan uno a uno
+        con su <b>✕</b> o de golpe con <em class="ui">Quitar todo</em>, como en el resto de la app.
+        El año <b>no deja chip</b>: nunca está vacío, así que su propio rótulo ya enseña la
+        selección entera («Año · 2025, 2026»).
+      </p>
+
+      <div class="callout">
+        <span class="label">La comparación no se enciende en ningún sitio</span>
+        <p>
+          <strong>Marcar dos años es lo que produce la comparación.</strong> No hay un botón
+          «comparar» ni una tarjeta aparte: las tres tarjetas <b>cambian de forma solas</b> según
+          cuántos años tengas marcados —con uno dibujan el reparto del periodo, con varios ponen un
+          año por serie—. Es la misma pregunta respondida sobre lo que marcaste.
+        </p>
+      </div>
+
+      <h4>Las tres tarjetas</h4>
+      <p>
+        Se leen igual que las de Gráficos: el <b>ⓘ</b> de la cabecera explica esa tarjeta,
+        <em class="ui">Ver como tabla</em> da las cifras exactas y la nota al pie confiesa lo que no
+        dibujó. (Ver <b>«Cómo se lee una tarjeta de gráfico»</b>, en el capítulo 02.)
+      </p>
+
+      <div class="card">
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width: 13rem">Tarjeta</th>
+                <th>Qué pregunta responde</th>
+                <th>Cómo se lee</th>
+                <th>Ojo con</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">Composición por servicio</td>
+                <td>¿En qué se factura? Cuánto aporta cada servicio, de mayor a menor.</td>
+                <td>
+                  Una barra por servicio. La nota al pie <b>nombra el denominador con su cifra</b>,
+                  así que el porcentaje de la tabla no hay que deducirlo del título. Con varios años
+                  marcados, una barra por año y servicio.
+                </td>
+                <td>
+                  Un servicio del catálogo que no vendió nada en el periodo <b>no se dibuja</b>, y
+                  la nota dice cuántos quedaron fuera por eso.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Concentración por pagador</td>
+                <td>
+                  ¿La venta se concentra en pocas aseguradoras o está repartida? Es la pregunta de
+                  riesgo: cuánto depende la clínica de un solo pagador.
+                </td>
+                <td>
+                  Los <b>diez mayores</b>, y la nota dice en una cifra
+                  <b>qué parte de la venta son</b>, con el resto contado y sumado. La cola no se
+                  pliega en una barra «Otros», que sería la más larga del gráfico y taparía justo
+                  esa lectura; <em class="ui">Ver como tabla</em> los lista <b>todos</b>.
+                </td>
+                <td>
+                  Los diez se eligen por el <b>total del periodo</b>, no por un año, para que el
+                  elenco no cambie al mover las marcas — así «Particular · 1» es la misma persona en
+                  las tres series.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Evolución</td>
+                <td>¿Cómo se mueve la facturación mes a mes, y contra el mismo mes de otro año?</td>
+                <td>
+                  <b>Barras con línea</b>: la barra dice cuánto —que es lo que se compara contra la
+                  del año de al lado— y la línea dice hacia dónde. La línea va <b>recta</b> y un mes
+                  sin cargar la <b>parte</b> en vez de unir enero con marzo.
+                </td>
+                <td>
+                  Un mes que <b>nunca cargaste</b> lleva una marca gris y una raya en la tabla:
+                  <b>no es un mes en cero</b>. Los huecos se cuentan <b>por año</b> («2024: 6
+                  meses»), no uno por mes.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <span class="label">Por qué los pacientes salen sin nombre</span>
+        <p>
+          Las <strong>aseguradoras se rotulan con su nombre</strong>; los
+          <strong>particulares, no</strong>: salen como «Particular · 1», «Particular · 2»… y el
+          número sigue al <b>monto</b>, no al orden del archivo. Es a propósito: el reporte trae
+          nombres de personas, y una gráfica que va a un informe impreso no es el sitio para
+          publicarlos.
+        </p>
+        <p>
+          El nombre <b>sí se guarda</b> tal cual vino —una cifra cuyo dueño no se guardó deja de ser
+          trazable contra el reporte—, y quien decide si se rotula es una sola regla, la misma para
+          la gráfica, la tabla y el papel. Está <b>inclinada hacia el lado prudente</b>: ante la
+          duda, persona. El costo de equivocarse no es simétrico —una aseguradora sin nombre es una
+          molestia; un paciente con su nombre impreso, no—.
+        </p>
+      </div>
+
+      <h4>Plegar tarjetas y esconder los meses vacíos</h4>
+      <ul>
+        <li>
+          La flecha <b>⌄</b> de cada cabecera <strong>pliega</strong> su tarjeta y deja solo el
+          título; <em class="ui">Cerrar todos</em>, arriba a la izquierda de las tarjetas, las
+          pliega de golpe. Tres gráficas obligan a bajar hasta el final para leer la última, y esto
+          es lo que evita ese paseo.
+        </li>
+        <li>
+          En la cabecera de <b>Evolución</b> —y solo ahí, porque solo esa tarjeta lo usa— aparece
+          <em class="ui">Ocultar meses en 0</em> cuando hay algo que ocultar. Quita del eje los
+          meses <strong>sin facturación</strong>: tanto los que nunca cargaste como los que llegaron
+          en cero, que en pantalla son la misma columna vacía.
+        </li>
+        <li>
+          Encendido, el botón lleva la <b>cuenta</b> de lo que quitó (<em class="ui"
+            >Mostrar 5 meses en 0</em
+          >), que es como se vuelve atrás, y
+          <b>la nota al pie de la tarjeta también lo declara</b> — para que una captura de esa
+          gráfica no se lea como un año que solo tuvo seis meses.
+        </li>
+        <li>
+          Con varios años marcados, una columna <b>sobrevive si cualquiera de ellos la mueve</b>: el
+          eje es uno solo, y podar por el año que la dejó vacía borraría la barra del que sí
+          facturó.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <span class="label">Ni el plegado ni el interruptor cambian una sola cifra</span>
+        <p>
+          Son <strong>maneras de mirar</strong>, no filtros: no se guardan, no dejan chip, no acotan
+          el periodo y <strong>el informe en PDF sale con el eje entero</strong> y con las tres
+          tarjetas desplegadas, tengas lo que tengas plegado en pantalla. Un interruptor impreso es
+          un botón que nadie puede pulsar.
+        </p>
+      </div>
+
+      <h4>El informe en PDF</h4>
+      <p>
+        <em class="ui">Informe PDF</em>, arriba a la derecha de la pantalla, arma el documento con
+        <strong>las mismas tarjetas que estás viendo</strong> y las mismas marcas de la barra —el
+        papel no puede decir una cifra que la pantalla no diga—. Está apagado mientras el cliente no
+        tenga ningún mes cargado, y el botón dice qué falta.
+      </p>
+      <ul>
+        <li>
+          <strong>Cabecera:</strong> el cliente, la razón social que declaran sus archivos, el
+          periodo que cubre y la fecha en que se generó — que es lo que en pantalla dice la barra, y
+          en papel la barra ya no está. Va con el logo del cliente a la izquierda y el de su centro
+          de costo a la derecha, como el resto de documentos de la firma.
+        </li>
+        <li>
+          <strong>Dos hojas:</strong> las dos primeras secciones son tablas de tres columnas y caben
+          en vertical; la <b>evolución</b>, que son doce meses, se lleva su propia hoja
+          <b>apaisada</b>.
+        </li>
+        <li>
+          Cada sección imprime <b>su tabla y su gráfica juntas</b>, sin ningún control que elegir.
+        </li>
+        <li>
+          <strong>Lo único en que el papel se separa de la pantalla</strong> es la cola de
+          pagadores: en pantalla la tabla los lista todos, pero un archivo real trae cientos, que
+          serían más de veinte páginas de nombres detrás de un informe de dos. En el PDF la cola se
+          <b>pliega en una fila con su suma</b> —así la columna sigue cerrando contra el total— y
+          esa fila dice cuánto era el mayor de los que agrupa. En papel se imprimen los
+          <b>treinta mayores</b> y el resto va en esa fila.
+        </li>
+        <li>
+          Para guardarlo: <em class="ui">Guardar PDF</em> y en el diálogo de impresión
+          <b>Destino → Guardar como PDF</b>.
+        </li>
+      </ul>
+
+      <div class="callout warn">
+        <span class="label">Aquí no hay «Descargar Excel», y es a propósito</span>
+        <p>
+          En esta pantalla el Excel es la <strong>fuente</strong>, no el producto: lo que la firma
+          entrega es el PDF. Por eso el bloque de botones solo trae
+          <em class="ui">Cargar Excel</em> y el <b>ⓘ</b> con los formatos que acepta.
+        </p>
+        <p>
+          Y por eso mismo, <strong>tu respaldo aquí son los reportes originales</strong> —los que ya
+          guardas—, no una descarga del sistema. Es la única pantalla de la app donde el consejo del
+          capítulo 01 no aplica tal cual.
+        </p>
+      </div>
+
+      <div class="callout">
+        <span class="label">El atajo desde Gráficos</span>
+        <p>
+          Cuando el estado cargado viene de <b>MicroPlus</b> —el sistema que emite este reporte—, la
+          tarjeta <b>«Composición de los ingresos»</b> de la pestaña
+          <em class="ui">Gráficos</em> trae en su cabecera un enlace en fucsia a
+          <em class="ui">Ventas por servicio</em>. Es el mismo reparto del ingreso visto por el otro
+          lado, y el fucsia dice que ese control <b>sale</b> de la tarjeta en vez de acotarla. No
+          cruza ninguna cifra: lo único que viaja es el enlace.
+        </p>
+      </div>
     </section>
 
     <!-- ══ 04 ═══════════════════════════════════════════════ -->
@@ -2404,6 +2825,57 @@
                 </td>
               </tr>
               <tr>
+                <td class="k">
+                  «No parece el reporte “Venta de Servicios por FACTURA”: falta su título o su
+                  cabecera»
+                </td>
+                <td>
+                  El archivo que soltaste en <b>Ventas por servicio</b> no es ese reporte. Se exigen
+                  <b>dos señas</b> —el título y la cabecera de cuatro rótulos— justamente para que
+                  un balance, que también escribe <code>CODIGO</code> y <code>NOMBRE</code>, no se
+                  cuele.
+                </td>
+                <td>
+                  Exportar de nuevo el reporte de <b>ventas por servicio</b> del mes. Los estados de
+                  resultados se cargan en la pestaña <em class="ui">Datos</em>, no aquí.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">«El archivo no declara su periodo (Desde: y Hasta:)»</td>
+                <td>
+                  Ese reporte lleva su rango adentro y es de ahí de donde se toma el mes. Sin esas
+                  dos líneas no hay forma de saber a qué mes pertenece.
+                </td>
+                <td>
+                  Volver a exportarlo sin recortar el preámbulo.
+                  <b>Renombrar el archivo no sirve</b>: aquí el nombre no participa.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">«El rango no es un mes calendario completo»</td>
+                <td>
+                  El reporte cubre medio mes, o cruza dos. La carga de ventas es siempre de un mes
+                  entero.
+                </td>
+                <td>
+                  Exportarlo del día 1 al último del mes. Si necesitas dos meses, son dos archivos —
+                  y se pueden soltar los dos a la vez.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">
+                  «La suma de las … líneas leídas no coincide con el total del archivo»
+                </td>
+                <td>
+                  No es un rechazo: <b>el mes se cargó igual</b>. La suma de lo leído y la fila de
+                  cierre del propio reporte difieren, y el aviso dice en cuánto.
+                </td>
+                <td>
+                  Comparar contra el reporte: la diferencia puede ser suya. Quedarte sin los datos
+                  no ayudaría a averiguarlo, y por eso se carga y se avisa.
+                </td>
+              </tr>
+              <tr>
                 <td class="k">«La utilidad de … ya no coincide con la del archivo»</td>
                 <td>
                   No es un error. Ajustaste una celda y el total cambió respecto al archivo
@@ -2600,6 +3072,29 @@
                   La suma de varios: de los centros de un cliente, de las sucursales de un hotel o
                   de varios clientes entre sí. <b>Se calcula al vuelo y nunca se guarda</b>, así que
                   es siempre de solo lectura.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Línea de factura</td>
+                <td>
+                  Una fila del reporte de facturación: qué servicio, quién lo paga, cuánto y por
+                  cuánto. Es el grano de <b>Ventas por servicio</b> — un mes real trae miles.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Pagador</td>
+                <td>
+                  Quien paga una factura: una <b>aseguradora</b>, que se rotula con su nombre, o un
+                  <b>particular</b>, que sale como «Particular · 1» y sin nombre. El número sigue al
+                  monto, no al orden del archivo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">Facturado · Contabilizado</td>
+                <td>
+                  Dos cifras distintas que no tienen por qué cuadrar. Lo <b>facturado</b> sale del
+                  reporte de facturación; lo <b>contabilizado</b>, del estado de resultados, y
+                  difiere por tiempos de reconocimiento, notas de crédito e IVA.
                 </td>
               </tr>
               <tr>

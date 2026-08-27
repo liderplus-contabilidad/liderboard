@@ -827,14 +827,15 @@ export function buildGraficosCards(
   // La vista del anexo ocupa DOS ranuras de la lista: la primera, que es la que toda vista
   // predeterminada sustituye, y la del ranking — porque el ranking pregunta lo mismo sobre el
   // mismo universo, y dejar las dos imprimiría la misma lista dos veces. La composición de
-  // ingresos se queda donde está a propósito: el segundo denominador del anexo es el ingreso, así
+  // ingresos sigue en la lista a propósito: el segundo denominador del anexo es el ingreso, así
   // que tenerlo en pantalla es el contexto de la columna «% del ingreso».
   const [annexBars, annexPie] = annex
     ? expenseDistributionCards(annex, periodName, expenses.warnings, rankingEmptyNote)
     : [null, null];
 
-  // Las tres que cierran la lista se declaran aparte porque el anexo las REORDENA: son las mismas
-  // tarjetas en los dos casos, así que sacarlas del literal es lo que evita escribirlas dos veces.
+  // Las tres que cierran la lista se declaran aparte porque el anexo cambia CUÁLES salen —se lleva
+  // por delante el ranking y «Distribución»— dejando a las otras en su mismo orden: sacarlas del
+  // literal es lo que evita escribirlas dos veces.
   //
   // La composición se dibuja en BARRAS HORIZONTALES y no en una tarta, la misma forma del ranking
   // que tiene al lado: el reparto ya viene ordenado de mayor a menor, y una barra dice cuánto pesa
@@ -913,6 +914,24 @@ export function buildGraficosCards(
     height: 340,
   };
 
+  const distribucionCard: ChartCardSpec = {
+    id: "distribucion",
+    title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
+    guide: GUIDE_DISTRIBUTION,
+    subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
+    option:
+      distribution.series.length > 0 && parentTotal
+        ? stackedTotalOption(distribution.series, parentTotal, distributionContext)
+        : null,
+    table:
+      distribution.series.length > 0 && parentTotal
+        ? stackedTotalTable(distribution.series, parentTotal, distributionContext)
+        : EMPTY_TABLE,
+    warnings: children.warnings,
+    ...withNote(distributionNote || undefined),
+    height: 320,
+  };
+
   return {
     periods,
     periodName,
@@ -954,47 +973,16 @@ export function buildGraficosCards(
               ...withNote(describeShares(shares)),
               height: 300,
             }),
-      // «Distribución» se RINDE bajo el anexo. Reparte UNA cuenta entre sus hijas, y allí resuelve
-      // Ingresos —quince cuentas marcadas no son «exactamente una»—, así que bajo un anexo de
-      // GASTOS quedaba una tarjeta repartiendo ingresos que no tiene nada que ver con lo que se
-      // está leyendo. Se va entera en vez de reapuntarse a los gastos porque la pila por periodo ya
-      // la dan las otras dos: el reparto lo dicen la tarta y las barras, y en anual no hay evolución
-      // que apilar. Es la misma regla con la que un módulo entero desaparece de la barra cuando no
-      // tiene nada que decir, y por eso la lista puede traer cuatro tarjetas en vez de cinco.
+      // La COMPOSICIÓN precede al ranking: ambas son lecturas del mismo reparto, pero el estado
+      // se entiende mejor empezando por lo que entró. El ranking, con más filas, quedaba al final
+      // de una tarjeta más alta, donde el ojo ya no llega. Detrás sigue «Distribución», que abre
+      // el reparto periodo a periodo, y la CASCADA cierra mostrando el recorrido del ingreso al
+      // resultado. En el anexo, el ranking cede su lugar, manteniendo el orden lógico: composición
+      // y luego cascada. «Distribución» se omite bajo el anexo de gastos, ya que su lectura ya está
+      // cubierta por las otras tarjetas.
       ...(annex
-        ? []
-        : [
-            {
-              id: "distribucion",
-              title: parent ? `Distribución de ${parent.label}` : "Distribución de una cuenta",
-              guide: GUIDE_DISTRIBUTION,
-              subtitle: `${distribution.series.length} ${distribution.series.length === 1 ? "cuenta" : "cuentas"} · ${periodName}`,
-              option:
-                distribution.series.length > 0 && parentTotal
-                  ? stackedTotalOption(distribution.series, parentTotal, distributionContext)
-                  : null,
-              table:
-                distribution.series.length > 0 && parentTotal
-                  ? stackedTotalTable(distribution.series, parentTotal, distributionContext)
-                  : EMPTY_TABLE,
-              warnings: children.warnings,
-              ...withNote(distributionNote || undefined),
-              height: 320,
-            } satisfies ChartCardSpec,
-          ]),
-      // La COMPOSICIÓN va ANTES del ranking: las dos son el mismo reparto del tramo en la misma
-      // forma —barras ordenadas de mayor a menor—, y el estado se lee empezando por lo que entró.
-      // Además son quince filas contra seis: con el ranking primero, la composición quedaba al pie
-      // de una tarjeta del doble de alto, que es justo donde el ojo ya no llega. El informe impreso
-      // hereda este orden porque lee esta misma lista.
-      //
-      // Bajo el anexo el par no existe: el ranking cede su ranura a la tarjeta del anexo y ahí la
-      // que se adelanta es la CASCADA, que va del ingreso al resultado pasando por los gastos —la
-      // continuación del reparto que se acaba de leer—, mientras la composición se queda detrás
-      // como el contexto de la columna «% del ingreso».
-      ...(annex
-        ? [annexPie ?? rankingCard, cascadaCard, composicionCard]
-        : [composicionCard, rankingCard, cascadaCard]),
+        ? [annexPie ?? rankingCard, composicionCard, cascadaCard]
+        : [composicionCard, rankingCard, distribucionCard, cascadaCard]),
     ],
   };
 }

@@ -119,17 +119,17 @@ describe("el contrato de la lista", () => {
 
     expect(cards.map((card) => card.id)).toEqual([
       "evolucion",
-      "distribucion",
       "composicion",
       "ranking",
+      "distribucion",
       "cascada",
     ]);
   });
 
   it("la composición son BARRAS y no una tarta, la misma forma del ranking que sigue", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const composicion = cards[2];
-    const ranking = cards[3];
+    const composicion = cards[1];
+    const ranking = cards[2];
 
     // Las dos son el mismo reparto ordenado de mayor a menor: una tarta lo diría por un ángulo
     // que hay que estimar, y con los rótulos fuera y con línea guía apilados en un borde.
@@ -147,7 +147,7 @@ describe("el contrato de la lista", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     // El anexo, que SIGUE siendo una tarta, se queda con el lead por defecto.
-    expect(cards[2].note).toContain("Fuera del reparto —");
+    expect(cards[1].note).toContain("Fuera del reparto —");
   });
 
   it("Análisis declara tres, y la tabla de análisis vertical no es una de ellas", () => {
@@ -162,9 +162,9 @@ describe("el contrato de la lista", () => {
 
     expect(graficos.cards.map((card) => [card.title, card.height])).toEqual([
       ["Ingresos contra Costos y Gastos", 300],
-      ["Distribución de Ventas", 320],
       ["Composición de los ingresos", 320],
       ["Ranking de gastos", 520],
+      ["Distribución de Ventas", 320],
       ["Del ingreso a la utilidad", 340],
     ]);
     expect(analisis.cards.map((card) => [card.title, card.height])).toEqual([
@@ -250,7 +250,7 @@ describe("el periodo del que hablan las tarjetas", () => {
 
     expect(analisis.periodName).toBe(graficos.periodName);
     // La composición lo lleva desnudo; las demás lo llevan dentro de su frase.
-    expect(graficos.cards[2].subtitle).toBe("Ene–Jul");
+    expect(graficos.cards[1].subtitle).toBe("Ene–Jul");
     for (const card of [...graficos.cards.slice(0, 4), analisis.cards[0], analisis.cards[2]]) {
       expect(card.subtitle).toContain("Ene–Jul");
     }
@@ -485,9 +485,9 @@ describe("lo que marcan los filtros", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.1.1.1", "5.1.5"] }));
 
     // La composición queda con la única hoja de ingresos marcada…
-    expect(cards[2].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
+    expect(cards[1].table.rows.map((row) => row.id)).toEqual(["4.1.1.1.1.1"]);
     // …y el ranking con las cuatro que cuelgan de 5.1.5, sin el sueldo, que cuelga de 5.1.1.
-    expect(cards[3].table.rows.map((row) => row.id)).toEqual([
+    expect(cards[2].table.rows.map((row) => row.id)).toEqual([
       "5.1.5.12",
       "5.1.5.3",
       "5.1.5.7",
@@ -498,8 +498,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un gasto vacía la composición de ingresos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["5.1.5"] }));
 
-    expect(cards[2].option).toBeNull();
-    expect(cards[2].note).toBe(
+    expect(cards[1].option).toBeNull();
+    expect(cards[1].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Ingresos.",
     );
   });
@@ -507,8 +507,8 @@ describe("lo que marcan los filtros", () => {
   it("marcar solo un ingreso vacía el ranking de gastos, y lo dice", () => {
     const { cards } = buildGraficosCards(MANOR, withFilters({ codes: ["4.1.1.2"] }));
 
-    expect(cards[3].option).toBeNull();
-    expect(cards[3].note).toBe(
+    expect(cards[2].option).toBeNull();
+    expect(cards[2].note).toBe(
       "El filtro de cuentas marcadas no incluye ninguna cuenta de Costos y Gastos.",
     );
   });
@@ -582,7 +582,7 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
    */
   it("el ranking de gastos pinta la segunda barra con el segundo slot", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
-    const rows = cards[3].table.rows;
+    const rows = cards[2].table.rows;
 
     expect(rows.map((row) => row.id)).toEqual([
       "5.1.1.1.1",
@@ -598,22 +598,20 @@ describe("el color se resuelve DESPUÉS de rankear", () => {
   });
 
   /**
-   * La COLA del ranking —de la novena barra en adelante— no repite el neutro. El fixture solo
-   * llega a cinco gastos, así que lo que se prueba aquí es el resolver que la tarjeta usa, con la
-   * lista de quince que un plan real sí produce: las ocho primeras conservan sus ranuras y las
-   * siete siguientes salen todas distintas. La gemela en tabla lee el MISMO resolver, que es lo
-   * que ata cada punto de color a su barra.
+   * Las quince barras salen de quince tonos DISTINTOS. El fixture solo llega a cinco gastos, así
+   * que lo que se prueba aquí es el resolver que la tarjeta usa, con la lista de quince que un
+   * plan real sí produce: las ocho primeras conservan sus ranuras de identidad y las siguientes
+   * toman el set del periodo, sin repetir ninguna ni caer en el neutro. La gemela en tabla lee el
+   * MISMO resolver, que es lo que ata cada punto de color a su barra.
    */
-  it("de la novena barra en adelante la cola varía, en vez de repetir el neutro", () => {
+  it("las quince barras varían, en vez de repetir el neutro ni una sola gama", () => {
     const codes = Array.from({ length: CHART_RANKING_MAX }, (_, i) => `5.1.5.${i}`);
     const colorOf = rankingColorOf(codes);
     const colors = codes.map(colorOf);
 
     expect(colors.slice(0, CHART_PALETTE.length)).toEqual([...CHART_PALETTE]);
-    const tail = colors.slice(CHART_PALETTE.length);
-    expect(tail).toHaveLength(7);
-    expect(new Set(tail).size).toBe(7);
-    expect(tail).not.toContain(CHART_NEUTRAL);
+    expect(new Set(colors).size).toBe(CHART_RANKING_MAX);
+    expect(colors).not.toContain(CHART_NEUTRAL);
   });
 
   /**
@@ -744,7 +742,7 @@ describe("lo que cada tarjeta dice de sí misma", () => {
     const { cards } = buildGraficosCards(MANOR, emptyFilters());
 
     // Cinco gastos y el corte está en quince: no hay nada que declarar fuera de la lista.
-    expect(cards[3].note).toBeUndefined();
+    expect(cards[2].note).toBeUndefined();
   });
 });
 
@@ -942,7 +940,7 @@ describe("la vista predeterminada de líneas de negocio", () => {
 });
 
 describe("la distribución de una cuenta", () => {
-  const distribucionOf = (filters: PygFilters) => buildGraficosCards(MANOR, filters).cards[1];
+  const distribucionOf = (filters: PygFilters) => buildGraficosCards(MANOR, filters).cards[3];
 
   it("se titula por la cuenta que reparte y lista sus hijas de mayor a menor", () => {
     const card = distribucionOf(emptyFilters());
@@ -990,7 +988,7 @@ describe("la distribución de una cuenta", () => {
   });
 
   it("sin cobertura no dibuja nada", () => {
-    const card = buildGraficosCards(VACIO, emptyFilters()).cards[1];
+    const card = buildGraficosCards(VACIO, emptyFilters()).cards[3];
 
     expect(card.option).toBeNull();
     expect(card.table.rows).toEqual([]);
@@ -1097,11 +1095,11 @@ describe("la vista predeterminada de costos y gastos", () => {
     expect(cards.map((card) => [card.id, card.title])).toEqual([
       ["evolucion", "Distribución de costos y gastos"],
       ["ranking", "Distribución de costos y gastos %"],
-      // La cascada se ADELANTA: va del ingreso al resultado pasando por los gastos, así que es la
-      // continuación del reparto que se acaba de leer. La composición de ingresos se queda detrás,
-      // como contexto de la columna «% del ingreso».
-      ["cascada", "Del ingreso a la utilidad"],
+      // Detrás del anexo el orden es el MISMO que fuera de él: la composición dice de qué está
+      // hecho lo que entró —y es el contexto de la columna «% del ingreso»— y la cascada cierra
+      // con el recorrido del ingreso al resultado.
       ["composicion", "Composición de los ingresos"],
+      ["cascada", "Del ingreso a la utilidad"],
     ]);
     // «Distribución» reparte UNA cuenta y con quince marcadas resolvía Ingresos: bajo un anexo de
     // gastos era una tarjeta repartiendo ingresos que no tiene que ver con lo que se está leyendo.
@@ -1115,9 +1113,9 @@ describe("la vista predeterminada de costos y gastos", () => {
 
     expect(cards.map((card) => card.title)).toEqual([
       "Ingresos contra Costos y Gastos",
-      "Distribución de Ventas",
       "Composición de los ingresos",
       "Ranking de gastos",
+      "Distribución de Ventas",
       "Del ingreso a la utilidad",
     ]);
   });

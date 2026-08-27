@@ -3,12 +3,12 @@
 Documentos destinados al **cliente**, no al desarrollo interno. Cada archivo de esta carpeta se
 entrega tal cual: se abre en el navegador sin servidor, sin dependencias y sin conexión.
 
-| Documento                                            | Contenido                                                                                    |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`manual-usuario.html`](./manual-usuario.html)       | Guía por tarea para quien usa el sistema, con capturas de cada pantalla.                     |
-| [`manual-tecnico.html`](./manual-tecnico.html)       | Arquitectura, tecnologías, diagramas ER de las tres bases IndexedDB y diccionario de datos.  |
-| [`manual-despliegue.html`](./manual-despliegue.html) | Instalación local, publicación en Vercel y la operativa de datos en el navegador.            |
-| [`documento-entrega.html`](./documento-entrega.html) | Cierre del proyecto: qué se entrega, cómo se verificó, qué queda fuera y quién lo construyó. |
+| Documento                                            | Contenido                                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`manual-usuario.html`](./manual-usuario.html)       | Guía por tarea para quien usa el sistema, con capturas de cada pantalla.                      |
+| [`manual-tecnico.html`](./manual-tecnico.html)       | Arquitectura, tecnologías, diagramas ER de las cuatro bases IndexedDB y diccionario de datos. |
+| [`manual-despliegue.html`](./manual-despliegue.html) | Instalación local, publicación en Vercel y la operativa de datos en el navegador.             |
+| [`documento-entrega.html`](./documento-entrega.html) | Cierre del proyecto: qué se entrega, cómo se verificó, qué queda fuera y quién lo construyó.  |
 
 No aplica un manual de API: la aplicación no expone ni consume ninguna — sin backend, sin
 peticiones de red y sin variables de entorno. Se evaluó y se descartó, no se omitió.

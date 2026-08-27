@@ -304,6 +304,70 @@ describe("el eje de la evolución obedece la marca de Mes", () => {
   });
 });
 
+describe("«Ocultar meses en 0» quita del eje las columnas sin facturación", () => {
+  function year(amounts: Record<number, number>, y = 2026) {
+    return {
+      year: y,
+      points: Array.from({ length: 12 }, (_unused, monthIndex) => ({
+        monthIndex,
+        amount: monthIndex in amounts ? amounts[monthIndex] : null,
+      })),
+    };
+  }
+  function spec(years: ReturnType<typeof year>[]): SalesCardsInput {
+    const reading = readSales([line({ amount: 1 })]);
+    return {
+      reading,
+      byYear: years.map((entry) => ({ year: entry.year, reading })),
+      period: years.map((entry) => entry.year).join(", "),
+      monthlyByYear: years,
+    };
+  }
+
+  it("se van juntos el mes que nunca llegó y el que llegó en cero", () => {
+    const input = spec([year({ 0: 500, 1: 0, 3: 300 })]);
+
+    expect(buildSalesCards(input).evolution.table.columns).toHaveLength(12);
+    expect(buildSalesCards(input, { hideEmptyMonths: true }).evolution.table.columns).toEqual([
+      "Ene",
+      "Abr",
+    ]);
+  });
+
+  it("una columna sobrevive si CUALQUIER año marcado la mueve", () => {
+    const cards = buildSalesCards(spec([year({ 0: 500 }), year({ 1: 400 }, 2025)]), {
+      hideEmptyMonths: true,
+    });
+
+    expect(cards.evolution.table.columns).toEqual(["Ene", "Feb"]);
+    expect(cards.evolution.table.rows.map((row) => row.values)).toEqual([
+      ["$500.00", "–"],
+      ["–", "$400.00"],
+    ]);
+  });
+
+  it("`emptyMonths` se cuenta sobre el eje SIN podar, así el botón no se esfuma al pulsarlo", () => {
+    const input = spec([year({ 0: 500, 3: 300 })]);
+
+    expect(buildSalesCards(input).emptyMonths).toBe(10);
+    expect(buildSalesCards(input, { hideEmptyMonths: true }).emptyMonths).toBe(10);
+  });
+
+  it("la nota DICE lo que quitó: un eje encogido en silencio se lee como un año de dos meses", () => {
+    const note = buildSalesCards(spec([year({ 0: 500, 3: 300 })]), { hideEmptyMonths: true })
+      .evolution.note;
+
+    expect(note).toContain("Se ocultaron 10 meses sin facturación");
+  });
+
+  it("el informe NO hereda la poda: construye con la misma entrada y sin estas opciones", () => {
+    // Un interruptor impreso es un botón que nadie puede pulsar, la regla del informe de PyG.
+    const input = spec([year({ 0: 500, 3: 300 })]);
+
+    expect(buildSalesCards(input).evolution.table.columns).toHaveLength(12);
+  });
+});
+
 describe("barras CON línea en la evolución", () => {
   function spec(years: number[], monthCount: number) {
     const points = Array.from({ length: monthCount }, (_unused, monthIndex) => ({
@@ -355,5 +419,46 @@ describe("barras CON línea en la evolución", () => {
     expect(buildSalesCards(spec([2025, 2026], 12)).evolution.option?.xAxis).toMatchObject({
       boundaryGap: true,
     });
+  });
+});
+
+describe("la guía del ⓘ", () => {
+  const lines = [line({ amount: 60 }), line({ serviceCode: "\\02", amount: 40 })];
+
+  it("las tres tarjetas la traen, con su para qué y sus controles, en las dos formas", () => {
+    const formas = [
+      buildSalesCards(input(lines)),
+      buildSalesCards(
+        comparing([
+          { year: 2025, lines },
+          { year: 2026, lines },
+        ]),
+      ),
+    ];
+
+    for (const cards of formas) {
+      for (const card of [cards.services, cards.payers, cards.evolution]) {
+        expect(card.guide?.purpose, card.title).toBeTruthy();
+        expect(card.guide?.actions.length ?? 0, card.title).toBeGreaterThan(0);
+        for (const action of card.guide?.actions ?? []) {
+          expect(action.control, card.title).toBeTruthy();
+          expect(action.effect, card.title).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("cada guía describe SU tarjeta y no la de al lado", () => {
+    const { services, payers, evolution } = buildSalesCards(input(lines));
+    const purposes = [services, payers, evolution].map((card) => card.guide?.purpose);
+    expect(new Set(purposes).size).toBe(3);
+  });
+
+  it("solo nombra controles que existen en esta pantalla", () => {
+    const cards = buildSalesCards(input(lines));
+    const controls = [cards.services, cards.payers, cards.evolution].flatMap((card) =>
+      (card.guide?.actions ?? []).map((action) => action.control),
+    );
+    expect(new Set(controls)).toEqual(new Set(["Año", "Mes", "Ver como tabla"]));
   });
 });

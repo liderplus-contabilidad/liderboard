@@ -919,11 +919,11 @@ un total.
 
 La vista ocupa DOS ranuras de la lista: la primera, que es la que toda vista sustituye, y la del
 **ranking**, porque pregunta lo mismo sobre el mismo universo y dejar las dos imprimiría la lista dos
-veces. **La CASCADA se adelanta a la composición de ingresos**, porque es la que continúa la
-lectura: va del ingreso al resultado pasando por los gastos, que es justo el reparto que se acaba de
-leer, mientras que la composición de ingresos se queda detrás como contexto de la columna «% del ingreso».
-Fuera del anexo el orden es el de siempre, así que las dos se declaran aparte del literal y la lista
-las intercambia — son la misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
+veces. **Detrás de ella el orden es el MISMO que fuera del anexo**: primero la composición de los
+ingresos —de qué está hecho lo que entró, que además es el contexto de la columna «% del ingreso»— y
+la cascada al final, porque va del ingreso al resultado y es el cierre de la lectura. Las dos se
+declaran aparte del literal porque lo que el anexo cambia es CUÁLES salen, no en qué orden — son la
+misma tarjeta en los dos casos. **Y RINDE la de «Distribución»**, que reparte UNA cuenta entre sus hijas y
 con quince marcadas resuelve Ingresos: bajo un anexo de GASTOS quedaba una tarjeta repartiendo
 ingresos sin relación con lo que se está leyendo. Se va entera en vez de reapuntarse a los gastos
 porque su lectura ya la dan las otras dos —el reparto lo dicen la tarta y las barras, y en anual no
@@ -1112,7 +1112,10 @@ apagadas, que es el único sitio desde el que se vuelven a encender.
 
 **«Distribución» es la tercera lectura de la composición y no repite a las otras dos**: la dona dice
 de qué se compone el TRAMO entero y el ranking cuáles son las más grandes, pero solo un apilado por
-periodo dice si una hija está ganando peso mes a mes. `lib/profit-loss/charts/distribution.ts` (puro y
+periodo dice si una hija está ganando peso mes a mes. Por eso va TERCERA y no segunda —composición,
+ranking, distribución y la cascada al final—: es la tercera lectura del mismo reparto, así que se
+lee después de saber de qué está hecho el tramo entero, y la cascada cierra porque va del ingreso al
+resultado. `lib/profit-loss/charts/distribution.ts` (puro y
 testeado) toma las dos decisiones que pueden estar mal. **Qué cuenta se reparte** es por quinta vez la
 figura de `resolveActiveCenterId` —exactamente una marcada es esa cuenta, ninguna o varias es
 Ingresos—, y luego DESCIENDE mientras haya una sola hija: un plan real encadena `4 → 4.1` y `5 → 5.1`,
@@ -1692,7 +1695,32 @@ soporte poda como se lee. Lo que NO se hace es truncar a secas: la cola se PLIEG
 suma, así que la columna sigue cerrando contra el TOTAL —una tabla recortada cuyas filas no suman su
 propio total es justo lo que hace desconfiar de un documento—, esa fila dice cuánto era el mayor de
 los que agrupa (que es la pregunta que un pliegue levanta), y la nota al pie cambia para declararlo
-en vez de prometer una lista completa que el papel ya no trae. **NO hay descarga de Excel**, y la forma del control lo refleja sola —`ExcelActions` la
+en vez de prometer una lista completa que el papel ya no trae.
+
+**Cada tarjeta explica SU lectura en el `ⓘ` de su cabecera**, y esa copy vive en `lib/sales/
+guides.ts` —aparte de `cards.ts`, donde sería texto entre cálculo—, la misma vecindad que
+`profit-loss/charts/guides.ts`. Se ENGANCHA en `cards.ts` y no en un mapa por `id` en la vista, y
+eso es lo que la salva del modo de fallo real: una tarjeta de aquí **cambia de forma según cuántos
+años estén marcados**, así que un mapa por `id` acabaría describiendo la lectura que NO está en
+pantalla. Las tres reglas de redacción son las de PyG, y la primera es la que más pesa en este
+subitem: **en llano**. Quien lo lee está cotejando contra su reporte de facturación, así que «quién
+paga» y no «pagador agregado», «los meses que no cargaste» y no «meses sin cobertura».
+
+**Las tres tarjetas PLIEGAN**, con la flecha de su cabecera y un «Cerrar todos» sobre la esquina
+donde están esas flechas, el mismo `useCollapsedCards` de Gráficos y por el mismo motivo: tres
+gráficas obligan a bajar hasta el final para leer la última. **Y la evolución lleva su «Ocultar meses
+en 0»**, que quita del eje las columnas sin facturación —las que nunca llegaron y las que llegaron en
+cero, que en pantalla son la misma columna vacía; para el módulo siguen siendo distintas, porque el
+interruptor decide qué se DIBUJA y no qué está cargado—. Vive en la CABECERA de esa tarjeta y no en
+la barra ni junto al «Cerrar todos»: lo lee UNA sola, la regla del «Ver por» de Ocupaciones. Solo
+asoma si hay algo que ocultar, `emptyMonths` se cuenta siempre sobre el eje SIN podar —así el botón
+no se esfuma justo al pulsarlo—, encendido lleva la cuenta de lo que quitó y la nota de la tarjeta lo
+declara también, porque la nota es lo que viaja con ella. Una columna sobrevive si CUALQUIER año
+marcado la mueve: el eje es uno solo, y podar por el año que la dejó vacía borraría la barra del que
+sí facturó. Es `SalesCardsOptions` y no un campo de `SalesCardsInput` a propósito — el informe
+construye estas mismas tarjetas con esa entrada y sin las opciones, así que el papel sigue sacando el
+eje entero, la regla del informe de PyG: un interruptor impreso es un botón que nadie puede pulsar.
+**NO hay descarga de Excel**, y la forma del control lo refleja sola —`ExcelActions` la
 deriva de cuántas opciones recibe—: aquí el Excel es la FUENTE y la pantalla lee; lo que la firma
 entrega es este PDF.
 
@@ -1783,33 +1811,33 @@ UI are:
   `CHART_COMPOSITION_MAX` es además el corte que `toPieSlices` recibe, en vez de un 6 suelto, para
   que «Otros» caiga siempre en la última ranura y ninguna fila se quede sin tono. Medido: banda
   PASS, croma PASS, CVD ΔE 15.0, visión normal ΔE 16.2.
-- **`CHART_RANKING_TAIL_RAMP` es la COLA del «Ranking de gastos», que pasó de 8 barras a 15.** Las
-  ocho primeras se pintan como siempre, con `CHART_PALETTE`: ahí el color sigue haciendo su trabajo
-  y la tarjeta no cambia de aspecto. El problema empieza en la NOVENA, donde `colorForEntity`
-  devuelve `CHART_NEUTRAL` — las siete últimas salían del mismo gris, siete barras iguales y siete
-  puntos iguales en la gemela en tabla, justo al fondo de la lista, que es donde se mira para saber
-  qué recortar. La cola no se arregla con siete hues nuevos: un noveno tono de identidad es lo que
-  la paleta prohíbe, y quince tonos separables no existen. Se arregla dándole a la cola lo que la
-  cola ES —un tramo ORDENADO y no siete entidades—, así que ahí el color sigue al PUESTO, la cuarta
-  vez que deja de seguir a la entidad. Son siete pasos de una sola gama **verde lima** (pedida por
-  la firma) de oscuro a claro, y dos cosas la dejan convivir con las ocho de arriba: **un solo hue**
-  (128°, solo cambia el tono), que es justo lo que la distingue de un set de identidad y lo que la
-  hace leerse como tramo, y que sea **APAGADA** — cada paso por debajo del croma de TODAS las
-  ranuras (0.08–0.118 contra un mínimo de 0.162). Son las barras más pequeñas: un verde vivo las
-  habría puesto por delante de las ocho, al revés de lo que la lista dice. El croma es también lo
-  que la separa de los dos verdes de identidad y del oliva de `--color-section-income` (h 124), el
-  vecino más cercano y el que merece decirse: en Datos el verde significa «ingresos» y aquí es la
-  cola de un ranking de GASTOS — convive porque nunca coinciden en pantalla (esa lectura de bloque
-  solo la hace `CHART_SECTION`, y solo comparando raíces) y porque la cola es visiblemente más
-  apagada. **El extremo claro lo fija una medición**: para en L 0.756 (2.13:1, el piso de 2:1 que
-  una escala ordinal exige de su paso claro) porque ese paso le toca a la barra MÁS CORTA de las
-  quince y seguir aclarando la borraba del papel — y el verde llega antes a ese piso que un azul,
-  porque pesa 0.7152 en la luminancia contra 0.0722. Medido: **monotonía en luminosidad PASS**
-  (0.496 → 0.756) — la banda, el piso de croma y la separación CVD/visión normal entre vecinos NO
-  se cumplen y no deben cumplirse, porque son los checks de un set CATEGÓRICO y el propio validador
-  los declara fuera de alcance para una rampa.
-  `CHART_RANKING_MAX` se DERIVA (8 + 7) y `EXPENSE_RANKING_SIZE` es ese número, no un 15 suelto,
-  así que ninguna barra dibujada puede quedarse sin tono; el resto de rankings sigue en
+- **`CHART_RANKING_SEQUENCE` son los tonos del «Ranking de gastos», que pasó de 8 barras a 15.** Las
+  ocho primeras se pintan como siempre, con `CHART_PALETTE`, y eso no es inercia: un plan que no
+  llega a nueve cuentas de gasto no ve nunca la cola, así que la tarjeta no cambia de aspecto hasta
+  la NOVENA barra. Ahí es donde ha estado el problema, y ha tenido DOS formas. Primero
+  `colorForEntity` devolvía `CHART_NEUTRAL` de la novena en adelante — siete barras del mismo gris y
+  siete puntos iguales en la gemela en tabla, justo al fondo de la lista, que es donde se mira para
+  saber qué recortar. Se arregló dándole a la cola lo que la cola ES —un tramo ORDENADO y no siete
+  entidades—, con siete pasos de una sola gama verde lima de oscuro a claro; eso quitaba el gris
+  pero no el defecto, porque un mismo tono repetido a siete luminosidades sigue leyéndose como una
+  mancha. Lo que la firma pide es lo que su propia tarta del anexo ya hace: **que los tonos SEAN
+  DISTINTOS**. Así que la cola dejó de ser una rampa y pasa a ser la continuación de la secuencia —
+  los DOCE decorativos de `CHART_PERIOD_PALETTE` detrás de las ocho de identidad, veinte ranuras sin
+  repetir una sola, de las que se dibujan quince. **Por qué ese set y no el de la tarta**:
+  `CHART_SLICE_SEQUENCE` arranca con los seis cálidos de «Composición de los ingresos», que es la
+  tarjeta que va JUSTO ENCIMA del ranking en la misma pantalla, y como en las dos el color va por
+  PUESTO y no por entidad, seis barras del mismo tono que sus seis filas se leerían como si la
+  primera de una fuera la primera de la otra; los tres sets son disjuntos, así que empezar por
+  identidad es lo que evita el choque. **Y sí, `CHART_PERIOD_PALETTE` es el set DECORATIVO**, el del
+  «nunca para series», cuya separación CVD entre vecinos no cierra: la excepción se paga con el
+  mismo relieve con el que la paga la dona del anexo, y es que cada barra lleva su cuenta rotulada y
+  su monto al lado y la tarjeta tiene su gemela en tabla con las quince cifras. El color no es la
+  lectura —el orden lo dicen la posición de la fila y la longitud de la barra—; lo único que hace es
+  que la cola no sea una mancha, y quien no distinga dos de esos tonos no pierde nada.
+  `CHART_RANKING_MAX` (15) es ahora un corte de LEGIBILIDAD que se DECLARA —la secuencia da veinte,
+  así que ya no coincide con ella— y `EXPENSE_RANKING_SIZE` es ese número, no un 15 suelto; que
+  ninguna barra dibujada se quede sin tono pasó de ser una identidad accidental (8 + 7) a un
+  invariante escrito en el test (`CHART_RANKING_MAX` ≤ la secuencia). El resto de rankings sigue en
   `RANKING_SIZE` (8), que es lo que da la paleta con la que se pintan. La tarjeta subió a 520 px
   —la misma densidad de ~34 px por fila, no una tarjeta más grande—, va **después** de «Composición
   de los ingresos» (las dos son el mismo reparto en la misma forma, y el estado se lee empezando por

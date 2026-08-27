@@ -74,6 +74,8 @@ interface SalesDataValue {
    */
   cardsInput: SalesCardsInput;
   cards: SalesCards;
+  hideEmptyMonths: boolean;
+  toggleEmptyMonths: () => void;
   toggleYear: (year: number) => void;
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
@@ -89,6 +91,7 @@ const NO_MONTHS: SalesMonth[] = [];
 export function SalesDataProvider({ children }: { children: ReactNode }) {
   const { activeClientId, activeClient, isConsolidated } = usePygData();
   const [rawFilters, setRawFilters] = useState<SalesFilters>(emptyFilters);
+  const [hideEmptyMonths, setHideEmptyMonths] = useState(false);
   const clientId = isConsolidated ? null : activeClientId;
 
   // La ÚNICA consulta, y siempre acotada por el cliente: es lo que impide que la facturación de
@@ -172,7 +175,12 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
     () => ({ reading, byYear, period: periodName, monthlyByYear }),
     [reading, byYear, periodName, monthlyByYear],
   );
-  const cards = useMemo(() => buildSalesCards(cardsInput), [cardsInput]);
+
+  const cards = useMemo(
+    () => buildSalesCards(cardsInput, { hideEmptyMonths }),
+    [cardsInput, hideEmptyMonths],
+  );
+  const toggleEmptyMonths = useCallback(() => setHideEmptyMonths((current) => !current), []);
 
   const toggleYear = useCallback(
     (year: number) => setRawFilters((current) => withYearToggled(current, year, years)),
@@ -219,6 +227,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       reading,
       cardsInput,
       cards,
+      hideEmptyMonths,
+      toggleEmptyMonths,
       toggleYear,
       selectAllYears,
       toggleMonth,
@@ -238,6 +248,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       reading,
       cardsInput,
       cards,
+      hideEmptyMonths,
+      toggleEmptyMonths,
       toggleYear,
       selectAllYears,
       toggleMonth,
