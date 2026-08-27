@@ -58,7 +58,7 @@ describe("buildSalariesCard", () => {
     );
 
     expect(card.table.rows[0].sublabel).toBe("RECEPCIONISTA");
-    // La gráfica no lo dibuja: en una leyenda competiría con el nombre.
+    // The chart does not draw it: in a legend it would compete with the name.
     expect(card.option?.series[0].name).toBe("SANDOVAL");
   });
 
@@ -67,7 +67,7 @@ describe("buildSalariesCard", () => {
       grid({ rows: [row("area:VENTAS", "VENTAS", [null, 725.07])], total: null }),
     );
 
-    // La raya que escribe la hoja del contador, no una celda en blanco ni `$0.00`.
+    // The dash the accountant's sheet writes, not a blank cell nor `$0.00`.
     expect(card.table.rows[0].values[0]).toBe("–");
     expect(card.table.rows[0].values[1]).toBe("$725.07");
   });
@@ -120,8 +120,8 @@ describe("el tope de series", () => {
   });
 
   it("las dibujadas conservan el orden de la tabla, no el del ranking", () => {
-    // El ranking es descendente por importe (11, 10, 9…); la tabla las lista 5, 6, 7… y la gráfica
-    // tiene que seguirla para que las dos se lean en paralelo.
+    // The ranking is descending by amount (11, 10, 9…); the table lists them 5, 6, 7… and the chart
+    // has to follow it so the two can be read in parallel.
     const drawn = (card.option?.series.map((s) => s.name) ?? []).filter((n) => n !== "SUBTOTAL");
     const tableOrder = many.map((r) => r.label).filter((label) => drawn.includes(label));
 
@@ -129,11 +129,11 @@ describe("el tope de series", () => {
   });
 
   it("la tabla lista TODAS las filas", () => {
-    expect(card.table.rows).toHaveLength(13); // 12 empleados + el cierre
+    expect(card.table.rows).toHaveLength(13); // 12 employees + the closing row
   });
 
   it("la tarjeta declara cuántas no dibujó", () => {
-    // Siete ranuras para empleados (la octava es el cierre), así que quedan cinco fuera.
+    // Seven slots for employees (the eighth is the closing row), so five are left out.
     expect(card.note).toContain("5 que no se dibujaron");
   });
 

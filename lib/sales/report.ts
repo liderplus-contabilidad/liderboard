@@ -1,14 +1,15 @@
 /**
- * El informe imprimible de «Ventas por servicio»: qué secciones lleva, en qué orden y qué escribe
- * su cabecera. Puro —no calcula ninguna cifra propia— y por eso testeable sin montar un gráfico.
+ * The printable report of «Ventas por servicio»: which sections it carries, in what order and what its
+ * header writes. Pure —it computes no figure of its own— and therefore testable without mounting a
+ * chart.
  *
- * **Son las MISMAS tarjetas de la pantalla**, `buildSalesCards` con las mismas marcas del usuario,
- * y eso es lo único que garantiza que el papel no pueda decir una cifra que la pantalla no diga:
- * una segunda derivación del reparto por servicio podría separarse de la primera sin que nada lo
- * delatara, y quien recibe el PDF ya no tiene la pantalla al lado para cotejar.
+ * **They are the SAME cards as the screen's**, `buildSalesCards` with the user's same marks, and that
+ * is the only thing that guarantees the paper cannot say a figure the screen does not say: a second
+ * derivation of the breakdown by service could drift from the first with nothing giving it away, and
+ * whoever receives the PDF no longer has the screen beside them to check against.
  *
- * Lo que la cabecera escribe es lo que en pantalla dice la BARRA, que en papel ya no está: el
- * cliente, el periodo que cubre el informe y la fecha en que se generó.
+ * What the header writes is what the BAR says on screen, which is no longer there on paper: the
+ * client, the period the report covers and the date it was generated.
  */
 import type { ChartCardSpec } from "@/lib/charts/types";
 import { formatTimestampEs } from "@/lib/date";
@@ -16,14 +17,14 @@ import type { EntityLogo } from "@/lib/workspaces";
 import { buildSalesCards, PAYER_TABLE_PRINT_LIMIT, type SalesCardsInput } from "./cards";
 
 export interface SalesReportHeader {
-  /** La etiqueta que el usuario le dio al cliente — nunca la razón social de ningún archivo. */
+  /** The label the user gave the client — never the razón social of any file. */
   clientName: string;
-  /** La razón social que DECLARAN los archivos, cuando la hay: es lo que identifica de qué empresa
-   *  es esta facturación, y en papel no está el selector que lo diría. */
+  /** The razón social the files DECLARE, when there is one: it is what identifies which company this
+   *  billing belongs to, and on paper the selector that would say it is not there. */
   companyName?: string;
-  /** El de la IZQUIERDA, del cliente — el mismo reparto de `letterheadLogos`. */
+  /** The LEFT-hand one, the client's — `letterheadLogos`' same layout. */
   logo?: EntityLogo;
-  /** El de la DERECHA, del centro de costo que el cliente haya declarado. */
+  /** The RIGHT-hand one, of the cost center the client may have declared. */
   rightLogo?: EntityLogo;
   /** «Abril 2026», «Ene–Abr 2026», «Ene, Mar, Abr 2026». */
   periodLabel: string;
@@ -31,7 +32,7 @@ export interface SalesReportHeader {
 }
 
 export interface SalesReportSection {
-  /** Estable e independiente del texto: es la clave de React y lo que nombra un test. */
+  /** Stable and independent of the text: it is React's key and what a test names. */
   id: string;
   card: ChartCardSpec;
 }
@@ -50,13 +51,13 @@ export interface BuildSalesReportInput extends SalesCardsInput {
 }
 
 /**
- * Las TRES lecturas, en el orden en que se leen en pantalla. Ninguna se omite por estar vacía: un
- * informe que perdiera la evolución no diría que el año está a medias, diría que no hay evolución
- * — y la tarjeta ya sabe explicarse sola cuando no tiene nada que dibujar.
+ * The THREE readings, in the order they are read on screen. None is omitted for being empty: a report
+ * that lost the evolution would not say the year is half-loaded, it would say there is no evolution —
+ * and the card already knows how to explain itself when it has nothing to draw.
  */
 export function buildSalesReport(input: BuildSalesReportInput): SalesReport {
-  // El ÚNICO sitio en el que el papel se separa de la pantalla, y lo decide el informe y no la
-  // tarjeta: la cola de pagadores se pliega en una fila con su suma. Ver `PAYER_TABLE_PRINT_LIMIT`.
+  // The ONLY place the paper parts ways with the screen, and it is decided by the report and not by
+  // the card: the payer tail is folded into one row with its sum. See `PAYER_TABLE_PRINT_LIMIT`.
   const cards = buildSalesCards({ ...input, payerTableLimit: PAYER_TABLE_PRINT_LIMIT });
   return {
     header: {

@@ -24,13 +24,13 @@ import type { EntityLogo } from "@/lib/logos";
  * than not announcing it at all.
  */
 export interface ReportLayerProps {
-  /** Nombre sugerido del PDF — se convierte en `document.title` mientras la capa está abierta y
-   *  se restaura al cerrarse, también cuando se cierra sin haber impreso. */
+  /** The PDF's suggested name — it becomes `document.title` while the layer is open and is restored
+   *  on closing, including when it is closed without printing. */
   fileName: string;
   onClose: () => void;
-  /** Controles propios del informe, delante de «Guardar PDF» — el «Detalle» de PyG entra por aquí. */
+  /** The report's own controls, ahead of «Guardar PDF» — PyG's «Detalle» comes in through here. */
   controls?: ReactNode;
-  /** Una nota breve bajo la barra, alineada a la derecha — cuántas tablas u hojas trae el informe. */
+  /** A short note under the bar, right-aligned — how many tables or sheets the report carries. */
   note?: ReactNode;
   children: ReactNode;
 }
@@ -72,9 +72,9 @@ export function ReportLayer({ fileName, onClose, controls, note, children }: Rep
   );
 }
 
-/** La hoja sobre la que se dibuja una sección: A4 vertical, o apaisada a su ancho real (1123 px) —
- *  nunca contenido desbordando la vertical, que en pantalla se leería como una tabla escapándose
- *  del papel. */
+/** The sheet a section is drawn on: A4 portrait, or landscape at its real width (1123 px) — never
+ *  content overflowing the portrait one, which on screen would read as a table escaping the
+ *  paper. */
 export function ReportSheet({ children, landscape }: { children: ReactNode; landscape?: boolean }) {
   return (
     <div
@@ -93,19 +93,19 @@ export function ReportSheet({ children, landscape }: { children: ReactNode; land
 }
 
 /**
- * LA BANDA DE UN INFORME — el mismo membrete que encabeza los Excel, en papel: el logo del cliente
- * pegado al borde izquierdo, el bloque de título CENTRADO y el logo del centro pegado al borde
- * derecho de lo que encabeza.
+ * A REPORT'S BAND — the same letterhead that heads the Excel files, on paper: the client's logo stuck
+ * to the left edge, the title block CENTRED and the center's logo stuck to the right edge of what it
+ * heads.
  *
- * Vive aquí y no en `profit-loss/` porque la usan los dos informes y los tres sitios de uno de
- * ellos —la portada, cada estado y el análisis vertical—, y tres versiones de «dónde va el logo»
- * acabarían poniéndolo en tres sitios distintos. No sabe nada de lo que encabeza: el título entra
- * como `children` y el cromado, como `className`, que es lo que deja a la portada ir sin relleno y
- * a una tabla llevarlo.
+ * It lives here and not in `profit-loss/` because both reports use it and all three places of one of
+ * them —the cover, each statement and the vertical analysis—, and three versions of «where the logo
+ * goes» would end up putting it in three different places. It knows nothing about what it heads: the
+ * title comes in as `children` and the chrome as `className`, which is what lets the cover go with no
+ * padding and a table carry it.
  *
- * **Centra de verdad**: las dos columnas de los logos son `1fr` iguales, así que el título cae en
- * el eje de la tabla aunque los logos midan distinto — con un `ml-auto` se habría centrado en lo
- * que sobra, que es otra cosa.
+ * **It centres for real**: the two logo columns are equal `1fr`s, so the title falls on the table's
+ * axis even if the logos measure differently — with an `ml-auto` it would have been centred in what
+ * is left over, which is another thing.
  */
 export function ReportBand({
   leftLogo,
@@ -114,12 +114,12 @@ export function ReportBand({
   className,
   children,
 }: {
-  /** El del CLIENTE, a la izquierda. */
+  /** The CLIENT's, on the left. */
   leftLogo?: EntityLogo | undefined;
-  /** El del CENTRO que se encabeza, a la derecha. El Consolidado no tiene. */
+  /** The one of the CENTER being headed, on the right. The Consolidado has none. */
   rightLogo?: EntityLogo | undefined;
-  /** El alto del logo, en px. El de una tabla es el de su cabecera y ni uno más: un membrete que
-   *  engorda la banda le quita al estado las filas que la página tenía justas. */
+  /** The logo's height, in px. A table's is that of its header and not a pixel more: a letterhead
+   *  that fattens the band takes from the statement the rows the page had just enough of. */
   logoHeight?: number;
   className?: string;
   children: ReactNode;
@@ -138,19 +138,19 @@ export function ReportBand({
 }
 
 /**
- * Un logo de la banda, o nada. El ancho lo pone la proporción del propio logo (`w-auto` con el alto
- * fijo), que es el mismo `contain` que `fitLogoBox` aplica en el Excel y en el PDF del comprobante
- * — aquí lo resuelve el navegador porque hay caja donde resolverlo.
+ * One logo of the band, or nothing. The width is set by the logo's own proportion (`w-auto` with a
+ * fixed height), which is the same `contain` `fitLogoBox` applies in the Excel and in the payslip PDF
+ * — here the browser resolves it because there is a box in which to resolve it.
  *
- * El `alt` va VACÍO: el nombre del cliente está en el título de al lado y el del centro, en su
- * rótulo, así que un texto alternativo lo repetiría en voz alta.
+ * The `alt` is EMPTY: the client's name is in the title next to it and the center's is in its label,
+ * so alternative text would repeat it out loud.
  */
 function BandLogo({ logo, height }: { logo: EntityLogo | undefined; height: number }) {
   if (!logo) {
     return null;
   }
   return (
-    // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta.
+    // No `next/image`: the source is a data URL from IndexedDB, not an asset with a path.
     // oxlint-disable-next-line next/no-img-element
     <img
       src={logo.dataUrl}

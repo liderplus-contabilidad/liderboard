@@ -57,21 +57,21 @@ export type StagedUpload =
 
 /** The members a strategy exposes — see this file's header for what each owns. */
 export interface UploadStrategy {
-  /** Identificador estable, usado en errores y telemetría. También es el id del SISTEMA
-   * contable que la estrategia lee (ver `upload/systems.ts`). */
+  /** A stable identifier, used in errors and telemetry. It is also the id of the accounting SYSTEM
+   * the strategy reads (see `upload/systems.ts`). */
   id: string;
-  /** Etiqueta en español para el badge del modal y el catálogo de formatos. */
+  /** Spanish label for the modal's badge and the format catalogue. */
   label: string;
-  /** Prueba de forma, pura y barata. Nunca lee el nombre del archivo; nunca lanza. */
+  /** A shape test, pure and cheap. It never reads the file name; it never throws. */
   detect(candidate: UploadCandidate): boolean;
-  /** Parseo completo. Lanza `PygParseError` con mensaje en español al fallar. */
+  /** Full parse. Throws `PygParseError` with a Spanish message on failure. */
   parse(candidate: UploadCandidate): StagedUpload;
   /**
-   * Declara que la app sabe ESCRIBIR este formato, no solo leerlo. Sin este miembro la
-   * estrategia es de solo lectura, y un workspace originado en ella no ofrece la descarga «Un
-   * mes en crudo» — reproducir la plantilla de un sistema ajeno es trabajo real que se hace
-   * cuando hace falta, y la pregunta se repite con cada sistema nuevo, así que vive en el
-   * contrato y no en un `if` por proveedor en el componente de descargas.
+   * Declares that the app knows how to WRITE this format, not only read it. Without this member the
+   * strategy is read-only, and a workspace originated by it does not offer the «Un mes en crudo»
+   * download — reproducing another system's template is real work that gets done when it is needed,
+   * and the question comes up with every new system, so it lives in the contract and not in a
+   * per-vendor `if` in the downloads component.
    */
   writesOwnFormat?: true;
 }

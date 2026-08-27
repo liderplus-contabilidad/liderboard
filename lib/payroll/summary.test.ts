@@ -14,13 +14,13 @@ function period(overrides: Partial<PayrollPeriod> = {}): PayrollPeriod {
   };
 }
 
-/** El mapa `periodId → roster` que el provider deriva de la tabla `employees`. */
+/** The `periodId → roster` map the provider derives from the `employees` table. */
 function rosterMap(entries: [string, PayrollRosterSummary][]): Map<string, PayrollRosterSummary> {
   return new Map(entries);
 }
 
-/** El mapa `periodId → financials` que el provider deriva de la tabla `employees`, tal como
- *  `db.periodFinancials` lo entrega — sin entrada para un período sin `figures` cargadas. */
+/** The `periodId → financials` map the provider derives from the `employees` table, exactly as
+ *  `db.periodFinancials` delivers it — with no entry for a período with no `figures` loaded. */
 function financialsMap(
   entries: [string, PayrollPeriodFinancials][],
 ): Map<string, PayrollPeriodFinancials> {
@@ -78,7 +78,7 @@ describe("buildPayrollSummary", () => {
 
   it("«Líquido acumulado» suma SOLO los períodos con financials, y es null sin ninguno", () => {
     const marzo = period({ id: "marzo", monthIndex: 2 });
-    const abril = period({ id: "abril", monthIndex: 4 }); // en captura, sin financials — no cuenta ni como cero
+    const abril = period({ id: "abril", monthIndex: 4 }); // in capture, with no financials — it does not even count as zero
     const junio = period({ id: "junio", monthIndex: 5 });
     const financials = financialsMap([
       ["marzo", { gross: 200, deductions: 20, net: 100, cost: 150 }],

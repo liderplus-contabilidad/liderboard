@@ -13,18 +13,18 @@ interface EmployeeOvertimeApprovalProps {
 }
 
 /**
- * El único ajuste que este mes admite: cuánto de las horas extras trabajadas se reconoce.
+ * The only adjustment this month admits: how much of the overtime worked is recognised.
  *
- * La tarjeta se llama «Horas extras» y no «Ajustes del mes» porque ya solo lleva una cosa — las
- * dos casillas de provisión de décimos se fueron a la ficha, que es donde vive una elección del
- * empleado. Con el título nombrando el asunto, el rótulo del campo puede quedarse en «Importe
- * aprobado» sin repetirlo.
+ * The card is called «Horas extras» and not «Ajustes del mes» because it only carries one thing now —
+ * the two décimo provision checkboxes moved to the employee record, which is where a choice of the
+ * employee lives. With the title naming the subject, the field's label can stay «Importe aprobado»
+ * without repeating it.
  *
- * **El campo es un IMPORTE en dólares, no un número de horas**, y eso lo dice la marca `$` pegada
- * al campo antes que ningún texto — la misma convención que las celdas de la tabla de conceptos,
- * donde una `h` marca las horas y un `$` el importe. Las horas se teclean allí; aquí se recorta lo
- * que suman. Sin esa marca, «Importe aprobado de horas extras» con un placeholder «Todas» se lee
- * como una cantidad de horas, y el pie en femenino plural lo reforzaba.
+ * **The field is an AMOUNT in dollars, not a number of hours**, and that is said by the `$` mark stuck
+ * to the field before any text — the same convention as the cells of the concept table, where an `h`
+ * marks hours and a `$` an amount. The hours are typed there; here what they add up to is trimmed.
+ * Without that mark, «Importe aprobado de horas extras» with a placeholder «Todas» reads as a number
+ * of hours, and the feminine plural footnote reinforced it.
  */
 export function EmployeeOvertimeApproval({
   approvedOvertime,

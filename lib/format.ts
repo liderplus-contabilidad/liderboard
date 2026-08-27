@@ -88,17 +88,16 @@ export function formatAmount(value: number): string {
 }
 
 /**
- * Un importe de tabla: con símbolo y centavos, y RAYA cuando no hay nada que decir.
+ * A table amount: with a symbol and cents, and a DASH when there is nothing to say.
  *
- * Es la forma en que toda cifra de dinero se rinde en una rejilla de esta app, y vive aquí —y no
- * en el módulo que la estrenó— porque PyG y Rol de Pagos tienen que escribir el mismo número
- * igual. Dos definiciones de «cómo se ve un importe» se separan en cuanto una de las dos cambie,
- * y el usuario coteja las dos pantallas contra el mismo Excel.
+ * It is the way every money figure is rendered in a grid of this app, and it lives here —and not in
+ * the module that introduced it— because PyG and Rol de Pagos have to write the same number the same
+ * way. Two definitions of «what an amount looks like» drift apart as soon as one of them changes, and
+ * the user checks both screens against the same Excel.
  *
- * El cero se pinta igual que la ausencia, a propósito: en una columna de trece conceptos, doce
- * ceros compiten con las cifras que sí dicen algo, y la raya se lee como «aquí no hay nada» de un
- * vistazo. Donde el cero SÍ es una afirmación —un total, una diferencia conciliada— se usa
- * `formatCurrency` directamente.
+ * Zero is painted like absence, on purpose: in a column of thirteen concepts, twelve zeros compete
+ * with the figures that do say something, and the dash reads as «there is nothing here» at a glance.
+ * Where zero IS a claim —a total, a reconciled difference— `formatCurrency` is used directly.
  */
 export function formatCurrencyOrDash(value: number | null): string {
   if (value === null || value === 0) {

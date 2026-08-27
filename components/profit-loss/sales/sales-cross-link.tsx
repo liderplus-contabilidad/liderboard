@@ -6,38 +6,38 @@ import { MICROPLUS_SYSTEM } from "@/lib/profit-loss/upload/systems";
 import { usePygData } from "../pyg-data-provider";
 
 /**
- * El cruce desde «Composición de los ingresos» hacia «Ventas por servicio»: el reparto contable del
- * ingreso y el reparto de lo FACTURADO son las dos lecturas de la misma pregunta, y la segunda no
- * cabe en el plan de cuentas —el estado parte el ingreso en dos cuentas y el reporte de facturación
- * lo parte en cinco servicios con sus pagadores—.
+ * The cross-link from «Composición de los ingresos» to «Ventas por servicio»: the accounting
+ * breakdown of revenue and the breakdown of what was BILLED are the two readings of the same
+ * question, and the second does not fit in the chart of accounts —the statement splits revenue into
+ * two accounts and the billing report splits it into five services with their payers—.
  *
- * **Va en la CABECERA de la tarjeta y con la forma de sus vecinos** —la píldora de «Ver como
- * tabla»—, no en el pie. Vivió abajo, con la advertencia de que lo facturado no cuadra con estas
- * cuentas escrita bajo el enlace, y ahí las dos líneas quedaban pegadas a la nota de «Fuera del
- * reparto» con la misma tinta y el mismo cuerpo: tres renglones grises al fondo de la tarjeta que
- * se leían como una sola nota al pie, donde el enlace no parecía pulsable y la advertencia no
- * parecía suya. Arriba es un control, que es lo que es.
+ * **It goes in the card's HEADER and with the shape of its neighbours** —the «Ver como tabla» pill—,
+ * not in the footer. It lived below, with the warning that what was billed does not square with these
+ * accounts written under the link, and there the two lines sat glued to the «Fuera del reparto» note
+ * in the same ink and the same size: three grey lines at the bottom of the card that read as a single
+ * footnote, where the link did not look clickable and the warning did not look like its own. Up top
+ * it is a control, which is what it is.
  *
- * Esa mudanza se lleva la advertencia, porque una píldora no sostiene una frase: la declara la
- * pantalla de DESTINO, en la línea de su propio pie, que es donde el lector tiene por fin las dos
- * cifras delante y donde el aviso hace falta. Aquí queda de `title`, de apoyo y nunca como único
- * aviso —el rótulo ya dice a dónde lleva—. Ninguna cifra de ventas cruza a esta pantalla: lo único
- * que la atraviesa es el enlace.
+ * That move takes the warning with it, because a pill cannot hold a sentence: it is declared by the
+ * DESTINATION screen, in the line of its own footer, which is where the reader finally has both
+ * figures in front of them and where the notice is needed. Here it is left as a `title`, as support
+ * and never as the only warning —the label already says where it leads—. No sales figure crosses to
+ * this screen: the only thing that crosses is the link.
  *
- * **Y no es `brand`**: el fucsia de `--color-crosslink` está para decir que este control SALE de la
- * tarjeta, mientras que `brand` es la acción primaria dentro de la pantalla. El rótulo repite
- * verbatim el del sidebar para que el lector reconozca dónde aterriza.
+ * **And it is not `brand`**: `--color-crosslink`'s fuchsia is there to say this control LEAVES the
+ * card, whereas `brand` is the primary action within the screen. The label repeats the sidebar's
+ * verbatim so the reader recognises where they land.
  *
- * **Solo con MicroPlus**, que es el sistema que emite ese reporte: `sourceSystemId` es el id de la
- * estrategia que cargó el workspace ABIERTO, y vale `null` en el Consolidado entre clientes, así
- * que ahí esto se rinde solo, sin un caso propio. NO mira si ya hay meses cargados — sin ellos la
- * pantalla de destino dice qué falta y trae su propio botón de carga, que es más de lo que este
- * enlace podría explicar.
+ * **Only with MicroPlus**, which is the system that issues that report: `sourceSystemId` is the id of
+ * the strategy that loaded the OPEN workspace, and it is `null` in the cross-client Consolidado, so
+ * there this renders nothing on its own, without a case of its own. It does NOT look at whether there
+ * are months loaded already — without them the destination screen says what is missing and brings its
+ * own upload button, which is more than this link could explain.
  *
- * Vive en `components/profit-loss/sales/` y no en `charts/` porque lo que sabe es del subitem de
- * ventas; `GraficosView` solo lo coloca. Se monta por el `headerSlot` de la tarjeta y no viaja en
- * su `ChartCardSpec`: el informe imprimible lee esa misma lista, y un enlace en papel es un botón
- * que nadie puede pulsar.
+ * It lives in `components/profit-loss/sales/` and not in `charts/` because what it knows belongs to
+ * the sales subitem; `GraficosView` only places it. It is mounted through the card's `headerSlot` and
+ * does not travel in its `ChartCardSpec`: the printable report reads that same list, and a link on
+ * paper is a button nobody can press.
  */
 export function SalesCrossLink() {
   const { sourceSystemId } = usePygData();

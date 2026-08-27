@@ -6,24 +6,25 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/cn";
 
 export interface ClientFilterProps {
-  /** Todos los clientes que el consolidado podría sumar — los que tienen datos. */
+  /** Every client the consolidado could sum — the ones with data. */
   clients: { id: string; name: string }[];
   selected: readonly string[];
   onToggle: (id: string) => void;
-  /** «Todos los clientes»: limpia la selección en vez de marcarlos uno a uno. */
+  /** «Todos los clientes»: clears the selection instead of marking them one by one. */
   onSelectAll: () => void;
 }
 
 /**
- * Filtro «Cliente»: qué clientes entran en el consolidado y cuáles no.
+ * The «Cliente» filter: which clients go into the consolidado and which do not.
  *
- * Es hermano de «Centro de costo» y se lee igual — un atajo destacado para «ninguno marcado», que
- * aquí significa TODOS, y una casilla por cliente. La diferencia con los centros es que aquí marcar
- * varios SUMA en vez de comparar: el consolidado es una suma por definición, y quien quiera comparar
- * dos clientes los abre por separado.
+ * It is a sibling of «Centro de costo» and reads alike — a highlighted shortcut for «nothing marked»,
+ * which here means ALL, and one checkbox per client. The difference from the centers is that marking
+ * several here SUMS instead of comparing: the consolidado is a sum by definition, and whoever wants
+ * to compare two clients opens them separately.
  *
- * **No se rinde fuera del consolidado**, igual que `center-filter.tsx` no se rinde en modo estado
- * único: dentro de un cliente concreto, «qué clientes considerar» no querría decir nada.
+ * **It does not render outside the consolidado**, just as `center-filter.tsx` does not render in
+ * single-statement mode: inside one particular client, «which clients to consider» would mean
+ * nothing.
  */
 export function ClientFilter({ clients, selected, onToggle, onSelectAll }: ClientFilterProps) {
   if (clients.length === 0) {

@@ -24,11 +24,11 @@ import { SalesReportButton } from "./report/sales-report-button";
 import { SalesToolbar } from "./sales-toolbar";
 
 /**
- * «Ventas por servicio»: qué facturó la clínica, repartido por servicio, por pagador y por mes.
+ * «Ventas por servicio»: what the clinic billed, broken down by service, by payer and by month.
  *
- * Todo lo que enseña es DERIVADO y nada se guarda: lo único persistido son las líneas de factura
- * que trajo cada Excel, y las tres lecturas se recalculan en cada render — la misma regla por la
- * que Rol de Pagos no persiste ni un total.
+ * Everything it shows is DERIVED and nothing is stored: the only thing persisted are the invoice
+ * lines each Excel brought, and the three readings are recomputed on every render — the same rule by
+ * which Rol de Pagos persists not a single total.
  */
 export function SalesView() {
   return (
@@ -59,15 +59,15 @@ function SalesContent() {
   );
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
-  // Antes de la primera lectura de Dexie no se sabe si hay meses: esperar evita el parpadeo del
-  // vacío sobre un cliente que en realidad ya tiene su año cargado.
+  // Before the first read from Dexie it is not known whether there are months: waiting avoids the
+  // empty state flickering over a client that actually already has its year loaded.
   if (!ready) {
     return null;
   }
 
-  // El consolidado NO es un cliente sino la suma de todos, y lo que suma son estados de
-  // resultados. Su hueco no se llena con un archivo —cargar aquí escribiría en una partición que
-  // no es de nadie—, así que dice qué elegir en vez de ofrecer «Cargar Excel».
+  // The consolidado is NOT a client but the sum of all of them, and what it sums are estados de
+  // resultados. Its gap is not filled by a file —loading here would write into a partition that
+  // belongs to nobody—, so it says what to choose instead of offering «Cargar Excel».
   if (isConsolidated) {
     return (
       <div className="px-7 py-20">
@@ -79,7 +79,7 @@ function SalesContent() {
     );
   }
 
-  // Sin cliente el vacío nombra el paso que falta, que es de PyG y no de esta pantalla.
+  // With no client the empty state names the missing step, which is PyG's and not this screen's.
   if (clientId === null) {
     return <PygEmptyState />;
   }
@@ -211,13 +211,13 @@ function SalesContent() {
 }
 
 /**
- * **Lo facturado NO es lo contabilizado**, y la pantalla lo dice.
+ * **What is billed is NOT what is booked**, and the screen says so.
  *
- * Los $229.616 de un abril facturado no son los ingresos contables de abril: hay tiempos de
- * reconocimiento, notas de crédito e IVA de por medio. Dos cifras de ingreso que no cuadran en la
- * misma app no se leen como dos fuentes, se leen como un error — así que estas ventas no entran en
- * ninguna lectura de PyG, y ese silencio hay que declararlo donde se produce. Conciliar las dos es
- * una lectura legítima, y va aparte.
+ * The $229,616 of a billed April are not April's accounting revenue: there are recognition timings,
+ * credit notes and VAT in between. Two revenue figures that do not square inside the same app do not
+ * read as two sources, they read as an error — so these sales go into no reading of PyG, and that
+ * silence has to be declared where it is produced. Reconciling the two is a legitimate reading, and
+ * it goes separately.
  */
 function BillingDisclaimer() {
   return (

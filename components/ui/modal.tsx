@@ -4,17 +4,17 @@ import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 
 /**
- * Una ventana CENTRADA, sobre el nativo `<dialog>`: apilado en el top-layer, trampa de foco y
- * Escape los pone el navegador, no nosotros.
+ * A CENTRED window, over the native `<dialog>`: top-layer stacking, focus trapping and Escape are
+ * provided by the browser, not by us.
  *
- * Es la hermana de `SidePanel` y se elige por la FORMA de lo que muestra, no por gusto. El cajón
- * lateral existe para un detalle que se lee JUNTO a lo que lo abrió —la ficha de una cuenta contra
- * su fila de la tabla— y por eso no lleva velo: se puede seguir leyendo detrás. Esta ventana es lo
- * contrario: interrumpe, se pone en medio y apaga el fondo, así que es lo correcto cuando lo que se
- * abre se lee SOLO y se cierra enseguida.
+ * It is `SidePanel`'s sibling and is chosen by the SHAPE of what it shows, not by taste. The side
+ * drawer exists for a detail read NEXT TO what opened it —an account's ficha against its row of the
+ * table— and that is why it carries no scrim: you can keep reading behind it. This window is the
+ * opposite: it interrupts, stands in the middle and dims the background, so it is the right thing
+ * when what opens is read ALONE and closed straight away.
  *
- * `ConfirmDialog` es anterior a este archivo y repite estas mecánicas; cuando alguien lo toque,
- * conviene plegarlo aquí en vez de mantener dos.
+ * `ConfirmDialog` predates this file and repeats these mechanics; when someone touches it, it is
+ * better folded in here than kept as a second one.
  */
 export function Modal({
   open,
@@ -26,7 +26,7 @@ export function Modal({
 }: {
   open: boolean;
   title: string;
-  /** Lo que identifica sin ser el nombre — un código de cuenta sobre el título. */
+  /** What identifies without being the name — an account code above the title. */
   eyebrow?: ReactNode;
   onClose: () => void;
   children: ReactNode;
@@ -36,9 +36,9 @@ export function Modal({
   const titleId = useId();
   const closeId = useId();
 
-  // El `open` controlado se sincroniza con el estado nativo. `showModal()` es lo que pone la
-  // ventana en el top-layer; el foco se mueve al cierre explícitamente y por id —no por orden en
-  // el DOM— para que abrir no deje el foco perdido dentro del contenido.
+  // The controlled `open` is synced with the native state. `showModal()` is what puts the window in
+  // the top layer; focus is moved to the close button explicitly and by id —not by DOM order— so
+  // opening does not leave focus lost inside the content.
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) {
@@ -52,9 +52,9 @@ export function Modal({
     }
   }, [open, closeId]);
 
-  // Clic en el velo: el evento cuyo target ES el propio `<dialog>` cayó en el `::backdrop`. Se ata
-  // a mano y no con `onClick` para que las reglas de accesibilidad no lean el diálogo como un
-  // elemento no interactivo al que se le colgó un clic.
+  // A click on the scrim: the event whose target IS the `<dialog>` itself landed on the `::backdrop`.
+  // It is bound by hand and not with `onClick` so the accessibility rules do not read the dialog as a
+  // non-interactive element with a click hung on it.
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) {
@@ -74,7 +74,7 @@ export function Modal({
       ref={ref}
       aria-labelledby={titleId}
       onCancel={(event) => {
-        // Escape dispara el `cancel` nativo; React sigue siendo la fuente de verdad del cierre.
+        // Escape fires the native `cancel`; React remains the source of truth for closing.
         event.preventDefault();
         onClose();
       }}

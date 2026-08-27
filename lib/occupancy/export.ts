@@ -54,25 +54,26 @@ const METRIC_ORDER = [
 /** Builds the whole year as one sheet of stacked month blocks. */
 export function buildOccupancyWorkbook(
   year: OccupancyDataset,
-  /** El logo del hotel abierto, que encabeza la hoja. */
+  /** The open hotel's logo, which heads the sheet. */
   logo?: EntityLogo,
-  /** El de la SUCURSAL que esta hoja es, si le subieron uno. Va a la derecha del membrete. */
+  /** The one of the SUCURSAL this sheet is, if one was uploaded for it. It goes on the right of the
+   *  letterhead. */
   centerLogo?: EntityLogo,
 ): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "LiderPlus";
   const ws = wb.addWorksheet(SHEET_NAME);
-  // El ancho va antes del membrete porque de él sale el ancla del logo derecho; poner un ancho no
-  // escribe ninguna fila, así que adelantarlo no cambia nada más de la hoja.
+  // The width goes before the letterhead because the right-hand logo's anchor comes from it; setting
+  // a width writes no row, so bringing it forward changes nothing else about the sheet.
   ws.getColumn(1).width = 40;
-  // Antes del preámbulo y con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. La banda
-  // llega hasta donde llega el BLOQUE DE UN MES —los días, el TOTAL, el Porcentaje y el Promedio—,
-  // que es la tabla que encabeza.
+  // Before the preamble and with the sheet still empty: the letterhead is WRITTEN, not shifted. The
+  // band reaches as far as ONE MONTH'S BLOCK does —the days, the TOTAL, the Porcentaje and the
+  // Promedio—, which is the table it heads.
   //
-  // Las tres líneas siguen leyéndose BY POSITION: `readNames` cuenta las no vacías de la columna A
-  // por encima del primer bloque, y una celda combinada guarda su valor en esa misma columna. La
-  // del centro se omite para `principal`: escribirla convertiría un hotel sin sucursales en uno
-  // nombrado por sí mismo.
+  // The three lines are still read BY POSITION: `readNames` counts the non-empty ones of column A
+  // above the first block, and a merged cell stores its value in that same column. The center's is
+  // omitted for `principal`: writing it would turn a hotel with no sucursales into one named after
+  // itself.
   writeLetterhead(wb, ws, {
     leftLogo: logo,
     rightLogo: centerLogo,

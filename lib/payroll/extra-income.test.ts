@@ -46,9 +46,9 @@ describe("sumExtraIncome", () => {
     });
   });
 
-  /** El importe huérfano ya no puede existir: el rótulo, la clase y el importe viven en la MISMA
-   *  fila, así que quitarla se los lleva a los tres. Antes eran dos estructuras y una podía quedar
-   *  colgada de la otra. */
+  /** The orphan amount can no longer exist: the label, the class and the amount live in the SAME row,
+   *  so removing it takes all three. They used to be two structures and one could be left hanging off
+   *  the other. */
   it("sin filas declaradas los dos agregados son cero", () => {
     expect(sumExtraIncome([])).toEqual({ contributory: 0, nonContributory: 0 });
     expect(sumExtraIncome(undefined)).toEqual({ contributory: 0, nonContributory: 0 });
@@ -57,7 +57,7 @@ describe("sumExtraIncome", () => {
 
 describe("extraCapBreaches", () => {
   it("no avisa dentro de los dos topes", () => {
-    // Sueldo 500: hasta 100 de no aportables (20 %) y hasta 500 de aportables.
+    // Salary 500: up to 100 of non-contributory (20 %) and up to 500 of contributory.
     expect(extraCapBreaches({ contributory: 400, nonContributory: 100 }, 500)).toEqual([]);
   });
 
@@ -67,7 +67,7 @@ describe("extraCapBreaches", () => {
       { id: "n2", label: "Alimentación", kind: "noAportable", amount: 20 },
       { id: "n3", label: "Bono", kind: "noAportable", amount: 20 },
     ];
-    // Sueldo 200 → tope 40. Ninguna de las tres lo supera por su cuenta; juntas sí.
+    // Salary 200 → cap 40. None of the three exceeds it on its own; together they do.
     const totals = sumExtraIncome(rows);
     const breaches = extraCapBreaches(totals, 200);
 
@@ -89,8 +89,8 @@ describe("extraCapBreaches", () => {
     expect(extraCapBreaches({ contributory: 500, nonContributory: 100 }, 500)).toEqual([]);
   });
 
-  /** Un céntimo de más no es un aviso: el motor arrastra ruido de coma flotante y el tope de un
-   *  sueldo con decimales cae en medio de un bit. Se juzga al centavo, como todo el módulo. */
+  /** One cent over is not a notice: the engine carries floating-point noise and the cap of a salary
+   *  with decimals falls in the middle of a bit. It is judged to the cent, like the whole module. */
   it("no avisa por ruido de coma flotante bajo el centavo", () => {
     expect(extraCapBreaches({ contributory: 500.000000001, nonContributory: 0 }, 500)).toEqual([]);
   });
@@ -106,7 +106,7 @@ describe("extraCapBreaches", () => {
 
   it("la tasa del tope no aportable es el 20 % que el libro escribe a mano", () => {
     expect(NON_CONTRIBUTORY_CAP_RATE).toBe(0.2);
-    // Las dos celdas del libro de DELICMAR, al pie de la columna del sueldo.
+    // The two cells of DELICMAR's book, at the foot of the salary column.
     expect(extraCapBreaches({ contributory: 0, nonContributory: 48.2 }, 241)).toEqual([]);
     expect(extraCapBreaches({ contributory: 0, nonContributory: 100 }, 500)).toEqual([]);
   });
@@ -127,8 +127,8 @@ describe("newExtraRow", () => {
   it("busca sufijo contra los rótulos ya tomados, incluidos los de otras filas", () => {
     const first = newExtraRow("aportable", []);
     expect(newExtraRow("aportable", [first]).label).toBe("Bono aportable 2");
-    // El universo incluye los rótulos del catálogo: una fila nueva no puede nacer chocando con
-    // «Uniformes» solo porque el choque venga de la otra tabla.
+    // The universe includes the catalogue's labels: a new row cannot be born clashing with
+    // «Uniformes» just because the clash comes from the other table.
     expect(newExtraRow("aportable", [], ["Bono aportable"]).label).toBe("Bono aportable 2");
   });
 

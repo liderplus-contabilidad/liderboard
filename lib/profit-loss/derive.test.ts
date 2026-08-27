@@ -44,10 +44,10 @@ describe("buildAccountTree", () => {
   });
 
   it("ordena raíces y hermanas por segmento numérico, no por orden de llegada", () => {
-    // Un plan real llega desordenado: `merge-month` ordena lo que guarda, pero la UNIÓN de
-    // varios años, centros o clientes concatena por primer avistamiento, y una cuenta que solo
-    // trae el segundo aporte aterriza al final. El árbol es la única definición de la forma del
-    // plan, así que el orden se decide aquí y lo heredan Datos, el filtro, el Excel y el informe.
+    // A real plan arrives unordered: `merge-month` orders what it stores, but the UNION of several
+    // years, centers or clients concatenates by first sighting, and an account only the second
+    // contributor brings lands at the end. The tree is the only definition of the plan's shape, so the
+    // order is decided here and Datos, the filter, the Excel and the report inherit it.
     const rows: AccountRow[] = [
       { code: "5", name: "Costos", values: [0] },
       { code: "4", name: "Ingresos", values: [0] },
@@ -57,13 +57,13 @@ describe("buildAccountTree", () => {
     ];
     const { roots } = buildAccountTree(rows);
     expect(roots.map((r) => r.code)).toEqual(["4", "5"]);
-    // `4.1.2` antes que `4.1.11`: numérico por segmento, jamás lexicográfico.
+    // `4.1.2` before `4.1.11`: numeric by segment, never lexicographic.
     expect(roots[0].children[0].children.map((c) => c.code)).toEqual(["4.1.2", "4.1.11"]);
   });
 
   it("anida una hija que llega antes que su padre", () => {
-    // En una unión el padre puede venir del segundo aporte. Anidar mientras se recorre dejaba a
-    // la hija de raíz suelta al lado de su propio padre; los códigos se indexan antes de enlazar.
+    // In a union the parent can come from the second contributor. Nesting while walking left the root
+    // child loose next to its own parent; the codes are indexed before any linking.
     const rows: AccountRow[] = [
       { code: "4.1", name: "Ventas", values: [10] },
       { code: "4", name: "Ingresos", values: [0] },
@@ -565,16 +565,16 @@ describe("toDatosGrid: reutilización de filas", () => {
 
     const before = flattenGrid(first);
     const after = flattenGrid(second);
-    // La hoja editada y su cadena de padres cambian de valor, luego de identidad.
+    // The edited leaf and its chain of parents change value, hence identity.
     expect(after.get("4.1.1")).not.toBe(before.get("4.1.1"));
     expect(after.get("4.1")).not.toBe(before.get("4.1"));
     expect(after.get("4")).not.toBe(before.get("4"));
     expect(second.rows.find((r) => r.isResult)).not.toBe(first.rows.find((r) => r.isResult));
-    // La rama de costos no participa del cambio y conserva su objeto.
+    // The costs branch takes no part in the change and keeps its object.
     expect(after.get("5")).toBe(before.get("5"));
     expect(after.get("5.1")).toBe(before.get("5.1"));
     expect(after.get("5.1.1")).toBe(before.get("5.1.1"));
-    // Y una hoja hermana de la editada tampoco se toca.
+    // And a leaf sibling of the edited one is not touched either.
     expect(after.get("4.2")).toBe(before.get("4.2"));
   });
 
@@ -585,12 +585,12 @@ describe("toDatosGrid: reutilización de filas", () => {
     ];
     const second = toDatosGrid(monthlyDataset(), edits, "mensual", first);
     expect(flattenGrid(second).get("4.1.1")).not.toBe(flattenGrid(first).get("4.1.1"));
-    // Un comentario no mueve importes, pero el padre SÍ cambia de objeto: su `children` pasa a
-    // contener otra referencia, y una fila que dice "estos son mis hijos" no puede reutilizarse
-    // cuando esos hijos ya no son los mismos.
+    // A comment moves no amounts, but the parent DOES change object: its `children` comes to hold
+    // another reference, and a row that says "these are my children" cannot be reused when those
+    // children are no longer the same.
     expect(flattenGrid(second).get("4.1")).not.toBe(flattenGrid(first).get("4.1"));
     expect(flattenGrid(second).get("4.1")?.cells).toEqual(flattenGrid(first).get("4.1")?.cells);
-    // La rama de costos no comparte ningún hijo con la comentada y conserva su objeto.
+    // The costs branch shares no child with the commented one and keeps its object.
     expect(flattenGrid(second).get("5")).toBe(flattenGrid(first).get("5"));
     expect(flattenGrid(second).get("4.2")).toBe(flattenGrid(first).get("4.2"));
   });
@@ -661,25 +661,25 @@ describe("mergeCenters", () => {
   });
 
   describe("planes desiguales", () => {
-    /** El total de una raíz tras los rollups, que es lo que el módulo entero lee. */
+    /** A root's total after the rollups, which is what the whole module reads. */
     const totalOf = (accounts: AccountRow[], code: string): number | undefined =>
       computeRollups(buildAccountTree(accounts).roots).find((n) => n.code === code)?.values[0];
 
     it("no pierde lo que un centro anotó en un código que otro desglosa", () => {
       const shallow = [
         { code: "4", name: "Ingresos", values: [500] },
-        { code: "4.1", name: "Ventas", values: [500] }, // hoja aquí
+        { code: "4.1", name: "Ventas", values: [500] }, // a leaf here
       ];
       const deep = [
         { code: "4", name: "Ingresos", values: [300] },
-        { code: "4.1", name: "Ventas", values: [300] }, // padre aquí
+        { code: "4.1", name: "Ventas", values: [300] }, // a parent here
         { code: "4.1.01", name: "Ventas netas", values: [300] },
       ];
 
       const { accounts, warnings } = mergeCenters([shallow, deep]);
 
-      // 500 + 300, no 300: el rollup recalcula 4.1 desde sus hijas, así que los 500 tienen que
-      // vivir en una hija propia o desaparecen.
+      // 500 + 300, not 300: the rollup recomputes 4.1 from its children, so the 500 has to live in a
+      // child of its own or it disappears.
       expect(totalOf(accounts, "4")).toBe(800);
       const byCode = new Map(accounts.map((a) => [a.code, a]));
       expect(byCode.get("4.1.0")).toMatchObject({ name: "Sin desglosar", values: [500] });
@@ -769,7 +769,7 @@ describe("storedAdjustment", () => {
 
   it("treats clearing a cell (null) as a zero", () => {
     expect(storedAdjustment(accounts, "4.1", 0, null)).toBeUndefined();
-    expect(storedAdjustment(accounts, "4.1", 1, null)).toBeNull(); // el archivo dice 500
+    expect(storedAdjustment(accounts, "4.1", 1, null)).toBeNull(); // the file says 500
   });
 
   it("keeps a value that really differs from the file", () => {

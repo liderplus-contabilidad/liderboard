@@ -428,13 +428,13 @@ describe("toAnnualGrid", () => {
    */
   it("keeps the capacity of a month with no sales out of «Total año»", () => {
     const dataset = yearWith([{ revenue: 1000, sold: 10, available: 40 }]);
-    // Agosto: la plantilla del año, con disponibles y habitaciones pero sin una sola venta.
+    // August: the year's scaffolding, with available and rooms but not a single sale.
     dataset.months[7].inputs.available = new Array(31).fill(50);
     dataset.months[7].inputs.rooms.simples = new Array(31).fill(3);
 
     expect(annualRow(dataset, "available").cells[7]).toBeNull();
     expect(annualRow(dataset, "simples").cells[7]).toBeNull();
-    // 10 de 40, no 10 de 1.590.
+    // 10 of 40, not 10 of 1,590.
     expect(annualRow(dataset, "available").agg).toBe(40);
     expect(annualRow(dataset, "occupancy").agg).toBeCloseTo(0.25, 10);
   });
@@ -516,7 +516,7 @@ describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
   });
 
   it("sums the raw inputs of the months it covers", () => {
-    // T3 y T4 no tienen ni una venta: quedan vacíos, no en cero.
+    // Q3 and Q4 have not a single sale: they are left empty, not at zero.
     expect(cell(quarters(), "sold", "trimestral").cells).toEqual([60, 5, null, null]);
     expect(cell(quarters(), "revenue", "trimestral").cells).toEqual([1200, 200, null, null]);
     expect(cell(quarters(), "available", "trimestral").cells).toEqual([200, 50, null, null]);
@@ -543,7 +543,7 @@ describe("toAnnualGrid · agrupado por trimestre y semestre", () => {
   });
 
   it("cubre el trimestre en que CUALQUIERA de sus meses vendió", () => {
-    // Abril vendió y mayo/junio no: T2 se dibuja igual, con lo que abril trae.
+    // April sold and May/June did not: Q2 is drawn all the same, with what April brings.
     expect(cell(quarters(), "sold", "trimestral").cells[1]).toBe(5);
   });
 

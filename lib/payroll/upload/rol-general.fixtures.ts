@@ -1,7 +1,7 @@
 /**
  * Synthetic `GENERAL` sheet fixtures, mirroring the STRUCTURE verified against `.context/
  * ROL_DE_PAGOS_03-2026_CULTURA_MANOR_OK (1).xls` (see this change's task): a desynced VLOOKUP
- * index row at the very top (row 1), the rótulos split across two rows (row 2 for `M`–`BH`, row 3
+ * index row at the very top (row 1), the labels split across two rows (row 2 for `M`–`BH`, row 3
  * for `A`–`L`), area headers carrying only a name, an ordinal written `"1-"` on one employee, a
  * `SUBTOTAL` row per area and one `SUMAN` row closing the nómina, and an asientos contables row
  * BELOW `SUMAN` that reuses the same "code in col A, description in col B" shape an employee row
@@ -9,23 +9,23 @@
  * data at compact column indices (not the real file's actual letters); tests must never depend on
  * the git-ignored real workbook.
  *
- * Tres rasgos del libro real que parecen decorado y son TRAMPAS, reproducidos verbatim porque son
- * justo lo que un lector por rótulo tiene que sobrevivir:
- *  - la fila 2 lleva DOS rótulos agrupadores sobre las columnas de horas extras —`" No. HORAS
- *    EXTRAS"` sobre `G`–`I` y `"VALOR DE HORAS EXTRAS"` sobre `J`–`L`—, y el primero está por
- *    ENCIMA del `"No. "` de la fila 3 que nombra el ordinal;
- *  - tres rótulos de egreso (`PRESTAMOS EMPRESARIALES`, `ALMUERZOS`, `CONTRIBUCION SOLIDARIA`) se
- *    repiten más abajo como descripciones del bloque de asientos contables, igual que ya pasaba
- *    con `LIQUIDO A RECIBIR` y `PAGADO`;
- *  - dos rótulos llegan con espacio sobrante (`"OTROS "`) o partidos en dos líneas
- *    (`"CONTRIBUCION \nSOLIDARIA"`), que es lo que `compactLabel` existe para absorber.
+ * Three features of the real book that look like decoration and are TRAPS, reproduced verbatim
+ * because they are exactly what a label-based reader has to survive:
+ *  - row 2 carries TWO grouping labels over the overtime columns —`" No. HORAS EXTRAS"` over `G`–`I`
+ *    and `"VALOR DE HORAS EXTRAS"` over `J`–`L`—, and the first one is ABOVE the `"No. "` of row 3
+ *    that names the ordinal;
+ *  - three deduction labels (`PRESTAMOS EMPRESARIALES`, `ALMUERZOS`, `CONTRIBUCION SOLIDARIA`) are
+ *    repeated further down as descriptions of the journal entry block, just as already happened with
+ *    `LIQUIDO A RECIBIR` and `PAGADO`;
+ *  - two labels arrive with a spare space (`"OTROS "`) or split into two lines
+ *    (`"CONTRIBUCION \nSOLIDARIA"`), which is what `compactLabel` exists to absorb.
  */
 import * as XLSX from "xlsx";
 import type { Cell as FixtureCell } from "@/lib/excel/workbook";
 
 /** Column indices — named the way the report itself labels them, so a test reads like the sheet.
- * El comentario de cada una es su LETRA en el libro; que aquí no coincidan es deliberado, y es lo
- * que demuestra que el parser localiza por rótulo y nunca por coordenada. */
+ * Each one's comment is its LETTER in the book; that they do not match here is deliberate, and it is
+ * what proves the parser locates by label and never by coordinate. */
 const COL = {
   ordinal: 0, // A · No.
   employee: 1, // B · EMPLEADO (also holds B1's company and B2's period, and every área's name)
@@ -43,7 +43,7 @@ const COL = {
   paid: 13, // BZ · PAGADO
   overtimeHours50: 14, // G · HORAS EXTRAS 50% (cantidad)
   overtimeHours100: 15, // H · HORAS EXTRAS 100% (cantidad)
-  overtimeHours25: 16, // I · HORAS EXTRAS 15% (cantidad, así rotulada)
+  overtimeHours25: 16, // I · HORAS EXTRAS 15% (the quantity, labelled that way)
   overtimePay50: 17, // J · VALOR GANADO EXTRAS 50%
   overtimePay100: 18, // K · VALOR GANADO EXTRAS 100%
   overtimePay25: 19, // L · VALOR GANADO EXTRAS 25%
@@ -74,9 +74,9 @@ const COL = {
 
 /** Row indices of the fixed preamble, so mutations below can target them by name. */
 const ROW = {
-  garbage: 0, // fila 1: desynced VLOOKUP index list, plus B1's company
-  labelsM_BH: 1, // fila 2: B2's period text, plus the M–BH rótulos
-  labelsA_L: 2, // fila 3: the A–L rótulos
+  garbage: 0, // row 1: desynced VLOOKUP index list, plus B1's company
+  labelsM_BH: 1, // row 2: B2's period text, plus the M–BH labels
+  labelsA_L: 2, // row 3: the A–L labels
 } as const;
 
 /** Places cells at their column indices, leaving every gap in between as `null` — same helper
@@ -92,9 +92,9 @@ function row(cells: [number, FixtureCell][]): FixtureCell[] {
   return line;
 }
 
-/** Lo que el rol CAPTURA del mes de un empleado, tal como el libro lo escribe. Aparte de la ficha
- * porque es justo lo que cambia entre los tres casos de abajo: cada uno ejercita una combinación
- * distinta del interruptor de `M` y de las dos banderas del fondo de reserva. */
+/** What the rol CAPTURES of an employee's month, exactly as the book writes it. Apart from the
+ * record because it is precisely what changes between the three cases below: each exercises a
+ * different combination of `M`'s switch and of the two reserve-fund flags. */
 interface EmployeeCapture {
   overtimeHours50: number;
   overtimeHours100: number;
@@ -127,8 +127,8 @@ interface EmployeeCapture {
   hasReserveFund: FixtureCell;
 }
 
-/** El mes en blanco: sin horas, sin ingresos capturados, sin descuentos y sin fondo de reserva —
- * el punto de partida sobre el que cada empleado escribe solo lo que su caso ejercita. */
+/** The blank month: no hours, no captured income, no deductions and no reserve fund — the starting
+ * point over which each employee writes only what their case exercises. */
 const NO_CAPTURE: EmployeeCapture = {
   overtimeHours50: 0,
   overtimeHours100: 0,
@@ -241,7 +241,7 @@ const PREAMBLE = (company: string, period: string): FixtureCell[][] => [
     [COL.net, 999999],
     [COL.paid, 888888],
   ]),
-  // fila 2 — B2's period, los dos rótulos AGRUPADORES de las horas extras, y los rótulos M–BH.
+  // row 2 — B2's period, the two GROUPING labels of the overtime, and the M–BH labels.
   row([
     [COL.employee, period],
     [COL.gross, "TOTAL INGRESO"],
@@ -253,10 +253,10 @@ const PREAMBLE = (company: string, period: string): FixtureCell[][] => [
     [COL.hireDate, "FECHA INGRESO"],
     [COL.sectorCode, "CODIGO \nSECTORIAL"],
     [COL.paid, "PAGADO"],
-    // Agrupador sobre G–I. Va ANTES que el "No. " de la fila 3 y empieza igual que él: si
-    // `compactLabel` no distinguiera la etiqueta entera, el ordinal se leería de aquí.
+    // A grouper over G–I. It comes BEFORE row 3's "No. " and starts the same as it: if `compactLabel`
+    // did not tell the whole label apart, the ordinal would be read from here.
     [COL.overtimeHours50, " No. HORAS EXTRAS"],
-    // Agrupador sobre J–L, hermano del anterior.
+    // A grouper over J–L, sibling of the previous one.
     [COL.overtimePay50, "VALOR DE HORAS EXTRAS"],
     [COL.overtimeTotal, "TOTAL HORAS EXTRAS"],
     [COL.vacationPay, "VACACIONES - MENSUAL"],
@@ -273,8 +273,8 @@ const PREAMBLE = (company: string, period: string): FixtureCell[][] => [
     [COL.meals, "ALMUERZOS"],
     [COL.fines, "MULTAS"],
     [COL.inHouseConsumption, "CONSUMO LOCALES EMPLEADO"],
-    [COL.solidarityContribution, "CONTRIBUCION \nSOLIDARIA"], // partido en dos líneas, como el libro
-    [COL.otherDeductions, "OTROS "], // con el espacio sobrante que el libro escribe
+    [COL.solidarityContribution, "CONTRIBUCION \nSOLIDARIA"], // split into two lines, like the book
+    [COL.otherDeductions, "OTROS "], // with the spare space the book writes
     [COL.partTimeDeduction, "DESCUENTO TIEMPO PACIAL"], // sic
     [COL.medicalLeaveDeduction, "Descuento PERMISO MEDICO"],
     [COL.thirteenthProvision, "XIII"],
@@ -282,7 +282,7 @@ const PREAMBLE = (company: string, period: string): FixtureCell[][] => [
     [COL.accumulatesReserveFund, "AC FR"],
     [COL.hasReserveFund, "FR"],
   ]),
-  // fila 3 — the A–L rótulos.
+  // row 3 — the A–L labels.
   row([
     [COL.ordinal, "No. "],
     [COL.employee, "EMPLEADO"],
@@ -291,7 +291,7 @@ const PREAMBLE = (company: string, period: string): FixtureCell[][] => [
     [COL.days, "DIAS"],
     [COL.overtimeHours50, "HORAS EXTRAS 50%"],
     [COL.overtimeHours100, "HORAS EXTRAS 100%"],
-    [COL.overtimeHours25, "HORAS EXTRAS 15%"], // sic: la cantidad se rotula 15 % y su valor 25 %
+    [COL.overtimeHours25, "HORAS EXTRAS 15%"], // sic: the quantity is labelled 15 % and its value 25 %
     [COL.overtimePay50, "VALOR GANADO EXTRAS 50%"],
     [COL.overtimePay100, "VALOR GANADO EXTRAS 100%"],
     [COL.overtimePay25, "VALOR GANADO EXTRAS 25%"],
@@ -310,9 +310,9 @@ const ASIENTO_ROW: FixtureCell[] = row([
   [COL.role, 2918.58],
 ]);
 
-/** El otro lado de la misma trampa: el bloque de asientos REPITE como descripción tres rótulos de
- * egreso que la cabecera ya usó (`AB`, `AD`, `AG` en el libro real). Como `findLabel` se queda con
- * la PRIMERA coincidencia y la cabecera va arriba, estas no pueden desplazarla. */
+/** The other side of the same trap: the journal entry block REPEATS as descriptions three deduction
+ * labels the header already used (`AB`, `AD`, `AG` in the real book). Since `findLabel` keeps the
+ * FIRST match and the header is above, these cannot displace it. */
 const ASIENTO_LABEL_ECHO_ROWS: FixtureCell[][] = [
   row([
     [COL.ordinal, "621005"],
@@ -332,10 +332,10 @@ const ASIENTO_LABEL_ECHO_ROWS: FixtureCell[][] = [
 const EMPTY_ORDINAL_ROW: FixtureCell[] = row([[COL.ordinal, 1]]);
 
 /**
- * Recorte a CERO: 9,5 horas valoradas en 27,00 y un `M` en cero — el `*0` que el libro escribe a
- * mano (fila 15 del archivo real). Cada concepto capturado trae un valor DISTINTO (11–16 los
- * ingresos, 41–53 los egresos, sin repetir ninguno de los que ya usan sueldo, días o totales), así
- * que una atribución cruzada entre dos columnas cambia la cifra y el test la caza.
+ * A trim to ZERO: 9.5 hours valued at 27.00 and an `M` at zero — the `*0` the book writes by hand
+ * (row 15 of the real file). Each captured concept brings a DIFFERENT value (11–16 the income items,
+ * 41–53 the deductions, without repeating any of the ones already used by salary, days or totals), so
+ * a crossed attribution between two columns changes the figure and the test catches it.
  */
 const EMPLEADO_UNO = employee({
   ...NO_CAPTURE,
@@ -378,13 +378,13 @@ const EMPLEADO_UNO = employee({
   otherDeductions: 51,
   partTimeDeduction: 52,
   medicalLeaveDeduction: 53,
-  accumulatesReserveFund: "S", // como la fila 15 real: acumula, y por eso NO cobra
+  accumulatesReserveFund: "S", // like the real row 15: it accrues, and that is why it is NOT received
   hasReserveFund: "N",
 });
 
-/** Sin recorte: `M` coincide con `J+K+L` (ambos en cero, como la fila 16 real, cuyas 140 horas
- * quedaron valoradas en cero por la errata de `L`) ⇒ `approvedOvertime` es `null`. Enciende SOLO
- * la provisión del décimo tercero, para que las dos banderas de `AS`/`AT` se deduzcan por separado. */
+/** No trim: `M` matches `J+K+L` (both at zero, like the real row 16, whose 140 hours ended up valued
+ * at zero by `L`'s typo) ⇒ `approvedOvertime` is `null`. It switches ONLY the décimo tercero
+ * provision on, so the two `AS`/`AT` flags are deduced separately. */
 const EMPLEADO_DOS = employee({
   ...NO_CAPTURE,
   ordinal: 2,
@@ -404,11 +404,11 @@ const EMPLEADO_DOS = employee({
   overtimeHours25: 140,
   overtimeTotal: 0, // = J+K+L ⇒ approvedOvertime = null
   thirteenthProvision: 40.6,
-  hasReserveFund: "S", // tiene derecho y NO acumula: la rama que sí paga `U`
+  hasReserveFund: "S", // entitled and NOT accruing: the branch that does pay `U`
 });
 
-/** Recorte PARCIAL: 91,91 trabajados y 50 reconocidos — ni todo ni nada, que es lo que el modelo
- * de importe (y no de booleano ni de porcentaje) existe para poder decir. */
+/** A PARTIAL trim: 91.91 worked and 50 recognised — neither everything nor nothing, which is what the
+ * amount model (and not a boolean nor a percentage) exists to be able to say. */
 const EMPLEADO_TRES = employee({
   ...NO_CAPTURE,
   ordinal: 3,
@@ -431,7 +431,7 @@ const EMPLEADO_TRES = employee({
   overtimePay100: 12.5, // J+K+L = 91.91
   overtimeTotal: 50, // ≠ 91.91 ⇒ approvedOvertime = 50
   fourteenthProvision: 20.5,
-  accumulatesReserveFund: "s", // minúscula: el `=` de Excel no distingue mayúsculas
+  accumulatesReserveFund: "s", // lower case: Excel's `=` does not distinguish case
   hasReserveFund: "S",
 });
 
@@ -457,8 +457,8 @@ export const ROL_GENERAL_AOA: FixtureCell[][] = [
   ...ASIENTO_LABEL_ECHO_ROWS,
 ];
 
-/** Borra un rótulo de la fila donde vive, dejando la columna de datos intacta: así es como el
- * libro puede legítimamente no declarar una columna, y el aviso agrupado tiene que nombrarla. */
+/** Erases a label from the row it lives in, leaving the data column intact: that is how the book can
+ * legitimately not declare a column, and the grouped notice has to name it. */
 function withoutLabel(aoa: FixtureCell[][], labelRow: number, col: number): FixtureCell[][] {
   return aoa.map((line, i) =>
     i === labelRow ? line.map((cell, c) => (c === col ? null : cell)) : line,
@@ -472,15 +472,15 @@ export const ROL_GENERAL_NO_PAGADO_AOA: FixtureCell[][] = withoutLabel(
   COL.paid,
 );
 
-/** Sin el rótulo de `M`: no hay forma de saber cuánto se reconoció, así que no se puede deducir
- * recorte alguno — y la carga tiene que seguir, con la columna nombrada en el aviso agrupado. */
+/** Without `M`'s label: there is no way of knowing how much was recognised, so no trim can be deduced
+ * — and the upload has to carry on, with the column named in the grouped notice. */
 export const ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA: FixtureCell[][] = withoutLabel(
   ROL_GENERAL_AOA,
   ROW.labelsM_BH,
   COL.overtimeTotal,
 );
 
-/** Sin el rótulo de `AA` (ANTICIPO SUELDO): una columna de concepto que falta no rompe la carga. */
+/** Without `AA`'s label (ANTICIPO SUELDO): a missing concept column does not break the upload. */
 export const ROL_GENERAL_NO_ANTICIPO_AOA: FixtureCell[][] = withoutLabel(
   ROL_GENERAL_AOA,
   ROW.labelsM_BH,
@@ -503,15 +503,15 @@ export const ROL_GENERAL_BAD_CONTRACT_TYPE_AOA: FixtureCell[][] = ROL_GENERAL_AO
     : line,
 );
 
-/** One empleado's `FECHA INGRESO` isn't a number at all. */
+/** One employee's `FECHA INGRESO` isn't a number at all. */
 export const ROL_GENERAL_BAD_HIRE_DATE_AOA: FixtureCell[][] = ROL_GENERAL_AOA.map((line) =>
   line[COL.employee] === EMPLEADO_UNO[COL.employee]
     ? line.map((cell, c) => (c === COL.hireDate ? "sin fecha" : cell))
     : line,
 );
 
-/** `FR` en blanco y `AC FR` con algo que NO es `"S"` — el libro compara `="S"` y todo lo demás cae
- * en el `else`, así que las dos banderas se apagan y nada avisa. */
+/** `FR` blank and `AC FR` with something that is NOT `"S"` — the book compares `="S"` and everything
+ * else falls into the `else`, so both flags switch off and nothing warns. */
 export const ROL_GENERAL_ODD_RESERVE_FUND_AOA: FixtureCell[][] = ROL_GENERAL_AOA.map((line) =>
   line[COL.employee] === EMPLEADO_TRES[COL.employee]
     ? line.map((cell, c) => {
@@ -524,9 +524,9 @@ export const ROL_GENERAL_ODD_RESERVE_FUND_AOA: FixtureCell[][] = ROL_GENERAL_AOA
 );
 
 /**
- * `M` = 96,26 contra un `J+K+L` que en coma flotante da 96,25999999999999. El libro escribe
- * `M = J+K+L`, así que esto NO es un recorte: es la misma cifra con el ruido que ya obliga a
- * `sameToTheCentavo` en la conciliación (§9 del documento de fórmulas).
+ * `M` = 96.26 against a `J+K+L` that in floating point gives 96.25999999999999. The book writes
+ * `M = J+K+L`, so this is NOT a trim: it is the same figure with the noise that already forces
+ * `sameToTheCentavo` in the reconciliation (§9 of the formulas document).
  */
 export const ROL_GENERAL_OVERTIME_FLOAT_NOISE_AOA: FixtureCell[][] = ROL_GENERAL_AOA.map((line) =>
   line[COL.employee] === EMPLEADO_UNO[COL.employee]

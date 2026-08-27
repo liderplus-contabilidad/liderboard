@@ -5,20 +5,20 @@ import { useCallback, useMemo, useState } from "react";
 export interface CollapsedCards {
   isCollapsed: (id: string) => boolean;
   toggle: (id: string) => void;
-  /** True cuando NO queda ninguna desplegada — lo que hace que el botón diga «Desplegar todos». */
+  /** True when NONE is left expanded — which is what makes the button say «Desplegar todos». */
   allCollapsed: boolean;
   toggleAll: () => void;
 }
 
 /**
- * Qué tarjetas de una pestaña están plegadas. Vive aquí y no dentro de `ChartCard` porque un
- * «Cerrar todos» necesita una sola verdad: con el estado repartido por tarjeta, el botón tendría
- * que empujar un valor a cada una y las dos podrían discrepar.
+ * Which cards of a tab are collapsed. It lives here and not inside `ChartCard` because a «Cerrar
+ * todos» needs one single truth: with the state spread per card, the button would have to push a
+ * value into each one and the two could disagree.
  *
- * Guarda las PLEGADAS y no las abiertas, la regla del sidebar y por el mismo motivo: una tarjeta
- * nueva —otra vista predeterminada, otro cliente— nace visible sin que nadie tenga que sembrarla.
- * Y se lee CRUZANDO contra los ids que hay en pantalla, así que una marca de una tarjeta que ya no
- * está no deja nada colgando.
+ * It stores the COLLAPSED ones and not the open ones, the sidebar's rule and for the same reason: a
+ * new card —another preset view, another client— is born visible without anyone having to seed it.
+ * And it is read by CROSSING against the ids on screen, so a mark for a card that is no longer there
+ * leaves nothing hanging.
  */
 export function useCollapsedCards(ids: readonly string[]): CollapsedCards {
   const [collapsed, setCollapsed] = useState<readonly string[]>([]);
@@ -36,8 +36,8 @@ export function useCollapsedCards(ids: readonly string[]): CollapsedCards {
     [ids, collapsed],
   );
 
-  // Un solo botón con dos sentidos: si queda alguna abierta, cierra; si no queda ninguna, abre.
-  // Dos botones separados dejarían siempre uno sin trabajo que hacer.
+  // One single button with two meanings: if any is left open, it closes; if none is left, it opens.
+  // Two separate buttons would always leave one with no work to do.
   const toggleAll = useCallback(() => {
     setCollapsed(allCollapsed ? [] : [...ids]);
   }, [allCollapsed, ids]);

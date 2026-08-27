@@ -5,23 +5,23 @@ import { statementFit, WIDEST_FIGURE_CHARS } from "@/lib/report/page-fit";
 import { SalesReportTable } from "./sales-report-table";
 
 /**
- * Una sección del informe. Imprime las DOS lecturas a la vez —la tabla arriba, la gráfica debajo—
- * y NUNCA el interruptor «Ver como tabla / Ver como gráfica» de `ChartCard`: un control impreso es
- * un botón que nadie puede pulsar, la misma regla que ya siguen los otros dos informes.
+ * One section of the report. It prints BOTH readings at once —the table above, the chart below— and
+ * NEVER `ChartCard`'s «Ver como tabla / Ver como gráfica» switch: a printed control is a button
+ * nobody can press, the same rule the other two reports already follow.
  *
- * `card` es el MISMO `ChartCardSpec` que la pantalla monta, así que el título, la tabla, la
- * gráfica y la nota salen de ahí sin una segunda lectura de los datos.
+ * `card` is the SAME `ChartCardSpec` the screen mounts, so the title, the table, the chart and the
+ * note come from there without a second reading of the data.
  *
- * El encaje se decide POR SECCIÓN y no por informe, al revés que en Sueldos por Áreas: allí todas
- * las tablas tienen exactamente las mismas columnas, y aquí una tiene tres y otra doce.
+ * The fit is decided PER SECTION and not per report, unlike in Sueldos por Áreas: there every table
+ * has exactly the same columns, and here one has three and another twelve.
  *
- * Y se dimensiona con la CIFRA MÁS LARGA que esta tabla va a imprimir, no con la cota por defecto
- * de `statementFit`: esa vale diez caracteres (`-$1,171,420`), que es lo que mide un estado de
- * resultados en dólares enteros, y aquí se escriben centavos sobre millones (`$1,446,789.21`, trece).
- * Con la cota corta la columna salía más estrecha que su propio contenido y `overflow-hidden` se
- * comía los últimos dígitos de cada importe grande —sin marca ninguna, que es lo peor que puede
- * hacer un informe con una cifra—. Contar CARACTERES es fiel porque la columna es monoespaciada,
- * que es el mismo argumento por el que `page-fit.ts` mide por cota en vez de por canvas.
+ * And it is sized by the LONGEST FIGURE this table is going to print, not by `statementFit`'s default
+ * bound: that one is worth ten characters (`-$1,171,420`), which is what an estado de resultados in
+ * whole dollars measures, and here cents are written over millions (`$1,446,789.21`, thirteen). With
+ * the short bound the column came out narrower than its own content and `overflow-hidden` ate the
+ * last digits of every large amount —with no mark at all, which is the worst thing a report can do to
+ * a figure—. Counting CHARACTERS is faithful because the column is monospaced, which is the same
+ * argument by which `page-fit.ts` measures by bound instead of by canvas.
  */
 export function SalesReportSection({
   card,

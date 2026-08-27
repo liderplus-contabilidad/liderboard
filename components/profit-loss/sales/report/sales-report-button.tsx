@@ -12,14 +12,14 @@ const SalesReportPreview = dynamic(
 );
 
 /**
- * «Informe PDF» de Ventas por servicio, en la CABECERA de la vista — no en la barra, que es la
- * única superficie de SELECCIÓN, y pedir un informe no selecciona nada.
+ * Ventas por servicio's «Informe PDF», in the view's HEADER — not in the bar, which is the only
+ * SELECTION surface, and asking for a report selects nothing.
  *
- * Deshabilitado NOMBRANDO el paso que falta mientras el cliente no tenga ningún mes cargado: un
- * control apagado sin explicación obliga a apuntarlo para descubrir qué le falta.
+ * Disabled while the client has no month loaded, NAMING the missing step: a control switched off with
+ * no explanation forces you to point at it to find out what it is missing.
  *
- * La vista previa se carga en dinámico: monta un gráfico por sección y no puede pesar en la carga
- * de una pantalla que la mayoría de las veces solo se mira.
+ * The preview loads dynamically: it mounts one chart per section and cannot weigh on the load of a
+ * screen that most of the time is only looked at.
  */
 export function SalesReportButton() {
   const { months, clientId } = useSalesData();

@@ -122,7 +122,7 @@ describe("byPayer", () => {
   it("ninguna etiqueta de particular deja escapar el nombre", () => {
     const payers = byPayer([line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 10 })]);
     expect(payers[0].label).not.toContain("SANDOVAL");
-    // …pero el nombre SIGUE guardado, que es lo que mantiene la cifra trazable.
+    // …but the name is STILL stored, which is what keeps the figure traceable.
     expect(payers[0].id).toBe("SANDOVAL MORALES JUAN CARLOS");
   });
 });

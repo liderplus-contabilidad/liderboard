@@ -12,12 +12,12 @@ import { RECONCILIATION_BADGE, reconciliationStatusOf } from "@/lib/payroll/peri
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 
 /**
- * Una línea con su rol ya calculado. Van EMPAREJADOS y no en dos listas paralelas —ni en un mapa
- * por `id`— porque así el tipo garantiza que toda fila pintada tiene su cómputo: con un mapa,
- * una clave ausente obligaría a saltarse la fila en silencio o a un `!`.
+ * A line with its rol already computed. They travel PAIRED and not in two parallel lists —nor in a
+ * map by `id`— because that way the type guarantees every painted row has its computation: with a
+ * map, a missing key would force skipping the row in silence or an `!`.
  *
- * El cómputo llega por prop y no se hace aquí: la pantalla lo calcula UNA vez para toda la nómina
- * y lo reparte, así los KPIs de arriba leen exactamente las mismas cifras que la tabla.
+ * The computation arrives by prop and is not done here: the screen computes it ONCE for the whole
+ * nómina and hands it out, so the KPIs above read exactly the same figures as the table.
  */
 export interface EmployeeRowData {
   line: PayrollEmployeeLine;
@@ -27,12 +27,12 @@ export interface EmployeeRowData {
 type EmployeeRowProps = EmployeeRowData;
 
 /**
- * Una fila de la nómina, que abre el detalle del empleado.
+ * A row of the nómina, which opens the employee's detail.
  *
- * La navegación va DOS veces a propósito y no es duplicación: el `<Link>` del nombre es la
- * afordancia real —toma foco, se anuncia, se abre en otra pestaña con ⌘-clic—, y el `onClick`
- * de la fila solo ensancha el blanco para el ratón, porque un `<tr>` no es focusable ni
- * anuncia nada. Quitar el enlace dejaría la fila inalcanzable con teclado.
+ * The navigation is there TWICE on purpose and is not duplication: the name's `<Link>` is the real
+ * affordance —it takes focus, it is announced, it opens in another tab with ⌘-click—, and the row's
+ * `onClick` only widens the target for the mouse, because a `<tr>` is neither focusable nor
+ * announces anything. Removing the link would leave the row unreachable by keyboard.
  */
 function EmployeeRowComponent({ line, computed }: EmployeeRowProps) {
   const router = useRouter();

@@ -62,15 +62,15 @@ describe("sueldo unificado (`F`)", () => {
   });
 
   it("más de 30 días paga de más — el libro no acota y el motor tampoco debe hacerlo", () => {
-    // Un mes de 31 días con 31 pagados existe en la práctica; inventar un tope aquí sería una
-    // regla que el archivo del contador no tiene.
+    // A 31-day month with 31 paid exists in practice; inventing a cap here would be a rule the
+    // accountant's file does not have.
     expect(compute({ baseSalary: 480, days: 31 }).unifiedSalary).toBe(496);
   });
 });
 
 describe("horas extras (`J`, `K`, `L`, `M`)", () => {
   it("el valor hora sale del sueldo BASE, no del unificado", () => {
-    // A media jornada el unificado cae a la mitad, pero la hora extra se paga a tarifa completa.
+    // At half time the unified salary drops by half, but the overtime hour is paid at the full rate.
     const completo = compute({ baseSalary: 480, days: 30, overtimeHours50: 10 });
     const medio = compute({ baseSalary: 480, days: 15, overtimeHours50: 10 });
     expect(medio.overtimePay50).toBe(completo.overtimePay50);
@@ -86,7 +86,7 @@ describe("horas extras (`J`, `K`, `L`, `M`)", () => {
     });
     expect(r.overtimePay50).toBe(3); // 2 × 1,5
     expect(r.overtimePay100).toBe(4); // 2 × 2
-    expect(r.overtimePay25).toBe(0.5); // 2 × 0,25 — solo el recargo, ver §11.2
+    expect(r.overtimePay25).toBe(0.5); // 2 × 0.25 — only the premium, see §11.2
   });
 
   it("acepta fracciones de hora", () => {
@@ -116,13 +116,13 @@ describe("`approvedOvertime`: el importe aprobado se TECLEA, no se calcula (§6,
   });
 
   it("un importe tecleado es EXACTAMENTE lo que cuenta", () => {
-    // Ni una fracción ni una regla: el número que el contador escribió en `M`.
+    // Neither a fraction nor a rule: the number the accountant wrote in `M`.
     expect(compute({ ...conHoras, approvedOvertime: 6.7 }).overtimeTotal).toBe(6.7);
   });
 
   it("no es un porcentaje: `0.5` son cincuenta centavos, no la mitad", () => {
-    // Este test existe porque el modelo anterior SÍ era una fracción. Si alguien lo revierte
-    // por descuido, aquí se ve: con `0.5` como fracción daría 15.
+    // This test exists because the previous model WAS a fraction. If someone reverts it carelessly,
+    // it shows here: with `0.5` as a fraction it would give 15.
     expect(compute({ ...conHoras, approvedOvertime: 0.5 }).overtimeTotal).toBe(0.5);
   });
 
@@ -131,8 +131,8 @@ describe("`approvedOvertime`: el importe aprobado se TECLEA, no se calcula (§6,
   });
 
   it("lo aprobado recorta lo que SUMA, no lo que se muestra", () => {
-    // El comprobante tiene que seguir diciendo cuántas horas hizo y cuánto valen, aunque este
-    // mes solo se le reconozca una parte.
+    // The payslip has to keep saying how many hours they worked and what they are worth, even though
+    // only a part of it is recognised this month.
     expect(compute({ ...conHoras, approvedOvertime: 0 }).overtimePay50).toBe(30);
     expect(compute({ ...conHoras, approvedOvertime: 6.7 }).overtimePay50).toBe(30);
   });
@@ -142,8 +142,8 @@ describe("`approvedOvertime`: el importe aprobado se TECLEA, no se calcula (§6,
     const parte = compute({ ...conHoras, approvedOvertime: 15 });
     const nada = compute({ ...conHoras, approvedOvertime: 0 });
 
-    // Mueve el aporte al IESS, el décimo tercero y las provisiones patronales, no solo la
-    // cifra que el empleado cobra.
+    // It moves the IESS contribution, the décimo tercero and the employer provisions, not just the
+    // figure the employee receives.
     for (const key of [
       "grossIncome",
       "iessEmployee",
@@ -202,8 +202,8 @@ describe("décimo tercero mensualizado (`O`)", () => {
 });
 
 describe("fondo de reserva: las dos banderas (§7)", () => {
-  // ⚠️ NINGUNA de estas ramas se ejercita en el archivo real: los seis empleados de marzo 2026
-  // traen `FR = "N"`. Están escritas contra la fórmula del libro y siguen SIN CONFIRMAR.
+  // ⚠️ NONE of these branches is exercised in the real file: the six employees of March 2026 bring
+  // `FR = "N"`. They are written against the book's formula and remain UNCONFIRMED.
   it("sin derecho, no genera nada por ninguna vía", () => {
     const r = compute({ baseSalary: 480, hasReserveFund: false, accumulatesReserveFund: false });
     expect(r.reserveFundPaid).toBe(0);
@@ -350,24 +350,24 @@ describe("conciliación (`CA`)", () => {
     expect(r.difference).toBeLessThan(0);
   });
 
-  // El caso de MORALES: su líquido es la resta de dos sumas sin redondear y llega con ruido.
+  // MORALES' case: their net pay is the difference of two unrounded sums and arrives with noise.
   const morales = {
     baseSalary: 487.21,
     deductions: { ...employee().deductions, iessLoans: 64.25 },
   };
 
   it("el ruido por debajo del centavo colapsa a CERO exacto", () => {
-    // Lo pagado se teclea con dos decimales. Sin esta regla los cinco empleados conciliados del
-    // archivo saldrían «con diferencia» por 5,7e-14 y la pantalla diría justo lo contrario de
-    // lo que dice el Excel.
+    // What was paid is typed with two decimals. Without this rule the five reconciled employees of
+    // the file would come out «with a difference» by 5.7e-14 and the screen would say exactly the
+    // opposite of what the Excel says.
     expect(compute(morales).netPay).toBe(457.69000000000005);
     expect(compute({ ...morales, paid: 457.69 }).difference).toBe(0);
   });
 
   it("un CENTAVO sí es una diferencia, y conserva su ruido intacto", () => {
-    // La tolerancia es solo del ruido: no puede tragarse una diferencia real ni redondearla,
-    // porque el archivo guarda la suya con ruido —la de VEGA es `-41.70999999999992`— y el
-    // motor tiene que cuadrar con eso.
+    // The tolerance is only for the noise: it cannot swallow a real difference or round it, because
+    // the file stores its own with noise —VEGA's is `-41.70999999999992`— and the engine has to
+    // square with that.
     const conDiferencia = compute({ ...morales, paid: 457.68 });
     expect(conDiferencia.difference).not.toBe(0);
     expect(conDiferencia.difference).toBeCloseTo(0.01, 10);
@@ -392,16 +392,16 @@ describe("redondeo: las derivaciones redondean, los totales NO (§9)", () => {
   });
 
   it("los totales arrastran el ruido de coma flotante, como el archivo", () => {
-    // No es un defecto: es lo que hace que la app y el Excel del contador digan lo mismo.
+    // It is not a defect: it is what makes the app and the accountant's Excel say the same thing.
     const r = compute({ baseSalary: 488.66 });
     expect(r.grossIncome).toBe(569.5500000000001);
   });
 });
 
 /**
- * La prueba de que las DOS CLASES significan lo que dicen, contra el motor entero y no solo contra
- * las bases: `bases.test.ts` ya declara en qué bases entra cada una, pero lo que la firma revisa
- * son las veinte columnas, y entre una base y una columna hay un redondeo y un parámetro.
+ * The proof that the TWO CLASSES mean what they say, against the whole engine and not just against
+ * the bases: `bases.test.ts` already declares which bases each one enters, but what the firm reviews
+ * are the twenty columns, and between a base and a column there is a rounding and a parameter.
  */
 describe("conceptos de ingreso extra: aportable contra no aportable", () => {
   const CONTRIBUTORY_COLUMNS = [
@@ -428,7 +428,7 @@ describe("conceptos de ingreso extra: aportable contra no aportable", () => {
     for (const column of CONTRIBUTORY_COLUMNS) {
       expect(con[column]).toBeGreaterThan(sin[column]);
     }
-    // El aporte personal es la base aportable por el 9,45 %: 100 más de base son 9,45 más.
+    // The personal contribution is the contributory base times 9.45 %: 100 more of base is 9.45 more.
     expect(con.iessEmployee - sin.iessEmployee).toBeCloseTo(9.45, 10);
     expect(con.grossIncome - sin.grossIncome).toBeCloseTo(
       100 + (con.thirteenthMonthly - sin.thirteenthMonthly),

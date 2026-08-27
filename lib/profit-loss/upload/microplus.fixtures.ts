@@ -63,7 +63,7 @@ function account(code: string, name: string, valueCol: number, value: FixtureCel
   ]);
 }
 
-/** Ingresos 3,500.00 · Gastos −1,240.50 (con una contra-cuenta positiva) · RESULTADO 2,259.50. */
+/** Ingresos 3,500.00 · Gastos −1,240.50 (with a positive counter-account) · RESULTADO 2,259.50. */
 const BODY: FixtureCell[][] = [
   account("4.", "INGRESOS", 23, "3,500.00"),
   [],

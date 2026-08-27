@@ -1,28 +1,28 @@
 /**
- * De qué EMPRESA son las ventas de un cliente: la razón social que declaran sus archivos.
+ * Which COMPANY a client's sales belong to: the razón social its files declare.
  *
- * Es DERIVADA y no se guarda —la misma decisión que `deriveHotelIdentity` en Ocupaciones y
- * `deriveWorkspaceIdentity` en PyG—, y eso es lo que hace gratis la regla que importa: **un cliente
- * sin ventas cargadas no tiene identidad**, así que la primera carga la ADOPTA y no puede chocar
- * con nada. Borrar el último mes devuelve al cliente a no tener ninguna.
+ * It is DERIVED and not stored —the same decision as `deriveHotelIdentity` in Ocupaciones and
+ * `deriveWorkspaceIdentity` in PyG—, and that is what makes the rule that matters free: **a client
+ * with no sales loaded has no identity**, so the first upload ADOPTS it and cannot clash with
+ * anything. Deleting the last month returns the client to having none.
  *
- * Es UN solo campo, al revés que PyG, y por el mismo motivo que en Ocupaciones: hay un único
- * parser, así que no hay sistema con el que discrepar, y aquí no existe un «modo» de guardar.
+ * It is ONE single field, unlike PyG, and for the same reason as in Ocupaciones: there is a single
+ * parser, so there is no system to disagree with, and here there is no «mode» of storing.
  *
- * **El nombre del CLIENTE nunca entra en esta comparación.** El usuario llama «Clínica Durán» a lo
- * que el archivo llama `HOSPITAL GENERAL PRIVADO DURAN S.A.`; comparar la etiqueta contra la razón
- * social rechazaría cargas legítimas, que es la regla que PyG y Ocupaciones ya sostienen.
+ * **The CLIENT's name never enters this comparison.** The user calls «Clínica Durán» what the file
+ * calls `HOSPITAL GENERAL PRIVADO DURAN S.A.`; comparing the label against the razón social would
+ * reject legitimate uploads, which is the rule PyG and Ocupaciones already hold.
  */
 import type { ParsedSalesMonth, SalesMonth } from "./types";
 
 export interface SalesIdentity {
-  /** Verbatim, tal como el archivo la declara — es lo que el aviso enseña. */
+  /** Verbatim, exactly as the file declares it — it is what the notice shows. */
   companyName: string;
 }
 
-/** Sin acentos, en minúsculas, y con la puntuación convertida en SEPARADOR en vez de desaparecer:
- *  `DURAN S.A.` → `duran s a`, que es lo que impide fundir dos empresas que solo se distinguen por
- *  una palabra. */
+/** With no accents, in lower case, and with punctuation turned into a SEPARATOR instead of
+ *  disappearing: `DURAN S.A.` → `duran s a`, which is what stops two companies that differ only by a
+ *  word from being fused. */
 function normalize(name: string): string {
   return name
     .normalize("NFD")
@@ -32,13 +32,13 @@ function normalize(name: string): string {
     .trim();
 }
 
-/** La identidad de lo que el cliente YA tiene, o `null` si no tiene nada. */
+/** The identity of what the client ALREADY has, or `null` if it has nothing. */
 export function deriveSalesIdentity(months: readonly SalesMonth[]): SalesIdentity | null {
   const named = months.find((month) => month.companyName.trim() !== "");
   return named ? { companyName: named.companyName } : null;
 }
 
-/** La identidad de lo que llega. `null` si ningún archivo del lote declara empresa. */
+/** The identity of what is arriving. `null` if no file of the batch declares a company. */
 export function incomingSalesIdentity(parsed: readonly ParsedSalesMonth[]): SalesIdentity | null {
   const named = parsed.find((month) => month.companyName.trim() !== "");
   return named ? { companyName: named.companyName } : null;
@@ -49,9 +49,9 @@ export function sameSalesIdentity(a: SalesIdentity, b: SalesIdentity): boolean {
 }
 
 /**
- * El aviso, cuando lo que llega contradice lo que el cliente ya tiene. Es un AVISO y no un
- * bloqueo: la empresa puede haberse renombrado, y la app no puede saberlo — lo que no puede es
- * escribir la facturación de otra compañía encima sin decirlo.
+ * The notice, when what arrives contradicts what the client already has. It is a NOTICE and not a
+ * block: the company may have been renamed, and the app cannot know — what it cannot do is write
+ * another company's billing over it without saying so.
  */
 export function describeSalesIdentityClash(
   current: SalesIdentity,
@@ -67,9 +67,9 @@ export function describeSalesIdentityClash(
 }
 
 /**
- * Cierra la frase sin doblar el punto. Media razón social del país acaba en una forma societaria
- * abreviada —`S.A.`, `CIA. LTDA.`— y añadirle el punto de la oración deja un `S.A..` que se lee
- * como una errata de la app sobre el nombre del cliente.
+ * Closes the sentence without doubling the full stop. Half the country's razón sociales end in an
+ * abbreviated legal form —`S.A.`, `CIA. LTDA.`— and adding the sentence's full stop leaves an `S.A..`
+ * that reads as a typo of the app over the client's name.
  */
 function sentenceEnd(name: string): string {
   const trimmed = name.trim();

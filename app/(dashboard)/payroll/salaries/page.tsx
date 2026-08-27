@@ -1,11 +1,11 @@
 import { SalariesView } from "@/components/payroll/salaries/salaries-view";
 
 /**
- * Sueldos por Áreas: subitem de Rol de Pagos, no módulo propio. Cuelga de `/payroll` porque lee los
- * períodos y la nómina del CLIENTE ACTIVO de ese módulo — el selector del header se monta por el
- * módulo padre, sin que esta página declare nada.
+ * Sueldos por Áreas: a subitem of Rol de Pagos, not a module of its own. It hangs off `/payroll`
+ * because it reads the períodos and the nómina of that module's ACTIVE CLIENT — the header's
+ * selector is mounted by the parent module, without this page declaring anything.
  *
- * Sin `ModuleTabs`: como el historial de nómina, esta vista es la página entera.
+ * No `ModuleTabs`: like the payroll history, this view is the whole page.
  */
 export default function PayrollSalariesPage() {
   return <SalariesView />;

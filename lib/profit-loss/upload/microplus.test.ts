@@ -71,8 +71,8 @@ describe("microplusStrategy.detect", () => {
   });
 
   it("no reclama un archivo de Dingoo, cuyo encabezado normaliza a las mismas etiquetas", () => {
-    // `Código`/`Nombre de la cuenta` es indistinguible de `CODIGO`/`NOMBRE DE LA CUENTA` una vez
-    // normalizados acentos y mayúsculas; lo que separa a los dos formatos es la fila de rango.
+    // `Código`/`Nombre de la cuenta` is indistinguishable from `CODIGO`/`NOMBRE DE LA CUENTA` once
+    // accents and case are normalized; what separates the two formats is the range row.
     expect(
       microplusStrategy.detect(
         buildCandidate("RptEstadoResultados.xlsx", dingooBuffer(DINGOO_AOA)),
@@ -108,7 +108,7 @@ describe("microplusStrategy.parse — archivo bien formado", () => {
   });
 
   it("el periodo sale del rango, nunca de la fecha de impresión", () => {
-    // El preámbulo declara `Fecha:` con el serial de julio de 2026 y un rango de mayo.
+    // The preamble declares `Fecha:` with July 2026's serial and a range of May.
     const slice = parseOk(MICROPLUS_AOA);
     expect(slice.month).toBe(4);
     expect(slice.year).toBe(2026);
@@ -150,7 +150,7 @@ describe("microplusStrategy.parse — el código se normaliza", () => {
       "La cuenta 5.2.03 viene marcada como cuenta padre pero no tiene cuentas anidadas en el " +
         "archivo; se conserva el árbol derivado de los códigos.",
     ]);
-    // El árbol manda: la cuenta sigue existiendo con su código normalizado y su valor.
+    // The tree leads: the account still exists with its normalized code and its value.
     expect(valueOf(slice, "5.2.03")).toBe(-150);
   });
 });
@@ -164,7 +164,7 @@ describe("microplusStrategy.parse — la rama de gastos se niega al importar", (
   });
 
   it("el resultado cuadra con el RESULTADO: del archivo, sin aviso de descuadre", () => {
-    // 3 500,00 − 1 240,50 = 2 259,50, el mismo RESULTADO: que declara el archivo.
+    // 3,500.00 − 1,240.50 = 2,259.50, the same RESULTADO: the file declares.
     expect(parseOk(MICROPLUS_AOA).warnings).toEqual([]);
   });
 
@@ -176,7 +176,7 @@ describe("microplusStrategy.parse — la rama de gastos se niega al importar", (
   it("la contra-cuenta positiva queda restando gasto", () => {
     const slice = parseOk(MICROPLUS_AOA);
     expect(valueOf(slice, "5.2.03")).toBe(-150);
-    // 390,50 de sueldos menos 150,00 de descuento = 240,50 de gasto administrativo.
+    // 390.50 of salaries minus 150.00 of discount = 240.50 of administrative expense.
     expect(valueOf(slice, "5.2.01") + valueOf(slice, "5.2.03")).toBe(240.5);
   });
 });

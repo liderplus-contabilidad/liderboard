@@ -30,14 +30,14 @@ import { PeriodNotFound } from "./period-not-found";
 import { PeriodParameters } from "./period-parameters";
 
 const EMPTY_LINES: PayrollEmployeeLine[] = [];
-/** Estable entre renders: un `[]` nuevo cada vez invalidaría los `useMemo` que lo llevan en las
- *  dependencias, y con ellos el rol entero de la pantalla. */
+/** Stable between renders: a fresh `[]` each time would invalidate the `useMemo`s that carry it in
+ *  their dependencies, and with them the screen's whole rol. */
 
 type DetailTab = "empleados" | "asiento";
 
-/** La MISMA barra de pestañas que Datos · Gráficos · Análisis de los otros módulos (`TabBar`), no
- *  un `SegmentedControl`: en esta app ese control significa elegir cómo se ve UNA tarjeta (el «Ver
- *  por» de Ocupaciones, el «Base» de Análisis), y esto cambia de vista. */
+/** The SAME tab bar as the other modules' Datos · Gráficos · Análisis (`TabBar`), not a
+ *  `SegmentedControl`: in this app that control means choosing how ONE card is seen (Ocupaciones'
+ *  «Ver por», Análisis' «Base»), and this changes view. */
 const TABS: TabBarItem<DetailTab>[] = [
   { id: "empleados", label: "Empleados", icon: Users },
   { id: "asiento", label: "Asiento contable", icon: BookText },
@@ -46,17 +46,17 @@ const TABS: TabBarItem<DetailTab>[] = [
 const TAB_ID_PREFIX = "payroll-period";
 
 /**
- * La pantalla de un período: `/payroll/[periodId]`. Todo lo que lee viene o del `PayrollDataProvider`
- * (períodos del cliente abierto, para el navegador ‹ › y el borrado) o de una lectura propia de su
- * nómina — `listEmployees(periodId)` no toma `clientId` porque `periodId` ya es único por sí solo,
- * pero la pantalla nunca la RINDE hasta confirmar que ese período está en la lista del cliente
- * activo, así que ningún dato de otro cliente llega a pintarse.
+ * A período's screen: `/payroll/[periodId]`. Everything it reads comes either from the
+ * `PayrollDataProvider` (the open client's períodos, for the ‹ › navigator and for deleting) or from
+ * a read of its own nómina — `listEmployees(periodId)` takes no `clientId` because `periodId` is
+ * already unique on its own, but the screen never RENDERS until it has confirmed that período is in
+ * the active client's list, so no data of another client ever gets painted.
  *
- * Todas las cifras salen del MOTOR, calculadas una sola vez aquí y repartidas: los KPIs, la tabla
- * y los comprobantes leen el mismo `rows`, así que no pueden discrepar. Una nómina sin ningún
- * archivo cargado rinde igual de completa — la ficha declara el sueldo y lo no capturado vale cero
- * de verdad (ver `toEngineInput`) —, y lo único que queda vacío sin datos es la conciliación, que
- * necesita que alguien declare lo PAGADO.
+ * Every figure comes from the ENGINE, computed just once here and handed out: the KPIs, the table and
+ * the payslips read the same `rows`, so they cannot disagree. A nómina with no file loaded at all
+ * renders just as complete — the record declares the salary and what is not captured is really worth
+ * zero (see `toEngineInput`) —, and the only thing left empty with no data is the reconciliation,
+ * which needs someone to declare what was PAID.
  */
 export function PeriodDetailView({ periodId }: { periodId: string }) {
   const router = useRouter();
@@ -72,10 +72,10 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   const prev = period ? adjacentPeriod(periods, period.id, "prev") : null;
   const next = period ? adjacentPeriod(periods, period.id, "next") : null;
 
-  // El rol de cada línea, calculado UNA vez para toda la pantalla. Todo lo de abajo se deriva de
-  // aquí — KPIs, tabla y comprobantes —, que es lo que garantiza que las tres cosas digan lo mismo.
-  // Los conceptos extra son del PERÍODO —una columna del rol, no una decisión de cada empleado—,
-  // así que viajan aparte de la ficha y llegan a las tres lecturas de abajo por el mismo camino.
+  // Each line's rol, computed ONCE for the whole screen. Everything below derives from here — KPIs,
+  // table and payslips —, which is what guarantees the three of them say the same thing. The extra
+  // concepts belong to the PERÍODO —a column of the rol, not a decision of each employee—, so they
+  // travel apart from the record and reach the three readings below by the same path.
   const rows = useMemo(
     () =>
       lines.map((line) => ({
@@ -91,21 +91,22 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     () => rows.filter((row) => matchesEmployeeSearch(row.line, search)),
     [rows, search],
   );
-  // El asiento sale de la nómina del período, sumada por `journal-amounts.ts` a través del motor.
-  // `lines` en las dependencias no es ceremonia: con el array vacío que tenía el mock, el asiento
-  // quedaría congelado en el primer render y no se movería al corregir un anticipo.
-  // `.oxlintrc.json` solo pone en error `correctness`, así que `react-hooks/exhaustive-deps` no
-  // está para atraparlo.
+  // The journal entry comes out of the período's nómina, summed by `journal-amounts.ts` through the
+  // engine. `lines` in the dependencies is not ceremony: with the empty array the mock had, the entry
+  // would be frozen on the first render and would not move on correcting an advance.
+  // `.oxlintrc.json` only puts `correctness` in error, so `react-hooks/exhaustive-deps` is not there
+  // to catch it.
   const journalEntry = useMemo(
     () => buildJournalEntry(journalAmountsFor(lines, DEFAULT_PAYROLL_PARAMETERS)),
     [lines],
   );
 
   /**
-   * Los comprobantes de la nómina entera, uno por página y en el orden en que se lee la tabla.
+   * The payslips of the whole nómina, one per page and in the order the table reads.
    *
-   * `buildPeriodPayslips` es el MISMO constructor que usa la fila del historial, que baja este mismo .zip
-   * sin abrir el período. Nada se persiste — cada cifra sale del motor en este instante.
+   * `buildPeriodPayslips` is the SAME builder the history row uses, which downloads this same .zip
+   * without opening the período. Nothing is persisted — every figure comes out of the engine at this
+   * instant.
    */
   const [downloading, setDownloading] = useState(false);
   const downloadPayslipsForPeriod = useCallback(async () => {
@@ -152,8 +153,8 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     }
   }, [period, deletePeriod, router]);
 
-  // Antes de la primera lectura de Dexie no se sabe si el período existe: esperar evita el
-  // parpadeo del vacío «no existe» sobre un período que en realidad sí está.
+  // Before the first read from Dexie it is not known whether the período exists: waiting avoids the
+  // «does not exist» empty state flickering over a período that is actually there.
   if (!ready) {
     return null;
   }

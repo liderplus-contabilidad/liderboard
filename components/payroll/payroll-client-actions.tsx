@@ -16,14 +16,14 @@ import type { PayrollClientContents, PayrollClientSummary } from "@/lib/payroll/
 import { describeClientContents } from "@/lib/payroll/db";
 import { usePayrollData } from "./payroll-data-provider";
 
-/** Las palabras de este módulo: el sujeto es el cliente, como en PyG. */
+/** This module's words: the subject is the client, as in PyG. */
 export const PAYROLL_LABELS: EntityLabels = {
   subject: "cliente",
   plural: "clientes",
   renameKeeps: "sus períodos y roles de pago",
 };
 
-/** «3 períodos · 2025–2026» — lo que un cliente TIENE, en una línea. */
+/** «3 períodos · 2025–2026» — what a client HAS, in one line. */
 function describeClient(client: PayrollClientSummary): string | undefined {
   if (client.periodCount === 0) {
     return undefined;
@@ -38,37 +38,37 @@ function describeClient(client: PayrollClientSummary): string | undefined {
 }
 
 /**
- * El diálogo de nombre conectado al provider de Rol de Pagos. Las reglas y el estado son de
- * `useEntityNaming`; aquí solo se dice qué lista, qué palabras y que este módulo pide además los
- * datos de la empresa del membrete.
+ * The name dialog wired to Rol de Pagos' provider. The rules and the state belong to
+ * `useEntityNaming`; all that is said here is which list, which words and that this module also asks
+ * for the letterhead's company data.
  */
 function useClientNaming() {
   const { clients, createClient, updateClient } = usePayrollData();
   return useEntityNaming({
     entities: clients,
     labels: PAYROLL_LABELS,
-    // Rol de Pagos es el único módulo que pide el perfil de empresa: su rol y su comprobante son
-    // documentos con membrete, y un cliente sin esos datos no puede producirlos.
+    // Rol de Pagos is the only module that asks for the company profile: its rol and its payslip are
+    // documents with a letterhead, and a client without that data cannot produce them.
     withCompany: true,
-    // Y el único que declara un CENTRO DE COSTO: su nombre entra en el rótulo del papel y su logo
-    // lo cierra por la derecha. Es opcional, a diferencia del perfil.
+    // And the only one that declares a COST CENTER: its name goes into the paper's heading and its
+    // logo closes it on the right. It is optional, unlike the profile.
     withCostCenter: true,
-    // Y el único que admite NOMBRES REPETIDOS: la firma lleva la nómina de varias unidades de una
-    // misma empresa y las llama a todas igual, así que rechazar el segundo «Delicmar» obligaba a
-    // inventarle un nombre que su papel no dice. Lo que las distingue en pantalla es el centro de
-    // costo, que viaja en el rótulo de la fila cuando se declara.
+    // And the only one that admits DUPLICATE NAMES: the firm keeps the nómina of several units of the
+    // same company and calls them all the same, so rejecting the second «Delicmar» forced inventing a
+    // name its paper does not say. What tells them apart on screen is the cost center, which travels
+    // in the row's label when it is declared.
     allowDuplicateNames: true,
     onCreate: createClient,
-    // Los logos por centro son el cuarto argumento y aquí no existen: un cliente de Rol de Pagos no
-    // tiene la lista de centros que PyG deriva de sus datos —el suyo lo DECLARA el usuario—, así
-    // que se descarta y el perfil sigue de largo.
+    // The per-center logos are the fourth argument and do not exist here: a Rol de Pagos client does
+    // not have the list of centers PyG derives from its data —the user DECLARES its own—, so it is
+    // dropped and the profile carries on.
     onRename: (id, name, logo, _centerLogos, company, costCenter) =>
       updateClient(id, name, logo, company, costCenter),
   });
 }
 
-/** «Agregar cliente» fuera del selector — la única salida del vacío. Mismo diálogo, mismas
- * reglas; solo cambia el disparador. */
+/** «Agregar cliente» outside the selector — the only exit from the empty state. Same dialog, same
+ * rules; only the trigger changes. */
 export function CreatePayrollClientButton() {
   const { openCreate, dialog } = useClientNaming();
   return (
@@ -82,8 +82,8 @@ export function CreatePayrollClientButton() {
 }
 
 /**
- * El selector de clientes de Rol de Pagos: el `ActiveClient` prop-driven conectado al provider,
- * más los tres diálogos que crean, renombran y borran — la misma forma que `PygClientActions` y
+ * Rol de Pagos' client selector: the prop-driven `ActiveClient` wired to the provider, plus the three
+ * dialogs that create, rename and delete — the same shape as `PygClientActions` and
  * `OccupancyHotelActions`.
  */
 export function PayrollClientActions() {
@@ -98,9 +98,9 @@ export function PayrollClientActions() {
         const caption = describeClient(client);
         return {
           id: client.id,
-          // El rótulo COMPUESTO, el mismo que encabeza el PDF y el Excel: con nombres repetidos
-          // permitidos, el centro es lo único que puede decir cuál de los dos «Delicmar» es cada
-          // fila, y decirlo aquí es más barato que una segunda línea que casi siempre sobra.
+          // The COMPOSED label, the same one that heads the PDF and the Excel: with duplicate names
+          // allowed, the center is the only thing that can say which of the two «Delicmar» each row
+          // is, and saying it here is cheaper than a second line that is almost always superfluous.
           name: costCenterHeading(client.name, client.costCenter),
           ...(caption ? { caption } : {}),
           ...(client.logo ? { logo: client.logo } : {}),
@@ -132,8 +132,8 @@ export function PayrollClientActions() {
               client: {
                 name: costCenterHeading(activeClient.name, activeClient.costCenter),
                 period: pluralize(activeClient.periodCount, "período"),
-                // En el orden en que se IMPRIMEN: el del cliente delante y el de su centro detrás,
-                // así que la cabecera confirma en pantalla lo que el PDF y el Excel encabezan.
+                // In the order in which they are PRINTED: the client's in front and its center's
+                // behind, so the header confirms on screen what the PDF and the Excel head with.
                 ...(activeLogos.left ? { logo: activeLogos.left } : {}),
                 ...(activeLogos.right ? { centerLogo: activeLogos.right } : {}),
               },
@@ -166,8 +166,8 @@ export function PayrollClientActions() {
 }
 
 /**
- * Borrar un cliente es irreversible, así que la confirmación CUENTA lo que descarta en vez de
- * nombrarlo en abstracto — «sus períodos» es justo la frase que uno confirma sin leer.
+ * Deleting a client is irreversible, so the confirmation COUNTS what it discards instead of naming it
+ * in the abstract — «sus períodos» is exactly the phrase one confirms without reading.
  */
 function DeletePayrollClientDialog({
   client,

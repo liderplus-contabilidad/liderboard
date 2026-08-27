@@ -23,15 +23,15 @@ import { usePygData } from "./pyg-data-provider";
  * PyG's filter row. It is the ONLY place PyG selects data — there is no separate "Comparar" box —
  * and the same row (and the same marks) reaches Datos, Gráficos and Análisis alike.
  *
- * Se lee en TRES TRAMOS separados por una línea, porque siete controles seguidos y todos iguales no
- * dicen cuál va con cuál. A la izquierda lo que ACOTA quién se compara (Cliente · Cuenta · Nivel ·
- * Centro); en medio el TIEMPO, que son tres controles del mismo eje —«Año» y «Periodo» eligen qué
- * tramo y «Ver por» con qué grano— y que estaban partidos a los dos extremos de la fila; y a la
- * derecha «Predeterminados», que no acota nada sino que SUSTITUYE la lectura entera.
+ * It reads in THREE SEGMENTS separated by a rule, because seven controls in a run and all alike do
+ * not say which goes with which. On the left, what NARROWS who is compared (Cliente · Cuenta · Nivel ·
+ * Centro); in the middle, TIME, which is three controls of the same axis —«Año» and «Periodo» pick
+ * which span and «Ver por» with what grain— and used to be split at the two ends of the row; and on
+ * the right «Predeterminados», which narrows nothing but REPLACES the whole reading.
  *
- * Los tres tramos son del mismo material —desplegables de 34 px— y eso incluye a «Ver por», que era
- * el único con otra forma. El único botón que no es un desplegable es el de predeterminados, y no
- * lo es porque abre una ventana en vez de un panel.
+ * The three segments are of the same material —34 px dropdowns— and that includes «Ver por», which
+ * was the only one with another shape. The one button that is not a dropdown is the presets one, and
+ * it is not because it opens a window instead of a panel.
  */
 export function PygToolbar() {
   const {
@@ -105,7 +105,7 @@ export function PygToolbar() {
             selected={filters.years}
             onToggle={toggleYear}
             onSelectAll={clearYears}
-            // Los años del consolidado son de los clientes que lo componen: se borran allí.
+            // The consolidado's years belong to the clients that compose it: they are deleted there.
             {...(isConsolidated ? {} : { onDelete: removeYear })}
           />
           <PeriodFilter
@@ -117,8 +117,9 @@ export function PygToolbar() {
           <FrequencyFilter value={frequency} allowed={allowed} onChange={setFrequency} />
         </div>
 
-        {/* Se pone a sí mismo contra el borde derecho: se rinde entero cuando el plan abierto no
-            admite ninguna vista, y una línea suelta ahí sería el resto de un control que no está. */}
+        {/* It puts itself against the right edge: it renders nothing at all when the open chart of
+            accounts admits no view, and a loose rule there would be the remains of a control that is
+            not present. */}
         <PresetFilter />
       </Toolbar>
 

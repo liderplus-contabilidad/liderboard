@@ -43,7 +43,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  /** El choque a resolver, con los archivos que lo provocaron: nada se escribe hasta que se elija. */
+  /** The clash to resolve, with the files that caused it: nothing is written until one is picked. */
   const [clash, setClash] = useState<{
     plan: Extract<ImportPlan, { kind: "clash" }>;
     results: OccupancyParseResult[];
@@ -93,7 +93,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
     f.result.dataset.warnings.map((warning) => `${f.fileName}: ${warning}`),
   );
 
-  /** Lo que traen los archivos, en palabras — la tarjeta derecha del diálogo de choque. */
+  /** What the files carry, in words — the clash dialog's right-hand card. */
   const incomingContents = useMemo(() => {
     const centers = new Set(valid.map((f) => f.result.dataset.centerName));
     const years = [...new Set(valid.map((f) => f.result.dataset.year))].sort((a, b) => a - b);
@@ -134,7 +134,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
     }
   }, [valid, mixedHotels, busy, planImport, hotels, importParsed, done]);
 
-  /** Las tres salidas del choque. Cada una escribe en un sitio distinto y solo en uno. */
+  /** The clash's three exits. Each writes in a different place and in only one. */
   const runClash = useCallback(
     async (exit: "into-matching" | "new-hotel" | "replace") => {
       if (!clash || busy) {
@@ -321,8 +321,8 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
         </div>
       </div>
 
-      {/* Sobre el modal, no en su lugar: los archivos siguen en la lista detrás, que es lo que
-          hace que «Cancelar» pueda no escribir nada y dejarlos donde estaban. */}
+      {/* Over the modal, not in its place: the files are still in the list behind it, which is what
+          lets «Cancelar» write nothing and leave them where they were. */}
       {clash && confirmation && (
         <HotelClashDialog
           confirmation={confirmation}
@@ -342,7 +342,7 @@ export function OccupancyUploadModal({ open, onClose }: { open: boolean; onClose
   );
 }
 
-/** Lo que el hotel abierto tiene ahora, en una frase — lo que el bloque de reemplazo descarta. */
+/** What the open hotel holds right now, in one phrase — what the replace block discards. */
 function describeActiveHotel(hotel: { centers: number; years: number[] } | undefined): string {
   if (!hotel || hotel.years.length === 0) {
     return "sin datos cargados";
@@ -355,8 +355,8 @@ function describeActiveHotel(hotel: { centers: number; years: number[] } | undef
 }
 
 /**
- * El diálogo de choque, en sus dos formas. Rinde lo que `describeHotelChange` decidió: la copia y
- * qué acción es la principal viven en `lib/`, y esto solo las pone en pantalla.
+ * The clash dialog, in its two forms. It renders what `describeHotelChange` decided: the copy and
+ * which action is the primary one live in `lib/`, and this only puts them on screen.
  */
 function HotelClashDialog({
   confirmation,

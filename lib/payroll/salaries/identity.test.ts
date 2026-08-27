@@ -7,7 +7,7 @@ function fields(name: string, idCard: string) {
 
 describe("employeeKey", () => {
   it("agrupa por cédula aunque el nombre esté escrito de otra manera", () => {
-    // El caso real: el archivo de un mes grita el nombre y el de otro lo escribe con acentos.
+    // The real case: one month's file shouts the name and another's writes it with accents.
     const febrero = employeeKey(fields("Sandoval Acosta Luis Fernándo", "1712345678"));
     const marzo = employeeKey(fields("SANDOVAL ACOSTA LUIS FERNANDO", "1712345678"));
 
@@ -19,7 +19,7 @@ describe("employeeKey", () => {
   });
 
   it("separa a dos personas con el mismo nombre y distinta cédula", () => {
-    // Sin esto dos homónimos se sumarían en una fila, que es el fallo invisible.
+    // Without this two namesakes would add up in one row, which is the invisible failure.
     const uno = employeeKey(fields("JUAN PEREZ", "1712345678"));
     const otro = employeeKey(fields("JUAN PEREZ", "0912345678"));
 
@@ -27,7 +27,7 @@ describe("employeeKey", () => {
   });
 
   it("cae al nombre cuando la ficha no trae cédula", () => {
-    // El importador escribe lo que diga el archivo, sin exigirla.
+    // The importer writes whatever the file says, without requiring it.
     const enero = employeeKey(fields("MARIA LOPEZ", ""));
     const febrero = employeeKey(fields("maría lópez", "  "));
 
@@ -36,7 +36,8 @@ describe("employeeKey", () => {
   });
 
   it("no funde una ficha sin cédula con una que sí la declara", () => {
-    // Son dos evidencias distintas: coincidir en el nombre no es afirmar que son la misma persona.
+    // They are two different pieces of evidence: matching on the name is not claiming they are the
+    // same person.
     const conCedula = employeeKey(fields("MARIA LOPEZ", "1712345678"));
     const sinCedula = employeeKey(fields("MARIA LOPEZ", ""));
 

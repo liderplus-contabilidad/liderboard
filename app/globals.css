@@ -46,12 +46,13 @@
   --color-section-other-hover: #e3c0a3;
   --color-section-other-sub-hover: #ead7c9;
 
-  /* El control que SALE de su tarjeta hacia otra fuente —hoy solo el cruce de «Composición de los
-     ingresos» hacia Ventas por servicio—. No es `brand`, y esa es toda su razón de ser: `brand` es
-     la acción primaria DENTRO de la pantalla, así que un enlace que se lleva al lector a otro
-     reporte pintado de `brand` se lee como un control más de la tarjeta. El fucsia no lo usa nada
-     más en la app, ni la paleta de series ni los rellenos de sección, así que dice «esto es de
-     otra parte» sin competir con ninguna lectura. Medido sobre `surface-header`: 6.1:1. */
+  /* The control that LEAVES its card towards another source —today only the cross-link from
+     «Composición de los ingresos» to Ventas por servicio—. It is not `brand`, and that is its whole
+     reason for being: `brand` is the primary action WITHIN the screen, so a link that carries the
+     reader off to another report painted in `brand` reads as one more control of the card. Nothing
+     else in the app uses this fuchsia, neither the series palette nor the section fills, so it says
+     «this belongs elsewhere» without competing with any reading. Measured over `surface-header`:
+     6.1:1. */
   --color-crosslink: #a21caf;
   --color-crosslink-hover: #86198f;
   --color-crosslink-soft: rgba(162, 28, 175, 0.08);

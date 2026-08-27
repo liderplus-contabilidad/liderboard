@@ -1,18 +1,18 @@
 /**
- * La persistencia de «Ventas por servicio» en IndexedDB, y **la ÚNICA puerta a sus tablas** — la
- * misma regla que sostienen `lib/profit-loss/db.ts`, `lib/occupancy/db.ts` y `lib/payroll/db.ts`,
- * y por el mismo motivo, que aquí no es orden sino mitigación: con varios clientes compartiendo
- * una tabla, una consulta sin `clientId` mezcla la facturación de dos empresas en silencio, y nada
- * aguas abajo —ni las agregaciones de `derive.ts`, ni las tarjetas, ni el informe— puede notarlo.
- * Toda lectura y toda escritura de aquí abajo llevan su `clientId`.
+ * The persistence of «Ventas por servicio» in IndexedDB, and **the ONLY door to its tables** — the
+ * same rule `lib/profit-loss/db.ts`, `lib/occupancy/db.ts` and `lib/payroll/db.ts` hold up, and for
+ * the same reason, which here is not tidiness but mitigation: with several clients sharing one table,
+ * a query with no `clientId` mixes the billing of two companies in silence, and nothing downstream
+ * —not `derive.ts`'s aggregations, not the cards, not the report— can notice. Every read and every
+ * write below carries its `clientId`.
  *
- * **Base propia** (`liderboard-sales`), separada de la de PyG aunque la partición sea el cliente de
- * PyG: el grano de esto es la LÍNEA DE FACTURA, y meterla en la base del estado de resultados
- * obligaría a esa base a guardar algo que no es una cuenta. Lo que se comparte es la identidad del
- * cliente, no el almacén.
+ * **A database of its own** (`liderboard-sales`), separate from PyG's even though the partition is
+ * PyG's client: the grain of this is the INVOICE LINE, and putting it in the estado de resultados'
+ * database would force that database to store something that is not an account. What is shared is the
+ * client's identity, not the store.
  *
- * Nada derivado se guarda: el reparto por servicio, la concentración por pagador y la evolución del
- * año se recalculan en cada lectura. Una copia quedaría obsoleta a la siguiente carga.
+ * Nothing derived is stored: the breakdown by service, the concentration by payer and the year's
+ * evolution are recomputed on every read. A copy would go stale on the next upload.
  */
 import Dexie, { type Table } from "dexie";
 import { salesMonthId, type ParsedSalesMonth, type SalesMonth } from "./types";
@@ -23,9 +23,9 @@ class SalesDb extends Dexie {
   constructor() {
     super("liderboard-sales");
     this.version(1).stores({
-      // El índice compuesto es ÚNICO (`&`) porque un cliente no puede tener dos veces el mismo
-      // (año, mes): recargar un mes lo REEMPLAZA, y con `id` derivado de esa terna el reemplazo lo
-      // hace `put` por construcción en vez de depender de que alguien recuerde borrar antes.
+      // The compound index is UNIQUE (`&`) because a client cannot have the same (year, month) twice:
+      // reloading a month REPLACES it, and with an `id` derived from that triple the replacement is
+      // done by `put` by construction instead of depending on someone remembering to delete first.
       months: "id, clientId, &[clientId+year+monthIndex], [clientId+year]",
     });
   }
@@ -34,8 +34,8 @@ class SalesDb extends Dexie {
 const db = new SalesDb();
 
 /**
- * Todos los meses de UN cliente. La única forma de leer la tabla: no hay ninguna consulta sin
- * `clientId`, que es lo que impide que un año de otra empresa se cuele en una lectura.
+ * Every month of ONE client. The only way of reading the table: there is no query without a
+ * `clientId`, which is what stops another company's year slipping into a read.
  */
 export function monthsForClient(clientId: string | null): Promise<SalesMonth[]> {
   if (!clientId) {
@@ -45,13 +45,13 @@ export function monthsForClient(clientId: string | null): Promise<SalesMonth[]> 
 }
 
 /**
- * Escribe un mes en el cliente ABIERTO, ESTAMPÁNDOLE ahí su dueño: a qué cliente pertenece un
- * archivo lo decide qué cliente está abierto, nunca el archivo — la misma regla con la que PyG
- * convierte un `ParsedDataset` en un `PygDataset`.
+ * Writes a month into the OPEN client, STAMPING its owner there: which client a file belongs to is
+ * decided by which client is open, never by the file — the same rule PyG turns a `ParsedDataset` into
+ * a `PygDataset` with.
  *
- * Un mes ya cargado se reemplaza POR COMPLETO. No se fusiona con lo anterior: el reporte es la
- * foto entera del mes, así que quedarse con líneas de una carga previa dejaría facturas que el
- * sistema contable ya no declara.
+ * An already loaded month is replaced IN FULL. It is not merged with what was there: the report is
+ * the whole picture of the month, so keeping lines from a previous upload would leave invoices the
+ * accounting system no longer declares.
  */
 export async function saveMonths(
   clientId: string,
@@ -65,7 +65,7 @@ export async function saveMonths(
   await db.months.bulkPut(rows);
 }
 
-/** Borra un mes del cliente abierto. */
+/** Deletes a month of the open client. */
 export async function deleteMonth(
   clientId: string,
   year: number,
@@ -75,10 +75,10 @@ export async function deleteMonth(
 }
 
 /**
- * El CASCADE al borrar un cliente de PyG. Vive aquí —y lo llama quien borra el cliente— en vez de
- * que la base de PyG conozca esta: la dependencia va del módulo nuevo hacia el que ya existía, y
- * nunca al revés. Sin esto, borrar un cliente dejaría su facturación en una partición que ninguna
- * pantalla lista y ningún borrado alcanza.
+ * The CASCADE when a PyG client is deleted. It lives here —and is called by whoever deletes the
+ * client— rather than PyG's database knowing this one: the dependency goes from the new module to the
+ * one that already existed, and never the other way round. Without this, deleting a client would leave
+ * its billing in a partition no screen lists and no deletion reaches.
  */
 export async function deleteSalesForClient(clientId: string): Promise<void> {
   await db.months.where("clientId").equals(clientId).delete();

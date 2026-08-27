@@ -1,24 +1,24 @@
 /**
- * UN .ZIP, ESCRITO A MANO Y SIN COMPRIMIR — puro, y por eso testeable.
+ * A .ZIP, WRITTEN BY HAND AND UNCOMPRESSED — pure, and therefore testable.
  *
- * Existe porque una descarga de esta app puede ser VARIOS archivos: los comprobantes de una nómina
- * son un PDF por empleado, y el navegador solo baja un archivo por gesto. Es la misma vecindad de
- * `lib/download.ts` —el único sitio donde esta app baja un archivo— y por el mismo motivo: dos
- * versiones de «cómo se empaqueta» acabarían escribiendo dos formatos distintos.
+ * It exists because a download of this app can be SEVERAL files: a nómina's payslips are one PDF per
+ * employee, and the browser only downloads one file per gesture. It is the same neighbourhood as
+ * `lib/download.ts` —the only place this app downloads a file— and for the same reason: two versions
+ * of «how it is packaged» would end up writing two different formats.
  *
- * **No se añadió una dependencia, y no es ahorro de bytes**: lo que aquí se necesita es la mitad
- * trivial del formato —`store`, sin compresión—, y el contenido que va dentro (PDF, xlsx) ya viene
- * comprimido, así que desinflarlo otra vez no quita ni un kilobyte. Un `zip` de `store` son tres
- * estructuras y un CRC-32; lo único que puede estar mal es la aritmética de desplazamientos, y por
- * eso vive suelto y con tests.
+ * **No dependency was added, and it is not about saving bytes**: what is needed here is the trivial
+ * half of the format —`store`, with no compression—, and the content that goes inside (PDF, xlsx) is
+ * already compressed, so deflating it again does not save a single kilobyte. A `store` zip is three
+ * structures and a CRC-32; the only thing that can be wrong is the offset arithmetic, and that is why
+ * it lives on its own and with tests.
  *
- * **Sin ZIP64**: los tamaños viajan en 32 bits, así que el archivo entero tiene que quedarse por
- * debajo de 4 GB. Una nómina de treinta comprobantes pesa cientos de kilobytes, y el día que un
- * consumidor se acerque a ese techo lo que hace falta es ZIP64, no un parche aquí.
+ * **No ZIP64**: the sizes travel in 32 bits, so the whole file has to stay below 4 GB. A nómina of
+ * thirty payslips weighs hundreds of kilobytes, and the day a consumer approaches that ceiling what
+ * is needed is ZIP64, not a patch here.
  */
 
 export interface ZipEntry {
-  /** El nombre del archivo DENTRO del .zip. Viaja en UTF-8. */
+  /** The file's name INSIDE the .zip. It travels in UTF-8. */
   name: string;
   data: Uint8Array;
 }
@@ -27,19 +27,19 @@ const LOCAL_HEADER = 0x04034b50;
 const CENTRAL_HEADER = 0x02014b50;
 const END_OF_CENTRAL = 0x06054b50;
 
-/** Los tres bloques de cabecera, en bytes, sin contar el nombre. */
+/** The three header blocks, in bytes, not counting the name. */
 const LOCAL_SIZE = 30;
 const CENTRAL_SIZE = 46;
 const END_SIZE = 22;
 
-/** Guardado tal cual, sin comprimir. */
+/** Stored as it is, uncompressed. */
 const METHOD_STORE = 0;
-/** Bit 11: el nombre del archivo va en UTF-8 y no en la tabla de códigos del sistema. */
+/** Bit 11: the file's name goes in UTF-8 and not in the system's code page. */
 const FLAG_UTF8 = 0x0800;
-/** La versión del formato que pide un `store`: la 2.0. */
+/** The format version a `store` requires: 2.0. */
 const VERSION = 20;
 
-/** La tabla del CRC-32 de PKZIP (polinomio `0xedb88320`), construida una vez. */
+/** PKZIP's CRC-32 table (polynomial `0xedb88320`), built once. */
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
   for (let index = 0; index < 256; index++) {
@@ -52,8 +52,8 @@ const CRC_TABLE = (() => {
   return table;
 })();
 
-/** El CRC-32 que cada entrada declara. Es la única forma que tiene un extractor de saber que lo
- *  que sacó es lo que se metió. */
+/** The CRC-32 each entry declares. It is the only way an extractor has of knowing that what it took
+ *  out is what was put in. */
 export function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff;
   for (let index = 0; index < bytes.length; index++) {
@@ -63,9 +63,9 @@ export function crc32(bytes: Uint8Array): number {
 }
 
 /**
- * La fecha en el formato de MS-DOS que el .zip guarda: dos enteros de 16 bits, con los segundos en
- * pasos de dos y el año contado desde 1980. El formato no sabe de fechas anteriores, así que
- * cualquiera por debajo se ancla en ese año en vez de dar la vuelta al contador.
+ * The date in the MS-DOS format the .zip stores: two 16-bit integers, with the seconds in steps of
+ * two and the year counted from 1980. The format knows nothing of earlier dates, so anything below is
+ * anchored at that year instead of wrapping the counter around.
  */
 function dosDateTime(when: Date): { time: number; date: number } {
   const year = Math.max(1980, when.getFullYear());
@@ -76,14 +76,15 @@ function dosDateTime(when: Date): { time: number; date: number } {
 }
 
 /**
- * Las entradas, empaquetadas en un .zip.
+ * The entries, packed into a .zip.
  *
- * La fecha llega POR PARÁMETRO y no se lee del reloj aquí: es lo único que impediría afirmar en un
- * test que dos llamadas con los mismos archivos dan los mismos bytes.
+ * The date arrives BY PARAMETER and is not read off the clock here: it is the only thing that would
+ * stop a test asserting that two calls with the same files give the same bytes.
  *
- * Los nombres se escriben tal como llegan —esta capa no los valida ni los desduplica—, porque quién
- * puede llamarse cómo es del consumidor: en los comprobantes lo decide `payslipZipEntryNames`, que
- * desempata dos empleados del mismo nombre con su posición en la nómina.
+ * The names are written exactly as they arrive —this layer neither validates nor de-duplicates
+ * them—, because who can be called what belongs to the consumer: in the payslips it is decided by
+ * `payslipZipEntryNames`, which tie-breaks two employees of the same name with their position in the
+ * nómina.
  */
 export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Array {
   const encoder = new TextEncoder();
@@ -103,7 +104,7 @@ export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Arr
   const view = new DataView(out.buffer);
   const { time, date } = dosDateTime(modified);
 
-  // ── Una cabecera local y su contenido, por archivo ───────────────────────────────────────────
+  // ── One local header and its content, per file ───────────────────────────────────────────────
   const offsets: number[] = [];
   let at = 0;
   for (const file of files) {
@@ -115,7 +116,7 @@ export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Arr
     view.setUint16(at + 10, time, true);
     view.setUint16(at + 12, date, true);
     view.setUint32(at + 14, file.crc, true);
-    // Sin comprimir, el tamaño «comprimido» y el real son el mismo número.
+    // Uncompressed, the «compressed» size and the real one are the same number.
     view.setUint32(at + 18, file.data.length, true);
     view.setUint32(at + 22, file.data.length, true);
     view.setUint16(at + 26, file.name.length, true);
@@ -125,11 +126,11 @@ export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Arr
     at += LOCAL_SIZE + file.name.length + file.data.length;
   }
 
-  // ── El directorio central: la misma ficha de cada archivo, más DÓNDE empieza ─────────────────
-  // Es lo que un extractor lee primero, y por eso el desplazamiento de cada cabecera local se
-  // apunta arriba mientras se escribe en vez de recalcularse: recalcularlo sería una segunda
-  // aritmética capaz de separarse de la primera, y un .zip con un solo offset mal apunta a la mitad
-  // de otro archivo sin que su CRC llegue a comprobarse.
+  // ── The central directory: each file's same record, plus WHERE it starts ─────────────────────
+  // It is what an extractor reads first, and that is why each local header's offset is noted above
+  // while writing instead of being recomputed: recomputing it would be a second arithmetic capable of
+  // drifting from the first, and a .zip with a single wrong offset points into the middle of another
+  // file without its CRC ever getting checked.
   const centralAt = at;
   for (const [index, file] of files.entries()) {
     view.setUint32(at, CENTRAL_HEADER, true);
@@ -143,8 +144,8 @@ export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Arr
     view.setUint32(at + 20, file.data.length, true);
     view.setUint32(at + 24, file.data.length, true);
     view.setUint16(at + 28, file.name.length, true);
-    // Sin campo extra, sin comentario, un solo disco y sin atributos: nada de eso significa algo
-    // para un archivo que solo transporta descargas.
+    // No extra field, no comment, a single disk and no attributes: none of that means anything for a
+    // file that only transports downloads.
     view.setUint16(at + 30, 0, true);
     view.setUint16(at + 32, 0, true);
     view.setUint16(at + 34, 0, true);
@@ -155,7 +156,7 @@ export function zipStore(entries: readonly ZipEntry[], modified: Date): Uint8Arr
     at += CENTRAL_SIZE + file.name.length;
   }
 
-  // ── El cierre: cuántos archivos hay y dónde empieza el directorio ────────────────────────────
+  // ── The close: how many files there are and where the directory starts ───────────────────────
   view.setUint32(at, END_OF_CENTRAL, true);
   view.setUint16(at + 4, 0, true);
   view.setUint16(at + 6, 0, true);

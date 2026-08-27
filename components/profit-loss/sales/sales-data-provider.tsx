@@ -33,44 +33,45 @@ import type { ParsedSalesMonth, SalesMonth } from "@/lib/sales/types";
 import { usePygData } from "../pyg-data-provider";
 
 /**
- * El estado de «Ventas por servicio», montado DENTRO de la vista y no en el layout.
+ * «Ventas por servicio»' state, mounted INSIDE the view and not in the layout.
  *
- * La regla de la casa es que un proveedor vive en el layout porque la CABECERA lee de su mismo
- * estado —así comparten `ActiveClient` y el panel en PyG y en Ocupaciones—, y de este subitem la
- * cabecera no lee nada: el cliente lo da `PygDataProvider`, que ya está arriba. Subir estas marcas
- * sería poner en el layout algo que ninguna otra pantalla lee.
+ * The house rule is that a provider lives in the layout because the HEADER reads from its same state
+ * —that is how `ActiveClient` and the panel share it in PyG and in Ocupaciones—, and the header reads
+ * nothing from this subitem: the client is given by `PygDataProvider`, which is already above.
+ * Lifting these marks would put something in the layout no other screen reads.
  *
- * Lo que sí justifica que sea un contexto y no `useState` suelto es que tres consumidores lejanos
- * necesitan lo mismo: la barra, el modal de carga y el botón del informe.
+ * What does justify it being a context and not loose `useState` is that three distant consumers need
+ * the same thing: the bar, the upload modal and the report button.
  */
 interface SalesDataValue {
   /**
-   * El cliente de PyG al que pertenece todo esto. `null` sin ninguno abierto **y también en el
-   * CONSOLIDADO ENTRE CLIENTES**, que no es un cliente sino su suma: escribir ahí crearía una
-   * partición fantasma que ninguna pantalla lista y ningún borrado alcanza, la misma defensa que
-   * `assertRealClient` monta en la base de PyG.
+   * The PyG client all of this belongs to. `null` with none open **and also in the CROSS-CLIENT
+   * CONSOLIDADO**, which is not a client but their sum: writing there would create a phantom
+   * partition no screen lists and no deletion reaches, the same defence `assertRealClient` mounts in
+   * PyG's database.
    */
   clientId: string | null;
-  /** Si lo abierto es el consolidado — el vacío lo dice con otras palabras que «no hay cliente». */
+  /** Whether what is open is the consolidado — the empty state says so in other words than «there is
+   *  no client». */
   isConsolidated: boolean;
   clientName: string | undefined;
-  /** Falso hasta la primera lectura de Dexie: evita el parpadeo del vacío sobre un cliente que sí
-   *  tiene meses. */
+  /** False until the first read from Dexie: it avoids the empty state flickering over a client that
+   *  does have months. */
   ready: boolean;
-  /** Todos los meses del cliente, de todos los años. */
+  /** Every month of the client, of every year. */
   months: SalesMonth[];
   universe: SalesUniverse;
   filters: SalesFilters;
-  /** Los meses que la lectura suma: los marcados, o todos los cargados del año. */
+  /** The months the reading sums: the marked ones, or every one loaded for the year. */
   period: number[];
-  /** Cómo se llama ese periodo — lo que dicen los tiles, los subtítulos y el informe. */
+  /** What that period is called — what the tiles, the subtitles and the report say. */
   periodName: string;
   reading: SalesReading;
   /**
-   * EXACTAMENTE la entrada con la que se construyeron `cards`. La expone el proveedor para que el
-   * informe imprimible pida las mismas tarjetas con los mismos argumentos en vez de recomponerlos:
-   * dos composiciones de la misma entrada pueden separarse, y quien recibe el PDF ya no tiene la
-   * pantalla al lado para cotejar.
+   * EXACTLY the input `cards` were built with. The provider exposes it so the printable report asks
+   * for the same cards with the same arguments instead of recomposing them: two compositions of the
+   * same input can drift apart, and whoever receives the PDF no longer has the screen beside them to
+   * check against.
    */
   cardsInput: SalesCardsInput;
   cards: SalesCards;
@@ -80,7 +81,7 @@ interface SalesDataValue {
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
   clearMonths: () => void;
-  /** Escribe los meses ya parseados en el cliente abierto, reemplazando los que repita. */
+  /** Writes the already parsed months into the open client, replacing the ones it repeats. */
   importMonths: (parsed: readonly ParsedSalesMonth[]) => Promise<void>;
 }
 
@@ -94,15 +95,15 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   const [hideEmptyMonths, setHideEmptyMonths] = useState(false);
   const clientId = isConsolidated ? null : activeClientId;
 
-  // La ÚNICA consulta, y siempre acotada por el cliente: es lo que impide que la facturación de
-  // dos empresas se mezcle en silencio.
+  // The ONLY query, and always bounded by the client: it is what stops the billing of two companies
+  // mixing in silence.
   const stored = useLiveQuery(() => monthsForClient(clientId), [clientId]);
   const months = stored ?? NO_MONTHS;
   const ready = stored !== undefined;
 
   const years = useMemo(() => loadedYears(months), [months]);
-  // Los AÑOS se resuelven primero, porque el universo de meses es el de los años marcados: sin ese
-  // orden, marcar un año no podría abrir los meses que solo él trae.
+  // The YEARS are resolved first, because the universe of months is that of the marked years: without
+  // that order, marking a year could not open the months only it brings.
   const yearsOnly = useMemo(
     () => sanitizeFilters(rawFilters, { years, months: [] }),
     [rawFilters, years],
@@ -110,22 +111,22 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   const universe = useMemo<SalesUniverse>(
     () => ({
       years,
-      // La UNIÓN de los meses de los años marcados, no la intersección: un mes que solo tiene uno de
-      // ellos sigue siendo un mes que se puede mirar, y la comparación dirá que al otro le falta.
+      // The UNION of the months of the marked years, not the intersection: a month only one of them
+      // has is still a month you can look at, and the comparison will say the other one lacks it.
       months: [...new Set(yearsOnly.years.flatMap((year) => loadedMonths(months, year)))].sort(
         (a, b) => a - b,
       ),
     }),
     [years, yearsOnly.years, months],
   );
-  // Podado en la LECTURA y nunca en un efecto: cambiar de cliente no deja un render con marcas de
-  // años que este cliente no tiene.
+  // Pruned on READ and never in an effect: switching client does not leave a render with marks for
+  // years this client does not have.
   const filters = useMemo(() => sanitizeFilters(rawFilters, universe), [rawFilters, universe]);
 
   const period = useMemo(() => selectedMonths(filters, universe), [filters, universe]);
   const periodName = useMemo(() => periodLabel(period, filters.years), [period, filters.years]);
 
-  /** Las líneas de un año, acotadas por los meses del periodo. */
+  /** One year's lines, bounded by the period's months. */
   const linesOf = useCallback(
     (year: number) => {
       const inPeriod = new Set(period);
@@ -136,25 +137,25 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
     [months, period],
   );
 
-  // Una sola agregación para todo lo que la pantalla dice: los tiles, las tarjetas y el informe
-  // leen de aquí, así que no pueden cuadrar contra tramos distintos.
+  // A single aggregation for everything the screen says: the tiles, the cards and the report read
+  // from here, so they cannot square against different spans.
   const reading = useMemo(
     () => readSales(filters.years.flatMap((year) => linesOf(year))),
     [filters.years, linesOf],
   );
 
-  // Y una POR AÑO, que es lo que las tarjetas comparan. Se construyen aquí y no en la tarjeta para
-  // que la suma total y las parciales salgan de las mismas líneas.
+  // And one PER YEAR, which is what the cards compare. They are built here and not in the card so the
+  // total sum and the partial ones come out of the same lines.
   const byYear = useMemo<YearReading[]>(
     () => filters.years.map((year) => ({ year, reading: readSales(linesOf(year)) })),
     [filters.years, linesOf],
   );
 
   /**
-   * El EJE de la evolución. Sin marcas de mes son los DOCE del ejercicio —es lo que hace visible un
-   * mes que nunca llegó, que es la distinción sobre la que descansa el módulo—, y con marcas es
-   * exactamente lo marcado: una marca ACOTA, aquí igual que en las otras dos tarjetas, y un eje que
-   * ignorara la marca dejaría al subtítulo diciendo «Ene–Feb» sobre doce columnas.
+   * The evolution's AXIS. With no month marks it is the TWELVE of the exercise —which is what makes a
+   * month that never arrived visible, the distinction the module rests on—, and with marks it is
+   * exactly what is marked: a mark NARROWS, here as on the other two cards, and an axis that ignored
+   * the mark would leave the subtitle saying «Ene–Feb» over twelve columns.
    */
   const monthlyByYear = useMemo<YearMonths[]>(
     () =>
@@ -203,8 +204,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
         return;
       }
       await saveMonths(clientId, parsed);
-      // Se abre en lo que se acaba de cargar: es lo que el usuario quiere ver, y sin esto un mes
-      // de otro año se guardaría sin que la pantalla se moviera.
+      // It opens on what has just been loaded: it is what the user wants to see, and without this a
+      // month of another year would be stored without the screen moving.
       const last = [...parsed].sort(byPeriod).at(-1);
       if (last) {
         setRawFilters({ years: [last.year], months: [] });

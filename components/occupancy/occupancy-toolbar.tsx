@@ -83,8 +83,8 @@ function DaySelect({
 
       {open && (
         <>
-          {/* El mismo telón que usa `Dropdown`: pulsar fuera cierra, sin cerrar el panel que lo
-              contiene — está dentro de su propio subárbol. */}
+          {/* The same backdrop `Dropdown` uses: clicking outside closes it, without closing the
+              panel that contains it — it sits inside its own subtree. */}
           <button
             type="button"
             aria-label="Cerrar los días"
@@ -149,8 +149,9 @@ function MonthPicker({
         {label}
       </span>
       <span className="flex gap-1.5">
-        {/* El ancho va en un envoltorio, no en el `className` del Select: ése llega al `<select>` y el
-            elemento flex es el `div` que lo envuelve, así que ahí `flex-1` no hacía nada. */}
+        {/* The width goes on a wrapper, not on the Select's `className`: that one reaches the
+            `<select>` and the flex element is the `div` wrapping it, so `flex-1` did nothing
+            there. */}
         <span className="w-[76px] shrink-0">
           <Select
             size="sm"
@@ -225,7 +226,7 @@ export function OccupancyToolbar() {
       dotColor: colorForEntity(id, colorOrder),
       onRemove: () => toggleCenterMark(id),
     })),
-    // El tramo es UN chip: quitarlo es volver a todo el año, no destejer doce marcas.
+    // The span is ONE chip: removing it goes back to the whole year, not unpicking twelve marks.
     ...(isRange
       ? isWholeYearRange(filters.range)
         ? []
@@ -258,8 +259,8 @@ export function OccupancyToolbar() {
                   onToggle={() => toggleCenterMark(center.id)}
                 >
                   <span className="inline-flex items-center gap-2">
-                    {/* La miniatura solo donde hay logo: reservarle hueco a todas las filas
-                        sangraría la lista por un espacio que casi nunca se llena. */}
+                    {/* The thumbnail only where there is a logo: reserving room for every row would
+                        indent the list for a space that almost never gets filled. */}
                     {logo && (
                       // oxlint-disable-next-line next/no-img-element
                       <img
@@ -343,7 +344,7 @@ export function OccupancyToolbar() {
                     );
                   })}
                 </div>
-                {/* Escrito en palabras: dos pares de selectores no dicen el tramo que forman. */}
+                {/* Written out in words: two pairs of selectors do not say what span they form. */}
                 <p className="mt-3 rounded-lg bg-brand-soft px-3 py-2 text-[12px] font-semibold text-brand">
                   {rangeLabel(filters.range)}
                 </p>
@@ -367,8 +368,9 @@ export function OccupancyToolbar() {
                     years={allYears}
                     onChange={setDraft}
                   />
-                  {/* Un clic agrega o quita, y se queda abierto: normalmente se eligen varios días del
-                      mismo mes. «Todo el mes» sale de la misma rejilla, no de una pestaña aparte. */}
+                  {/* One click adds or removes, and it stays open: normally several days of the same
+                      month get picked. «Todo el mes» comes out of the same grid, not a separate
+                      tab. */}
                   <DaySelect
                     text="Elegir días"
                     month={newDate}

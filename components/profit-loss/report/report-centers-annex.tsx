@@ -2,7 +2,7 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import type { CentersAnnex, CentersAnnexRow } from "@/lib/profit-loss/report/types";
 import { cn } from "@/lib/cn";
 
-/** Lo que se lleva el nombre del centro; el resto se reparte entre los conceptos por igual. */
+/** What the center's name takes; the rest is split evenly among the concepts. */
 const NAME_COLUMN_PCT = 30;
 
 /**
@@ -49,7 +49,7 @@ export function ReportCentersAnnex({ annex }: { annex: CentersAnnex }) {
         </thead>
         <tbody>
           {annex.columns.map((center, index) => {
-            // El Consolidado cierra la tabla: la regla lo separa de los centros que suma.
+            // The Consolidado closes the table: the rule separates it from the centers it sums.
             const isTotal = index === annex.columns.length - 1;
             return (
               <tr key={center.id} className={isTotal ? "bg-surface-header" : undefined}>

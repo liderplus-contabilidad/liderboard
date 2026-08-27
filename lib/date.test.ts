@@ -16,15 +16,15 @@ describe("formatDayMonthYear", () => {
   });
 
   it("una fecha ilegible tampoco inventa nada", () => {
-    // El parser ya deja `null` cuando no puede leer la fecha de ingreso, pero un dato viejo o
-    // tecleado a mano puede llegar roto y una pantalla no debe pintar «NaN/NaN/NaN».
+    // The parser already leaves `null` when it cannot read the hire date, but old or hand-typed data
+    // can arrive broken and a screen must not paint «NaN/NaN/NaN».
     expect(formatDayMonthYear("no es una fecha")).toBeNull();
     expect(formatDayMonthYear("")).toBeNull();
   });
 
   it("no se corre de día por zona horaria", () => {
-    // Leída como fecha LOCAL, `2026-03-01` en un huso al oeste de UTC retrocede al 28 de
-    // febrero. El rol de un mes empezando el día anterior sería un error difícil de ver.
+    // Read as a LOCAL date, `2026-03-01` in a time zone west of UTC goes back to 28 February. A rol
+    // for a month starting the day before would be a hard error to spot.
     expect(formatDayMonthYear("2026-03-01")).toBe("01/03/2026");
     expect(formatDayMonthYear("2026-01-01")).toBe("01/01/2026");
   });

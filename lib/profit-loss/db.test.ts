@@ -84,7 +84,7 @@ describe("clientes", () => {
     const second = await createClient("Manor Galápagos");
     expect(await getActiveClientId()).toBe(second.id);
     expect(await clientDatasets(second.id)).toEqual([]);
-    // El primero queda exactamente como estaba.
+    // The first one is left exactly as it was.
     expect((await clientDatasets(first.id)).map((d) => d.id)).toEqual(["a"]);
   });
 
@@ -196,7 +196,7 @@ describe("deleteClient", () => {
     expect(await db.edits.where("datasetId").equals("a25").count()).toBe(0);
     expect(await getWorkspaceMeta(a)).toBeUndefined();
     expect((await listClients()).map((c) => c.name)).toEqual(["B"]);
-    // Lo de B, intacto.
+    // B's, untouched.
     expect((await clientDatasets(b)).map((d) => d.id)).toEqual(["b26"]);
     expect(await clientEdits(b)).toHaveLength(1);
   });
@@ -251,7 +251,7 @@ describe("replaceClientWorkspace", () => {
     const a = await seedClient("A", [withAccounts("viejo", ["5.2.1", "5.2.9"])]);
     await saveCellEdit({ datasetId: "viejo", code: "5.2.1", monthIndex: 0, comment: "revisar" });
     await saveCellEdit({ datasetId: "viejo", code: "5.2.9", monthIndex: 0, comment: "se pierde" });
-    // Un AJUSTE de valor, que el reemplazo sí descarta: el archivo nuevo trae otra cifra.
+    // A value ADJUSTMENT, which the replacement does discard: the new file brings another figure.
     await saveCellEdit({ datasetId: "viejo", code: "5.2.1", monthIndex: 1, value: 500 });
 
     await replaceClientWorkspace(a, [withAccounts("nuevo", ["5.2.1"])], meta());
@@ -307,12 +307,12 @@ describe("describeClientContents", () => {
     ]);
     await saveCellEdit({ datasetId: "n25", code: "4", monthIndex: 0, comment: "una" });
     await saveCellEdit({ datasetId: "n26", code: "5", monthIndex: 3, comment: "otra" });
-    // Un ajuste sin comentario no cuenta como comentario.
+    // An adjustment with no comment does not count as a comment.
     await saveCellEdit({ datasetId: "s26", code: "4", monthIndex: 0, value: 7 });
 
     expect(await describeClientContents(a)).toEqual({
       years: [2025, 2026],
-      // El mismo centro en dos años es UN centro.
+      // The same center in two years is ONE center.
       centers: 2,
       accounts: 2,
       comments: 2,
@@ -346,7 +346,7 @@ describe("countEditsForYears", () => {
 
 describe("mergeWorkspaceYears — el «Excel completo» no borra los años que no trae", () => {
   it("reemplaza solo los años del archivo y deja intactos los demás", async () => {
-    // El caso que motiva todo esto: ya tengo 2025 y 2026, y cargo un libro de 2027.
+    // The case that motivates all of this: I already have 2025 and 2026, and I load a 2027 workbook.
     const a = await seedClient("A", [
       center("c25", "cartago", 2025),
       center("c26", "cartago", 2026),
@@ -367,13 +367,13 @@ describe("mergeWorkspaceYears — el «Excel completo» no borra los años que n
     );
 
     expect((await clientDatasets(a)).map((d) => d.year).sort()).toEqual([2025, 2026, 2027]);
-    // La cobertura de los años anteriores sobrevive junto a la del año nuevo.
+    // The previous years' coverage survives alongside the new year's.
     expect((await getWorkspaceMeta(a))?.loadedMonthsByYear).toEqual({
       2025: [0, 1],
       2026: [0],
       2027: [0, 1, 2],
     });
-    // Y el ajuste de 2025 sigue ahí: el archivo no hablaba de ese año.
+    // And the 2025 adjustment is still there: the file did not speak of that year.
     expect(await datasetEdits("c25")).toHaveLength(1);
   });
 
@@ -389,7 +389,7 @@ describe("mergeWorkspaceYears — el «Excel completo» no borra los años que n
 
     expect(await clientDatasets(a)).toHaveLength(1);
     expect((await clientDatasets(a))[0].id).toBe("c26-nuevo");
-    // El ajuste viejo se fue con su dataset; el archivo trae los suyos.
+    // The old adjustment went with its dataset; the file brings its own.
     expect(await datasetEdits("c26")).toHaveLength(0);
   });
 });
@@ -420,9 +420,9 @@ describe("applyMonthSlice", () => {
   });
 
   it("devuelve los datasets sin `order` — un índice sobre `order` los excluiría", async () => {
-    // Regresión: IndexedDB deja fuera de un índice las filas cuya clave es `undefined`, así que
-    // un dataset `single` (sin `order`) desaparecería de un `orderBy("order")`. La consulta
-    // acotada por cliente no usa ese índice.
+    // Regression: IndexedDB leaves out of an index the rows whose key is `undefined`, so a `single`
+    // dataset (with no `order`) would disappear from an `orderBy("order")`. The query bounded by
+    // client does not use that index.
     const a = await seedClient("A", [dataset("s1"), center("c1", "norte")]);
     expect((await clientDatasets(a)).map((d) => d.id).sort()).toEqual(["c1", "s1"]);
   });
@@ -528,12 +528,13 @@ describe("consolidatedContributions", () => {
 
     const contributions = await consolidatedContributions();
 
-    // Alfabético, el orden del selector.
+    // Alphabetical, the selector's order.
     expect(contributions.map((c) => c.name)).toEqual(["Alfa", "Beta"]);
     expect(contributions[0].datasets.map((d) => d.id)).toEqual(["a26"]);
     expect(contributions[0].edits.map((e) => e.datasetId)).toEqual(["a26"]);
     expect(contributions[0].loadedMonthsByYear).toEqual({ 2026: [0] });
-    // El ajuste de Alfa no alcanza a Beta: la partición se mantiene aunque la lectura sea cruzada.
+    // Alfa's adjustment does not reach Beta: the partition holds even though the read is
+    // cross-cutting.
     expect(contributions[1].edits).toEqual([]);
     expect(contributions[1].loadedMonthsByYear).toEqual({ 2026: [0, 1] });
   });

@@ -1,20 +1,21 @@
 /**
- * De un `.xlsx` de «Venta de Servicios por FACTURA» a un mes listo para guardar.
+ * From a «Venta de Servicios por FACTURA» `.xlsx` to a month ready to store.
  *
- * Tres reglas gobiernan este archivo, y las tres se prueban:
+ * Three rules govern this file, and all three are tested:
  *
- *   1. **El formato se reconoce por su FORMA**, nunca por el nombre del archivo — el título y la
- *      cabecera de cuatro rótulos. Otro libro se rechaza NOMBRANDO lo que se esperaba, en vez de
- *      intentar leerlo y devolver un mes vacío.
- *   2. **El periodo lo declara el archivo** (`Desde:` / `Hasta:`) y ha de ser exactamente un mes
- *      calendario. La regla es la de `toCalendarMonth`, la MISMA que aplican el estado único y
- *      MicroPlus: no hay excepción por formato, y por eso se importa en vez de reescribirse.
- *   3. **La suma de las líneas se CUADRA contra el total del propio archivo**, y una diferencia se
- *      dice nombrándola. Es la única evidencia de que la lectura no se dejó filas por el camino,
- *      y sin ella una fila mal clasificada se pierde en silencio entre 2.774.
+ *   1. **The format is recognised by its SHAPE**, never by the file's name — the title and the
+ *      four-label header. Another workbook is rejected NAMING what was expected, instead of trying
+ *      to read it and returning an empty month.
+ *   2. **The period is declared by the file** (`Desde:` / `Hasta:`) and has to be exactly one
+ *      calendar month. The rule is `toCalendarMonth`'s, the SAME one the single statement and
+ *      MicroPlus apply: there is no per-format exception, and that is why it is imported instead of
+ *      rewritten.
+ *   3. **The sum of the lines is SQUARED against the file's own total**, and a difference is stated
+ *      by naming it. It is the only evidence that the reading did not leave rows behind, and without
+ *      it a misclassified row is lost in silence among 2,774.
  *
- * Devuelve un resultado y no lanza: cada archivo de un lote necesita poder explicarse por su
- * cuenta sin tumbar a los demás.
+ * It returns a result and does not throw: each file of a batch needs to be able to explain itself
+ * without bringing the others down.
  */
 import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
 import { toCalendarMonth, type DateRange } from "@/lib/profit-loss/upload/date-range";
@@ -33,8 +34,8 @@ export type SalesParseResult =
   | { ok: true; month: ParsedSalesMonth }
   | { ok: false; message: string };
 
-/** Un centavo: por debajo de eso, la diferencia contra el total del archivo es ruido de coma
- *  flotante y no un descuadre. */
+/** One cent: below that, the difference against the file's total is floating-point noise and not an
+ *  imbalance. */
 const CENT = 0.005;
 
 const WRONG_FORMAT =
@@ -54,8 +55,8 @@ export function parseSalesWorkbook(data: ArrayBuffer): SalesParseResult {
 }
 
 export function parseSalesGrid(grid: readonly Cell[][]): SalesParseResult {
-  // Se exigen las DOS señas: el título solo se lo lleva un reporte de ventas, y la cabecera de
-  // cuatro rótulos es lo que impide reclamar un balance que también escribe `CODIGO` y `NOMBRE`.
+  // BOTH signs are required: only a sales report carries the title, and the four-label header is what
+  // stops it claiming a balance that also writes `CODIGO` and `NOMBRE`.
   const header = findSalesHeader(grid);
   if (!hasSalesTitle(grid) || !header) {
     return { ok: false, message: WRONG_FORMAT };
@@ -99,16 +100,16 @@ export function parseSalesGrid(grid: readonly Cell[][]): SalesParseResult {
 }
 
 /**
- * El recorrido de la rejilla, y la única parte que decide QUÉ es un dato.
+ * The walk over the grid, and the only part that decides WHAT is a datum.
  *
- * Cada fila del reporte es una línea de factura COMPLETA —servicio, pagador, cantidad e importe—,
- * y el código del servicio se repite en todas: no hay agrupación ni subtotales. Lo que separa una
- * línea del resto es llevar ese código y las cuatro celdas que le siguen, que es lo que comprueba
- * `readSalesRow`; el preámbulo, la cabecera y las dos filas de cierre se caen solas por no
- * cumplirlo, sin necesidad de reconocer cada una por su rótulo.
+ * Every row of the report is a COMPLETE invoice line —service, payer, quantity and amount—, and the
+ * service's code is repeated in all of them: there is no grouping and there are no subtotals. What
+ * separates a line from the rest is carrying that code and the four cells that follow it, which is
+ * what `readSalesRow` checks; the preamble, the header and the two closing rows drop out on their own
+ * for not meeting it, with no need to recognise each one by its label.
  *
- * El total del reporte se busca DESPUÉS, en la columna donde las líneas escribieron su importe:
- * esa fila no lleva rótulo, así que la columna es lo único que la identifica.
+ * The report's total is looked for AFTERWARDS, in the column where the lines wrote their amount: that
+ * row carries no label, so the column is the only thing that identifies it.
  */
 function readRows(
   grid: readonly Cell[][],
@@ -144,9 +145,9 @@ function readRows(
 }
 
 /**
- * El cuadre contra la fila de total del archivo. Un aviso y NO un rechazo: el mes se carga igual,
- * porque una diferencia puede ser del reporte y no de la lectura, y quedarse sin los datos no
- * ayuda a averiguarlo. Lo que no puede pasar es que la diferencia no se diga.
+ * The balance against the file's total row. A notice and NOT a rejection: the month is loaded all the
+ * same, because a difference may belong to the report and not to the reading, and being left with no
+ * data does not help find out. What cannot happen is the difference not being stated.
  */
 function cuadre(lines: readonly SalesLine[], declaredTotal: number | null): string[] {
   if (declaredTotal === null) {

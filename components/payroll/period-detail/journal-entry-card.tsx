@@ -14,15 +14,15 @@ import { JournalEntryRow } from "./journal-entry-row";
 
 interface JournalEntryCardProps {
   entry: JournalEntry;
-  /** El período que la tarjeta rotula. */
+  /** The período the card labels. */
   year: number;
   monthIndex: number;
 }
 
 /**
- * La tarjeta del asiento contable del rol: cabecera con totales + distintivo de cuadre, tabla de
- * cuentas y pie «SUMAN». «Ocultar ceros» solo decide qué filas se PINTAN — el pie y los totales de
- * la cabecera siempre leen `entry.debit`/`entry.credit`, nunca la suma de lo visible.
+ * The card for the rol's journal entry: a header with totals + a balance badge, a table of accounts
+ * and a «SUMAN» footer. «Ocultar ceros» only decides which rows are PAINTED — the footer and the
+ * header's totals always read `entry.debit`/`entry.credit`, never the sum of what is visible.
  */
 export function JournalEntryCard({ entry, year, monthIndex }: JournalEntryCardProps) {
   const [hideZero, setHideZero] = useState(false);
@@ -32,8 +32,8 @@ export function JournalEntryCard({ entry, year, monthIndex }: JournalEntryCardPr
     [entry, hideZero],
   );
   const hiddenCount = entry.lines.length - visibleLines.length;
-  // Redondeada al centavo: el cuadre (`entry.balanced`) se decide con `sameToTheCentavo`, que
-  // compara redondeando, así que sin este redondeo la cabecera podía leer «Descuadra 0.00».
+  // Rounded to the cent: the balance (`entry.balanced`) is decided with `sameToTheCentavo`, which
+  // compares after rounding, so without this rounding the header could read «Descuadra 0.00».
   const difference = Math.round((entry.debit - entry.credit) * 100) / 100;
 
   const toggleHideZero = useCallback(() => setHideZero((value) => !value), []);
@@ -63,8 +63,8 @@ export function JournalEntryCard({ entry, year, monthIndex }: JournalEntryCardPr
             </span>
           )}
 
-          {/* Vive en la cabecera de esta tarjeta y no en la barra: lo lee una sola tarjeta, igual
-              que el «Ver por» de Ocupaciones y el «Base» de Análisis. */}
+          {/* It lives in this card's header and not in the bar: a single card reads it, just like
+              Ocupaciones' «Ver por» and Análisis' «Base». */}
           <Button
             size="sm"
             variant="secondary"

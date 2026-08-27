@@ -84,15 +84,16 @@ export function assignCenterSlots<T extends ParsedDataset>(datasets: readonly T[
 }
 
 /**
- * Los centros de un workspace, en el orden del selector — el que fija `assignCenterSlots`, así que
- * no estrena una segunda idea de en qué orden van.
+ * A workspace's centers, in the selector's order — the one `assignCenterSlots` fixes, so it does not
+ * introduce a second idea of what order they go in.
  *
- * Existe porque hay superficies que necesitan SABER QUÉ CENTROS HAY sin construir sus datos: el
- * diálogo que sube el logo de cada uno los lista para un cliente que ni siquiera está abierto, y
- * las vistas del proveedor solo existen para el que sí lo está.
+ * It exists because there are surfaces that need to KNOW WHICH CENTERS THERE ARE without building
+ * their data: the dialog that uploads each one's logo lists them for a client that is not even open,
+ * and the provider's views only exist for the one that is.
  *
- * El nombre lo pone el año MÁS RECIENTE que trajo ese centro, que es el criterio que las vistas ya
- * aplican: si el contador renombró «COCINA» a «COCINA CENTRAL» en 2026, es ese el nombre vivo.
+ * The name is set by the MOST RECENT year that brought that center, which is the criterion the views
+ * already apply: if the accountant renamed «COCINA» to «COCINA CENTRAL» in 2026, that is the live
+ * name.
  */
 export function listCenters(datasets: readonly ParsedDataset[]): CenterOption[] {
   const newest = new Map<string, ParsedDataset>();

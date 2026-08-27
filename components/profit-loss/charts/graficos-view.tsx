@@ -34,7 +34,7 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
  * here is where each one goes on screen. The printable report reads that same list, which is why
  * it cannot come back into this file.
  */
-/** Las dos lecturas del mismo reparto: el largo de una barra o el ángulo de una porción. */
+/** The two readings of the same breakdown: the length of a bar or the angle of a slice. */
 const ANNEX_SHAPES = [
   { value: "barras" as const, label: "Barras" },
   { value: "pastel" as const, label: "Pastel" },
@@ -44,19 +44,19 @@ export function GraficosView() {
   const { dataset, filters, frequency } = usePygData();
   const { context, runQuery } = usePygAnalytics();
   /**
-   * Los meses del eje en los que el estado no movió nada —los que el archivo nunca trajo y los que
-   * trajo en cero, que en pantalla son la misma columna vacía—. Es estado local de esta pantalla y no un
-   * `PygFilters`: lo leen las cinco tarjetas de aquí y ninguna de Datos ni de Análisis, así que no
-   * se guarda, no produce chip y el informe imprimible —que llama a `buildGraficosCards` por su
-   * cuenta— sigue sacando el eje completo.
+   * The months of the axis in which the statement moved nothing —the ones the file never brought and
+   * the ones it brought at zero, which on screen are the same empty column—. It is local state of this
+   * screen and not a `PygFilters`: the five cards here read it and none of Datos or Análisis does, so
+   * it is not stored, it produces no chip and the printable report —which calls `buildGraficosCards`
+   * on its own— still puts out the whole axis.
    */
   const [hideEmptyPeriods, setHideEmptyPeriods] = useState(false);
   /**
-   * Las líneas de negocio apagadas en la leyenda de su tarjeta. Es estado local por lo mismo que el
-   * interruptor de arriba: lo lee UNA tarjeta y ninguna de Datos ni de Análisis, así que no se
-   * guarda, no produce chip y el informe imprimible —que llama a `buildGraficosCards` por su
-   * cuenta— sigue sacando todas. Una marca de un plan que ya no está abierto se ignora al leer, así
-   * que cambiar de cliente no deja nada colgando.
+   * The business lines switched off in their card's legend. It is local state for the same reason as
+   * the switch above: ONE card reads it and none of Datos or Análisis does, so it is not stored, it
+   * produces no chip and the printable report —which calls `buildGraficosCards` on its own— still puts
+   * out all of them. A mark from a chart of accounts that is no longer open is ignored on read, so
+   * switching client leaves nothing hanging.
    */
   const [hiddenLines, setHiddenLines] = useState<readonly string[]>([]);
   const { periodName, tiles, cards, annex, annexShapes, emptyPeriods, lines } = useMemo(
@@ -68,35 +68,36 @@ export function GraficosView() {
       current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
     );
   }, []);
-  // Solo asoma en MENSUAL —un trimestre cubierto agrega tres meses y no es «un mes en 0»— y solo si
-  // hay alguno que ocultar: un control que no puede hacer nada enseña a no leer el de al lado.
-  // `emptyPeriods` se cuenta sobre el eje sin podar, así que el botón no se esfuma al pulsarlo.
+  // It only shows up in MONTHLY —a covered quarter aggregates three months and is not «a month at 0»—
+  // and only if there is something to hide: a control that can do nothing teaches you not to read the
+  // one next to it. `emptyPeriods` is counted over the unpruned axis, so the button does not vanish
+  // on being pressed.
   const canHideEmptyPeriods = frequency === "mensual" && emptyPeriods > 0;
 
-  // Qué tarjetas están plegadas, y el «todos» que las mueve de una vez. Es estado local de esta
-  // pantalla, como los dos interruptores de arriba: no se guarda, no produce chip y el informe
-  // imprimible sigue sacando todas las tarjetas enteras.
+  // Which cards are collapsed, and the «all» that moves them at once. It is local state of this
+  // screen, like the two switches above: it is not stored, it produces no chip and the printable
+  // report still puts out every card whole.
   /**
-   * En qué FORMA se lee el anexo. Sus dos tarjetas dibujan el mismo reparto —una sola reducción,
-   * las mismas filas, el mismo corte— y enseñarlas a la vez es decir dos veces lo mismo, la regla
-   * que Ocupaciones ya aplica a su «Ver como». Abre en BARRAS porque son las que aguantan
-   * dieciocho rubros: la tarta a esa altura escribe los rótulos fuera, con líneas guía amontonadas
-   * en un borde y la leyenda paginada, que es justo lo que hizo que «Composición de los ingresos»
-   * dejara de ser tarta. Es estado local, como los dos interruptores de arriba: no se guarda, no
-   * deja chip, y el informe imprimible —que llama a `buildGraficosCards` por su cuenta— sigue
-   * sacando LAS DOS, porque un control impreso es un botón que nadie puede pulsar.
+   * In which SHAPE the annex is read. Its two cards draw the same breakdown —one single reduction,
+   * the same rows, the same cut— and showing them at once is saying the same thing twice, the rule
+   * Ocupaciones already applies to its «Ver como». It opens in BARS because they are what withstands
+   * eighteen lines: the pie at that size writes its labels outside, with guide lines piled up on one
+   * edge and the legend paginated, which is exactly what made «Composición de los ingresos» stop being
+   * a pie. It is local state, like the two switches above: it is not stored, it leaves no chip, and
+   * the printable report —which calls `buildGraficosCards` on its own— still puts out BOTH, because a
+   * printed control is a button nobody can press.
    */
   const [annexShape, setAnnexShape] = useState<"barras" | "pastel">("barras");
-  // La tarjeta del anexo que se está leyendo, y `null` fuera de esa vista. Es un ID y no una
-  // posición porque al cambiar de forma la lista se reordena: con la tarta puesta, la primera
-  // tarjeta ya no es la del anexo, y un clic atado al índice 0 abriría la ventana desde otra.
+  // The annex card being read, and `null` outside that view. It is an ID and not a position because
+  // on changing shape the list is reordered: with the pie in place, the first card is no longer the
+  // annex's, and a click tied to index 0 would open the window from another one.
   const visibleAnnexId = annexShapes
     ? annexShape === "barras"
       ? annexShapes.barras
       : annexShapes.pastel
     : null;
-  // La forma que NO se está leyendo se cae de la lista; con el anexo apagado no hay ninguna que
-  // quitar y esto es la lista entera.
+  // The shape that is NOT being read drops off the list; with the annex off there is none to remove
+  // and this is the whole list.
   const visibleCards = useMemo(() => {
     if (!annexShapes) {
       return cards;
@@ -108,17 +109,17 @@ export function GraficosView() {
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
   /**
-   * El rubro cuyo peso se está mirando, por su posición en el reparto. Es un ÍNDICE y no un código
-   * porque es lo que el gráfico entrega al clicar, y resolverlo aquí contra la misma lista que lo
-   * dibujó es lo que impide que la ventana hable de un rubro distinto del que se pulsó.
+   * The line whose weight is being looked at, by its position in the breakdown. It is an INDEX and not
+   * a code because it is what the chart hands over on click, and resolving it here against the same
+   * list that drew it is what stops the window talking about a line other than the one clicked.
    */
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const openCategory = openIndex === null ? undefined : annex?.categories[openIndex];
   /**
-   * El camino abierto dentro de esa cuenta, del rubro hacia dentro. Es una PILA y no un código
-   * suelto porque el plan baja varios niveles —`5.5.01.02` cuelga veintisiete secciones y cada una
-   * sus cuentas— y la miga de pan de la ventana necesita saber de dónde se viene. Se vacía al
-   * cerrar y al cambiar de rubro, así que nunca habla de una cuenta que no está abierta.
+   * The path opened inside that account, from the line inwards. It is a STACK and not a loose code
+   * because the plan goes down several levels —`5.5.01.02` hangs twenty-seven sections and each one
+   * its accounts— and the window's breadcrumb needs to know where it came from. It is emptied on
+   * closing and on switching line, so it never talks about an account that is not open.
    */
   const [drill, setDrill] = useState<readonly AccountStep[]>([]);
   const path = useMemo<AccountStep[]>(
@@ -132,9 +133,9 @@ export function GraficosView() {
     [openCategory, drill],
   );
   /**
-   * El desglose del último tramo. Sale de la MISMA consulta que dibujan las tarjetas —mismo centro,
-   * año, frecuencia y periodos marcados—, que es lo que hace que las hijas sumen exactamente la
-   * barra que se pulsó; pedirlo por otra puerta podría cuadrar contra otro tramo.
+   * The last leg's breakdown. It comes out of the SAME query the cards draw —same center, year,
+   * frequency and marked periods—, which is what makes the children add up to exactly the bar that was
+   * clicked; asking for it through another door could square against a different span.
    */
   const breakdown = useMemo(() => {
     const current = path[path.length - 1];
@@ -172,11 +173,11 @@ export function GraficosView() {
         ))}
       </div>
 
-      {/* Los dos interruptores de lectura de esta pestaña. Van aquí y no en la barra de filtros
-          porque los leen las tarjetas de ESTA pestaña y ninguna de las otras dos: en la barra
-          serían controles muertos en Datos y en Análisis. El de plegar va a la IZQUIERDA, sobre la
-          esquina de las tarjetas donde están las flechas que mueve; el de meses en 0 se queda a la
-          derecha con el aspecto del de la tarjeta de Datos, para que se lean como el mismo gesto. */}
+      {/* This tab's two reading switches. They go here and not in the filter bar because the cards of
+          THIS tab read them and none of the other two do: in the bar they would be dead controls in
+          Datos and in Análisis. The collapse one goes on the LEFT, over the corner of the cards where
+          the arrows it moves are; the months-at-0 one stays on the right with the look of the Datos
+          card's, so they read as the same gesture. */}
       <div className="flex items-center justify-between gap-2">
         <Button
           size="sm"
@@ -200,8 +201,8 @@ export function GraficosView() {
               hideEmptyPeriods && "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
             )}
           >
-            {/* Encendido lleva la CUENTA de lo que quitó: aquí no hay pie de tabla donde ponerla,
-                así que sin ella el eje se encogería sin decir cuánto. */}
+            {/* Switched on it carries the COUNT of what it removed: there is no table footer here to
+                put it in, so without it the axis would shrink without saying by how much. */}
             {hideEmptyPeriods
               ? `Mostrar ${emptyPeriods} ${emptyPeriods === 1 ? "mes" : "meses"} en 0`
               : "Ocultar meses en 0"}
@@ -209,22 +210,22 @@ export function GraficosView() {
         )}
       </div>
 
-      {/* El orden lo declara `buildGraficosCards`; esta vista solo lo dispone, y las cinco van al
-          MISMO ancho: una retícula a medias dejaba una tarjeta angosta al lado de un hueco, que se
-          lee como que algo no cargó. El ranking además lo NECESITA — con quince cuentas el canal
-          de rótulos son 150 px fijos, y a media pantalla se truncan casi todos los nombres.
+      {/* The order is declared by `buildGraficosCards`; this view only lays it out, and the five go at
+          the SAME width: a half-built grid left a narrow card next to a gap, which reads as though
+          something failed to load. The ranking also NEEDS it — with fifteen accounts the label channel
+          is a fixed 150 px, and at half screen almost every name is truncated.
 
-          La ÚNICA que responde al clic es la del anexo, y solo mientras esa vista está puesta: en
-          las demás una barra no tiene un «dentro» al que entrar, y un gráfico que a veces reacciona
-          y a veces no enseña a no pulsarlo. */}
-      {/* La leyenda de líneas cuelga de la PRIMERA tarjeta, la única que las dibuja, y se rinde
-          fuera de esa vista: `lines` llega vacío y no hay nada que ofrecer.
+          The ONLY one that responds to a click is the annex's, and only while that view is in place:
+          on the others a bar has no «inside» to go into, and a chart that sometimes reacts and
+          sometimes does not teaches you not to click it. */}
+      {/* The line legend hangs off the FIRST card, the only one that draws them, and renders nothing
+          outside that view: `lines` arrives empty and there is nothing to offer.
 
-          La cabecera se decide en UNA sola expresión y no en dos spreads: la tarjeta del anexo y
-          `composicion` nunca son la misma, así que hoy no pueden coincidir, pero dos `headerSlot`
-          sueltos se pisarían en silencio el día que eso cambie. El cruce hacia Ventas por servicio
-          se monta aquí y no viaja en el `ChartCardSpec` porque el informe imprimible lee esa misma
-          lista, y un enlace en papel es un botón que nadie puede pulsar. */}
+          The header is decided in ONE single expression and not in two spreads: the annex's card and
+          `composicion` are never the same one, so today they cannot coincide, but two loose
+          `headerSlot`s would silently overwrite each other the day that changes. The cross-link to
+          Ventas por servicio is mounted here and does not travel in the `ChartCardSpec` because the
+          printable report reads that same list, and a link on paper is a button nobody can press. */}
       {visibleCards.map((card, index) => (
         <SpecCard
           key={card.id}

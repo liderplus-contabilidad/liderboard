@@ -1,43 +1,44 @@
 /**
- * La copia de nómina: pura. `copyRoster` es la ÚNICA definición de qué sobrevive de un período a
- * otro y qué no — la frontera de la operación, para que nadie tenga que deducirla leyendo `db.ts`.
+ * The nómina copy: pure. `copyRoster` is the ONLY definition of what survives from one período to
+ * another and what does not — the operation's boundary, so nobody has to deduce it by reading
+ * `db.ts`.
  *
- * LO QUE SOBREVIVE (la ficha, estable mes a mes): nombre, cargo, área, sueldo base, tipo de
- * contrato, cédula, fecha de ingreso, código sectorial, las dos banderas del fondo de reserva
- * (`FR` y `AC FR`) y las dos de provisión de décimos (`AS` y `AT`) — que son de la ficha porque
- * dependen de la antigüedad y de una elección del empleado, no del mes. Provisionar los décimos o
- * mensualizarlos es lo mismo que acumular el fondo de reserva o cobrarlo: se decide una vez con
- * cada persona, y volver a marcarlo cada mes era una forma segura de que un mes se quedara sin
- * provisión sin que nada avisara.
+ * WHAT SURVIVES (the record, stable month to month): name, job title, area, base salary, contract
+ * type, cédula, hire date, sector code, the two reserve-fund flags (`FR` and `AC FR`) and the two
+ * décimo provision ones (`AS` and `AT`) — which belong to the record because they depend on seniority
+ * and on a choice of the employee, not on the month. Provisioning the décimos or taking them monthly
+ * is the same as accruing the reserve fund or receiving it: it is decided once with each person, and
+ * marking it again each month was a sure way for one month to end up with no provision with nothing
+ * warning about it.
  *
- * LO QUE NO: todo lo que vive en `PayrollMonthlyCapture` —horas extras (`G`, `H`, `I`), el
- * importe aprobado (`M`), comisiones/viáticos/bonos (`P`–`V`), anticipos, multas, préstamos y
- * demás descuentos (`Y`–`AN`)— y todo lo derivado (`F` sueldo unificado, `N` décimo IV, `O`
- * décimo III, `W` total ingresos, `X` aporte IESS, `AO`, `AP`…). Los primeros son del MES y se
- * capturan cada vez; los segundos los recalcula el motor. Por eso la copia deja `capture`
- * AUSENTE en vez de en ceros: un período recién copiado todavía no recibió su archivo, y esa
- * distinción es la que hace que la pantalla no pinte un rol completo de un mes vacío.
+ * WHAT DOES NOT: everything that lives in `PayrollMonthlyCapture` —overtime (`G`, `H`, `I`), the
+ * approved amount (`M`), commissions/viáticos/bonuses (`P`–`V`), advances, fines, loans and other
+ * deductions (`Y`–`AN`)— and everything derived (`F` unified salary, `N` décimo IV, `O` décimo III,
+ * `W` total income, `X` IESS contribution, `AO`, `AP`…). The former belong to the MONTH and are
+ * captured each time; the latter are recomputed by the engine. That is why the copy leaves `capture`
+ * ABSENT instead of at zeros: a freshly copied período has not received its file yet, and that
+ * distinction is what keeps the screen from painting a complete rol for an empty month.
  *
- * `days` sí es del mes (días pagados), pero tiene un default natural — se copia como 30 y se
- * corrige al capturar (ingreso a mitad de mes, salida, licencia) — así que la copia lo RESETEA en
- * vez de arrastrarlo.
+ * `days` does belong to the month (days paid), but it has a natural default — it is copied as 30 and
+ * corrected on capture (a mid-month start, a departure, a leave) — so the copy RESETS it instead of
+ * dragging it along.
  *
- * LA EXCEPCIÓN son las FILAS DE BONO, que viajan con su rótulo y su clase y con el importe en CERO.
- * No contradice la frontera: una fila de bono es FORMA del rol —la columna que esa empresa nombra
- * `MOVILIZACION NO APORTABLE` y repite todos los meses—, y lo que no viaja es lo que cada empleado
- * cobró en ella. Sin arrastrarlas, una nómina de cuarenta personas con tres bonos pediría ciento
- * veinte altas a mano cada mes.
+ * THE EXCEPTION is the BONUS ROWS, which travel with their label and their class and with the amount
+ * at ZERO. It does not contradict the boundary: a bonus row is the rol's SHAPE —the column that
+ * company names `MOVILIZACION NO APORTABLE` and repeats every month—, and what does not travel is
+ * what each employee received in it. Without dragging them, a nómina of forty people with three
+ * bonuses would ask for a hundred and twenty manual additions every month.
  *
- * Y NO viajan los rótulos propios de las filas del CATÁLOGO (`labels`), que es la asimetría que
- * conviene tener escrita: una fila del catálogo existe en el libro con o sin cifra y solo se VE si
- * tiene una, así que arrastrar su nombre sin su importe pondría el rótulo de marzo esperando a la
- * cifra de abril — un «Rotura de vajilla» sobre un descuento que todavía no es nada. Una fila de
- * bono, en cambio, no existe más que por haberla declarado.
+ * And the CATALOGUE rows' own labels (`labels`) do NOT travel, which is the asymmetry worth having
+ * written down: a catalogue row exists in the book with or without a figure and is only VISIBLE if it
+ * has one, so dragging its name without its amount would put March's label waiting for April's figure
+ * — a «Rotura de vajilla» over a deduction that is not anything yet. A bonus row, on the other hand,
+ * exists only by having been declared.
  *
- * Por eso una línea con bonos llega con `capture` PRESENTE, vacía salvo por ellos, donde antes
- * llegaba ausente. Nada distingue hoy ausente de vacía —todo lector hace `capture ?? emptyCapture()`
- * y el motor las trata igual— y esta copia vivía antes en `db.ts`, fuera de la única definición de
- * qué sobrevive a un período.
+ * That is why a line with bonuses arrives with `capture` PRESENT, empty except for them, where it
+ * used to arrive absent. Nothing today tells absent from empty —every reader does
+ * `capture ?? emptyCapture()` and the engine treats them alike— and this copy used to live in
+ * `db.ts`, outside the only definition of what survives a período.
  */
 import { emptyCapture } from "./employee-input";
 import type { ParsedPayrollEmployeeLine, PayrollEmployeeLine } from "./types";

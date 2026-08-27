@@ -60,8 +60,8 @@ describe("findSalesHeader", () => {
   });
 
   it("sus columnas NO son las de los datos: los rótulos van centrados sobre celdas combinadas", () => {
-    // `CANTIDAD` se rotula en la 19 y las cantidades viven en la 18; `VENTA TOTAL` en la 25 y los
-    // importes en la 24. Es por esto que la cabecera identifica el formato pero no localiza nada.
+    // `CANTIDAD` is labelled in column 19 and the quantities live in 18; `VENTA TOTAL` in 25 and the
+    // amounts in 24. It is because of this that the header identifies the format but locates nothing.
     const header = findSalesHeader(salesGrid());
     expect(header).toMatchObject({ quantityCol: 19, amountCol: 25 });
     expect(readSalesRow(salesGrid()[7])).toMatchObject({ amountCol: 24 });
@@ -139,7 +139,7 @@ describe("readSalesRow", () => {
 
 describe("findDeclaredTotal", () => {
   it("lee el cierre en la columna del IMPORTE, que es lo único que lo identifica", () => {
-    // Esa fila no lleva rótulo; la de arriba dice `TOTAL ITEMS` y cuenta LÍNEAS, no dólares.
+    // That row carries no label; the one above says `TOTAL ITEMS` and counts LINES, not dollars.
     expect(findDeclaredTotal(salesGrid(), 12, 24)).toBe(1900);
   });
 

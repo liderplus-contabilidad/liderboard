@@ -2,13 +2,13 @@ import { cn } from "@/lib/cn";
 import type { ComparisonCardData } from "@/lib/workspaces";
 
 /**
- * Una de las dos tarjetas que un diálogo de choque enfrenta: lo que hay ABIERTO frente a lo que
- * traen los ARCHIVOS. Es el mismo bloque en PyG y en Ocupaciones porque la pregunta lo es —«¿esto
- * es lo mismo que ya tengo?»—, y la copia de los tres campos ya viene redactada desde `lib/`
- * (`describeIdentityChange` / `describeHotelChange`): esto solo la pone en pantalla.
+ * One of the two cards a clash dialog puts face to face: what is OPEN against what the FILES bring.
+ * It is the same block in PyG and in Ocupaciones because the question is —«is this the same as what
+ * I already have?»—, and the copy for the three fields already arrives written from `lib/`
+ * (`describeIdentityChange` / `describeHotelChange`): this only puts it on screen.
  *
- * Las dos líneas van truncadas con su `title`: una razón social larga no puede ensanchar la
- * tarjeta, porque las dos se comparan lado a lado y tienen que medir lo mismo.
+ * Both lines are truncated with their `title`: a long razón social cannot widen the card, because the
+ * two are compared side by side and have to measure the same.
  */
 export function ComparisonCard({
   card,
@@ -16,8 +16,8 @@ export function ComparisonCard({
 }: {
   card: ComparisonCardData;
   /**
-   * Rinde `detail` en mono. Solo PyG lo pide: es donde esa línea lleva la razón social que el
-   * lector coteja carácter a carácter contra su propio archivo.
+   * Renders `detail` in mono. Only PyG asks for it: that is where the line carries the razón social
+   * the reader checks character by character against their own file.
    */
   monoDetail?: boolean;
 }) {

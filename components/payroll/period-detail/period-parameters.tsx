@@ -2,13 +2,13 @@ import { formatCurrency, formatPercent } from "@/lib/format";
 import { DEFAULT_PAYROLL_PARAMETERS as PARAMS } from "@/lib/payroll/engine/parameters";
 
 /**
- * Los cuatro parámetros de §3, leídos de la MISMA tabla con la que el motor calcula. Que la tira
- * los lea de ahí y no de una constante propia es lo que impide que la pantalla enseñe un SBU y el
- * motor use otro: había dos declaraciones de estas cifras y se habrían separado el enero en que el
- * SBU suba por decreto.
+ * The four parameters of §3, read from the SAME table the engine computes with. That the strip reads
+ * them from there and not from a constant of its own is what stops the screen showing one SBU while
+ * the engine uses another: there were two declarations of these figures and they would have drifted
+ * apart the January the SBU rises by decree.
  *
- * De solo lectura porque son de LEY, no una preferencia de la app. El día en que cada período
- * guarde los suyos, esta tira leerá los del período y esta línea será lo único que cambie.
+ * Read-only because they are STATUTORY, not a preference of the app. The day each período stores its
+ * own, this strip will read the período's and this line will be the only thing that changes.
  */
 const PARAMETERS: readonly { label: string; value: string }[] = [
   { label: "SBU", value: formatCurrency(PARAMS.unifiedBasicSalary, { cents: true }) },
@@ -17,8 +17,8 @@ const PARAMETERS: readonly { label: string; value: string }[] = [
   { label: "Fondo de reserva", value: formatPercent(PARAMS.reserveFundRate * 100, 2) },
 ];
 
-/** «Parámetros del período»: los cuatro valores fijos bajo los que se leen las cifras de la
- *  tabla — no un filtro, no una edición. */
+/** «Parámetros del período»: the four fixed values under which the table's figures are read — not a
+ *  filter, not an edit. */
 export function PeriodParameters() {
   return (
     <div className="mb-4 rounded-[13px] border border-border bg-surface px-5 py-4">

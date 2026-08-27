@@ -634,7 +634,7 @@ export function CostCenterUploadModal({ open, onClose }: { open: boolean; onClos
   );
 }
 
-/** Los años y centros del cliente abierto en una frase — lo que el bloque de reemplazo descarta. */
+/** The open client's years and centers in one phrase — what the replace block discards. */
 function describeContents(client: { years: number[]; identity: unknown } | undefined): string {
   const years = client?.years ?? [];
   if (years.length === 0) {
@@ -644,9 +644,9 @@ function describeContents(client: { years: number[]; identity: unknown } | undef
 }
 
 /**
- * El diálogo de choque, en sus dos formas. Rinde lo que `describeIdentityChange` decidió: la copia
- * y qué acción es la principal viven en `lib/`, y esto solo las pone en pantalla. Las tarjetas
- * comparan empresa y sistema — nunca un NIT, que ninguna estrategia extrae.
+ * The clash dialog, in its two forms. It renders what `describeIdentityChange` decided: the copy and
+ * which action is the primary one live in `lib/`, and this only puts them on screen. The cards
+ * compare company and system — never a NIT, which no strategy extracts.
  */
 function IdentityClashDialog({
   confirmation,
@@ -762,8 +762,8 @@ function IdentityClashDialog({
           </button>
         </div>
 
-        {/* «Elegir otro archivo» no cabe en la fila de 6B, que ya lleva tres botones: va debajo,
-            junto a lo que la acción principal implica. */}
+        {/* «Elegir otro archivo» does not fit in 6B's row, which already carries three buttons: it
+            goes below, next to what the primary action implies. */}
         <div className="mt-2.5 flex items-center justify-between gap-3">
           {confirmation.replace ? (
             <button

@@ -2,23 +2,23 @@ import { cn } from "@/lib/cn";
 import type { ChartTable } from "@/lib/charts/types";
 import type { StatementFit } from "@/lib/report/page-fit";
 
-/** Bajo cuatro columnas, el ancho extra va al nombre de la fila en vez de inflar cifras que ya se
- *  leen bien — el mismo tope que las tablas del informe de PyG. */
+/** Below four columns, the extra width goes to the row's name instead of inflating figures that
+ *  already read fine — the same cap as the tables of PyG's report. */
 const MAX_COLUMN_PCT = 16;
 const BASE_INDENT = 10;
 
 /**
- * La tabla impresa de una sección, a partir del MISMO `ChartTable` que la pantalla ya construye —
- * nunca una segunda lectura de los datos.
+ * The printed table of one section, built from the SAME `ChartTable` the screen already builds —
+ * never a second reading of the data.
  *
- * No reusa el `TableTwin` de `chart-card.tsx`: aquella tiene afordancias de PANTALLA —columna
- * pegajosa, `hover`, cuerpo fijo de 12 px— que en papel no significan nada, y no acepta el cuerpo
- * de letra que dicta `fit`.
+ * It does not reuse `chart-card.tsx`'s `TableTwin`: that one has SCREEN affordances —a sticky column,
+ * `hover`, a fixed 12 px body— that mean nothing on paper, and it does not accept the type size `fit`
+ * dictates.
  *
- * Es la SEGUNDA tabla de informe con esta forma (la otra está en `payroll/salaries/report/`), y la
- * diferencia real entre las dos es qué hacen con las filas largas. Cuando aparezca una tercera,
- * conviene plegar las tres en `components/ui/` en vez de mantener tres — la misma nota que
- * `modal.tsx` lleva sobre `ConfirmDialog`.
+ * It is the SECOND report table with this shape (the other is in `payroll/salaries/report/`), and the
+ * real difference between the two is what they do with long rows. When a third one appears, the three
+ * should be folded into `components/ui/` instead of keeping three — the same note `modal.tsx` carries
+ * about `ConfirmDialog`.
  */
 export function SalesReportTable({ table, fit }: { table: ChartTable; fit: StatementFit }) {
   const columnCount = table.columns.length;
@@ -102,8 +102,9 @@ export function SalesReportTable({ table, fit }: { table: ChartTable; fit: State
                   )}
                   style={{ paddingLeft: padX, paddingRight: padX }}
                 >
-                  {/* La RAYA de una celda sin nada que decir viaja YA ESCRITA en el `ChartTable`;
-                      un `null` aquí solo puede venir de una fila más corta que sus columnas. */}
+                  {/* The DASH of a cell with nothing to say travels ALREADY WRITTEN in the
+                      `ChartTable`; a `null` here can only come from a row shorter than its
+                      columns. */}
                   {value ?? "–"}
                 </td>
               ))}

@@ -37,13 +37,13 @@ describe("periodRangeLabel", () => {
   const meses = periodsForYear(2026, "mensual");
 
   it("collapses a contiguous set into a range", () => {
-    // El archivo llega hasta julio: el rango es el de la cobertura, no el del año.
+    // The file runs to July: the range is that of the coverage, not that of the year.
     expect(periodRangeLabel(meses.slice(0, 7))).toBe("Ene–Jul");
     expect(periodRangeLabel(periodsForYear(2026, "trimestral").slice(0, 3))).toBe("T1–T3");
   });
 
   it("enumerates a set with holes instead of claiming what is between", () => {
-    // «Ene–Mar» afirmaría que febrero está sumado, y no lo está.
+    // «Ene–Mar» would claim February is summed, and it is not.
     expect(periodRangeLabel([meses[0], meses[2]])).toBe("Ene, Mar");
     expect(periodRangeLabel([meses[0], meses[2], meses[4]])).toBe("Ene, Mar, May");
   });

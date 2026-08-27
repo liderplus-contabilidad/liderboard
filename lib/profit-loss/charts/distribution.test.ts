@@ -20,9 +20,9 @@ import {
 } from "./distribution";
 
 /**
- * El plan de la fixture encadena `4 → 4.1` y `5 → 5.1` con una sola hija, y solo debajo se abre:
- * `4.1` tiene tres hijas (`4.1.1`, `4.1.4` negativa, `4.1.8`) y `5.1` dos. Esa forma es la que
- * hace que las dos decisiones de este módulo sean comprobables sobre datos reales del módulo.
+ * The fixture's plan chains `4 → 4.1` and `5 → 5.1` with a single child, and only below that does it
+ * open up: `4.1` has three children (`4.1.1`, a negative `4.1.4`, `4.1.8`) and `5.1` two. That shape
+ * is what makes this module's two decisions checkable over real data of the module.
  */
 
 function childSeries(source: AnalyticsSource, codes: string[]): Series[] {
@@ -35,7 +35,7 @@ function childSeries(source: AnalyticsSource, codes: string[]): Series[] {
   }).series;
 }
 
-/** Una serie sintética con un valor por mes — para probar el plegado sin depender del plan. */
+/** A synthetic series with one value per month — to test the folding without depending on the plan. */
 function fakeSeries(code: string, monthly: number | null): Series {
   return {
     key: { code, centerId: "c", year: 2026 },
@@ -50,7 +50,7 @@ function fakeSeries(code: string, monthly: number | null): Series {
 
 describe("qué cuenta se distribuye", () => {
   it("sin cuentas marcadas, Ingresos — y desciende la cadena de hija única", () => {
-    // `4` tiene una sola hija, así que distribuir `4` sería un apilado de un segmento.
+    // `4` has a single child, so distributing `4` would be a stack of one segment.
     expect(resolveDistributionParent(CULTURA_MANOR_SOURCE, [])).toEqual({
       code: "4.1",
       label: "Ventas",
@@ -69,7 +69,7 @@ describe("qué cuenta se distribuye", () => {
   });
 
   it("una marcada con hija única desciende hasta donde hay algo que repartir", () => {
-    // `5 → 5.1` es una cadena de hija única; `5.1` ya tiene dos.
+    // `5 → 5.1` is a single-child chain; `5.1` already has two.
     expect(resolveDistributionParent(CULTURA_MANOR_SOURCE, ["5"])).toEqual({
       code: "5.1",
       label: "Gastos Operacionales",
@@ -115,7 +115,7 @@ describe("qué hijas se dibujan", () => {
   });
 
   it("pliega la cola en «Otros» ordenando ANTES de cortar", () => {
-    // La mayor va la última del arreglo: cortar por orden de entrada la dejaría fuera.
+    // The largest one goes last in the array: cutting by input order would leave it out.
     const entries = [
       ...Array.from({ length: 9 }, (_, index) => fakeSeries(`chica-${index}`, 10)),
       fakeSeries("grande", 1000),
@@ -129,7 +129,7 @@ describe("qué hijas se dibujan", () => {
       DISTRIBUTION_OTHERS_CODE,
     ]);
     expect(grouped).toBe(7);
-    // 7 cuentas × 10 por mes.
+    // 7 accounts × 10 per month.
     expect(series[3].points.map((point) => point.value)).toEqual([70, 70, 70]);
   });
 
@@ -168,7 +168,7 @@ describe("qué hijas se dibujan", () => {
 });
 
 describe("qué parte del total es cada segmento", () => {
-  /** Un total a la medida de las hijas del caso, para poder leer los porcentajes a ojo. */
+  /** A total tailored to the case's children, so the percentages can be read by eye. */
   function fakeTotal(monthly: (number | null)[]): Series {
     return {
       ...fakeSeries("4.1", null),
@@ -189,7 +189,7 @@ describe("qué parte del total es cada segmento", () => {
 
     expect(shares.map((share) => share.values[0])).toEqual([25, 75]);
     expect(shares.every((share) => share.baseLabel === "Ventas")).toBe(true);
-    // El id es el de la serie hija: con él la reconocen la etiqueta y el tooltip.
+    // The id is the child series': the label and the tooltip recognise it by it.
     expect(shares[0].seriesId).toBe("a|c|2026");
   });
 
@@ -228,7 +228,7 @@ describe("el color sigue al tamaño, no a la cuenta", () => {
     const drawn = foldDistribution([fakeSeries("a", 10), fakeSeries("b", 90)]).series;
     const colorOf = distributionColor(drawn);
 
-    // «b» es la mayor, así que va abajo y se lleva el paso más oscuro.
+    // «b» is the largest, so it goes at the bottom and takes the darkest step.
     expect(colorOf(drawn[0].key)).toBe(CHART_DISTRIBUTION_RAMP[0]);
     expect(colorOf({ code: "b", centerId: "c", year: 2026 })).toBe(CHART_DISTRIBUTION_RAMP[0]);
     expect(colorOf({ code: "a", centerId: "c", year: 2026 })).toBe(CHART_DISTRIBUTION_RAMP[1]);

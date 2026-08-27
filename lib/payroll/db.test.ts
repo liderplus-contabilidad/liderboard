@@ -32,7 +32,7 @@ import {
 /** The cliente every scoped case runs inside; a second one appears only where isolation is the point. */
 let clientId = "";
 
-/** Un perfil de empresa completo, el del archivo real del cliente. */
+/** A complete company profile, the one from the client's real file. */
 const COMPANY = {
   legalName: "DELICMAR S.A.S.",
   taxId: "1891234567001",
@@ -44,7 +44,7 @@ const COMPANY = {
   email: "nomina@delicmar.com",
 };
 
-/** Una ficha completa, para no repetir sus nueve campos en cada test de nómina. */
+/** A complete record, so its nine fields need not be repeated in every nómina test. */
 function employeeLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
   return {
     id: overrides.id ?? crypto.randomUUID(),
@@ -106,9 +106,9 @@ describe("clientes", () => {
     const withLogo = await createClient("Con logo", logo);
     expect((await getClient(withLogo.id))?.logo).toEqual(logo);
 
-    // Lo que se comprueba aquí es el comportamiento de Dexie del que depende «Quitar»: un
-    // `undefined` en un `update` BORRA la propiedad. Si en su lugar la dejara puesta, las tres
-    // superficies dibujarían un logo vacío en vez de ninguno.
+    // What is checked here is the Dexie behaviour «Quitar» depends on: an `undefined` in an `update`
+    // DELETES the property. If it left it in place instead, the three surfaces would draw an empty
+    // logo instead of none.
     await updateClient(withLogo.id, "Con logo", null);
     const cleared = await getClient(withLogo.id);
     expect(cleared?.logo).toBeUndefined();
@@ -133,16 +133,16 @@ describe("clientes", () => {
     expect((await listPeriods(conPerfil.id)).length).toBe(1);
   });
 
-  // Un cliente guardado antes de que el perfil existiera es el caso normal, no el raro: la app
-  // tiene que leerlo sin error y el membrete imprimir lo que haya.
+  // A client stored before the profile existed is the normal case, not the odd one: the app has to
+  // read it without erroring and the letterhead has to print whatever is there.
   it("un cliente sin perfil no guarda un campo vacío y se lee igual", async () => {
     const client = await getClient(clientId);
     expect(client?.company).toBeUndefined();
     expect("company" in (client ?? {})).toBe(false);
   });
 
-  // Renombrar desde un módulo que no pide perfil (PyG, Ocupaciones) NO puede borrar el que hay:
-  // `undefined` significa «esta llamada no habla del perfil», no «quítalo».
+  // Renaming from a module that does not ask for a profile (PyG, Ocupaciones) CANNOT erase the one
+  // that is there: `undefined` means «this call does not talk about the profile», not «remove it».
   it("renombrar sin hablar del perfil lo conserva", async () => {
     const conPerfil = await createClient("Delicmar", undefined, COMPANY);
     await updateClient(conPerfil.id, "Delicmar S.A.S.", null);
@@ -162,15 +162,15 @@ describe("clientes", () => {
     const conCentro = await createClient("Delicmar", undefined, COMPANY, center);
     expect((await getClient(conCentro.id))?.costCenter).toEqual(center);
 
-    // Vaciar el nombre en el diálogo llega aquí como `null`, y es la única forma de quitarlo: un
-    // `{ name: "" }` guardado dejaría un rótulo «Delicmar · » en los tres papeles.
+    // Emptying the name in the dialog arrives here as `null`, and it is the only way to remove it: a
+    // stored `{ name: "" }` would leave a «Delicmar · » label on all three papers.
     await updateClient(conCentro.id, "Delicmar", null, COMPANY, null);
     const cleared = await getClient(conCentro.id);
     expect(cleared?.costCenter).toBeUndefined();
     expect("costCenter" in (cleared ?? {})).toBe(false);
   });
 
-  // El mismo contrato que el perfil: `undefined` es «esta llamada no habla del centro».
+  // The same contract as the profile: `undefined` is «this call does not talk about the center».
   it("renombrar sin hablar del centro lo conserva", async () => {
     const center = { name: "Planta Ambato" };
     const conCentro = await createClient("Delicmar", undefined, undefined, center);
@@ -447,8 +447,8 @@ describe("employeesForPeriods", () => {
   });
 
   it("un período registrado y sin nómina llega con una lista vacía, no ausente", async () => {
-    // «Registrado y sin empleados» no es lo mismo que «no existe»: el grid dibuja su columna en
-    // blanco en vez de omitirla.
+    // «Registered and with no employees» is not the same as «does not exist»: the grid draws its
+    // column blank instead of omitting it.
     const period = await createPeriod(clientId, 2026, 2);
 
     expect((await employeesForPeriods([period.id])).get(period.id)).toEqual([]);
@@ -479,8 +479,8 @@ describe("periodFinancials", () => {
 
     const financials = await periodFinancials([p1.id, p2.id]);
 
-    // Contra la MISMA derivación pura que la pantalla usa: lo que esta prueba afirma es el
-    // acotado y el agrupado por período, no la aritmética del motor —esa la fija `golden.test.ts`.
+    // Against the SAME pure derivation the screen uses: what this test asserts is the bounding and
+    // the grouping by período, not the engine's arithmetic —that is fixed by `golden.test.ts`.
     expect(financials.get(p1.id)).toEqual(
       computePeriodFinancials(
         [ana, luis].map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
@@ -539,12 +539,12 @@ describe("migración v1 → v2 (aditiva)", () => {
     expect((await listPeriods(legacyClientId)).map((p) => p.id)).toEqual([legacyPeriodId]);
     expect(await getActiveClientId()).toBe(legacyClientId);
 
-    // La tabla nueva funciona de inmediato sobre datos viejos — nada especial "activa" la v2.
+    // The new table works immediately over old data — nothing special "activates" v2.
     await db.employees.add(employeeLine({ periodId: legacyPeriodId }));
     expect(await listEmployees(legacyPeriodId)).toHaveLength(1);
 
-    // Re-siembra para que el resto de la suite (su `beforeEach` de arriba) siga desde un estado
-    // conocido en vez de heredar lo que este test dejó.
+    // Re-seeded so the rest of the suite (its `beforeEach` above) continues from a known state
+    // instead of inheriting what this test left behind.
     await db.clients.clear();
     await db.periods.clear();
     await db.employees.clear();
@@ -553,8 +553,8 @@ describe("migración v1 → v2 (aditiva)", () => {
 });
 
 describe("updateEmployee · el parche de FICHA", () => {
-  // Es la garantía que hace segura la edición: alguien arregla una cédula y lo capturado —las
-  // horas, los descuentos, lo pagado— sigue exactamente donde estaba.
+  // It is the guarantee that makes editing safe: someone fixes a cédula and what was captured —the
+  // hours, the deductions, what was paid— stays exactly where it was.
   it("corrige la identidad sin tocar la captura del mes", async () => {
     const period = await createPeriod(clientId, 2026, 2);
     const capture = { ...emptyCapture(), bonus: 40, paid: 561.89 };
@@ -625,8 +625,8 @@ describe("deleteEmployee", () => {
 });
 
 describe("migración v3 → v4: las provisiones suben de la captura a la ficha", () => {
-  /** La ficha como la v3 la guardaba: SIN las dos banderas, que vivían dentro de la captura.
-   *  Quitarlas del factory es lo que hace que estos tests fallen si la migración desaparece. */
+  /** The record as v3 stored it: WITHOUT the two flags, which lived inside the capture. Removing them
+   *  from the factory is what makes these tests fail if the migration disappears. */
   function v3Line(overrides: Partial<PayrollEmployeeLine> = {}): Record<string, unknown> {
     const {
       provisionsThirteenth: _t,
@@ -637,7 +637,7 @@ describe("migración v3 → v4: las provisiones suben de la captura a la ficha",
     return ficha;
   }
 
-  /** Una base tal como la v3 la dejaba, con las dos banderas DENTRO de la captura. */
+  /** A database as v3 left it, with the two flags INSIDE the capture. */
   async function seedV3(lines: readonly Record<string, unknown>[]): Promise<void> {
     db.close();
     await Dexie.delete("liderboard-payroll");
@@ -682,8 +682,8 @@ describe("migración v3 → v4: las provisiones suben de la captura a la ficha",
   });
 
   it("y el motor la lee desde ahí: el costo empresa sigue llevando su provisión", async () => {
-    // Es lo que hace que la migración importe. Sin ella la bandera se leería como apagada y el
-    // único síntoma sería un costo total más bajo, que nadie compara contra el mes anterior.
+    // It is what makes the migration matter. Without it the flag would read as switched off and the
+    // only symptom would be a lower total employer cost, which nobody compares against last month.
     await seedV3([
       {
         ...v3Line({ id: "e1", periodId: "p1" }),
@@ -726,7 +726,7 @@ describe("importRoster", () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].name).toBe("Silvia Morales");
     expect(stored[0].capture).toEqual(capture);
-    // El dueño se estampa en la puerta, no lo trae el archivo.
+    // The owner is stamped at the door, the file does not bring it.
     expect(stored[0].periodId).toBe(period.id);
   });
 
@@ -736,7 +736,8 @@ describe("importRoster", () => {
 
     await importRoster(period.id, [employeeLine({ name: "Silvia Morales" })]);
 
-    // Fusionar dejaría viva a la baja del mes, sumando en los KPIs sin salir en ningún archivo.
+    // Merging would leave the month's removal alive, adding up in the KPIs without appearing in any
+    // file.
     expect((await listEmployees(period.id)).map((line) => line.name)).toEqual(["Silvia Morales"]);
   });
 
@@ -799,8 +800,8 @@ describe("updateEmployee", () => {
   });
 
   it("no toca lo que no se le pasa", async () => {
-    // Un parche parcial no puede borrar la ficha por omisión: la pantalla escribe un campo a la
-    // vez, y `days` no debería llevarse por delante el nombre ni la captura.
+    // A partial patch cannot erase the record by omission: the screen writes one field at a time, and
+    // `days` should not take the name or the capture with it.
     const period = await createPeriod(clientId, 2026, 2);
     await importRoster(period.id, [employeeLine()]);
     const [stored] = await listEmployees(period.id);
@@ -838,7 +839,7 @@ describe("addEmployee", () => {
     expect(stored.map((line) => line.name)).toEqual(["Silvia Morales"]);
   });
 
-  // Al revés que `importRoster`, que reemplaza el mes entero: un alta es una fila más.
+  // The opposite of `importRoster`, which replaces the whole month: adding one is one more row.
   it("no reemplaza la nómina que el período ya tiene", async () => {
     const period = await createPeriod(clientId, 2026, 2);
     await importRoster(period.id, [employeeLine({ name: "Pedro Sandoval" })]);
@@ -871,7 +872,8 @@ describe("addEmployee", () => {
     expect((await listEmployees(abril.id)).map((line) => line.name)).toEqual(["Nómina de abril"]);
   });
 
-  // La misma distinción que `copyRoster`: sin captura no es con la captura en ceros.
+  // The same distinction as `copyRoster`: with no capture is not the same as with the capture at
+  // zeros.
   it("un alta sin captura se guarda sin captura, no con una vacía", async () => {
     const period = await createPeriod(clientId, 2026, 2);
 
@@ -901,7 +903,7 @@ describe("las filas de bono", () => {
 
     const [after] = await listEmployees(period.id);
     expect(after.capture?.extras).toEqual([bono("x1", "Movilización", 45)]);
-    // El período no guarda nada de esto: por eso su rol se calcula sin leerlo.
+    // The período stores none of this: that is why its rol is computed without reading it.
     expect(await listPeriods(clientId)).toMatchObject([{ id: period.id }]);
     expect((await listPeriods(clientId))[0]).not.toHaveProperty("extraConcepts");
   });
@@ -940,9 +942,11 @@ describe("las filas de bono", () => {
     const abril = await createPeriod(clientId, 2026, 3, { copyFrom: marzo.id });
     const [enAbril] = await listEmployees(abril.id);
 
-    // La fila es la MISMA de un mes a otro —conserva su id, su rótulo y su clase— y llega en cero.
+    // The row is the SAME from one month to the next —it keeps its id, its label and its class— and
+    // arrives at zero.
     expect(enAbril.capture?.extras).toEqual([bono("x1", "Movilización", 0)]);
-    // El rótulo de una fila del CATÁLOGO no viaja: su fila tampoco, porque su importe no viaja.
+    // A CATALOGUE row's label does not travel: neither does its row, because its amount does not
+    // travel.
     expect(enAbril.capture?.labels).toBeUndefined();
   });
 

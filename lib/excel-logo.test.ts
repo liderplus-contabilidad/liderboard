@@ -14,15 +14,15 @@ describe("columnWidthPx", () => {
     expect(columnWidthPx(42)).toBe(299);
   });
 
-  // Es lo que hace que anclar contra una hoja de Ocupaciones —donde solo la columna A declara
-  // ancho— caiga donde cae de verdad y no en la columna B.
+  // It is what makes anchoring against an Ocupaciones sheet —where only column A declares a width—
+  // land where it really lands and not in column B.
   it("una columna que nadie declaró vale los 64 px de una columna en blanco", () => {
     expect(columnWidthPx(undefined)).toBe(64);
   });
 });
 
 describe("columnAnchorAt", () => {
-  // Los anchos de una hoja de estado de resultados: código, nombre y meses.
+  // The widths of an estado de resultados sheet: code, name and months.
   const statement = [12, 42, 13, 13, 13];
   const EMU = 9525;
 
@@ -30,12 +30,12 @@ describe("columnAnchorAt", () => {
     expect(columnAnchorAt(statement, 0)).toEqual({ nativeCol: 0, nativeColOff: 0 });
   });
 
-  // La forma fraccionaria de exceljs (`col: 1.81`) NO sirve aquí: su Anchor la convierte con
-  // `caracteres × 10000` EMU por columna cuando un carácter mide ~66.700, así que encoge más de
-  // seis veces y el logo aparece al principio de la columna en vez de al final. Por eso el
-  // desplazamiento viaja en EMU, que es la unidad del propio formato.
+  // exceljs' fractional form (`col: 1.81`) does NOT serve here: its Anchor converts it with
+  // `characters × 10000` EMU per column when a character measures ~66,700, so it shrinks more than
+  // sixfold and the logo appears at the start of the column instead of at the end. That is why the
+  // offset travels in EMU, which is the format's own unit.
   it("cae DENTRO de la columna que lo contiene, con el resto en EMU", () => {
-    // 89 (código) + 299 (nombre) = 388; a 332 px quedan 243 dentro de la columna del nombre.
+    // 89 (code) + 299 (name) = 388; at 332 px there are 243 left inside the name column.
     expect(columnAnchorAt(statement, 332)).toEqual({
       nativeCol: 1,
       nativeColOff: 243 * EMU,
@@ -48,7 +48,7 @@ describe("columnAnchorAt", () => {
   });
 
   it("pasada la última columna declarada sigue contando en columnas en blanco", () => {
-    // 388 de las dos primeras + 3 × 96 = 676 agota lo declarado; lo que sobra va a 64 px cada una.
+    // 388 of the first two + 3 × 96 = 676 exhausts what is declared; the rest is 64 px each.
     expect(columnAnchorAt(statement, 676 + 64)).toEqual({ nativeCol: 6, nativeColOff: 0 });
   });
 
@@ -66,30 +66,31 @@ describe("columnAnchorAt", () => {
 });
 
 describe("bandWidthFor", () => {
-  /** PyG: código (12) + nombre (42), y detrás columnas de meses. */
+  /** PyG: code (12) + name (42), and month columns behind. */
   const statement = [12, 42, 13, 13, 13];
-  /** Ocupaciones: una sola columna de rótulos, ancha, y detrás un día por columna. */
+  /** Ocupaciones: one single wide label column, and a day per column behind. */
   const occupancy = [40];
 
-  // El arreglo que pidió la firma: la esquina de la TABLA, no el final del bloque de rótulos, que
-  // a 390 px no se lee como el borde de nada sino como algo flotando entre las cifras.
+  // The fix the firm asked for: the corner of the TABLE, not the end of the label block, which at
+  // 390 px does not read as the edge of anything but as something floating among the figures.
   it("acaba donde acaba la tabla, no donde acaban los rótulos", () => {
     expect(bandWidthFor(statement, 5, 56, 56)).toBe(89 + 299 + 96 * 3);
   });
 
   it("solo cuenta las columnas que la tabla ocupa", () => {
-    // Un estado de modo único son tres columnas: código, nombre y Total.
+    // A single-mode statement is three columns: code, name and Total.
     expect(bandWidthFor(statement, 3, 56, 56)).toBe(89 + 299 + 96);
   });
 
-  // Las columnas que nadie declaró valen los 64 px de una columna en blanco, que es lo que mide
-  // una hoja de Ocupaciones más allá de su columna de rótulos.
+  // The columns nobody declared are worth the 64 px of a blank column, which is what an Ocupaciones
+  // sheet measures beyond its label column.
   it("cuenta a 64 px las columnas de la tabla que no declaran ancho", () => {
     expect(bandWidthFor(occupancy, 4, 56, 56)).toBe(285 + 64 * 3);
   });
 
-  // Sin esto, un estado de modo único (tres columnas, 484 px) no daría para dos logos apaisados de
-  // 240 y el del centro se dibujaría ENCIMA del del cliente, que no es un membrete sino un borrón.
+  // Without this, a single-mode statement (three columns, 484 px) would not have room for two
+  // landscape logos of 240 and the center's would be drawn ON TOP of the client's, which is not a
+  // letterhead but a smudge.
   it("se ensancha lo justo cuando los dos logos no caben en la tabla", () => {
     expect(bandWidthFor([12], 1, 240, 240)).toBe(240 + 16 + 240);
   });
@@ -111,7 +112,7 @@ describe("bandWidthFor", () => {
 });
 
 describe("writeLetterhead", () => {
-  /** Un logo cuadrado de 100 px: `fitLogoBox` lo deja en 56 × 56, el alto del hueco. */
+  /** A square 100 px logo: `fitLogoBox` leaves it at 56 × 56, the height of the gap. */
   const logo = {
     dataUrl: "data:image/png;base64,AAAA",
     mime: "image/png" as const,
@@ -119,7 +120,7 @@ describe("writeLetterhead", () => {
     height: 100,
   };
 
-  /** Una hoja de estado de resultados: código, nombre y tres columnas de cifras. */
+  /** An estado de resultados sheet: code, name and three figure columns. */
   function sheet() {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Hoja");
@@ -136,13 +137,13 @@ describe("writeLetterhead", () => {
 
     expect(ws.getCell("A1").alignment?.horizontal).toBe("center");
     expect(ws.getCell("A1").isMerged).toBe(true);
-    // La combinación llega a la quinta columna: la esquina de la tabla, no la del bloque de rótulos.
+    // The merge reaches the fifth column: the table's corner, not the label block's.
     expect(ws.getCell("E1").master.address).toBe("A1");
     expect(ws.getCell("E2").master.address).toBe("A2");
   });
 
-  // Es lo que sostiene el viaje de vuelta de los tres módulos sin tocar un solo lector: el valor de
-  // una celda combinada vive en su esquina superior izquierda.
+  // It is what holds up the round trip of all three modules without touching a single reader: a
+  // merged cell's value lives in its top-left corner.
   it("deja el texto en la columna que el lector del módulo ya mira", () => {
     const { wb, ws } = sheet();
     writeLetterhead(wb, ws, { columns: 5, lines: [{ text: "DELICMAR S.A." }] });
@@ -155,19 +156,19 @@ describe("writeLetterhead", () => {
 
     expect(ws.getCell("B1").value).toBe("DELICMAR S.A.");
     expect(ws.getCell("B1").master.address).toBe("B1");
-    // La A queda FUERA de la combinación, pero dentro de la banda: el relleno llega al borde.
+    // Column A stays OUTSIDE the merge, but inside the band: the fill reaches the edge.
     expect(ws.getCell("A1").isMerged).toBe(false);
     expect(ws.getCell("A1").fill).toBeDefined();
   });
 
-  // Lo que la hace parecer una cabecera y no texto suelto en A1.
+  // What makes it look like a header and not loose text in A1.
   it("pinta la banda a lo ancho de la tabla y la cierra con una raya", () => {
     const { wb, ws } = sheet();
     writeLetterhead(wb, ws, { columns: 5, lines: [{ text: "Uno" }, { text: "Dos" }] });
 
     expect(ws.getCell("E1").fill).toBeDefined();
     expect(ws.getCell("E2").border?.bottom?.style).toBe("thin");
-    // La raya cierra la banda entera, no solo la última línea de texto.
+    // The rule closes the whole band, not just the last line of text.
     expect(ws.getCell("A2").border?.bottom?.style).toBe("thin");
     expect(ws.getCell("A1").border?.bottom).toBeUndefined();
   });
@@ -175,7 +176,7 @@ describe("writeLetterhead", () => {
   it("abre las filas que pide el logo cuando el título trae menos líneas", () => {
     const { wb, ws } = sheet();
     writeLetterhead(wb, ws, { columns: 5, leftLogo: logo, lines: [{ text: "Uno" }] });
-    // 56 px de logo son tres filas de 20; una sola línea de título dejaría el logo derramándose.
+    // 56 px of logo are three rows of 20; a single title line would leave the logo spilling over.
     expect(ws.rowCount).toBe(3);
   });
 
@@ -191,8 +192,8 @@ describe("writeLetterhead", () => {
 
     const [left, right] = (ws as unknown as { _media: { range: { tl: ColumnAnchor } }[] })._media;
     expect(left?.range.tl).toMatchObject({ nativeCol: 0, nativeColOff: 0 });
-    // La tabla mide 89 + 299 + 96 × 3 = 676 px; el logo de 56 empieza en 620, dentro de la última
-    // columna (que arranca en 580).
+    // The table measures 89 + 299 + 96 × 3 = 676 px; the 56 px logo starts at 620, inside the last
+    // column (which starts at 580).
     expect(right?.range.tl).toMatchObject(columnAnchorAt([12, 42, 13, 13, 13], 676 - 56));
   });
 });

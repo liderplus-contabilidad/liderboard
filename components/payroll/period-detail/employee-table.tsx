@@ -13,13 +13,13 @@ import { type EmployeeRowData, EmployeeRow } from "./employee-row";
 import { EmployeeFormModal } from "../employee-form-modal";
 
 interface EmployeeTableProps {
-  /** El período al que va a parar un alta — también es lo que el modal nombra en su subtítulo. */
+  /** The período a new employee lands in — it is also what the modal names in its subtitle. */
   period: PayrollPeriod;
-  /** La nómina completa del período, SIN filtrar — decide entre el vacío «no tiene empleados» y
-   *  el de «ningún empleado coincide con lo que buscas», y es lo que el modal de alta lee para
-   *  rechazar un duplicado. */
+  /** The período's whole nómina, UNFILTERED — it decides between the «has no employees» empty state
+   *  and the «no employee matches what you are searching» one, and it is what the creation modal
+   *  reads to reject a duplicate. */
   lines: readonly PayrollEmployeeLine[];
-  /** `lines` con su rol calculado, después del buscador — lo que la tabla pinta. */
+  /** `lines` with their rol computed, after the search box — what the table paints. */
   visibleRows: readonly EmployeeRowData[];
   search: string;
   onSearchChange: (value: string) => void;

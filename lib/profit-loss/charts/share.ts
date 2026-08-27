@@ -1,46 +1,46 @@
 /**
- * Lo que una cuenta marcada ocupa dentro de OTRA cuenta marcada que la contiene.
+ * What a marked account takes up within ANOTHER marked account containing it.
  *
- * Marcar «4 Ingresos» y «4.1 Ventas» a la vez ya no es solo comparar dos barras: la pregunta que
- * produce esa marca es qué parte de la primera es la segunda. Aquí se responde una sola vez, en
- * puro, y el resultado viaja a la etiqueta de la barra, al tooltip y a la línea que explica la
- * tarjeta — tres lecturas del mismo número en vez de tres cálculos que pueden separarse.
+ * Marking «4 Ingresos» and «4.1 Ventas» at once is no longer just comparing two bars: the question
+ * that mark produces is what part of the first the second is. It is answered here just once, in the
+ * pure layer, and the result travels to the bar's label, to the tooltip and to the line explaining the
+ * card — three readings of the same number instead of three computations that can drift apart.
  *
- * La base es el **ancestro marcado más cercano**, a cualquier profundidad. Eso es lo que hace
- * que marcar «4» y «4.1.01» saltándose el nivel intermedio siga dando una lectura, y lo que
- * acierta con dos familias marcadas a la vez (`4`, `4.1`, `5`, `5.1`) sin una cláusula aparte:
- * cada hija cae dentro de la suya. Se camina `parentByCode`, que es la parentela del ÁRBOL y no
- * la del prefijo con puntos — la misma que sigue `ancestorPath`, así que una cuenta huérfana se
- * mide dentro de donde la tabla la dibuja anidada.
+ * The base is the **nearest marked ancestor**, at any depth. That is what makes marking «4» and
+ * «4.1.01» while skipping the intermediate level still give a reading, and what gets it right with two
+ * families marked at once (`4`, `4.1`, `5`, `5.1`) with no separate clause: each child falls inside
+ * its own. `parentByCode` is walked, which is the TREE's parentage and not that of the dotted prefix —
+ * the same one `ancestorPath` follows, so an orphan account is measured inside where the table draws
+ * it nested.
  *
- * La división no se reescribe: se le cuelga a la serie ese ancestro como `container` y se pasa
- * por `toPctOfContainer`, la única definición de «porcentaje sobre el contenedor» del módulo. De
- * ahí hereda las dos reglas que importan — un periodo sin cobertura y una base en `0` dan `null`,
- * nunca `0 %`.
+ * The division is not rewritten: that ancestor is hung on the series as `container` and it goes
+ * through `toPctOfContainer`, the module's only definition of «percentage over the container». From it
+ * it inherits the two rules that matter — a period with no coverage and a base at `0` give `null`,
+ * never `0 %`.
  */
 import { toPctOfContainer } from "../analytics/structure";
 import { seriesKeyId, type AnalyticsSource, type Series } from "../analytics/types";
 
-/** El porcentaje de una serie dentro de la cuenta marcada que la contiene. */
+/** A series' percentage within the marked account containing it. */
 export interface MarkedShare {
-  /** `seriesKeyId` de la serie hija — con lo que la etiqueta y el tooltip la reconocen. */
+  /** The child series' `seriesKeyId` — what the label and the tooltip recognise it by. */
   seriesId: string;
-  /** Nombre de la cuenta hija en el plan, para la frase que explica la tarjeta. */
+  /** The child account's name in the plan, for the phrase that explains the card. */
   label: string;
   /**
-   * Nombre de la cuenta base en el PLAN, nunca la etiqueta de su serie: con varios centros
-   * marcados esa etiqueta sería «Ingresos · Restaurante», y como la base siempre es del mismo
-   * centro que la hija, nombrarlo no desambigua nada y solo alarga.
+   * The base account's name in the PLAN, never its series' label: with several centers marked that
+   * label would be «Ingresos · Restaurante», and since the base is always of the same center as the
+   * child, naming it disambiguates nothing and only lengthens it.
    */
   baseLabel: string;
-  /** Un porcentaje por periodo, en el orden del eje; `null` donde no se puede dividir. */
+  /** One percentage per period, in the axis' order; `null` where it cannot be divided. */
   values: (number | null)[];
 }
 
 /**
- * Las series que caen dentro de otra de la misma tanda, en el orden en que se dibujan. Una serie
- * sin ancestro marcado no aparece: no hay porcentaje que inventarle, y marcar «4» y «5» tiene que
- * dejar la gráfica exactamente como estaba.
+ * The series that fall inside another one of the same batch, in the order they are drawn. A series
+ * with no marked ancestor does not appear: there is no percentage to invent for it, and marking «4»
+ * and «5» has to leave the chart exactly as it was.
  */
 export function markedShares(
   series: readonly Series[],
@@ -50,8 +50,8 @@ export function markedShares(
     sources.map((source) => [sourceId(source.centerId, source.year), source]),
   );
 
-  // Las marcas se agrupan por (centro, año) porque una serie solo puede medirse dentro de una
-  // base DIBUJADA A SU LADO: el 4.1 del restaurante no es la base del 4.1.01 de la bodega.
+  // The marks are grouped by (center, year) because a series can only be measured inside a base DRAWN
+  // BESIDE IT: the restaurant's 4.1 is not the base of the warehouse's 4.1.01.
   const markedBy = new Map<string, Map<string, Series>>();
   for (const entry of series) {
     const id = sourceId(entry.key.centerId, entry.key.year);
@@ -92,14 +92,14 @@ export function markedShares(
 }
 
 /**
- * Qué se mide dentro de qué, en castellano llano y bajo la tarjeta.
+ * What is measured within what, in plain Spanish and under the card.
  *
- * La barra lleva solo el número porque «28.4 % de Ingresos» no cabe en doce columnas, y un `28.4 %`
- * suelto no dice de quién es en cuanto hay dos niveles de padre en la misma columna. Esta línea es
- * lo que cierra ese hueco, y el tooltip lo repite barra por barra.
+ * The bar carries only the number because «28.4 % de Ingresos» does not fit in twelve columns, and a
+ * loose `28.4 %` does not say whose it is as soon as there are two parent levels in the same column.
+ * This line is what closes that gap, and the tooltip repeats it bar by bar.
  *
- * Un par de cuentas se nombra UNA vez aunque se repita en varios centros: con cuatro centros
- * marcados la frase diría cuatro veces lo mismo.
+ * A pair of accounts is named ONCE even if it repeats across several centers: with four centers marked
+ * the phrase would say the same thing four times.
  */
 export function describeShares(shares: readonly MarkedShare[]): string | undefined {
   const pairs: string[] = [];
@@ -127,7 +127,7 @@ function nameOf(source: AnalyticsSource, code: string): string {
   return source.namesByCode.get(code) ?? code;
 }
 
-/** Sube por el árbol hasta la primera cuenta que también esté marcada; `undefined` si no hay. */
+/** Walks up the tree to the first account that is also marked; `undefined` if there is none. */
 function nearestMarkedAncestor(
   source: AnalyticsSource,
   code: string,

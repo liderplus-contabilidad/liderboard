@@ -48,9 +48,9 @@ const EMPTY_DATASETS: OccupancyDataset[] = [];
 const EMPTY_HOTELS: occupancyDb.HotelSummary[] = [];
 
 /**
- * Qué hacer con una carga ya parseada. `merge` es el caso normal —el hotel abierto está vacío o los
- * archivos son suyos—; `clash` es el que abre el diálogo de tres salidas, y lleva todo lo que ese
- * diálogo necesita para decidir su forma sin volver a leer una tabla.
+ * What to do with an already parsed upload. `merge` is the normal case —the open hotel is empty or
+ * the files are its own—; `clash` is the one that opens the three-exit dialog, and it carries
+ * everything that dialog needs to decide its shape without reading a table again.
  */
 export type ImportPlan =
   | { kind: "merge" }
@@ -60,17 +60,17 @@ export type ImportPlan =
       kind: "clash";
       current: HotelIdentity;
       incoming: HotelIdentity;
-      /** El hotel que SÍ tiene esa identidad, o `null`. Es lo que decide la salida principal. */
+      /** The hotel that DOES have that identity, or `null`. It is what decides the main exit. */
       matching: occupancyDb.HotelSummary | null;
     };
 
 interface OccupancyDataValue {
   datasets: OccupancyDataset[];
-  /** Cada hotel con lo que guarda — la lista del selector. */
+  /** Each hotel with what it holds — the selector's list. */
   hotels: occupancyDb.HotelSummary[];
   activeHotelId: string | null;
   activeHotel: occupancyDb.HotelSummary | undefined;
-  /** El nombre que DECLARAN los archivos del hotel abierto; `undefined` si aún no tiene ninguno. */
+  /** The name the open hotel's files DECLARE; `undefined` if it has none yet. */
   hotelName: string | undefined;
   createHotel: (name: string) => Promise<string>;
   /** Changes the LABEL — name and logo — and nothing else. */
@@ -116,15 +116,15 @@ interface OccupancyDataValue {
   deleteYear: (year: number) => Promise<void>;
   deleteCenter: (centerId: string) => Promise<void>;
   /**
-   * Lo que hay que hacer con una carga, decidido ANTES de escribir nada. Quien pregunta es el modal
-   * de carga, que es quien puede explicarse; quien escribe son las tres funciones de abajo.
+   * What has to be done with an upload, decided BEFORE anything is written. The asker is the upload
+   * modal, which is the one that can explain itself; the writers are the three functions below.
    */
   planImport: (results: OccupancyParseResult[]) => ImportPlan;
-  /** Carga en el hotel abierto, o en `hotelId` — que además pasa a ser el hotel activo. */
+  /** Loads into the open hotel, or into `hotelId` — which also becomes the active hotel. */
   importParsed: (results: OccupancyParseResult[], hotelId?: string) => Promise<void>;
-  /** Crea el hotel con ese nombre y carga allí. La única carga que crea un hotel. */
+  /** Creates the hotel with that name and loads there. The only upload that creates a hotel. */
   importIntoNewHotel: (results: OccupancyParseResult[], name: string) => Promise<void>;
-  /** Reemplaza SOLO el hotel abierto. Los demás no se tocan. */
+  /** Replaces ONLY the open hotel. The others are not touched. */
   replaceActiveHotel: (results: OccupancyParseResult[]) => Promise<void>;
   importError: string | null;
   importErrorDetails: string[];
@@ -139,7 +139,7 @@ interface OccupancyDataValue {
   toggleCenterMark: (centerId: string) => void;
   clearCenterMarks: () => void;
   clearAllMarks: () => void;
-  /** «Rango» (un tramo, con total y evolución) o «Días» (fechas sueltas, una columna cada una). */
+  /** «Rango» (one span, with total and evolution) or «Días» (loose dates, one column each). */
   setPeriodMode: (mode: PeriodMode) => void;
   /** Moves one end of the span; ends given in reverse are normalized. */
   setRangeEdge: (edge: "from" | "to", ref: DateRef) => void;
@@ -155,7 +155,7 @@ function yearsOf(datasets: OccupancyDataset[]): number[] {
   return [...new Set(datasets.map((d) => d.year))].sort((a, b) => a - b);
 }
 
-/** Los hoteles que declaran los archivos de una carga, uno por identidad. */
+/** The hotels the files of one upload declare, one per identity. */
 function hotelsIn(results: OccupancyParseResult[]): OccupancyParseResult[] {
   return [...new Map(results.map((r) => [normalize(r.dataset.hotelName), r])).values()];
 }
@@ -164,9 +164,9 @@ function hotelsIn(results: OccupancyParseResult[]): OccupancyParseResult[] {
  * Mounted in the dashboard layout so the header can name the hotel while the Datos panel
  * renders the grid.
  *
- * Todo lo que lee está acotado al HOTEL abierto, y siempre a través de `db.ts`: con varios hoteles
- * compartiendo una tabla, una consulta sin acotar mezcla dos empresas en silencio y nada de lo que
- * hay debajo puede notarlo.
+ * Everything it reads is bounded to the OPEN hotel, and always through `db.ts`: with several hotels
+ * sharing one table, an unbounded query mixes two companies in silence and nothing below it can
+ * tell.
  */
 export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   const hotelRows = useLiveQuery(() => occupancyDb.listHotelSummaries(), []);

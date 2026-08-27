@@ -71,18 +71,19 @@ export interface NamedEntity {
 }
 
 /**
- * Un CENTRO de un workspace, como lo lista una superficie que no dibuja sus cifras: el centro de
- * costo de PyG y la sucursal de Ocupaciones son la misma figura con dos nombres, y el diálogo que
- * les sube el logo es uno solo.
+ * A workspace's CENTER, as a surface that does not draw its figures lists it: PyG's cost center and
+ * Ocupaciones' sucursal are the same figure with two names, and the dialog that uploads their logo is
+ * one single one.
  *
- * Vive aquí por la misma razón que `NamedEntity`: no sabe de qué módulo habla. Lo que cada módulo
- * pone encima es cómo LLAMA a esto (`EntityLabels.centerPlural`), que es lo único que cambia.
+ * It lives here for the same reason as `NamedEntity`: it does not know which module it is talking
+ * about. What each module puts on top is what it CALLS this (`EntityLabels.centerPlural`), which is
+ * the only thing that changes.
  */
 export interface CenterOption {
-  /** El `centerId`: el id de la vista, y la clave con la que se guarda su logo. */
+  /** The `centerId`: the view's id, and the key its logo is stored under. */
   id: string;
   name: string;
-  /** El punto de color del selector, si el módulo le da uno. */
+  /** The selector's colour dot, if the module gives it one. */
   color?: string;
 }
 
@@ -125,20 +126,20 @@ export function matchesSearch(name: string, query: string): boolean {
 }
 
 /**
- * Una de las dos tarjetas que un diálogo de choque compara: lo que hay ABIERTO frente a lo que
- * traen los ARCHIVOS. La forma vive aquí porque la pregunta es la misma en los dos módulos —«¿esto
- * es lo mismo que ya tengo?»—; lo que cambia es la identidad que cada uno compara, y de eso se
- * ocupa el `describe…Change` de su módulo, que es quien redacta estos tres campos.
+ * One of the two cards a clash dialog compares: what is OPEN against what the FILES bring. The shape
+ * lives here because the question is the same in both modules —«is this the same as what I already
+ * have?»—; what changes is the identity each one compares, and that is handled by its module's
+ * `describe…Change`, which is what writes these three fields.
  *
- * El renderizado es `components/ui/comparison-card.tsx`. La forma está aquí y no allí porque `lib/`
- * no puede importar de `components/`, y es `lib/` quien la produce.
+ * The rendering is `components/ui/comparison-card.tsx`. The shape is here and not there because
+ * `lib/` cannot import from `components/`, and it is `lib/` that produces it.
  */
 export interface ComparisonCardData {
-  /** El micro-rótulo: «CLIENTE ABIERTO», «LOS ARCHIVOS». */
+  /** The micro-label: «CLIENTE ABIERTO», «LOS ARCHIVOS». */
   caption: string;
-  /** La línea en negrita: la etiqueta del usuario, o el nombre que declara el archivo. */
+  /** The bold line: the user's label, or the name the file declares. */
   name: string;
-  /** La línea secundaria: el nombre declarado (si difiere de `name`) y lo que hay dentro. */
+  /** The secondary line: the declared name (if it differs from `name`) and what is inside. */
   detail: string;
 }
 

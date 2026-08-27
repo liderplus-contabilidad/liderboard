@@ -50,19 +50,19 @@ class PayrollDb extends Dexie {
       periods: "id, clientId, &[clientId+year+monthIndex]",
       active: "key",
     });
-    // v2: la ficha del empleado (`PayrollEmployeeLine`), lo que una copia de nómina arrastra.
-    // Puramente ADITIVA — Dexie no baja de versión, y la v1 puede existir ya en el navegador de
-    // quien probó el módulo antes de este cambio — así que solo se agrega la tabla nueva; nada de
-    // lo de v1 se toca ni se re-declara.
+    // v2: the employee's record (`PayrollEmployeeLine`), what a nómina copy drags along. Purely
+    // ADDITIVE — Dexie does not downgrade, and v1 may already exist in the browser of whoever tried
+    // the module before this change — so only the new table is added; nothing of v1 is touched or
+    // re-declared.
     this.version(2).stores({
       employees: "id, periodId",
     });
-    // v3: el rótulo de una fila del rol se muda del PERÍODO a la CAPTURA del empleado. Ningún
-    // índice cambia —ni `extraConcepts` ni `extraAmounts` lo estaban nunca—, así que esta versión
-    // existe SOLO para correr su `upgrade`. Es un reshape, no un borrado: se lee la declaración del
-    // período y el importe de cada captura y se escribe la fila entera, con las dos cosas dentro.
-    // Nada se limpia hasta que las líneas están escritas, y todo ocurre en la transacción de la
-    // actualización, porque Dexie no baja de versión.
+    // v3: a rol row's label moves from the PERÍODO to the employee's CAPTURE. No index changes
+    // —neither `extraConcepts` nor `extraAmounts` ever were indexed—, so this version exists ONLY to
+    // run its `upgrade`. It is a reshape, not a deletion: the período's declaration and each
+    // capture's amount are read and the whole row is written, with both things inside it. Nothing is
+    // cleared until the lines are written, and everything happens inside the upgrade's transaction,
+    // because Dexie does not downgrade.
     this.version(3)
       .stores({})
       .upgrade(async (tx) => {
@@ -82,8 +82,9 @@ class PayrollDb extends Dexie {
           if (!concepts) {
             continue;
           }
-          // Un empleado SIN captura de un período que sí declaraba recibe igualmente sus filas en
-          // cero: es exactamente lo que la pantalla le mostraba, y no dárselas las borraría.
+          // An employee WITHOUT a capture of a período that did declare gets their rows at zero all
+          // the same: it is exactly what the screen showed them, and not giving them would erase
+          // them.
           const capture = line.capture ?? emptyCapture();
           const amounts = (capture.extraAmounts ?? {}) as Record<string, number>;
           delete capture.extraAmounts;
@@ -103,16 +104,16 @@ class PayrollDb extends Dexie {
           }
         }
       });
-    // v4: las dos banderas de provisión de décimos suben de la CAPTURA a la FICHA — son una
-    // elección del empleado y no un dato del mes, la misma razón por la que las dos del fondo de
-    // reserva ya estaban ahí (ver `PayrollEmployeeLine`). Ningún índice cambia, así que esta
-    // versión existe SOLO para correr su `upgrade`.
+    // v4: the two décimo provision flags move up from the CAPTURE to the RECORD — they are a choice
+    // of the employee and not a datum of the month, the same reason the two reserve-fund ones were
+    // already there (see `PayrollEmployeeLine`). No index changes, so this version exists ONLY to run
+    // its `upgrade`.
     //
-    // Con el archivo real de marzo 2026 es un no-op —apagadas en los seis empleados—, pero el caso
-    // contrario existe y perderlo sería invisible: una bandera encendida dejaría de provisionar y
-    // lo único que se movería es el costo total empresa, que nadie compara contra el mes anterior.
-    // Por eso se migra el dato en vez de leerlo con un `??` desde el sitio viejo, que dejaría las
-    // dos formas vivas para siempre.
+    // With the real March 2026 file it is a no-op —switched off in all six employees—, but the
+    // opposite case exists and losing it would be invisible: a flag that was on would stop
+    // provisioning and the only thing that would move is the total employer cost, which nobody
+    // compares against last month. That is why the datum is migrated instead of being read with a
+    // `??` from the old place, which would leave both shapes alive forever.
     this.version(4)
       .stores({})
       .upgrade(async (tx) => {
@@ -131,17 +132,17 @@ class PayrollDb extends Dexie {
   }
 }
 
-/** La forma que `PayrollPeriod.extraConcepts` tenía hasta la v2. Se declara aquí y no en
- *  `types.ts` porque la migración es el único código que vuelve a verla. */
+/** The shape `PayrollPeriod.extraConcepts` had up to v2. It is declared here and not in `types.ts`
+ *  because the migration is the only code that ever sees it again. */
 interface LegacyExtraConcept {
   id: string;
   label: string;
   kind: PayrollExtraConceptKind;
 }
 
-/** La ficha tal como la v3 la guardaba: con las dos provisiones DENTRO de la captura. Aquí y no en
- *  `types.ts` por lo mismo — es una forma muerta, y darle sitio entre los tipos vivos invitaría a
- *  leerla como una alternativa vigente. */
+/** The record as v3 stored it: with the two provisions INSIDE the capture. Here and not in `types.ts`
+ *  for the same reason — it is a dead shape, and giving it room among the live types would invite
+ *  reading it as a current alternative. */
 type LegacyLineWithProvisions = PayrollEmployeeLine & {
   capture?: PayrollMonthlyCapture & {
     provisionsThirteenth?: boolean;
@@ -190,14 +191,14 @@ export async function createClient(
 
 /**
  * Changes the cliente's LABEL — its name, its logo, its company profile and its centro de costo —
- * and NOTHING else: no período and no nómina is touched. Los cuatro viajan en una escritura porque
- * el diálogo los edita juntos; `logo: null` lo quita, y un `undefined` en un `update` de Dexie
- * borra la propiedad, que es justamente lo que eso significa aquí.
+ * and NOTHING else: no período and no nómina is touched. All four travel in one write because the
+ * dialog edits them together; `logo: null` removes it, and an `undefined` in a Dexie `update` deletes
+ * the property, which is exactly what that means here.
  *
- * El perfil llega `null` solo desde un módulo que no lo pide; en Rol de Pagos el diálogo lo exige,
- * así que guardar un cliente es también la vía por la que uno antiguo deja de estar incompleto. El
- * centro es opcional SIEMPRE, así que `undefined` es su forma de irse: vaciar su nombre en el
- * diálogo borra el campo, que es lo que devuelve el papel a su forma de antes.
+ * The profile arrives `null` only from a module that does not ask for it; in Rol de Pagos the dialog
+ * requires it, so saving a client is also the way an old one stops being incomplete. The center is
+ * ALWAYS optional, so `undefined` is its way of going: emptying its name in the dialog deletes the
+ * field, which is what returns the paper to its former shape.
  */
 export async function updateClient(
   clientId: string,
@@ -301,7 +302,7 @@ export async function listPeriods(clientId: string): Promise<PayrollPeriod[]> {
 }
 
 /**
- * Creates an empty período: born `"captura"`, `totals` ausente — no existen cálculos todavía. The
+ * Creates an empty período: born `"captura"`, `totals` absent — there are no computations yet. The
  * owner is stamped HERE, at the door, the same as every other module's `db.ts`.
  *
  * Duplicate rejection with a message that NAMES the period is the popover's job (it already holds
@@ -331,8 +332,9 @@ export async function createPeriod(
   }
 
   await db.transaction("rw", db.periods, db.employees, async () => {
-    // Las filas de bono las arrastra `copyRoster`, que es la única definición de qué sobrevive de
-    // un período a otro. Antes se copiaban aquí, a nivel de período, fuera de esa definición.
+    // The bonus rows are dragged along by `copyRoster`, which is the only definition of what survives
+    // from one período to another. They used to be copied here, at período level, outside that
+    // definition.
     await db.periods.add(period);
     const sourceLines = await db.employees.where("periodId").equals(copyFrom).toArray();
     const copiedLines: PayrollEmployeeLine[] = copyRoster(sourceLines).map((line) => ({
@@ -359,40 +361,38 @@ export async function deletePeriod(periodId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Nómina (la ficha de cada empleado de un período)
+// Nómina (each employee's record of a período)
 // ---------------------------------------------------------------------------
 
-/** La nómina de UN período, sin orden particular — lo que arrastra una copia. */
+/** The nómina of ONE período, in no particular order — what a copy drags along. */
 export async function listEmployees(periodId: string): Promise<PayrollEmployeeLine[]> {
   return db.employees.where("periodId").equals(periodId).toArray();
 }
 
 /**
- * Escribe la nómina que trajo un archivo, REEMPLAZANDO la que el período tuviera, en UNA
- * transacción.
+ * Writes the nómina a file brought in, REPLACING whatever the período held, in ONE transaction.
  *
- * Reemplazar y no fusionar es lo correcto porque el rol de pagos ES el mes entero: su hoja
- * `GENERAL` lista a todos los empleados que cobraron. Fusionar dejaría vivo a quien el contador
- * dio de baja —seguiría sumando en los KPIs sin aparecer en ningún archivo— y ningún control de la
- * pantalla podría notarlo. Por eso también es seguro que un mismo mes se cargue dos veces: la
- * segunda carga vuelve a dejar exactamente lo que el archivo dice.
+ * Replacing and not merging is right because the rol de pagos IS the whole month: its `GENERAL` sheet
+ * lists every employee who was paid. Merging would leave alive whoever the accountant removed —they
+ * would keep adding up in the KPIs without appearing in any file— and no control on the screen could
+ * notice. That is also why it is safe for the same month to be loaded twice: the second upload leaves
+ * exactly what the file says again.
  *
- * Lo que se pierde al reemplazar es la ficha copiada del mes anterior, y eso es justo lo que se
- * quiere: el archivo trae su propia ficha y es la del contador.
+ * What is lost on replacing is the record copied from the previous month, and that is precisely what
+ * is wanted: the file brings its own record and it is the accountant's.
  */
 /**
- * Lo que se puede reescribir de un empleado, por las DOS puertas que la pantalla tiene:
+ * What can be rewritten of an employee, through the TWO doors the screen has:
  *
- *   - **el mes**, en línea en el detalle: `days`, `baseSalary` y la captura entera. Se escribe
- *     campo a campo, al salir de cada input, para que el líquido se mueva a la vista.
- *   - **la ficha**, desde el diálogo de edición: identidad, contrato, fondo de reserva y las dos
- *     provisiones. Antes no estaban aquí y el comentario remitía a «la ficha», que no existía como
- *     pantalla: una cédula mal tecleada solo se arreglaba borrando el período o recargando el
- *     Excel.
+ *   - **the month**, inline in the detail: `days`, `baseSalary` and the whole capture. It is written
+ *     field by field, on leaving each input, so the net pay moves in plain sight.
+ *   - **the record**, from the edit dialog: identity, contract, reserve fund and the two provisions.
+ *     They were not here before and the comment pointed at «the record», which did not exist as a
+ *     screen: a mistyped cédula could only be fixed by deleting the período or reloading the Excel.
  *
- * El parche alcanza SOLO al empleado de SU período: cada período guarda su propia copia de la
- * nómina, igual que el contador tiene una hoja `GENERAL` por mes, así que corregir marzo no
- * reescribe febrero. La corrección viaja hacia adelante sola cuando `copyRoster` crea abril.
+ * The patch reaches ONLY the employee of THEIR período: each período stores its own copy of the
+ * nómina, just as the accountant has a `GENERAL` sheet per month, so correcting March does not
+ * rewrite February. The correction travels forward on its own when `copyRoster` creates April.
  */
 export type PayrollEmployeePatch = Partial<
   Pick<
@@ -415,12 +415,12 @@ export type PayrollEmployeePatch = Partial<
 >;
 
 /**
- * Escribe un parche PARCIAL sobre un empleado. Dexie's `update` fusiona en vez de reemplazar, así
- * que corregir `days` no se lleva por delante ni el nombre ni lo capturado — que importa porque
- * esta pantalla escribe un campo cada vez, según se va saliendo de cada input.
+ * Writes a PARTIAL patch over an employee. Dexie's `update` merges instead of replacing, so
+ * correcting `days` does not take the name or what was captured with it — which matters because this
+ * screen writes one field at a time, as each input is left.
  *
- * Un `id` que no existe no crea nada: `update` devuelve 0 y se acabó. Es la respuesta correcta a
- * un empleado borrado en otra pestaña mientras esta lo tenía abierto.
+ * An `id` that does not exist creates nothing: `update` returns 0 and that is that. It is the right
+ * answer to an employee deleted in another tab while this one had them open.
  */
 export async function updateEmployee(
   employeeId: string,
@@ -430,19 +430,20 @@ export async function updateEmployee(
 }
 
 /**
- * Agrega UN empleado a la nómina de un período, sin tocar la que ya tiene — al revés que
- * `importRoster`, que reemplaza el mes entero porque un archivo ES el mes entero. Un alta a mano
- * es una fila más, y por eso no hay transacción: es una sola escritura.
+ * Adds ONE employee to a período's nómina, without touching the one it already has — the opposite of
+ * `importRoster`, which replaces the whole month because a file IS the whole month. Adding one by
+ * hand is one more row, and that is why there is no transaction: it is a single write.
  *
- * El dueño se estampa AQUÍ, en la puerta, igual que en `importRoster` y en la copia de nómina: a
- * qué período pertenece un empleado lo decide el período que está abierto, nunca lo que traiga la
- * ficha. Por eso el argumento es una `ParsedPayrollEmployeeLine`, sin `id` ni `periodId`.
+ * The owner is stamped HERE, at the door, just as in `importRoster` and in the nómina copy: which
+ * período an employee belongs to is decided by the período that is open, never by what the record
+ * brings. That is why the argument is a `ParsedPayrollEmployeeLine`, with no `id` and no `periodId`.
  *
- * Devuelve la ficha ya estampada para que quien la llama pueda navegar a ella sin releer la tabla.
+ * It returns the already stamped record so the caller can navigate to it without re-reading the
+ * table.
  *
- * Lo que NO hace es validar: qué es obligatorio y qué forma tiene una cédula es de
- * `lib/payroll/employee-form.ts`, que corre donde se puede decir QUÉ campo está mal. El duplicado
- * de cédula se comprueba allí por la misma razón — aquí solo se podría rechazar sin explicar.
+ * What it does NOT do is validate: what is required and what shape a cédula has belongs to
+ * `lib/payroll/employee-form.ts`, which runs where it can say WHICH field is wrong. The duplicate
+ * cédula is checked there for the same reason — here it could only be rejected without explaining.
  */
 export async function addEmployee(
   periodId: string,
@@ -454,15 +455,15 @@ export async function addEmployee(
 }
 
 /**
- * Quita UN empleado de la nómina de su período. Una sola escritura, sin transacción, y sin tocar
- * al resto de la nómina — al revés que `importRoster`, que reemplaza el mes entero porque un
- * archivo ES el mes entero.
+ * Removes ONE employee from their período's nómina. A single write, with no transaction, and without
+ * touching the rest of the nómina — the opposite of `importRoster`, which replaces the whole month
+ * because a file IS the whole month.
  *
- * Alcanza solo al período donde está: el mismo empleado en otro mes es otra fila, y darlo de baja
- * en marzo no puede borrar el marzo que ya se pagó en enero.
+ * It reaches only the período they are in: the same employee in another month is another row, and
+ * removing them in March cannot erase the March that was already paid in January.
  *
- * Un `id` que no existe no falla: `delete` no encuentra nada y se acabó. Es la respuesta correcta
- * a un empleado borrado en otra pestaña mientras esta lo tenía abierto.
+ * An `id` that does not exist does not fail: `delete` finds nothing and that is that. It is the right
+ * answer to an employee deleted in another tab while this one had them open.
  */
 export async function deleteEmployee(employeeId: string): Promise<void> {
   await db.employees.delete(employeeId);
@@ -483,10 +484,9 @@ export async function importRoster(
 }
 
 /**
- * Cuenta empleados y áreas distintas de VARIOS períodos a la vez, en una sola consulta — la
- * columna EMPLEADOS de toda la tabla y el resumen la leen de aquí, en vez de una consulta por
- * fila. Cada `periodId` debe pertenecer a un cliente ya conocido por quien llama (nunca una
- * lectura sin acotar).
+ * Counts employees and distinct areas of SEVERAL períodos at once, in a single query — the EMPLEADOS
+ * column of the whole table and the summary read it from here, instead of one query per row. Each
+ * `periodId` must belong to a client already known to the caller (never an unbounded read).
  */
 export async function rosterCounts(
   periodIds: readonly string[],
@@ -511,20 +511,20 @@ export async function rosterCounts(
 }
 
 /**
- * La nómina de VARIOS períodos a la vez, agrupada por `periodId` — una sola consulta detrás de
- * Sueldos por Áreas, que lee todos los períodos visibles en vez de uno por fila. Mismo patrón
- * batcheado que `rosterCounts` y `periodFinancials`.
+ * The nómina of SEVERAL períodos at once, grouped by `periodId` — a single query behind Sueldos por
+ * Áreas, which reads every visible período instead of one per row. The same batched pattern as
+ * `rosterCounts` and `periodFinancials`.
  *
- * Devuelve las FICHAS y no un total porque quien llama las agrupa por área y por empleado y deriva
- * el costo con el motor; agregarlas aquí obligaría a esta función a conocer las marcas de la barra,
- * que es justo lo que la mantendría acoplada a una pantalla.
+ * It returns the RECORDS and not a total because the caller groups them by area and by employee and
+ * derives the cost with the engine; aggregating them here would force this function to know the bar's
+ * marks, which is precisely what would keep it coupled to a screen.
  *
- * Un período pedido que no tiene nómina aparece con una lista vacía: es «registrado y sin
- * empleados», que no es lo mismo que un período que no existe — y esa distinción es la que deja al
- * grid dibujar su columna en blanco en vez de omitirla.
+ * A requested período with no nómina appears with an empty list: it is «registered and with no
+ * employees», which is not the same as a período that does not exist — and that distinction is what
+ * lets the grid draw its column blank instead of omitting it.
  *
- * Cada `periodId` debe pertenecer a un cliente ya resuelto por quien llama: nunca una lectura sin
- * acotar, que es lo que separa la nómina de dos empresas.
+ * Each `periodId` must belong to a client already resolved by the caller: never an unbounded read,
+ * which is what separates the nómina of two companies.
  */
 export async function employeesForPeriods(
   periodIds: readonly string[],
@@ -547,11 +547,11 @@ export async function employeesForPeriods(
 }
 
 /**
- * Los cuatro totales (`gross`/`deductions`/`net`/`cost`) de VARIOS períodos a la vez, en una sola
- * consulta — el mismo precedente batcheado que `rosterCounts`. La derivación es de
- * `computePeriodFinancials` (`lib/payroll/period-detail.ts`, puro y testeado) sobre el rol que el
- * motor calcula por línea (`computeLinePayroll`); esta función solo hace la lectura acotada y
- * agrupa por período. Un período SIN empleados no aparece en el mapa — no es cero, es «no hay».
+ * The four totals (`gross`/`deductions`/`net`/`cost`) of SEVERAL períodos at once, in a single query
+ * — the same batched precedent as `rosterCounts`. The derivation belongs to `computePeriodFinancials`
+ * (`lib/payroll/period-detail.ts`, pure and tested) over the rol the engine computes per line
+ * (`computeLinePayroll`); this function only does the bounded read and groups by período. A período
+ * WITHOUT employees does not appear in the map — it is not zero, it is «there is none».
  */
 export async function periodFinancials(
   periodIds: readonly string[],

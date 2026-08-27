@@ -70,8 +70,8 @@ describe("incomingSalesIdentity", () => {
 
 describe("describeSalesIdentityClash", () => {
   it("no dobla el punto cuando la razón social ya acaba en uno", () => {
-    // Media razón social del país acaba en `S.A.`, y un `S.A..` se lee como una errata de la app
-    // sobre el nombre del cliente.
+    // Half the country's razón sociales end in `S.A.`, and an `S.A..` reads as a typo of the app over
+    // the client's name.
     const message = describeSalesIdentityClash(
       { companyName: "HOSPITAL DURAN" },
       { companyName: "CENTRO MEDICO SAN RAFAEL S.A." },

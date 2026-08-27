@@ -21,13 +21,13 @@ describe("las secciones del informe", () => {
     const declared = ids({ mode: "single", vertical: true });
 
     expect(declared).toEqual(["portada", "resumen", "graficos", "analisis", "vertical", "estado"]);
-    // No es que venga vacío ni deshabilitado: no está declarado.
+    // It is not that it arrives empty or disabled: it is not declared.
     expect(declared).not.toContain("centros");
   });
 
   it("sin nada que añadir, el análisis vertical tampoco existe", () => {
-    // Sobre Ingresos y sin año contra el que comparar, sería la columna «% Ing.» del estado
-    // impresa otra vez en su propia página.
+    // Over Ingresos and with no year to compare against, it would be the statement's «% Ing.» column
+    // printed again on its own page.
     expect(ids({ mode: "single", vertical: false })).not.toContain("vertical");
   });
 
@@ -52,8 +52,8 @@ describe("qué secciones abren página", () => {
       .map((section) => section.id);
 
   it("solo las tablas de página entera", () => {
-    // Las cuatro primeras se leen de corrido: la portada ocupa dos tercios de hoja y el resumen
-    // son tres tiles. Cada una en su propia página son dos hojas casi en blanco.
+    // The first four are read continuously: the cover takes two thirds of a sheet and the summary is
+    // three tiles. Each on its own page is two almost blank sheets.
     expect(breaking({ mode: "multi", vertical: true })).toEqual(["vertical", "estado", "centros"]);
   });
 

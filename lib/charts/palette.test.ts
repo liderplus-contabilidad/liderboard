@@ -99,7 +99,7 @@ describe("constantes de marca", () => {
 
 describe("CHART_PERIOD_PALETTE · un color por marca", () => {
   it("está apagado a propósito: doce barras saturadas cansan la vista", () => {
-    // Ninguno es el tono pleno del set de identidad: son mezclas hacia gris.
+    // None of them is the full hue of the identity set: they are mixes toward grey.
     for (const hue of CHART_PERIOD_PALETTE) {
       expect(CHART_PALETTE).not.toContain(hue);
     }
@@ -121,7 +121,7 @@ describe("CHART_PERIOD_PALETTE · un color por marca", () => {
   });
 
   it("no se pisa con los slots de serie: son dos trabajos distintos", () => {
-    // Comparten los primeros por diseño (misma familia de marca), pero el set es más largo.
+    // They share the first ones by design (same brand family), but the set is longer.
     expect(CHART_PERIOD_PALETTE.length).toBeGreaterThan(CHART_PALETTE.length);
   });
 });
@@ -139,8 +139,8 @@ describe("CHART_DISTRIBUTION_RAMP · la pila ordenada", () => {
   });
 
   it("son cinco pasos y el neutro: el arco no da para más sin juntar dos vecinos", () => {
-    // El corte no es estético — a ocho pasos el peor par vecino cae a ΔE 8, bajo el piso de
-    // visión normal, y en una pila los vecinos son justo lo que hay que distinguir.
+    // The cut is not aesthetic — at eight steps the worst neighbouring pair drops to ΔE 8, below the
+    // normal-vision floor, and in a stack neighbours are exactly what has to be told apart.
     expect(CHART_DISTRIBUTION_MAX).toBe(6);
     expect(CHART_DISTRIBUTION_MAX).toBeLessThan(CHART_MAX_SERIES);
     expect(CHART_DISTRIBUTION_RAMP.at(-1)).toBe(CHART_NEUTRAL);
@@ -176,13 +176,13 @@ describe("CHART_COMPOSITION_PALETTE · el reparto de la tarta", () => {
   });
 
   it("NO son los tonos de la referencia, y por eso no hay ningún rojo puro", () => {
-    // `#ff0000` y `#ff5600` daban ΔE 7.6 en visión NORMAL: la porción del 30 % y la del 20 %
-    // eran casi el mismo rojo para cualquiera. Allí lo salvaba el «20%» impreso dentro de la
-    // porción; aquí los rótulos van fuera, así que ese relieve no existe.
+    // `#ff0000` and `#ff5600` gave ΔE 7.6 in NORMAL vision: the 30 % slice and the 20 % one were
+    // almost the same red to anyone. There it was saved by the «20%» printed inside the slice; here
+    // the labels go outside, so that relief does not exist.
     for (const hex of ["#ff0000", "#ff5600", "#ff8500", "#99aa27"]) {
       expect(CHART_COMPOSITION_PALETTE).not.toContain(hex);
     }
-    // El teal sí se conserva: es uno de los cinco de la referencia y pasa tal cual.
+    // The teal is kept: it is one of the reference's five and passes as it is.
     expect(CHART_COMPOSITION_PALETTE).toContain("#00836f");
   });
 
@@ -214,7 +214,7 @@ describe("CHART_RANKING_SEQUENCE · las quince barras del ranking", () => {
   });
 
   it("las ocho primeras barras siguen siendo las ranuras de identidad", () => {
-    // La cola es un añadido, no un reemplazo: el ranking no cambia de aspecto hasta la novena
+    // The tail is an addition, not a replacement: the ranking does not change look until the ninth
     for (let slot = 0; slot < CHART_PALETTE.length; slot++) {
       expect(colorForRankingSlot(slot)).toBe(CHART_PALETTE[slot]);
     }
@@ -232,18 +232,18 @@ describe("CHART_RANKING_SEQUENCE · las quince barras del ranking", () => {
   });
 
   it("no arranca por el set de la tarta, que se dibuja justo encima en la misma pantalla", () => {
-    // `CHART_SLICE_SEQUENCE` empieza por los seis cálidos de «Composición de los ingresos», que va
-    // sobre el ranking; con ellos las seis primeras barras saldrían del tono de sus seis filas y,
-    // como en las dos el color va por PUESTO, se leería como si la fila 1 de una fuera la de la
-    // otra. Son sets disjuntos, así que empezar por identidad es lo que evita el choque.
+    // `CHART_SLICE_SEQUENCE` starts with the six warm hues of «Composición de los ingresos», which
+    // sits above the ranking; with them the first six bars would take the hue of its six rows and,
+    // since in both the colour goes by POSITION, it would read as though row 1 of one were row 1 of
+    // the other. They are disjoint sets, so starting with identity is what avoids the clash.
     for (const slot of CHART_COMPOSITION_PALETTE) {
       expect(CHART_RANKING_SEQUENCE).not.toContain(slot);
     }
   });
 
   it("el corte cabe en la secuencia, así que ninguna barra dibujada queda sin tono", () => {
-    // El invariante que antes era una identidad accidental (8 + 7 = 15). Quince es el límite de
-    // legibilidad que pidió la firma y la secuencia da veinte: lo que hay que sostener es el «≤».
+    // The invariant that used to be an accidental identity (8 + 7 = 15). Fifteen is the legibility
+    // limit the firm asked for and the sequence gives twenty: what has to hold is the «≤».
     expect(CHART_RANKING_MAX).toBe(15);
     expect(CHART_RANKING_MAX).toBeLessThanOrEqual(CHART_RANKING_SEQUENCE.length);
     expect(colorForRankingSlot(CHART_RANKING_MAX - 1)).not.toBe(CHART_NEUTRAL);
@@ -291,8 +291,8 @@ describe("CHART_HEAT_RAMP · un solo tono", () => {
 
 describe("CHART_SLICE_SEQUENCE · la tarta que nombra todas sus porciones", () => {
   it("encadena los seis cálidos de la composición y los doce del periodo", () => {
-    // El orden importa: las porciones grandes conservan el aspecto que la tarta ya tenía, y la cola
-    // —la que aparece de más al no plegarse— toma el set hecho para «una serie con muchas marcas».
+    // The order matters: the large slices keep the look the pie already had, and the tail —the part
+    // that appears extra by not being folded— takes the set made for «one series with many marks».
     expect(CHART_SLICE_SEQUENCE.slice(0, CHART_COMPOSITION_PALETTE.length)).toEqual([
       ...CHART_COMPOSITION_PALETTE,
     ]);
@@ -302,7 +302,7 @@ describe("CHART_SLICE_SEQUENCE · la tarta que nombra todas sus porciones", () =
   });
 
   it("da para un anexo real sin repetir ni caer en el neutro", () => {
-    // El del hospital trae diecisiete rubros; la secuencia tiene que cubrirlos todos.
+    // The hospital's carries seventeen lines; the sequence has to cover them all.
     expect(CHART_SLICE_MAX).toBe(18);
     expect(new Set(CHART_SLICE_SEQUENCE).size).toBe(CHART_SLICE_MAX);
     expect(CHART_SLICE_SEQUENCE).not.toContain(CHART_NEUTRAL);

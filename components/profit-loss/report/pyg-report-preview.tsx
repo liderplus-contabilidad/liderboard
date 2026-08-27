@@ -125,9 +125,9 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
     verticalBaseCode,
   ]);
 
-  // El corte de nivel del INFORME. Es estado local a propósito: el `collapsed` del proveedor
-  // gobierna la tabla de Datos y el filtro «Nivel» de la barra, y elegir aquí una profundidad
-  // para imprimir no puede replegarle el árbol a nadie en pantalla.
+  // The REPORT's level cut. It is local state on purpose: the provider's `collapsed` governs the
+  // Datos table and the bar's «Nivel» filter, and picking a depth here to print cannot collapse
+  // anybody's tree on screen.
   const [level, setLevel] = useState<number>(DEFAULT_REPORT_LEVEL);
 
   const tables = useMemo(() => {
@@ -137,7 +137,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
       key: string;
       name: string | null;
       color: string | undefined;
-      /** El de ESTE centro; el Consolidado, que no lo es, no tiene. */
+      /** THIS center's; the Consolidado, which is not one, has none. */
       centerLogo: EntityLogo | undefined;
       grid: DatosGrid;
       trimmed: boolean;
@@ -155,8 +155,8 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
           key: `${view.id}-${year}`,
           name: several ? `${view.name} · ${year}` : view.name,
           color: view.color,
-          // `view.id` ES el `centerId`; el Consolidado tiene el suyo propio y ningún logo colgado
-          // de él, así que sale `undefined` sin necesitar un caso aparte.
+          // `view.id` IS the `centerId`; the Consolidado has its own and no logo hanging off it, so it
+          // comes out `undefined` without needing a separate case.
           centerLogo: centerLogoOf(activeClient?.centerLogos, view.id),
           grid: pruneEmptyColumns(pruneEmptyRows(sliceColumns(grid, positions))),
           trimmed: positions.length < grid.columns.length,
@@ -169,8 +169,8 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const columnCount = Math.max(0, ...tables.map((table) => table.grid.columns.length));
   const fit = statementFit(columnCount);
 
-  /** El análisis vertical es del centro que resolvió la barra, así que su banda lleva el logo de
-   *  ESE centro; el Consolidado no tiene ninguno y `centerLogoOf` lo responde sin caso aparte. */
+  /** The vertical analysis belongs to the center the bar resolved, so its band carries THAT center's
+   *  logo; the Consolidado has none and `centerLogoOf` answers that without a separate case. */
   const verticalCenterLogo = centerLogoOf(activeClient?.centerLogos, activeCenterId);
 
   const periodRefs = useMemo(
@@ -214,8 +214,9 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const cover = useMemo(
     () =>
       describePygReport({
-        // El consolidado no es un cliente ni tiene razón social: la portada nombra lo que SUMA,
-        // que es la única forma de que el papel diga de quién habla cuando la barra ya no está.
+        // The consolidado is neither a client nor does it have a razón social: the cover names what it
+        // SUMS, which is the only way for the paper to say who it is talking about once the bar is
+        // gone.
         clientName: isConsolidated
           ? "Consolidado entre clientes"
           : (activeClient?.name ?? "Sin cliente"),
@@ -368,7 +369,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Estable, para que las tablas que no llevan aviso no re-rendericen por una lista nueva. */
+/** Stable, so the tables that carry no notice do not re-render because of a new list. */
 const EMPTY_NOTES: readonly string[] = [];
 
 function centerName(

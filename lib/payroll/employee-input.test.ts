@@ -61,9 +61,9 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
 
 describe("toEngineInput", () => {
   it("SIN captura calcula igual, tratando lo capturado como cero", () => {
-    // La app tiene que servir sin Excel: una nómina creada a mano o copiada del mes anterior ya
-    // tiene sueldo base, días y tipo de contrato, y con eso el rol se calcula entero. Devolver
-    // `null` aquí dejaba la pantalla en blanco justo en el caso de uso principal.
+    // The app has to work with no Excel: a nómina created by hand or copied from the previous month
+    // already has a base salary, days and contract type, and with that the rol is computed whole.
+    // Returning `null` here left the screen blank in exactly the main use case.
     const input = toEngineInput(line());
 
     expect(input.baseSalary).toBe(487.21);
@@ -74,8 +74,8 @@ describe("toEngineInput", () => {
   });
 
   it("sin captura, un empleado ya tiene su rol completo", () => {
-    // Las cifras de MORALES sin ninguna captura: su sueldo unificado, sus dos décimos, su aporte
-    // al IESS y el costo que le supone a la empresa salen todos de la ficha.
+    // MORALES' figures with no capture at all: their unified salary, their two décimos, their IESS
+    // contribution and what they cost the company all come out of the record.
     const computed = computeEmployeePayroll(toEngineInput(line()), DEFAULT_PAYROLL_PARAMETERS);
 
     expect(computed.unifiedSalary).toBe(487.21);
@@ -101,8 +101,8 @@ describe("toEngineInput", () => {
   });
 
   it("las dos banderas del fondo de reserva vienen de la FICHA, no del mes", () => {
-    // Son del empleado (antigüedad y su propia elección), no del período. Si viajaran en la
-    // captura, copiar la nómina del mes anterior las perdería.
+    // They belong to the employee (seniority and their own choice), not to the período. If they
+    // travelled in the capture, copying the previous month's nómina would lose them.
     const input = toEngineInput(
       line({ hasReserveFund: true, accumulatesReserveFund: false, capture: capture() }),
     );
@@ -111,8 +111,9 @@ describe("toEngineInput", () => {
   });
 
   it("`paid` sale de la captura, y es null mientras nadie lo declare", () => {
-    // Es del MES y se TECLEA, así que da igual si lo escribió quien arma el rol o lo trajo el
-    // `BZ` de un archivo: para el motor son la misma cosa, y por eso un alta a mano concilia.
+    // It belongs to the MONTH and it is TYPED, so it does not matter whether whoever assembles the
+    // rol wrote it or a file's `BZ` brought it: to the engine they are the same thing, and that is
+    // why a manual creation reconciles.
     expect(toEngineInput(line({ capture: capture() })).paid).toBeNull();
     expect(toEngineInput(line({ capture: capture({ paid: 457.69 }) })).paid).toBe(457.69);
     expect(toEngineInput(line()).paid).toBeNull();
@@ -126,8 +127,8 @@ describe("toEngineInput", () => {
   });
 
   it("una línea SIN captura conserva sus provisiones: no son del mes", () => {
-    // Es lo que hace que una nómina recién copiada provisione desde el primer render, sin que
-    // nadie vuelva a marcar nada.
+    // It is what makes a freshly copied nómina provision from the first render, without anyone
+    // marking anything again.
     const input = toEngineInput(line({ provisionsThirteenth: true }));
     expect(input.flags).toEqual({ provisionsThirteenth: true, provisionsFourteenth: false });
   });
@@ -140,7 +141,7 @@ describe("toEngineInput", () => {
   });
 
   it("reproduce el rol real de MORALES de punta a punta", () => {
-    // El caso completo: ficha + captura → motor → las cifras que el archivo del contador trae.
+    // The complete case: record + capture → engine → the figures the accountant's file brings.
     const input = toEngineInput(
       line({
         capture: capture({
@@ -173,7 +174,7 @@ describe("emptyCapture", () => {
   });
 
   it("devuelve un objeto NUEVO cada vez", () => {
-    // Compartir una constante dejaría que editar un empleado moviera las cifras de otro.
+    // Sharing a constant would let editing one employee move another's figures.
     const a = emptyCapture();
     a.deductions.fines = 50;
     expect(emptyCapture().deductions.fines).toBe(0);

@@ -10,9 +10,9 @@ import { PAYSLIP_COLORS } from "./palette";
 import type { MeasureText, PayslipBox, PayslipDocument } from "./types";
 
 /**
- * Se mide con la Helvetica REAL, la que `render.ts` acaba usando, en vez de con anchos inventados:
- * un medidor de mentira dejaría pasar justamente el fallo que este archivo existe para atrapar —
- * un rótulo que se sale de su columna en el PDF de verdad.
+ * It is measured with the REAL Helvetica, the one `render.ts` ends up using, instead of with invented
+ * widths: a fake measurer would let through exactly the failure this file exists to catch — a label
+ * that falls outside its column in the real PDF.
  */
 let measure: MeasureText;
 let edgesOf: (box: PayslipBox) => [left: number, right: number];
@@ -22,9 +22,9 @@ beforeAll(async () => {
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   measure = (text, size, isBold) => (isBold ? bold : regular).widthOfTextAtSize(text, size);
-  // Los dos bordes de una caja, con su alineación resuelta. Escrito UNA vez: desde que el
-  // encabezado va centrado, un test que dé por hecho que `x` es el borde izquierdo mide la caja en
-  // un sitio en el que no está, y lo hace en silencio.
+  // A box's two edges, with its alignment resolved. Written ONCE: ever since the header became
+  // centred, a test that assumes `x` is the left edge measures the box in a place where it is not,
+  // and does so silently.
   edgesOf = (box) => {
     const width = measure(box.text, box.size, box.bold);
     const left =
@@ -52,8 +52,8 @@ const LINE: PayrollEmployeeLine = {
   capture: { ...emptyCapture(), deductions: { ...emptyCapture().deductions, salaryAdvance: 200 } },
 };
 
-/** Todo capturado: el comprobante MÁS LARGO posible, sus 26 filas. Es el caso que decide si la
- *  hoja da de sí, porque una ficha real imprime cinco. */
+/** Everything captured: the LONGEST possible payslip, its 26 rows. It is the case that decides
+ *  whether the page stretches far enough, because a real record prints five. */
 const FULL: Partial<PayrollEmployeeLine> = {
   hasReserveFund: true,
   capture: {
@@ -84,8 +84,8 @@ const FULL: Partial<PayrollEmployeeLine> = {
   },
 };
 
-/** El perfil del archivo real del cliente: la línea de ubicación pasa de setenta caracteres, que es
- *  lo que decide si el membrete cabe. */
+/** The client's real file profile: the location line runs past seventy characters, which is what
+ *  decides whether the letterhead fits. */
 const COMPANY = {
   legalName: "DELICMAR S.A.S.",
   taxId: "1891234567001",
@@ -97,7 +97,7 @@ const COMPANY = {
   email: "nomina@delicmar.com",
 };
 
-/** Un logo apaisado cualquiera: lo que importa de él son sus proporciones, no sus bytes. */
+/** Any landscape logo: what matters about it are its proportions, not its bytes. */
 const LOGO = {
   dataUrl: "data:image/png;base64,SGk=",
   mime: "image/png" as const,
@@ -105,8 +105,8 @@ const LOGO = {
   height: 120,
 };
 
-/** El logo del centro de costo: apaisado y distinto del del cliente, para poder decir cuál es cuál
- *  por su forma sin mirar sus bytes. */
+/** The cost center's logo: landscape and different from the client's, so it is possible to say which
+ *  is which by its shape without looking at its bytes. */
 const CENTER_LOGO = { ...LOGO, dataUrl: "data:image/png;base64,Q0M=", width: 400, height: 100 };
 
 function documentFor(
@@ -154,8 +154,8 @@ describe("el comprobante cabe en la hoja", () => {
   });
 
   it("una ficha real, que imprime cinco filas, se queda muy corta", () => {
-    // Omitir las filas sin importe solo puede ACORTAR la hoja, nunca alargarla: el caso que decide
-    // si cabe es el de arriba, con las 26.
+    // Omitting the rows with no amount can only SHORTEN the page, never lengthen it: the case that
+    // decides whether it fits is the one above, with all 26.
     const short = layoutPayslip(documentFor(), measure);
     const long = layoutPayslip(documentFor(FULL), measure);
     expect(short.overflow).toBe(false);
@@ -165,8 +165,8 @@ describe("el comprobante cabe en la hoja", () => {
 
 describe("las columnas se respetan", () => {
   it("el rótulo más largo no invade la columna de valores", () => {
-    // 39 caracteres, el peor caso del catálogo. Su fila no usa `Cantidad`, así que puede correr
-    // hasta el inicio de `Valores` — que es exactamente el desbordamiento que hace el Excel.
+    // 39 characters, the catalogue's worst case. Its row does not use `Cantidad`, so it can run to
+    // the start of `Valores` — which is exactly the overflow the Excel performs.
     const { boxes } = layoutPayslip(documentFor(FULL), measure);
     const box = boxes.find((b) => b.text.startsWith("PRESTAMOS QUIROGRAFARIOS"));
     expect(box, "la fila del préstamo tiene que estar").toBeDefined();
@@ -185,7 +185,7 @@ describe("las columnas se respetan", () => {
   });
 
   it("el importe más largo cabe en la columna de valores", () => {
-    // `US$-1,171,420.00` es el peor caso realista: un líquido negativo de siete cifras.
+    // `US$-1,171,420.00` is the worst realistic case: a negative seven-figure net pay.
     const worst = "-$1,171,420.00";
     const available = PAYSLIP_COLUMNS.right - PAYSLIP_COLUMNS.quantityEnd;
     expect(measure(worst, 9.5, true)).toBeLessThanOrEqual(available);
@@ -218,9 +218,9 @@ describe("el texto largo se parte en líneas", () => {
 
 describe("la capa visual", () => {
   it("las bandas de sección llevan los colores del libro del contador", () => {
-    // Verde oliva para ingresos y celeste para costos: los rellenos que el contador ya usa en su
-    // hoja y que la tabla de Datos de PyG pinta en la raíz 4 y la 5. Un verde quiere decir
-    // «ingresos» en las tres superficies.
+    // Olive green for income and light blue for costs: the fills the accountant already uses on their
+    // sheet and that PyG's Datos table paints on roots 4 and 5. A green means «income» on all three
+    // surfaces.
     const { fills } = layoutPayslip(documentFor(), measure);
     const colors = fills.map((f) => f.color);
     expect(colors).toContain(PAYSLIP_COLORS.income);
@@ -228,8 +228,8 @@ describe("la capa visual", () => {
   });
 
   it("el líquido a recibir es la ÚNICA banda oscura", () => {
-    // Es el importe que el empleado declara haber recibido al firmar: no puede confundirse con los
-    // otros dos totales, y una segunda banda oscura le quitaría justamente eso.
+    // It is the amount the employee declares having received on signing: it cannot be confused with
+    // the other two totals, and a second dark band would take exactly that away from it.
     const { fills } = layoutPayslip(documentFor(), measure);
     expect(fills.filter((f) => f.color === PAYSLIP_COLORS.net)).toHaveLength(1);
   });
@@ -243,11 +243,11 @@ describe("la capa visual", () => {
   });
 
   it("la franja alterna cubre la mitad de las filas de concepto", () => {
-    // 26 filas: 13 impares en cada bloque contando desde cero → 6 + 6. Con menos filas son menos,
-    // y siguen alternando desde la primera de cada bloque.
+    // 26 rows: 13 odd ones in each block counting from zero → 6 + 6. With fewer rows there are fewer,
+    // and they keep alternating from the first of each block.
     const { fills } = layoutPayslip(documentFor(FULL), measure);
     expect(fills.filter((f) => f.color === PAYSLIP_COLORS.zebra)).toHaveLength(12);
-    // SORIA imprime 3 ingresos y 2 egresos: 1 + 1.
+    // SORIA prints 3 income rows and 2 deductions: 1 + 1.
     const real = layoutPayslip(documentFor(), measure);
     expect(real.fills.filter((f) => f.color === PAYSLIP_COLORS.zebra)).toHaveLength(2);
   });
@@ -259,7 +259,7 @@ describe("la capa visual", () => {
   });
 
   it("la cabecera `Cantidad` solo se escribe si alguna fila la usa", () => {
-    // Rotular una columna vacía promete un dato que no está en la hoja.
+    // Labelling an empty column promises a datum that is not on the sheet.
     const full = layoutPayslip(documentFor(FULL), measure);
     expect(full.boxes.some((b) => b.text === "Cantidad")).toBe(true);
     const real = layoutPayslip(documentFor(), measure);
@@ -297,14 +297,14 @@ describe("el membrete del cliente", () => {
     logo: logo(width, height),
   });
 
-  /** El eje de la hoja, contra el que se centra el bloque del encabezado. */
+  /** The page's axis, which the header block is centred against. */
   const pageCenter = (PAYSLIP_COLUMNS.pageLeft + PAYSLIP_COLUMNS.pageRight) / 2;
 
   it("sin logo el bloque del encabezado sigue centrado en la hoja", () => {
     const { images, boxes, fills, rules } = layoutPayslip(documentFor(), measure);
     expect(images).toEqual([]);
-    // Centrado en la HOJA y no en lo que sobra: es lo que hace que un comprobante con logo y otro
-    // sin él se superpongan.
+    // Centred on the PAGE and not on what is left over: it is what makes a payslip with a logo and
+    // one without overlap.
     const company = boxes[0];
     expect(company?.align).toBe("center");
     expect(company?.x).toBeCloseTo(pageCenter, 6);
@@ -319,9 +319,9 @@ describe("el membrete del cliente", () => {
     const mark = conLogo.images[0]!;
     const company = conLogo.boxes[0]!;
     expect(mark.x).toBe(PAYSLIP_COLUMNS.pageLeft);
-    // El eje del bloque no depende de que haya logo — los dos lados reservan lo mismo.
+    // The block's axis does not depend on there being a logo — both sides reserve the same.
     expect(company.x).toBeCloseTo(pageCenter, 6);
-    // Y el rótulo empieza DESPUÉS de donde acaba el logo, que es lo que evita que se solapen.
+    // And the label starts AFTER where the logo ends, which is what keeps them from overlapping.
     expect(edgesOf(company)[0]).toBeGreaterThanOrEqual(mark.x + mark.width);
   });
 
@@ -338,7 +338,7 @@ describe("el membrete del cliente", () => {
       expect(mark.x + mark.width).toBeLessThanOrEqual(PAYSLIP_COLUMNS.pageRight);
       expect(mark.y).toBeGreaterThanOrEqual(0);
 
-      // Y no invade el bloque centrado, que es lo que tiene al lado.
+      // And it does not invade the centred block, which is what it has beside it.
       const title = boxes.find((box) => box.text === "ROL DE PAGOS");
       expect(mark.x + mark.width).toBeLessThanOrEqual(edgesOf(title!)[0]);
     }
@@ -353,7 +353,7 @@ describe("el membrete del cliente", () => {
   it("el logo no baja al panel de identidad: se queda dentro del encabezado", () => {
     const { images, rules } = layoutPayslip(withLogo(160, 640), measure);
     const mark = images[0]!;
-    // La primera regla es la raya que cierra el encabezado.
+    // The first rule is the line that closes the header.
     expect(mark.y + mark.height).toBeLessThanOrEqual(rules[0]!.y);
   });
 });
@@ -382,8 +382,8 @@ describe("el membrete del cliente", () => {
     }
   });
 
-  // El reparto entero, en un test: todo el encabezado comparte eje, y el título va DEBAJO del
-  // membrete y no a su derecha, que es lo que cambió.
+  // The whole layout, in one test: the entire header shares an axis, and the title goes BELOW the
+  // letterhead and not to its right, which is what changed.
   it("empresa, membrete, título y mes comparten el eje de la hoja, en ese orden", () => {
     const { boxes, rules } = layoutPayslip(
       documentFor(FULL, { company: COMPANY, logo: LOGO }),
@@ -403,8 +403,8 @@ describe("el membrete del cliente", () => {
     expect(at("ROL DE PAGOS")).toBeLessThan(at("MARZO 2026"));
   });
 
-  // La línea que decide el diseño: la ubicación del archivo real son setenta y pico caracteres, y
-  // entra ENTERA. Una dirección truncada no lleva a ninguna parte.
+  // The line that decides the design: the real file's location is seventy-odd characters, and it goes
+  // in WHOLE. A truncated address leads nowhere.
   it("la ubicación entra entera", () => {
     const { boxes } = layoutPayslip(documentFor(FULL, { company: COMPANY }), measure);
     const location = boxes.find((box) => box.text.startsWith("TUNGURAHUA"));
@@ -414,8 +414,8 @@ describe("el membrete del cliente", () => {
     );
   });
 
-  // Y una más larga BAJA DE CUERPO antes que truncarse, que es lo que hace que la de arriba no
-  // dependa de haber medido bien una sola dirección.
+  // And a longer one DROPS A SIZE rather than being truncated, which is what keeps the one above from
+  // depending on having measured a single address right.
   it("una ubicación más larga baja de cuerpo en vez de truncarse", () => {
     const largo = {
       ...COMPANY,
@@ -437,15 +437,15 @@ describe("el membrete del cliente", () => {
       return image!.y + image!.height / 2;
     };
 
-    // Con membrete el encabezado es más alto, así que su centro cae más abajo. Colgado de la
-    // primera línea, los dos centros coincidirían.
+    // With a letterhead the header is taller, so its centre falls lower. Hung from the first line,
+    // the two centres would coincide.
     expect(centro(conMembrete)).toBeGreaterThan(centro(sinMembrete) + 8);
   });
 
-  // El encabezado más corto que existe, y el que fija el alto del hueco del logo (44): un cliente
-  // sin perfil imprime empresa, título y mes, nada más.
-  // 103 = margen superior (44) + empresa (15) + aire del título (8) + título (13) + su aire (4) +
-  // mes (9) + el aire de la raya (10).
+  // The shortest header there is, and the one that fixes the height of the logo's gap (44): a client
+  // with no profile prints company, title and month, nothing else.
+  // 103 = top margin (44) + company (15) + the title's breathing room (8) + title (13) + its
+  // breathing room (4) + month (9) + the rule's breathing room (10).
   it("sin perfil, el encabezado es el bloque mínimo", () => {
     const layout = layoutPayslip(documentFor(FULL), measure);
     expect(layout.rules[0]?.y).toBe(103);
@@ -453,9 +453,9 @@ describe("el membrete del cliente", () => {
 });
 
 /**
- * EL CENTRO DE COSTO EN EL ENCABEZADO. Lo que puede estar mal no es que el logo salga: es que los
- * dos se pisen, que el título quede debajo del que le corresponde, o que un cliente SIN centro deje
- * de imprimir el comprobante que imprimía.
+ * THE COST CENTER IN THE HEADER. What can be wrong is not that the logo comes out: it is that the two
+ * overlap, that the title ends up under the one it belongs to, or that a client WITHOUT a center
+ * stops printing the payslip it used to print.
  */
 describe("el centro de costo", () => {
   const conCentro = () =>
@@ -481,7 +481,7 @@ describe("el centro de costo", () => {
     const derecha = images.find((image) => image.dataUrl === CENTER_LOGO.dataUrl)!;
     expect(izquierda.x).toBe(PAYSLIP_COLUMNS.pageLeft);
     expect(derecha.x + derecha.width).toBeCloseTo(PAYSLIP_COLUMNS.pageRight, 6);
-    // No se pisan, que es lo único que un encabezado de dos logos puede hacer mal en silencio.
+    // They do not overlap, which is the only thing a two-logo header can get wrong silently.
     expect(izquierda.x + izquierda.width).toBeLessThan(derecha.x);
   });
 
@@ -491,9 +491,9 @@ describe("el centro de costo", () => {
     const derecha = layout.images.find((image) => image.dataUrl === CENTER_LOGO.dataUrl)!;
     const raya = layout.rules[0]!.y;
 
-    // Lo único que un encabezado de dos logos puede hacer mal en silencio: que el bloque centrado
-    // se meta debajo de uno de ellos. Se comprueba sobre TODAS las cajas del encabezado, no solo
-    // sobre el título, porque la línea larga del membrete es la que llega más lejos.
+    // The only thing a two-logo header can get wrong silently: that the centred block slips under one
+    // of them. It is checked over ALL the header's boxes, not only over the title, because the
+    // letterhead's long line is the one that reaches furthest.
     for (const box of layout.boxes.filter((candidate) => candidate.y < raya)) {
       const [left, right] = edgesOf(box);
       expect(left, box.text).toBeGreaterThanOrEqual(izquierda.x + izquierda.width);
@@ -526,7 +526,7 @@ describe("el centro de costo", () => {
     expect(sinLogo.rules[0]?.y).toBe(base.rules[0]?.y);
   });
 
-  // La regresión que importa: sin centro, el comprobante es el de siempre hasta el último punto.
+  // The regression that matters: with no center, the payslip is the usual one down to the last point.
   it("sin centro el encabezado no se mueve ni un punto", () => {
     const base = layoutPayslip(documentFor(FULL, { company: COMPANY, logo: LOGO }), measure);
     expect(base.images).toHaveLength(1);

@@ -49,13 +49,13 @@ export function sameHotelIdentity(a: HotelIdentity, b: HotelIdentity): boolean {
 }
 
 /**
- * Una de las dos tarjetas que el diálogo compara — la forma genérica de `@/lib/workspaces`, la
- * misma que PyG. Aquí `caption` es «HOTEL ABIERTO»/«LOS ARCHIVOS» y `detail` el nombre declarado
- * (si difiere de `name`) más lo que hay dentro.
+ * One of the two cards the dialog compares — the generic shape from `@/lib/workspaces`, the same one
+ * as PyG. Here `caption` is «HOTEL ABIERTO»/«LOS ARCHIVOS» and `detail` the declared name (if it
+ * differs from `name`) plus what is inside.
  */
 export type HotelIdentityCard = ComparisonCardData;
 
-/** El bloque secundario de la forma `no-match`: reemplazar el hotel abierto, con su motivo. */
+/** The secondary block of the `no-match` form: replace the open hotel, with its reason. */
 export interface HotelReplaceOption {
   label: string;
   heading: string;
@@ -63,44 +63,44 @@ export interface HotelReplaceOption {
 }
 
 export interface HotelChangeConfirmation {
-  /** `other-hotel` = otro hotel ya tiene esta identidad; `no-match` = ninguno. */
+  /** `other-hotel` = another hotel already has this identity; `no-match` = none does. */
   form: "other-hotel" | "no-match";
   title: string;
   cards: { current: HotelIdentityCard; incoming: HotelIdentityCard };
-  /** El veredicto bajo las tarjetas: a qué hotel pertenecen estos archivos. */
+  /** The verdict under the cards: which hotel these files belong to. */
   verdict: string;
-  /** La acción principal, que es la correcta en cada caso. */
+  /** The primary action, which is the right one in each case. */
   primaryLabel: string;
-  /** Lo que esa acción implica; solo `other-hotel`, donde cambia el hotel activo. */
+  /** What that action implies; only for `other-hotel`, where the active hotel changes. */
   primaryHint?: string;
-  /** Solo `no-match`: reemplazar el hotel abierto, degradado a acción secundaria. */
+  /** Only for `no-match`: replacing the open hotel, demoted to a secondary action. */
   replace?: HotelReplaceOption;
 }
 
 export interface HotelChangeContext {
-  /** La etiqueta del hotel abierto — la del usuario, no la que declara el archivo. */
+  /** The open hotel's label — the user's, not the one the file declares. */
   activeHotelName: string;
-  /** El hotel que SÍ tiene la identidad entrante, o `null`. */
+  /** The hotel that DOES have the incoming identity, or `null`. */
   matchingHotelName: string | null;
-  /** El nombre propuesto para el hotel nuevo; editable antes de crear. */
+  /** The proposed name for the new hotel; editable before creating it. */
   proposedHotelName: string;
-  /** Lo que el hotel abierto perdería, en palabras: «2 sucursales, 2025–2026». */
+  /** What the open hotel would lose, in words: «2 sucursales, 2025–2026». */
   activeHotelContents: string;
-  /** Lo que traen los archivos, en palabras: «sucursal Centro, 2026». */
+  /** What the files bring, in words: «sucursal Centro, 2026». */
   incomingContents: string;
 }
 
 /**
- * El diálogo que un choque de identidad muestra, en sus DOS formas. Cuál se rinde no lo decide este
- * módulo por gusto: lo decide si existe o no otro hotel con exactamente la identidad entrante, que
- * es la única diferencia que cambia cuál es la acción correcta.
+ * The dialog an identity clash shows, in its TWO forms. Which one renders is not decided by this
+ * module out of preference: it is decided by whether another hotel with exactly the incoming identity
+ * exists, which is the only difference that changes which action is the right one.
  *
- * - **`other-hotel`**: los archivos pertenecen a un hotel que ya existe. La acción principal es
- *   cargarlos allí; nada se destruye, solo cambia el hotel activo.
- * - **`no-match`**: ningún hotel coincide. La acción principal es CREAR uno —el nombre se propone
- *   desde el que declara el archivo y el diálogo lo deja editar—, y reemplazar el hotel abierto baja
- *   a acción secundaria, explicando en qué caso tiene sentido (que el hotel se haya renombrado) y
- *   qué descarta exactamente.
+ * - **`other-hotel`**: the files belong to a hotel that already exists. The primary action is loading
+ *   them there; nothing is destroyed, only the active hotel changes.
+ * - **`no-match`**: no hotel matches. The primary action is to CREATE one —the name is proposed from
+ *   the one the file declares and the dialog allows editing it—, and replacing the open hotel drops
+ *   to a secondary action, explaining in which case it makes sense (that the hotel has been renamed)
+ *   and exactly what it discards.
  */
 export function describeHotelChange(
   current: HotelIdentity,
@@ -144,10 +144,10 @@ export function describeHotelChange(
 }
 
 /**
- * Una tarjeta comparativa. El nombre declarado solo se repite cuando difiere de la línea en negrita:
- * en el archivo son la misma cosa, y en un hotel casi nunca lo son —el usuario llama «Manor
- * Galápagos» a lo que el archivo llama `CULTURA MANOR`—, así que decirlo dos veces o esconderlo
- * serían dos formas distintas de mentir.
+ * A comparison card. The declared name is only repeated when it differs from the bold line: in the
+ * file they are the same thing, and in a hotel they almost never are —the user calls «Manor
+ * Galápagos» what the file calls `CULTURA MANOR`—, so saying it twice or hiding it would be two
+ * different ways of lying.
  */
 function card(
   caption: string,

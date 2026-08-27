@@ -1,35 +1,34 @@
 /**
- * La FORMA del reporte «Venta de Servicios por FACTURA», con cifras y nombres INVENTADOS.
+ * The SHAPE of the «Venta de Servicios por FACTURA» report, with INVENTED figures and names.
  *
- * Transcrita del archivo real de abril de 2026 del Hospital General Privado Durán, y lo que se
- * transcribe es la ESTRUCTURA:
+ * Transcribed from the real April 2026 file of the Hospital General Privado Durán, and what is
+ * transcribed is the STRUCTURE:
  *
- *   - el preámbulo repartido por celdas sueltas, con la paginación a veinte columnas de la empresa;
- *   - `Desde:` / `Hasta:` con su fecha en una celda SEPARADA del rótulo, y los dos en la misma fila;
- *   - la cabecera de cuatro rótulos **desalineada de sus propios datos**, porque va centrada sobre
- *     celdas combinadas: `CANTIDAD` cae una columna a la derecha de las cantidades y `VENTA TOTAL`
- *     una a la derecha de los importes. Es el detalle que hacía que el archivo real se reconociera
- *     y no trajera «ninguna línea», así que la fixture no puede alinearlos;
- *   - filas PLANAS: cada una es una línea completa y repite el código de su servicio, sin
- *     agrupación, sin subtotales y sin reimprimir la cabecera;
- *   - el cierre en dos filas — `TOTAL ITEMS` con el RECUENTO de líneas, y debajo el total de verdad
- *     SIN NINGÚN RÓTULO, alineado bajo las columnas de cantidad e importe.
+ *   - the preamble spread across loose cells, with the pagination twenty columns from the company;
+ *   - `Desde:` / `Hasta:` with their date in a cell SEPARATE from the label, and both on the same row;
+ *   - the four-label header **misaligned from its own data**, because it goes centred over merged
+ *     cells: `CANTIDAD` falls one column to the right of the quantities and `VENTA TOTAL` one to the
+ *     right of the amounts. It is the detail that made the real file be recognised and bring «no line
+ *     at all», so the fixture cannot align them;
+ *   - FLAT rows: each one is a complete line and repeats its service's code, with no grouping, no
+ *     subtotals and no reprinted header;
+ *   - the close in two rows — `TOTAL ITEMS` with the line COUNT, and below it the real total with NO
+ *     LABEL AT ALL, aligned under the quantity and amount columns.
  *
- * Lo que NO se transcribe es ni un dato: ni la razón social, ni los nombres de los pacientes, ni los
- * importes. Un test versionado no es sitio para el nombre de un paciente, que es justo lo que este
- * módulo existe para no enseñar. Y vive aquí y no en `.context/`, que no está en el repositorio.
+ * What is NOT transcribed is a single datum: neither the razón social, nor the patients' names, nor
+ * the amounts. A versioned test is no place for a patient's name, which is exactly what this module
+ * exists not to show. And it lives here and not in `.context/`, which is not in the repository.
  *
- * **Lo que el archivo real da al pasar por este parser**, para que nadie tenga que volver a
- * derivarlo: 2.774 líneas, 956 pagadores y $229.616,226 —cuadrando al centavo contra la fila de
- * cierre— repartidos en HONORARIOS 107.231,22 (46,7 %), MEDICINAS 33.231,32 (14,5 %), EXAMENES DE
- * LABORATORIO 30.984,06 (13,5 %), INSUMOS 29.148,11 (12,7 %) e IMAGENES 29.021,51 (12,6 %); los
- * diez mayores pagadores son el 57,5 % del mes y los 946 restantes suman 97.540,32. Son las cifras
- * que la firma reconoce de su propio reporte, y la única evidencia externa de que esta lectura
- * significa lo que dice.
+ * **What the real file gives when passed through this parser**, so nobody has to derive it again:
+ * 2,774 lines, 956 payers and $229,616.226 —squaring to the cent against the closing row— split into
+ * HONORARIOS 107,231.22 (46.7 %), MEDICINAS 33,231.32 (14.5 %), EXAMENES DE LABORATORIO 30,984.06
+ * (13.5 %), INSUMOS 29,148.11 (12.7 %) and IMAGENES 29,021.51 (12.6 %); the ten largest payers are
+ * 57.5 % of the month and the remaining 946 add up to 97,540.32. They are the figures the firm
+ * recognises from its own report, and the only external evidence that this reading means what it says.
  */
 import type { Cell } from "@/lib/excel/workbook";
 
-/** Las columnas del archivo real, para que la fixture herede su desalineación. */
+/** The real file's columns, so the fixture inherits its misalignment. */
 const CODE_COL = 1;
 const SERVICE_COL = 7;
 const PAYER_COL = 14;
@@ -56,40 +55,40 @@ function line(
   });
 }
 
-/** Una rejilla mínima y COMPLETA: preámbulo, cabecera, cinco líneas de tres servicios y el cierre. */
+/** A minimal and COMPLETE grid: preamble, header, five lines of three services and the close. */
 export function salesGrid(): Cell[][] {
   return [
     row({ 3: "CLINICA DE PRUEBA S.A.", 23: "Página:", 26: "1 de 2" }),
     row({ 23: "Fecha:", 26: 46259 }),
-    // El título llega con el espacio sobrante que el reporte escribe.
+    // The title arrives with the spare space the report writes.
     row({ 3: "Venta de Servicios por FACTURA " }),
     row({}),
     row({ 8: "Desde:", 11: "01/04/2026", 15: "Hasta:", 16: "30/04/2026" }),
     row({}),
-    // Los cuatro rótulos, cada uno en la columna en la que el reporte los CENTRA — ninguna coincide
-    // con la de sus valores.
+    // The four labels, each in the column the report CENTRES them in — none coincides with that of
+    // its values.
     row({ 2: "CODIGO", 10: "NOMBRE", 19: "CANTIDAD", 25: "VENTA TOTAL" }),
     line("\\01", "HONORARIOS", "ASEGURADORA UNO S.A.", 1, 1200.5),
     line("\\02", "MEDICINAS", "ASEGURADORA UNO S.A.", 5, 250),
     line("\\01", "HONORARIOS", "MENDOZA PARRA LUIS ALBERTO", 3, 300),
     line("\\03", "INSUMOS", "CONFIASALUD", 2, 100),
     line("\\02", "MEDICINAS", "MENDOZA PARRA LUIS ALBERTO", 1, 49.5),
-    // El recuento de LÍNEAS, que no son dólares.
+    // The count of LINES, which are not dollars.
     row({ 0: "TOTAL ITEMS", 5: 5 }),
-    // Y el total de verdad, sin rótulo, bajo sus columnas.
+    // And the real total, with no label, under its columns.
     row({ [QUANTITY_COL]: 12, [AMOUNT_COL]: 1900 }),
   ];
 }
 
-/** La misma forma con un rango que NO es un mes calendario. */
+/** The same shape with a range that is NOT a calendar month. */
 export function salesGridWithRange(from: string, to: string): Cell[][] {
   const grid = salesGrid();
   grid[4] = row({ 8: "Desde:", 11: from, 15: "Hasta:", 16: to });
   return grid;
 }
 
-/** La misma forma con los importes como TEXTO con separador de miles, que es como los escribe la
- *  variante en la que el reporte sale ya formateado. */
+/** The same shape with the amounts as TEXT with a thousands separator, which is how the variant where
+ *  the report comes out already formatted writes them. */
 export function salesGridWithTextAmounts(): Cell[][] {
   const grid = salesGrid();
   grid[7] = line("\\01", "HONORARIOS", "ASEGURADORA UNO S.A.", 1, "1,200.50");
@@ -98,14 +97,14 @@ export function salesGridWithTextAmounts(): Cell[][] {
 }
 
 /**
- * La misma forma con TODO desplazado tres columnas a la derecha — un cambio de márgenes de la
- * plantilla. La lectura tiene que dar exactamente lo mismo, porque nada se localiza por coordenada.
+ * The same shape with EVERYTHING shifted three columns to the right — a change in the template's
+ * margins. The reading has to give exactly the same, because nothing is located by coordinate.
  */
 export function salesGridShifted(): Cell[][] {
   return salesGrid().map((cells) => [null, null, null, ...cells]);
 }
 
-/** Un balance de MicroPlus: comparte los rótulos `CODIGO` y `NOMBRE…` y NO es este reporte. */
+/** A MicroPlus balance: it shares the `CODIGO` and `NOMBRE…` labels and is NOT this report. */
 export function foreignGrid(): Cell[][] {
   return [
     row({ 3: "CLINICA DE PRUEBA S.A." }),

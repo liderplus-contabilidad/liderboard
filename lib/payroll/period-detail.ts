@@ -1,22 +1,22 @@
 /**
- * La pantalla de detalle de un período: derivaciones puras sobre su nómina guardada. Como
- * `PayrollRosterSummary` ya hace para «Empleados»/«Áreas», nada de esto se persiste junto al
- * período — un total guardado aparte podría quedar desactualizado y entonces la tarjeta de KPIs
- * diría una cosa y la tabla de abajo otra.
+ * A período's detail screen: pure derivations over its stored nómina. As `PayrollRosterSummary`
+ * already does for «Empleados»/«Áreas», none of this is persisted next to the período — a total
+ * stored separately could go stale and then the KPI card would say one thing and the table below
+ * another.
  */
 import { matchesSearch } from "@/lib/workspaces";
 import type { PayrollEmployeeComputation } from "./engine/types";
 import type { PayrollEmployeeLine } from "./types";
 
 /**
- * Conciliado: se declaró lo pagado y coincide con el líquido que CALCULA el motor. Con
- * diferencia: se declaró y no coincide. Sin conciliar: nadie declaró lo pagado todavía —
- * ninguna de las otras dos, y la etiqueta no debe fingir que sí.
+ * Reconciled: what was paid was declared and matches the net pay the engine COMPUTES. With a
+ * difference: it was declared and does not match. Unreconciled: nobody has declared what was paid yet
+ * — neither of the other two, and the label must not pretend otherwise.
  *
- * Se clasifica el `difference` que el motor ya produjo (`CA = AP − BZ`) en vez de volver a
- * restar: el motor es el único sitio donde se decide qué es «cuadrar», incluido el colapso del
- * ruido sub-centavo, y una segunda resta aquí podía separarse de la suya — y se separaba, porque
- * esto comparaba lo que dijo el archivo mientras el motor comparaba lo tecleado.
+ * The `difference` the engine already produced (`CA = AP − BZ`) is classified instead of subtracting
+ * again: the engine is the only place where what «squaring» means is decided, including the collapse
+ * of the sub-cent noise, and a second subtraction here could drift from its own — and it did drift,
+ * because this compared what the file said while the engine compared what was typed.
  */
 export type EmployeeReconciliationStatus = "conciliado" | "diferencia" | "sin-conciliar";
 
@@ -30,12 +30,12 @@ export function reconciliationStatusOf(
 }
 
 /**
- * Cómo se rinde cada estado de conciliación: el tono del `Badge` y su rótulo.
+ * How each reconciliation state renders: the `Badge`'s tone and its label.
  *
- * Vive junto a `reconciliationStatusOf` y no en un componente porque lo leen DOS pantallas
- * —la fila de la nómina y la cabecera del detalle— y un rótulo que discrepe entre ellas haría
- * dudar de la cifra, no del rótulo. Las variantes son nombres de token, no React, así que la capa
- * pura puede nombrarlas sin arrastrar la de presentación.
+ * It lives next to `reconciliationStatusOf` and not in a component because TWO screens read it —the
+ * nómina's row and the detail's header— and a label that disagreed between them would raise doubts
+ * about the figure, not the label. The variants are token names, not React, so the pure layer can name
+ * them without dragging the presentation one in.
  */
 export const RECONCILIATION_BADGE: Record<
   EmployeeReconciliationStatus,
@@ -52,9 +52,9 @@ export interface PayrollReconciliationCounts {
 }
 
 /**
- * El desglose de la tarjeta «Empleados»: cuántos de la nómina están conciliados y cuántos con
- * diferencia. El resto (sin `PAGADO` declarado) no entra en ninguno de los dos conteos —
- * contarlo en cualquiera sería una etiqueta mintiendo por omisión.
+ * The breakdown of the «Empleados» card: how many of the nómina are reconciled and how many are in
+ * difference. The rest (with no declared `PAGADO`) enter neither of the two counts — counting them in
+ * either would be a label lying by omission.
  */
 export function computeReconciliationCounts(
   computations: readonly PayrollEmployeeComputation[],
@@ -80,19 +80,19 @@ export interface PayrollPeriodFinancials {
 }
 
 /**
- * Los cuatro totales de la tarjeta de KPIs, SIEMPRE sumados del rol que el motor calcula para
- * cada línea. `undefined` solo con la nómina VACÍA: un período sin empleados no tiene totales,
- * y eso no es lo mismo que una nómina con cifras en cero.
+ * The KPI card's four totals, ALWAYS summed from the rol the engine computes for each line.
+ * `undefined` only with an EMPTY nómina: a período with no employees has no totals, and that is not
+ * the same as a nómina with figures at zero.
  *
- * Antes el corte era «ningún empleado trae `figures`», o sea «no llegó el archivo». Ya no existe
- * ese estado: el motor deriva el rol completo de la ficha —el sueldo unificado sale del sueldo
- * base y los días, y lo no capturado vale cero de verdad (ver `toEngineInput`)—, así que una
- * nómina recién copiada del mes anterior enseña sus cuatro KPIs desde el primer render, que es
- * el caso de uso principal del módulo.
+ * The cut used to be «no employee brings `figures`», that is, «the file did not arrive». That state no
+ * longer exists: the engine derives the complete rol from the record —the unified salary comes out of
+ * the base salary and the days, and what is not captured is really worth zero (see `toEngineInput`)—,
+ * so a nómina just copied from the previous month shows its four KPIs from the first render, which is
+ * the module's main use case.
  *
- * Recibe cómputos y no líneas para que la previa de una carga pueda totalizar lo que el archivo
- * trae ANTES de que exista en la base y tenga `id`/`periodId`, con la misma definición de «los
- * cuatro totales» que después leerá la tarjeta de KPIs.
+ * It receives computations and not lines so an upload's preview can total what the file brings BEFORE
+ * it exists in the database and has an `id`/`periodId`, with the same definition of «the four totals»
+ * the KPI card will read later.
  */
 export function computePeriodFinancials(
   computations: readonly PayrollEmployeeComputation[],
@@ -112,8 +112,8 @@ export function computePeriodFinancials(
   );
 }
 
-/** El buscador de la tabla de empleados: compara el nombre, ignorando mayúsculas y acentos — la
- *  misma regla que ya usan el selector de clientes y el buscador de períodos. */
+/** The employee table's search box: it compares the name, ignoring case and accents — the same rule
+ *  the client selector and the período search box already use. */
 export function matchesEmployeeSearch(
   line: Pick<PayrollEmployeeLine, "name">,
   query: string,

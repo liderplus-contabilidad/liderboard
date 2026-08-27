@@ -1,23 +1,22 @@
 /**
- * Las TRES lecturas de la pantalla, descritas como DATOS (`option` + `table`) y no como markup:
- * composición por servicio, concentración por pagador y evolución.
+ * The screen's THREE readings, described as DATA (`option` + `table`) and not as markup: composition
+ * by service, concentration by payer and evolution.
  *
- * Que sean datos es lo que permite que el informe imprimible lea EXACTAMENTE la misma construcción
- * que la pantalla en vez de reconstruir sus cifras — la regla por la que el informe de PyG no puede
- * discrepar de Gráficos. Dos cálculos de la misma pregunta se separan, y nada aguas abajo puede
- * decir cuál de los dos números es el bueno.
+ * That they are data is what allows the printable report to read EXACTLY the same construction as the
+ * screen instead of rebuilding its figures — the rule by which PyG's report cannot disagree with
+ * Gráficos. Two computations of the same question drift apart, and nothing downstream can say which
+ * of the two numbers is the right one.
  *
- * **Cada tarjeta tiene DOS formas, y la elige el número de años marcados**, no un control: con uno
- * dibuja el reparto del periodo, y con varios pone un año por SERIE sobre el mismo eje. No es una
- * cuarta tarjeta ni un interruptor —dos sitios donde elegir lo mismo—, es la misma pregunta
- * respondida sobre lo que el usuario marcó, que es lo que hace que la comparación interanual no
- * cueste ningún control nuevo.
+ * **Each card has TWO shapes, and the number of marked years chooses it**, not a control: with one it
+ * draws the period's breakdown, and with several it puts one year per SERIES on the same axis. It is
+ * neither a fourth card nor a toggle —two places to choose the same thing—, it is the same question
+ * answered over what the user marked, which is what makes the year-on-year comparison cost no new
+ * control.
  *
- * Es un builder PROPIO y no el `option.ts` de PyG, siguiendo el precedente de Ocupaciones y de
- * Sueldos por Áreas: aquel está escrito sobre los tipos de su motor de analytics (`Series`,
- * `SeriesKey`, `PeriodRef`) y traerlos aquí ataría este subitem a ese motor por la presentación. Lo
- * que sí se comparte es lo que debe compartirse: los tipos `ChartOption`, la paleta y los
- * formateadores.
+ * It is an OWN builder and not PyG's `option.ts`, following Ocupaciones' and Sueldos por Áreas'
+ * precedent: that one is written over the types of its analytics engine (`Series`, `SeriesKey`,
+ * `PeriodRef`) and bringing them here would tie this subitem to that engine through presentation.
+ * What is shared is what should be: the `ChartOption` types, the palette and the formatters.
  */
 import {
   CHART_FONT,
@@ -46,88 +45,88 @@ import { shareOf, type MonthPoint, type PayerTotal, type SalesReading } from "./
 import { GUIDE_SALES_EVOLUTION, GUIDE_SALES_PAYERS, GUIDE_SALES_SERVICES } from "./guides";
 
 /**
- * Cuántos pagadores DIBUJA la tarjeta de concentración. Diez es lo que la firma lee en su propio
- * informe y lo que cabe sin que las barras se conviertan en una trama; los restantes no se pliegan
- * en una barra «Otros» —sería la más larga del gráfico y taparía justo la lectura de
- * concentración— sino que se cuentan en la nota y se listan enteros en la tabla gemela.
+ * How many payers the concentration card DRAWS. Ten is what the firm reads in its own report and what
+ * fits without the bars turning into a texture; the rest are not folded into an «Otros» bar —it would
+ * be the longest in the chart and would cover precisely the concentration reading— but are counted in
+ * the note and listed in full in the table twin.
  */
 export const PAYER_SLICES = 10;
 
 /**
- * Cuántos pagadores LISTA la tabla en el INFORME IMPRESO, antes de plegar la cola en una fila.
+ * How many payers the table LISTS in the PRINTED REPORT, before folding the tail into one row.
  *
- * En pantalla la tabla no corta, y ese es su trabajo: es el sitio donde un pagador que no se dibujó
- * conserva su cifra, y buscarlo cuesta un scroll. En papel esa justificación se cae — el archivo
- * real trae 956 pagadores, que son más de veinte páginas de nombres detrás de un informe de dos, y
- * la mayoría son filas «Particular · 731 · $12,40», anónimas por diseño: un anexo de veinte páginas
- * que nadie puede usar para nada. Es el mismo tipo de regla que el informe de PyG ya aplica al
- * podar por TABLA mientras su Excel poda por LIBRO: cada soporte poda como se lee.
+ * On screen the table does not cut, and that is its job: it is the place where a payer that was not
+ * drawn keeps its figure, and finding it costs a scroll. On paper that justification collapses — the
+ * real file brings 956 payers, which is over twenty pages of names behind a two-page report, and most
+ * of them are «Particular · 731 · $12.40» rows, anonymous by design: a twenty-page appendix nobody can
+ * use for anything. It is the same kind of rule PyG's report already applies by pruning per TABLE
+ * while its Excel prunes per WORKBOOK: each medium prunes the way it is read.
  *
- * Lo que NO se hace es truncar a secas. La cola se pliega en UNA fila con su suma, así que la
- * columna sigue cerrando contra el TOTAL: una tabla recortada cuyas filas no suman su propio total
- * es justo lo que hace desconfiar de un documento.
+ * What is NOT done is truncating outright. The tail is folded into ONE row with its sum, so the column
+ * still closes against the TOTAL: a trimmed table whose rows do not add up to its own total is exactly
+ * what makes a document untrustworthy.
  */
 export const PAYER_TABLE_PRINT_LIMIT = 30;
 
 /**
- * El color de una barra de PAGADOR dice su CLASE, no su identidad — la cuarta vez que el color deja
- * de seguir a la entidad en esta app, y aquí por dos motivos que se suman: diez entidades no caben
- * en las ocho ranuras de la paleta (la novena saldría neutra y parecería una categoría aparte), y
- * lo que un lector pregunta ante esta tarjeta es cuánto de su facturación depende de ASEGURADORAS
- * frente a lo que entra por ventanilla. Cada barra lleva su rótulo y su cifra, así que el color no
- * está distinguiendo nada que la fila no diga ya.
+ * The colour of a PAYER bar says its CLASS, not its identity — the fourth time colour stops following
+ * the entity in this app, and here for two reasons that add up: ten entities do not fit in the
+ * palette's eight slots (the ninth would come out neutral and would look like a separate category),
+ * and what a reader asks of this card is how much of their billing depends on INSURERS as against
+ * what comes in over the counter. Each bar carries its label and its figure, so the colour is not
+ * distinguishing anything the row does not already say.
  *
- * **Solo en la forma de UN año.** Comparando varios, la serie es el AÑO y el color vuelve a ser
- * identidad: teñir por clase pintaría del mismo tono los tres años de un mismo pagador, que es
- * justo lo que la comparación necesita distinguir.
+ * **Only in the ONE-year shape.** Comparing several, the series is the YEAR and the colour goes back
+ * to being identity: tinting by class would paint the three years of one same payer in the same hue,
+ * which is precisely what the comparison needs to tell apart.
  */
 const PAYER_FILL = { empresa: CHART_PALETTE[0], particular: CHART_NEUTRAL } as const;
 
-/** El relleno de un mes que NUNCA llegó — ver `absenceMarks`. */
+/** The fill of a month that NEVER arrived — see `absenceMarks`. */
 const ABSENT_FILL = CHART_LINES.grid;
 
 const SERVICES_HEIGHT = 300;
 const PAYERS_HEIGHT = 420;
 const EVOLUTION_HEIGHT = 300;
 
-/** Una lectura y el año del que es. */
+/** A reading and the year it belongs to. */
 export interface YearReading {
   year: number;
   reading: SalesReading;
 }
 
-/** Los doce meses de un año, con `null` en los que nunca llegaron. */
+/** A year's twelve months, with `null` in the ones that never arrived. */
 export interface YearMonths {
   year: number;
   points: MonthPoint[];
 }
 
-/** Todo lo que las tres tarjetas necesitan, ya agregado: ninguna recorre líneas sueltas. */
+/** Everything the three cards need, already aggregated: none of them walks loose lines. */
 export interface SalesCardsInput {
-  /** El agregado de TODO lo marcado — lo que dicen los tiles y los denominadores. */
+  /** The aggregate of EVERYTHING marked — what the tiles and the denominators say. */
   reading: SalesReading;
-  /** Una lectura por AÑO marcado, ascendente. Con una sola, las tarjetas usan su forma simple. */
+  /** One reading per marked YEAR, ascending. With just one, the cards use their simple shape. */
   byYear: readonly YearReading[];
-  /** Cómo se llama el periodo — «Abril 2026», «Abr · 2025, 2026». Lo escriben los subtítulos. */
+  /** What the period is called — «Abril 2026», «Abr · 2025, 2026». The subtitles write it. */
   period: string;
-  /** Los doce meses de cada año marcado. */
+  /** The twelve months of each marked year. */
   monthlyByYear: readonly YearMonths[];
   /**
-   * Cuántos pagadores lista la tabla antes de plegar la cola. `undefined` —la pantalla— los lista
-   * TODOS; el informe pasa `PAYER_TABLE_PRINT_LIMIT`. Es lo ÚNICO en lo que el papel y la pantalla
-   * se separan, y se separan a propósito: ver `PAYER_TABLE_PRINT_LIMIT`.
+   * How many payers the table lists before folding the tail. `undefined` —the screen— lists them ALL;
+   * the report passes `PAYER_TABLE_PRINT_LIMIT`. It is the ONLY thing in which the paper and the
+   * screen part ways, and they part ways on purpose: see `PAYER_TABLE_PRINT_LIMIT`.
    */
   payerTableLimit?: number;
 }
 
 /**
- * Opciones de visualización para las tarjetas de ventas. No afectan los datos, solo qué columnas
- * se muestran en el eje de evolución.
+ * Display options for the sales cards. They do not affect the data, only which columns are shown on
+ * the evolution's axis.
  */
 export interface SalesCardsOptions {
   /**
-   * Oculta meses sin facturación en el eje de evolución. Los meses sin datos (`null`) y en cero
-   * se tratan como columnas vacías.
+   * Hides months with no billing on the evolution's axis. Months with no data (`null`) and at zero are
+   * treated as empty columns.
    */
   hideEmptyMonths?: boolean;
 }
@@ -137,8 +136,8 @@ export interface SalesCards {
   payers: ChartCardSpec;
   evolution: ChartCardSpec;
   /**
-   * Cuántas columnas del eje no mueven nada. Se cuenta SIEMPRE sobre el eje sin podar, que es lo
-   * que impide que el botón se esfume justo al pulsarlo.
+   * How many columns of the axis move nothing. It is ALWAYS counted over the unpruned axis, which is
+   * what keeps the button from vanishing just as it is pressed.
    */
   emptyMonths: number;
 }
@@ -180,9 +179,9 @@ function valueAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      // Sin centavos: un eje es la escala contra la que se estima el largo de una barra, y seis
-      // rótulos de «$107,231.22» se comen el ancho del dibujo. La cifra exacta va en la barra, en
-      // el tooltip y en la tabla.
+      // Without cents: an axis is the scale against which a bar's length is estimated, and six labels
+      // of «$107,231.22» eat the drawing's width. The exact figure goes on the bar, in the tooltip
+      // and in the table.
       formatter: (value) => formatCurrency(Number(value)),
     },
   };
@@ -199,8 +198,8 @@ function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }
     axisLabel: {
       color: CHART_INK.muted,
       fontSize: 11,
-      // `interval: 0` obliga a dibujarlos TODOS: sin él ECharts adelgaza el eje y se salta uno de
-      // cada dos, y una barra sin nombre no se identifica por nada.
+      // `interval: 0` forces drawing them ALL: without it ECharts thins the axis and skips every
+      // other one, and a bar with no name is identified by nothing.
       interval: 0,
       width: 190,
       overflow: "truncate",
@@ -208,7 +207,7 @@ function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }
   };
 }
 
-/** La leyenda de los AÑOS. Con uno solo sobra: el subtítulo de la tarjeta ya lo nombra. */
+/** The YEARS' legend. With just one it is superfluous: the card's subtitle already names it. */
 function yearLegend(years: number): ChartLegend {
   return {
     show: years > 1,
@@ -222,7 +221,7 @@ function yearLegend(years: number): ChartLegend {
   };
 }
 
-/** El tooltip de la casa: dentro de la TARJETA (`confine`), que es un `overflow-hidden`. */
+/** The house tooltip: inside the CARD (`confine`), which is an `overflow-hidden`. */
 function itemTooltip(formatter: (param: ChartParam) => string): ChartTooltip {
   return {
     trigger: "item",
@@ -236,7 +235,7 @@ function itemTooltip(formatter: (param: ChartParam) => string): ChartTooltip {
   };
 }
 
-/** El tooltip de una comparación: la columna entera, con una línea por año. */
+/** A comparison's tooltip: the whole column, with one line per year. */
 function axisTooltip(unit: (value: number) => string): ChartTooltip {
   return {
     trigger: "axis",
@@ -250,7 +249,7 @@ function axisTooltip(unit: (value: number) => string): ChartTooltip {
     formatter: (params) => {
       const rows = Array.isArray(params) ? params : [params];
       const head = rows[0]?.name ?? "";
-      // Un año sin cifra se OMITE en vez de decir `$0.00`, la misma regla de la tabla.
+      // A year with no figure is OMITTED instead of saying `$0.00`, the table's same rule.
       const body = rows
         .filter((row) => row.value !== null && row.value !== undefined)
         .map(
@@ -263,8 +262,8 @@ function axisTooltip(unit: (value: number) => string): ChartTooltip {
   };
 }
 
-/** El color de un año: su puesto ESTABLE en la lista marcada, para que quitar uno no repinte los
- *  demás — la regla de `colorForEntity`. */
+/** A year's colour: its STABLE position in the marked list, so removing one does not repaint the
+ *  others — `colorForEntity`'s rule. */
 function yearColor(year: number, years: readonly number[]): string {
   return colorForEntity(String(year), years.map(String));
 }
@@ -278,22 +277,22 @@ const ROUND_RIGHT = [0, CHART_MARK.radius, CHART_MARK.radius, 0] as [
 const ROUND_TOP = [CHART_MARK.radius, CHART_MARK.radius, 0, 0] as [number, number, number, number];
 
 // ---------------------------------------------------------------------------
-// 1 · Composición por servicio
+// 1 · Composition by service
 // ---------------------------------------------------------------------------
 
 function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
   const { reading, byYear, period } = input;
   const total = reading.totals.amount;
-  // Un servicio parado se va y se cuenta: el reporte declara los cinco del catálogo tenga o no
-  // movimiento, y una barra invisible entierra a la que importa. Se juzga sobre el AGREGADO, así
-  // que un servicio que se movió en cualquiera de los años marcados se queda.
+  // An idle service goes and is counted: the report declares the catalogue's five whether or not they
+  // have movement, and an invisible bar buries the one that matters. It is judged over the AGGREGATE,
+  // so a service that moved in any of the marked years stays.
   const moving = reading.services.filter((service) => service.amount !== 0);
   const idle = reading.services.length - moving.length;
   const years = byYear.map((entry) => entry.year);
   const comparing = years.length > 1;
   const order = moving.map((service) => service.code);
 
-  /** Lo que cada año facturó en un servicio; `null` si ese año no lo tocó. */
+  /** What each year billed in a service; `null` if that year did not touch it. */
   const amountOf = (year: number, code: string): number | null =>
     byYear.find((entry) => entry.year === year)?.reading.services.find((s) => s.code === code)
       ?.amount ?? null;
@@ -347,9 +346,9 @@ function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
             outerBoundsContain: "axisLabel",
           },
           legend,
-          // Barras HORIZONTALES: los rótulos son nombres de servicio enteros («EXÁMENES DE
-          // LABORATORIO»), que bajo una columna no caben, y el reparto ya viene ordenado de mayor a
-          // menor, así que el largo de cada fila alineada dice su peso de un vistazo.
+          // HORIZONTAL bars: the labels are whole service names («EXÁMENES DE LABORATORIO»), which do
+          // not fit under a column, and the breakdown already arrives ordered largest to smallest, so
+          // the length of each aligned row says its weight at a glance.
           xAxis: valueAxis(),
           yAxis: categoryAxis(
             moving.map((service) => service.name),
@@ -441,8 +440,9 @@ function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
 }
 
 function servicesNote(total: number, idle: number, comparing: boolean): string {
-  // El denominador SE NOMBRA, con su cifra: un porcentaje que no dice contra qué se mide obliga a
-  // deducirlo del título, y esa es la cuenta que nadie hace y todos dan por hecha.
+  // The denominator IS NAMED, with its figure: a percentage that does not say what it is measured
+  // against forces deducing it from the title, and that is the computation nobody does and everybody
+  // assumes.
   const base = comparing
     ? `Una barra por año y servicio. Los porcentajes de la tabla son la parte del periodo entero (${formatCurrency(total, { cents: true })}), sumados los años.`
     : `Los porcentajes son la parte de la venta del periodo (${formatCurrency(total, { cents: true })}) que representa cada servicio.`;
@@ -452,7 +452,7 @@ function servicesNote(total: number, idle: number, comparing: boolean): string {
 }
 
 // ---------------------------------------------------------------------------
-// 2 · Concentración por pagador
+// 2 · Concentration by payer
 // ---------------------------------------------------------------------------
 
 function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
@@ -460,9 +460,9 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
   const total = reading.totals.amount;
   const years = byYear.map((entry) => entry.year);
   const comparing = years.length > 1;
-  // Los mayores se eligen sobre el AGREGADO, no sobre un año: si el elenco cambiara con las marcas,
-  // la tarjeta no se podría comparar consigo misma. Y el ORDINAL de un particular sale del mismo
-  // sitio, así que «Particular · 1» significa la misma persona en las tres series.
+  // The largest ones are chosen over the AGGREGATE, not over one year: if the cast changed with the
+  // marks, the card could not be compared with itself. And a particular's ORDINAL comes from the same
+  // place, so «Particular · 1» means the same person across the three series.
   const drawn = reading.payers.slice(0, PAYER_SLICES);
   const rest = reading.payers.slice(PAYER_SLICES);
   const restAmount = rest.reduce((sum, payer) => sum + payer.amount, 0);
@@ -539,8 +539,8 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
           series,
         };
 
-  // En pantalla la tabla NO corta: es el sitio donde un pagador que no se dibujó conserva su cifra.
-  // En papel se pliega la cola, con su suma, para que la columna siga cerrando contra el TOTAL.
+  // On screen the table does NOT cut: it is the place where a payer that was not drawn keeps its
+  // figure. On paper the tail is folded, with its sum, so the column still closes against the TOTAL.
   const listed =
     payerTableLimit === undefined ? reading.payers : reading.payers.slice(0, payerTableLimit);
   const folded = payerTableLimit === undefined ? [] : reading.payers.slice(payerTableLimit);
@@ -579,8 +579,9 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
         columns: ["Venta", "% del periodo", "Líneas"],
         rows: [
           ...listed.map<ChartTableRow>((payer, index) => ({
-            // El id es el PUESTO y nunca el nombre: es la clave de React y viaja al informe, y el
-            // nombre de un paciente no puede colarse en una estructura solo porque ahí no se rinda.
+            // The id is the POSITION and never the name: it is React's key and it travels to the
+            // report, and a patient's name cannot slip into a structure just because it is not
+            // rendered there.
             id: `payer-${index}`,
             label: payer.label,
             color: index < PAYER_SLICES ? PAYER_FILL[payer.kind] : undefined,
@@ -631,8 +632,9 @@ function subtitleForPayers(drawn: number, all: number, period: string): string {
 }
 
 /**
- * La concentración se dice EN UNA CIFRA —qué parte del periodo son los dibujados—, porque es la
- * lectura entera de esta tarjeta y estimarla sumando diez barras a ojo no se hace.
+ * The concentration is stated IN ONE FIGURE —what part of the period the drawn ones are—, because it
+ * is this card's whole reading and estimating it by adding ten bars by eye is not something anyone
+ * does.
  */
 function payersNote(
   drawn: number,
@@ -652,27 +654,28 @@ function payersNote(
     restCount === 0
       ? ""
       : `Los ${formatNumber(restCount)} restantes suman ${formatCurrency(restAmount, { cents: true })}. `;
-  // Qué hace la TABLA con esos restantes se dice aquí y no se da por supuesto: es la diferencia
-  // entre la pantalla y el papel, y una nota que prometiera la lista completa en un informe que la
-  // pliega sería lo único de la tarjeta que no se puede comprobar mirándola.
+  // What the TABLE does with those remaining ones is said here and not taken for granted: it is the
+  // difference between the screen and the paper, and a note promising the complete list in a report
+  // that folds it would be the only thing on the card that cannot be checked by looking at it.
   const where =
     foldedCount === 0
       ? "La tabla los lista uno a uno."
       : `La tabla lista los mayores y agrupa a los ${formatNumber(foldedCount)} últimos en una fila, que sigue sumando en el total.`;
-  // Cuáles se dibujan se decide sobre el AGREGADO, y con varios años eso no es obvio: sin esta
-  // línea, un pagador que fue el mayor de un año y no aparece se lee como un dato que falta.
+  // Which ones are drawn is decided over the AGGREGATE, and with several years that is not obvious:
+  // without this line, a payer who was one year's largest and does not appear reads as a missing
+  // datum.
   const ranking = comparing
     ? " Los mayores se eligen por el total del periodo, no por un año, para que el elenco no cambie al mover las marcas."
     : "";
-  // La regla del anonimato se DECLARA donde se aplica: una fila que dice «Particular · 4» sin esta
-  // línea se lee como un pagador llamado así.
+  // The anonymity rule is DECLARED where it is applied: a row saying «Particular · 4» without this
+  // line reads as a payer called that.
   return `${head} ${rest}${where}${ranking} Los pacientes particulares van sin nombre; las aseguradoras, con el suyo.`;
 }
 
 /**
- * La cola plegada en UNA fila, o ninguna. Lleva su propia suma para que la columna siga cerrando
- * contra el TOTAL, y dice CUÁNTO era el mayor de los que agrupa: es la pregunta que una fila
- * plegada levanta —«¿qué me estoy perdiendo?»— y responderla es lo que la hace aceptable.
+ * The tail folded into ONE row, or none. It carries its own sum so the column still closes against the
+ * TOTAL, and it says HOW MUCH the largest of the ones it groups was: it is the question a folded row
+ * raises —«what am I missing?»— and answering it is what makes it acceptable.
  */
 function foldedRow(
   folded: readonly PayerTotal[],
@@ -716,7 +719,7 @@ function foldedRow(
 }
 
 // ---------------------------------------------------------------------------
-// 3 · Evolución
+// 3 · Evolution
 // ---------------------------------------------------------------------------
 
 function buildEvolutionCard(
@@ -730,26 +733,26 @@ function buildEvolutionCard(
   }));
   const years = monthlyByYear.map((entry) => entry.year);
   const comparing = years.length > 1;
-  // El eje sale de los PUNTOS y no de los doce meses: cuando «Mes» acota, la tarjeta dibuja lo
-  // marcado, y el subtítulo y las columnas dicen lo mismo.
+  // The axis comes from the POINTS and not from the twelve months: when «Mes» narrows, the card draws
+  // what is marked, and the subtitle and the columns say the same thing.
   const axis = monthlyByYear[0]?.points ?? [];
   const labels = axis.map((point) => MONTHS_SHORT_ES[point.monthIndex]);
   const covered = monthlyByYear.flatMap((entry) =>
     entry.points.filter((point) => point.amount !== null),
   );
 
-  // **Barras CON línea encima**: la barra dice cuánto —que es lo que se compara contra la del año
-  // de al lado— y la línea dice hacia dónde, que es lo que una fila de barras agrupadas obliga a
-  // reconstruir saltando de la primera de cada grupo a la siguiente. Son las dos mitades de
-  // «evolución» y ninguna de las dos sobra.
+  // **Bars WITH a line above**: the bar says how much —which is what is compared against the one of
+  // the year next to it— and the line says which way, which is what a row of grouped bars forces you
+  // to reconstruct by jumping from the first of each group to the next. They are the two halves of
+  // «evolution» and neither is superfluous.
   //
-  // Se cae a barras SOLAS con una única columna, donde una línea es un punto suelto. El precedente
-  // de combo en esta app es la línea de total sobre la pila de «Distribución» en PyG.
+  // It falls back to bars ALONE with a single column, where a line is a loose point. The combo
+  // precedent in this app is the total's line over «Distribución»'s stack in PyG.
   const withLine = labels.length > 1;
 
   const legend = yearLegend(years.length);
-  // Las DOS series de un año comparten `name`, que es por lo que la leyenda dedupe: sale un ítem
-  // por año y al apagarlo se van su barra y su línea a la vez.
+  // A year's TWO series share a `name`, which is why the legend dedupes: one item comes out per year
+  // and switching it off takes its bar and its line at once.
   const series: ChartSeries[] = monthlyByYear.flatMap((entry) => {
     const color = yearColor(entry.year, years);
     const data = entry.points.map((point) => point.amount);
@@ -761,7 +764,7 @@ function buildEvolutionCard(
       itemStyle: { color, borderRadius: ROUND_TOP },
       barMaxWidth: comparing ? 18 : CHART_MARK.barMaxWidth,
       label: {
-        // Una cifra por marca deja de leerse pasadas unas pocas: con varios años son 24 o 36.
+        // A figure per mark stops being readable past a few: with several years there are 24 or 36.
         show: !comparing && covered.length <= 6,
         position: "top",
         color: CHART_INK.muted,
@@ -783,11 +786,11 @@ function buildEvolutionCard(
       lineStyle: { color, width: CHART_MARK.lineWidth },
       symbol: "circle",
       symbolSize: CHART_MARK.symbolSize,
-      // Recta y no `smooth`: una curva inventa valores entre dos meses que nadie midió. Y un hueco
-      // PARTE la línea —ECharts no une `null` por defecto—, que es lo correcto: unir enero con marzo
-      // dibujaría un febrero que no llegó.
+      // Straight and not `smooth`: a curve invents values between two months nobody measured. And a
+      // gap BREAKS the line —ECharts does not join `null` by default—, which is right: joining January
+      // with March would draw a February that never arrived.
       smooth: false,
-      // Por encima de las barras, que es donde tiene que leerse.
+      // Above the bars, which is where it has to be read.
       z: 3,
     };
     return [bar, line];
@@ -808,9 +811,9 @@ function buildEvolutionCard(
             outerBoundsContain: "axisLabel",
           },
           legend,
-          // La banda se RESERVA siempre —explícito, no por el defecto de ECharts— porque siempre
-          // hay barras: la línea va por el centro de cada banda, que es donde el grupo de barras
-          // está centrado.
+          // The band is ALWAYS RESERVED —explicitly, not by ECharts' default— because there are
+          // always bars: the line runs through the centre of each band, which is where the group of
+          // bars is centred.
           xAxis: { ...categoryAxis(labels), boundaryGap: true },
           yAxis: valueAxis(),
           tooltip: axisTooltip((value) => formatCurrency(value, { cents: true })),
@@ -823,8 +826,8 @@ function buildEvolutionCard(
       id: `year-${entry.year}`,
       label: String(entry.year),
       color: yearColor(entry.year, years),
-      // La RAYA, no una celda en blanco ni un `$0.00`: es lo que dice «este mes nunca llegó»,
-      // frente al cero que un mes cargado sí afirma.
+      // The DASH, not a blank cell nor a `$0.00`: it is what says «this month never arrived», as
+      // against the zero a loaded month does assert.
       values: entry.points.map((point) => currencyOrDash(point.amount)),
     })),
   };
@@ -842,17 +845,17 @@ function buildEvolutionCard(
 }
 
 /**
- * La MARCA DE AUSENCIA: un tope recesivo bajo los meses que nunca llegaron.
+ * The ABSENCE MARK: a recessive cap under the months that never arrived.
  *
- * Sin ella un mes ausente y un mes cargado en cero se dibujan igual —los dos, nada—, y la
- * distinción sobre la que descansa todo el módulo desaparecería justo en la tarjeta que existe para
- * enseñarla. Va `silent` (fuera del hover y de la emphasis) porque su alto NO es un dato: es una
- * fracción fija de la escala, y un tooltip que lo dijera estaría inventando una cifra.
+ * Without it an absent month and a month loaded at zero are drawn alike —both, nothing—, and the
+ * distinction the whole module rests on would disappear precisely in the card that exists to show it.
+ * It goes `silent` (out of hover and of emphasis) because its height is NOT a datum: it is a fixed
+ * fraction of the scale, and a tooltip stating it would be inventing a figure.
  *
- * **Solo con UN año**, que es también el único caso que se dibuja con barras. Comparando varios la
- * lectura es una LÍNEA, y ahí un hueco ya se ve porque la línea se parte y porque los otros años sí
- * tienen punto en esa columna; una fila de topes grises añadiría marcas falsas a un gráfico que ya
- * lleva tres reales.
+ * **Only with ONE year**, which is also the only case drawn with bars. Comparing several, the reading
+ * is a LINE, and there a gap is already visible because the line breaks and because the other years do
+ * have a point in that column; a row of grey caps would add false marks to a chart that already
+ * carries three real ones.
  */
 function absenceMarks(monthlyByYear: readonly YearMonths[]): ChartSeries[] {
   if (monthlyByYear.length !== 1) {
@@ -870,8 +873,8 @@ function absenceMarks(monthlyByYear: readonly YearMonths[]): ChartSeries[] {
       id: "sin-cargar",
       type: "bar",
       silent: true,
-      // Apilada sobre la serie real para que las dos compartan columna: un mes con marca de
-      // ausencia no tiene valor, así que no hay nada que se le monte encima.
+      // Stacked over the real series so both share a column: a month with an absence mark has no
+      // value, so there is nothing to ride on top of it.
       stack: "mes",
       data: points.map((point) => (point.amount === null ? stub : null)),
       itemStyle: {
@@ -901,8 +904,8 @@ function evolutionNote(
     .filter((entry) => entry.missing.length > 0);
 
   if (gaps.length === 0) {
-    // Habla del EJE que está en pantalla y no de «los doce meses»: con «Mes» acotado, afirmar que
-    // el año está completo sería decir algo que la tarjeta no está enseñando.
+    // It talks about the AXIS that is on screen and not about «the twelve months»: with «Mes»
+    // narrowed, claiming the year is complete would be saying something the card is not showing.
     const what = axisLength === 12 ? "los doce meses" : pluralize(axisLength, "mes", "meses");
     return (
       (comparing
@@ -910,8 +913,8 @@ function evolutionNote(
         : `Sin huecos: ${what} del eje tienen su archivo cargado.`) + pruned
     );
   }
-  // Los huecos se dicen POR AÑO, nunca uno por mes: con tres años a medias, una línea por mes serían
-  // treinta avisos para una sola idea.
+  // The gaps are said PER YEAR, never one per month: with three half-loaded years, one line per month
+  // would be thirty notices for a single idea.
   const detail = gaps
     .map((entry) =>
       comparing
@@ -923,12 +926,12 @@ function evolutionNote(
   return `${head} Un mes que nunca llegó no es un mes en cero — la misma regla de cobertura de PyG.${pruned}`;
 }
 
-/** Un importe de tabla, con la RAYA de «este periodo nunca llegó». */
+/** A table amount, with the DASH of «this period never arrived». */
 function currencyOrDash(value: number | null): string {
   return value === null ? "–" : formatCurrency(value, { cents: true });
 }
 
-/** Un porcentaje de tabla, con la raya de «esta pregunta no tiene respuesta». */
+/** A table percentage, with the dash of «this question has no answer». */
 function formatShare(share: number | null): string {
   return share === null ? "–" : formatPercent(share);
 }

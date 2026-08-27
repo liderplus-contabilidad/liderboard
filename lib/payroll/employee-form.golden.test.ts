@@ -1,10 +1,9 @@
 /**
- * Prueba la integración del formulario con el motor de cálculo, verificando que los datos
- * capturados manualmente y los calculados coincidan con las cifras esperadas (§12).
+ * Tests the form's integration with the computation engine, verifying that the manually captured data
+ * and the computed data match the expected figures (§12).
  *
- * Este archivo evalúa la conversión formulario → `toEmployeeLine` → `toEngineInput` → motor,
- * incluyendo horas extras y descuentos aplicados después. Casos como el de MORALES combinan
- * ambas entradas.
+ * This file exercises the conversion form → `toEmployeeLine` → `toEngineInput` → engine, including
+ * overtime and deductions applied afterwards. Cases such as MORALES' combine both inputs.
  */
 import { describe, expect, it } from "vitest";
 import { emptyEmployeeForm, toEmployeeLine, type EmployeeFormValues } from "./employee-form";
@@ -22,13 +21,13 @@ type CapturedHours = Pick<
 interface GoldenCase {
   name: string;
   form: Partial<EmployeeFormValues>;
-  /** Lo que se teclea DESPUÉS en la ficha; el alta no lo pide. */
+  /** What is typed in LATER on the record; the creation form does not ask for it. */
   hours?: Partial<CapturedHours>;
-  /** `M` · el importe aprobado. También se teclea en la ficha, junto a las horas que recorta: el
-   *  alta salió de pedirlo justamente porque no captura esas horas. */
+  /** `M` · the approved amount. It is also typed on the record, next to the hours it trims: the
+   *  creation form came out of asking for it precisely because it does not capture those hours. */
   approvedOvertime?: number | null;
   deductions?: Partial<CapturedDeductions>;
-  /** Ausente en los casos que no comparan los cinco totales sino una derivación suelta. */
+  /** Absent in the cases that do not compare the five totals but one loose derivation. */
   expected?: {
     grossIncome: number;
     iessEmployee: number;
@@ -39,10 +38,10 @@ interface GoldenCase {
 }
 
 /**
- * Las horas extras de MORALES, SANDOVAL COLIMBA y ACOSTA están APAGADAS en el archivo
- * (`approvedOvertime: 0`, el `*0` de §6) y las de los otros tres no hacen falta apagarlas porque no
- * tienen ninguna. VEGA entra sin horas: sus 140 «al 15 %» las anula el propio archivo en la columna
- * `L`, que es la errata de §11.2 y no algo que la app modele.
+ * The overtime of MORALES, SANDOVAL COLIMBA and ACOSTA is SWITCHED OFF in the file
+ * (`approvedOvertime: 0`, §6's `*0`) and the other three do not need switching off because they have
+ * none. VEGA comes in with no hours: their 140 «at 15 %» are cancelled by the file itself in column
+ * `L`, which is §11.2's typo and not something the app models.
  */
 const GOLDEN: GoldenCase[] = [
   {
@@ -121,7 +120,7 @@ const GOLDEN: GoldenCase[] = [
   },
 ];
 
-/** El alta tal como la escribe `db.ts`: la ficha del formulario, con el dueño estampado. */
+/** The creation as `db.ts` writes it: the form's record, with the owner stamped on. */
 function registered(entry: GoldenCase): PayrollEmployeeLine {
   const line: PayrollEmployeeLine = {
     ...toEmployeeLine({
@@ -139,8 +138,8 @@ function registered(entry: GoldenCase): PayrollEmployeeLine {
   if (!entry.hours && !entry.deductions && entry.approvedOvertime === undefined) {
     return line;
   }
-  // Lo que hace la ficha al teclear unas horas o un descuento: parte de la captura que haya, o de
-  // una vacía, y escribe encima el campo tocado (`patchCapture`).
+  // What the record does on typing some hours or a deduction: it starts from whatever capture exists,
+  // or from an empty one, and writes the touched field over it (`patchCapture`).
   const capture = line.capture ?? emptyCapture();
   return {
     ...line,
@@ -192,9 +191,9 @@ describe("las derivaciones que el pie del modal promete que «se generan solas»
 });
 
 describe("bajar los días trabajados a 15", () => {
-  // El valor hora sale del sueldo BASE (`D/30/8`), no del unificado: a quien trabajó medio mes su
-  // hora extra se le paga a tarifa completa (§4). Es la trampa que un alta a mano podría delatar,
-  // porque es el único sitio donde alguien teclea unos días distintos de 30.
+  // The hourly rate comes out of the BASE salary (`D/30/8`), not the unified one: someone who worked
+  // half a month is paid their overtime at the full rate (§4). It is the trap a manual creation could
+  // give away, because it is the only place where someone types days other than 30.
   const base: GoldenCase = {
     name: "Media jornada",
     form: { baseSalary: 487.21 },

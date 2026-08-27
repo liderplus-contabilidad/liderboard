@@ -30,8 +30,8 @@ describe("presetEffects", () => {
     expect(anexo && presetEffects(anexo)).toEqual(["Se lee en anual", "Se acota marcando cuentas"]);
   });
 
-  // La tarjeta pinta esta lista tal cual: una vista que no declara nada tiene que dejarla vacía
-  // en vez de inventarse una frase, o la tira de chips prometería un efecto que no ocurre.
+  // The card paints this list as it is: a view that declares nothing has to leave it empty instead of
+  // inventing a phrase, or the chip strip would promise an effect that does not happen.
   it("devuelve [] cuando la vista no declara ningún efecto", () => {
     expect(presetEffects(view({}))).toEqual([]);
   });
@@ -40,7 +40,7 @@ describe("presetEffects", () => {
     expect(presetEffects(view({ frequency: "trimestral" }))).toEqual(["Se lee en trimestral"]);
   });
 
-  // El orden es el del gesto: primero lo que la vista hace por su cuenta, después cómo se lee.
+  // The order is that of the gesture: first what the view does on its own, then how it is read.
   it("pone las siembras antes que la frecuencia y el acotado", () => {
     expect(
       presetEffects(
@@ -66,8 +66,8 @@ describe("presetEffects", () => {
 });
 
 describe("PRESET_VIEWS", () => {
-  // El modal escribe las dos: el rótulo en la tarjeta y la descripción bajo él, donde antes solo
-  // vivía en un `title=` que nadie veía.
+  // The modal writes both: the label on the card and the description under it, where before it only
+  // lived in a `title=` nobody saw.
   it("cada vista trae rótulo y descripción, que es lo que la tarjeta imprime", () => {
     for (const preset of PRESET_VIEWS) {
       expect(preset.label.length).toBeGreaterThan(0);

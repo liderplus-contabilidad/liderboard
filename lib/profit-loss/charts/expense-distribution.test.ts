@@ -11,10 +11,9 @@ import {
 } from "./expense-distribution";
 
 /**
- * Las cifras son las del anexo real que trajo la firma (Hospital General Privado Durán, del 01 de
- * enero al 30 de junio de 2026): 1.120.438,68 de gasto contra 1.441.884,42 de ingreso. Comprobar
- * contra ese archivo es lo único que dice que las dos columnas de porcentaje significan lo que su
- * cabecera promete.
+ * The figures are those of the real annex the firm brought (Hospital General Privado Durán, from 01
+ * January to 30 June 2026): 1,120,438.68 of expense against 1,441,884.42 of revenue. Checking against
+ * that file is the only thing that says the two percentage columns mean what their header promises.
  */
 const GASTO_TOTAL = 1_120_438.68;
 const INGRESO_TOTAL = 1_441_884.42;
@@ -59,7 +58,7 @@ describe("el anexo real cuadra", () => {
   });
 
   it("reproduce los porcentajes que imprime el archivo del contador", () => {
-    // Los redondeados a entero que se leen en su columna PORCENTAJE.
+    // The ones rounded to whole numbers that are read in their PORCENTAJE column.
     const redondeado = (code: string) => Math.round(categoryOf(code).shareOfExpenses as number);
 
     expect(redondeado("5.3.03.01")).toBe(27); // Honorarios Médicos
@@ -82,8 +81,8 @@ describe("el anexo real cuadra", () => {
   });
 
   it("la segunda columna mide contra el INGRESO, no contra el gasto", () => {
-    // Honorarios Médicos es el 27,4 % del gasto pero solo el 21,3 % de lo que el hospital facturó.
-    // Son las dos preguntas del anexo y no se pueden responder con un solo denominador.
+    // Honorarios Médicos is 27.4 % of the expense but only 21.3 % of what the hospital billed. They
+    // are the annex's two questions and they cannot be answered with a single denominator.
     const honorarios = categoryOf("5.3.03.01");
 
     expect(honorarios.shareOfExpenses).toBeCloseTo(27.4, 1);
@@ -110,7 +109,8 @@ describe("el orden y lo que se deja fuera", () => {
   });
 
   it("deja fuera las cuentas paradas y las CUENTA en vez de nombrarlas", () => {
-    // Un estado declara cada cuenta de su plan se mueva o no; el anexo solo lista las que sí.
+    // A statement declares every account of its plan whether it moves or not; the annex only lists
+    // the ones that do.
     const conParadas = [
       ...ANEXO,
       { code: "5.3.03.20", label: "Venta Parqueadero", value: 0 },
@@ -160,15 +160,15 @@ describe("un porcentaje que no se puede calcular no es cero", () => {
     });
 
     expect(categories.every((category) => category.shareOfExpenses === null)).toBe(true);
-    // El ingreso sí da base, así que esa columna se conserva: son dos preguntas independientes.
+    // The revenue does give a base, so that column is kept: they are two independent questions.
     expect(categories.every((category) => category.shareOfRevenue !== null)).toBe(true);
   });
 });
 
 describe("el denominador es el rollup, no la suma de lo que hay en pantalla", () => {
   it("un subconjunto de categorías suma menos de 100 %, y eso es lo correcto", () => {
-    // Es la misma regla que sigue la ficha con su cuenta padre y la pila del 100 %: elegir tres de
-    // ocho hijas se queda corto a propósito, porque el total no es «lo que se ve».
+    // It is the same rule the ficha follows with its parent account and the 100 % stack: choosing
+    // three of eight children falls short on purpose, because the total is not «what is visible».
     const tres = ANEXO.slice(0, 3);
     const total = buildExpenseDistribution(tres, TOTALES).categories.reduce(
       (sum, category) => sum + (category.shareOfExpenses ?? 0),
@@ -192,7 +192,7 @@ describe("la nota al pie", () => {
   });
 
   it("dice cuántos rubros agrupó «Otros» y dónde están enteros", () => {
-    // Sin esa línea, «Otros» se lee como una cuenta más del plan en vez de como un pliegue.
+    // Without that line, «Otros» reads as one more account of the plan instead of as a fold.
     const note = describeExpenseDistribution(buildExpenseDistribution(ANEXO, TOTALES), {
       grouped: 3,
       format,
@@ -213,10 +213,10 @@ describe("la nota al pie", () => {
 });
 
 /**
- * EL ANEXO DECLARADO. El plan se transcribe por su FORMA desde el árbol real de MicroPlus —los
- * códigos con su anidamiento y los rótulos que el propio archivo escribe—, nunca desde `.context/`:
- * la regla de `parse.fixtures.ts`. Lo que se prueba es que la lista elige y nombra, que es lo único
- * que puede estar mal aquí; las cifras las prueba el bloque de arriba.
+ * THE DECLARED ANNEX. The plan is transcribed by its SHAPE from MicroPlus' real tree —the codes with
+ * their nesting and the labels the file itself writes—, never from `.context/`: `parse.fixtures.ts`'
+ * rule. What is tested is that the list chooses and names, which is the only thing that can be wrong
+ * here; the figures are tested by the block above.
  */
 const CLINICA: Array<[string, string]> = [
   ["5", "COSTOS Y GASTOS"],
@@ -226,13 +226,13 @@ const CLINICA: Array<[string, string]> = [
   ["5.2.01.01.01", "Costo de ventas medicamentos 0%"],
   ["5.2.01.02", "COSTO ALIMENTACION"],
   ["5.2.01.02.01", "Costo Alimentacion, Viveres, Pacientes , Empleados"],
-  // Un rubro del anexo con NIETOS: `5.2.02` cuelga secciones que a su vez cuelgan cuentas.
+  // An annex line with GRANDCHILDREN: `5.2.02` hangs sections that in turn hang accounts.
   ["5.2.02", "MANO DE OBRA DIRECTA / FARMACIA/ LABORATORIO/MANO DE OBRA DIRECTA"],
   ["5.2.02.01", "SUELDOS Y SALARIOS Y DEMAS REMUNERACIONES / FARMACIA/ LABORATORIO"],
   ["5.2.02.01.01", "Sueldos y Salarios"],
   ["5.2.02.02", "APORTES A LA SEGURIDAD SOCIAL (Incluído Fondo Res / FARMACIA"],
   ["5.2.02.02.01", "Aporte Patronal"],
-  // Una rama que el anexo NO lista: en el archivo real no se mueve.
+  // A branch the annex does NOT list: in the real file it does not move.
   ["5.2.03", "(-) DESCUENTO EN COMPRAS"],
   ["5.2.03.01", "DESCUENTO EN COMPRAS"],
   ["5.2.03.01.01", "Descuento en Compras"],
@@ -240,7 +240,7 @@ const CLINICA: Array<[string, string]> = [
   ["5.2.04.01", "HONORARIOS MEDICOS-PLANTA"],
   ["5.2.04.01.01", "Honorarios Médicos-Planta"],
   ["5.3", "COSTOS INDIRECTOS"],
-  // Con BISNIETOS: tres niveles por debajo del rubro.
+  // With GREAT-GRANDCHILDREN: three levels below the line.
   ["5.3.02", "MANO DE OBRA INDIRECTA /ADMISIONES / CAJA / INFORMACION"],
   ["5.3.02.01", "MANO DE OBRA INDIRECTA /ADMISIONES / CAJA / INFORMACION"],
   ["5.3.02.01.01", "SUELDOS, SALARIOS Y DEMAS REMUNERACIONES / ADMISIONES"],
@@ -284,7 +284,7 @@ const CLINICA: Array<[string, string]> = [
   ["5.5.03.01.01", "Intereses y Multas (SRI-IESS-ATS-ATM)"],
 ];
 
-/** Otro plan de MicroPlus: los mismos dos raíces y ni uno de los códigos que el anexo declara. */
+/** Another MicroPlus plan: the same two roots and not one of the codes the annex declares. */
 const OTRA_EMPRESA: Array<[string, string]> = [
   ["5", "Costos y Gastos"],
   ["5.1", "Costo de Servicios de Salud"],
@@ -334,8 +334,8 @@ describe("el anexo que la clínica declara", () => {
   });
 
   it("entran los rubros que tienen NIETOS, que es por lo que es una lista y no una regla", () => {
-    // Seis de los diecisiete no son «el ancestro más profundo con hijas» — la regla estructural que
-    // se probó primero los habría partido en sus secciones y hundido en «Otros».
+    // Six of the seventeen are not «the deepest ancestor with children» — the structural rule that was
+    // tried first would have split them into their sections and sunk them into «Otros».
     const codes = codesOf(annexPlanOf(planSource(CLINICA))) ?? [];
 
     expect(codes).toEqual(expect.arrayContaining(["5.2.02", "5.3.02", "5.3.03.12", "5.5.01.01"]));
@@ -371,8 +371,8 @@ describe("el anexo que la clínica declara", () => {
       "5.3.03.17",
       "5.3.03.19",
     ]);
-    // Un trozo del anexo no arrastra el resto del gasto a una barra: la columna suma menos de
-    // 100 %, que es lo que dice que se está mirando un trozo.
+    // A piece of the annex does not drag the rest of the expense into one bar: the column adds up to
+    // less than 100 %, which is what says a piece is being looked at.
     expect(plan?.residual).toBe(false);
   });
 
@@ -386,7 +386,7 @@ describe("cómo se dibuja el anexo declarado", () => {
   const PLAN = { rows: [...DECLARED_ANNEX_ROWS], residual: true };
 
   it("el rótulo declarado pisa al que trae el plan de cuentas", () => {
-    // El archivo llama a estas tres de otra manera; el anexo las nombra como su propia hoja.
+    // The file calls these three something else; the annex names them as its own sheet does.
     const { categories } = buildExpenseDistribution(
       [
         { code: "5.2.02", label: "MANO DE OBRA DIRECTA / FARMACIA/ LABORATORIO", value: 100 },
@@ -409,13 +409,13 @@ describe("cómo se dibuja el anexo declarado", () => {
 
     expect(reparto.categories).toHaveLength(17);
     expect(reparto.maxSlices).toBe(17);
-    // Los diecisiete suman el gasto entero, así que no falta nada y «Otros» no se dibuja.
+    // The seventeen add up to the whole expense, so nothing is missing and «Otros» is not drawn.
     expect(reparto.residual).toBe(false);
     expect(reparto.categories.map((entry) => entry.code)).not.toContain("otros");
   });
 
   it("un «Otros» en cero no se cuenta como cuenta parada", () => {
-    // El reparto cubre el gasto entero, así que el residuo vale cero — y no es una cuenta.
+    // The breakdown covers the whole expense, so the residue is zero — and it is not an account.
     const reparto = buildExpenseDistribution(ANEXO, TOTALES, { annex: PLAN });
 
     expect(reparto.idle).toBe(0);
@@ -437,7 +437,7 @@ describe("cómo se dibuja el anexo declarado", () => {
     expect(describeExpenseDistribution(reparto, { format: (value) => String(value) })).toContain(
       "«Otros» es el resto del gasto que el anexo no nombra",
     );
-    // Y con él dentro, la columna vuelve a cerrar en 100 %.
+    // And with it inside, the column closes at 100 % again.
     const suma = reparto.categories.reduce(
       (total, entry) => total + (entry.shareOfExpenses ?? 0),
       0,

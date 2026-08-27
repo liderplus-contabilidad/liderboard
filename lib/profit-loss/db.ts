@@ -297,16 +297,17 @@ export async function createClient(name: string, logo?: EntityLogo): Promise<Pyg
 }
 
 /**
- * Cambia la ETIQUETA del cliente — su nombre, su logo y los de sus centros — y NADA más: la
- * identidad se deriva de los datos, así que ni los datasets, ni los ajustes, ni los comentarios se
- * tocan.
+ * Changes the client's LABEL — its name, its logo and those of its centers — and NOTHING else: the
+ * identity is derived from the data, so neither the datasets, nor the adjustments, nor the comments
+ * are touched.
  *
- * Los tres van en la misma escritura porque el diálogo los edita a la vez; `logo: null` lo quita, y
- * un `undefined` en un `update` de Dexie borra la propiedad, que es exactamente lo que se quiere.
+ * All three travel in the same write because the dialog edits them at once; `logo: null` removes it,
+ * and an `undefined` in a Dexie `update` deletes the property, which is exactly what is wanted.
  *
- * `centerLogos` viaja SIEMPRE, aunque venga vacío: el diálogo que edita el nombre es el mismo que
- * edita los logos de los centros, así que lo que trae es la foto completa. Hacerlo opcional
- * obligaría a distinguir «no los toques» de «quítalos todos», y las dos llamadas se escriben igual.
+ * `centerLogos` ALWAYS travels, even when it arrives empty: the dialog that edits the name is the same
+ * one that edits the centers' logos, so what it brings is the complete picture. Making it optional
+ * would force telling «do not touch them» from «remove them all» apart, and the two calls are written
+ * alike.
  */
 export async function updateClient(
   clientId: string,
@@ -362,10 +363,10 @@ export interface ClientSummary extends PygClient {
   /** Ascending; `[]` for a client with no data. */
   years: number[];
   /**
-   * Sus centros de costo, en el orden del selector; `[]` en estado único o sin datos. Van en el
-   * MISMO resumen que ya alimenta el desplegable porque el diálogo que sube el logo de cada centro
-   * puede abrirse sobre un cliente que no está abierto — y las vistas del proveedor, que es de
-   * donde el resto de la app saca los centros, solo existen para el que sí lo está.
+   * Its cost centers, in the selector's order; `[]` in single-statement mode or with no data. They
+   * travel in the SAME summary that already feeds the dropdown because the dialog that uploads each
+   * center's logo can be opened over a client that is not open — and the provider's views, which is
+   * where the rest of the app gets the centers from, only exist for the one that is.
    */
   centerOptions: CenterOption[];
 }
@@ -447,13 +448,13 @@ export async function datasetEdits(datasetId: string): Promise<CellEdit[]> {
 }
 
 /**
- * La ÚNICA lectura de este archivo que no está acotada por un `clientId` — lo que alimenta el
- * consolidado entre clientes.
+ * The ONLY read in this file that is not bounded by a `clientId` — what feeds the cross-client
+ * consolidado.
  *
- * Que exista no contradice la regla de arriba, la confirma: mezclar dos empresas en silencio es
- * el riesgo, y aquí mezclarlas es exactamente el encargo. Por eso tiene nombre propio, devuelve
- * cada cliente por SEPARADO —con lo suyo agrupado, no un montón de filas planas— y es el único
- * sitio donde alguien puede escribirla. Ninguna otra función puede caer en esto por descuido.
+ * That it exists does not contradict the rule above, it confirms it: mixing two companies in silence
+ * is the risk, and here mixing them is exactly the brief. That is why it has a name of its own,
+ * returns each client SEPARATELY —with its own grouped, not a heap of flat rows— and is the only place
+ * anyone can write it. No other function can fall into this by carelessness.
  */
 export async function consolidatedContributions(): Promise<ClientContribution[]> {
   const [clients, datasets, metaRows, edits] = await Promise.all([
@@ -480,8 +481,8 @@ export async function consolidatedContributions(): Promise<ClientContribution[]>
     }
     editsByClient.set(clientId, [...(editsByClient.get(clientId) ?? []), edit]);
   }
-  // Alfabético, el único orden de la lista de clientes — así los avisos nombran a los ausentes
-  // en el mismo orden en que el selector los muestra.
+  // Alphabetical, the client list's only order — that way the notices name the absent ones in the same
+  // order the selector shows them.
   return sortClients(clients).map((client) => ({
     clientId: client.id,
     name: client.name,
@@ -528,13 +529,12 @@ async function editsOfDatasets(datasetIds: readonly string[]): Promise<CellEdit[
 // ---------------------------------------------------------------------------
 
 /**
- * El consolidado entre clientes es una lectura derivada: no tiene fila en `clients`, no tiene
- * partición propia y nada debe aterrizar sobre él.
+ * The cross-client consolidado is a derived reading: it has no row in `clients`, it has no partition
+ * of its own and nothing must land on it.
  *
- * La interfaz ya apaga cada control que podría intentarlo, pero eso es una promesa de la UI y
- * esta es la puerta. Una carga que aterrizara en el centinela crearía una partición fantasma que
- * ninguna pantalla lista y ningún borrado alcanza — invisible y permanente. Vale una línea por
- * escritura.
+ * The interface already switches off every control that could attempt it, but that is a promise of the
+ * UI and this is the door. An upload landing on the sentinel would create a phantom partition no
+ * screen lists and no deletion reaches — invisible and permanent. It is worth one line per write.
  */
 function assertRealClient(clientId: string): void {
   if (clientId === CONSOLIDATED_CLIENT_ID) {

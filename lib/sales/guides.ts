@@ -1,6 +1,6 @@
 import type { ChartGuide, ChartGuideAction } from "@/lib/charts/types";
 
-/** Los dos controles de la barra, que las tres tarjetas comparten. */
+/** The bar's two controls, which the three cards share. */
 const YEAR: ChartGuideAction = {
   control: "Año",
   effect: "marca varios y cada uno se dibuja aparte.",
@@ -8,7 +8,7 @@ const YEAR: ChartGuideAction = {
 const MONTH: ChartGuideAction = { control: "Mes", effect: "qué meses entran." };
 const AS_TABLE: ChartGuideAction = { control: "Ver como tabla", effect: "los números exactos." };
 
-/** Composición por servicio. */
+/** Composition by service. */
 export const GUIDE_SALES_SERVICES: ChartGuide = {
   purpose: "En qué se factura: cuánto aporta cada servicio, de mayor a menor.",
   actions: [YEAR, MONTH, AS_TABLE],
@@ -16,7 +16,7 @@ export const GUIDE_SALES_SERVICES: ChartGuide = {
     "Los porcentajes son sobre la venta del periodo, y la nota de abajo la escribe con su cifra. Un servicio que no vendió nada no se dibuja.",
 };
 
-/** Concentración por pagador. */
+/** Concentration by payer. */
 export const GUIDE_SALES_PAYERS: ChartGuide = {
   purpose: "Quién paga: si la venta se concentra en pocas aseguradoras o está repartida.",
   actions: [YEAR, MONTH, { control: "Ver como tabla", effect: "la lista entera de pagadores." }],
@@ -24,7 +24,7 @@ export const GUIDE_SALES_PAYERS: ChartGuide = {
     "Se dibujan los diez mayores del periodo y la nota dice qué parte de la venta son. Los pacientes particulares salen sin nombre; las aseguradoras, con el suyo.",
 };
 
-/** Evolución mes a mes. */
+/** Month-by-month evolution. */
 export const GUIDE_SALES_EVOLUTION: ChartGuide = {
   purpose: "Cómo se mueve la facturación mes a mes, y contra el mismo mes de otro año.",
   actions: [

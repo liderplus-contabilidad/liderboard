@@ -137,9 +137,9 @@ describe("buildOccupancyWorkbook · membrete del hotel", () => {
   };
 
   /**
-   * Aquí el riesgo es mayor que en PyG: este parser lee el hotel y la sucursal POR POSICIÓN. Lo que
-   * lo salva es que `readNames` recoge solo las líneas NO VACÍAS, así que las filas en blanco del
-   * membrete no corren el índice. Esto lo deja escrito como garantía en vez de como suposición.
+   * The risk here is greater than in PyG: this parser reads the hotel and the sucursal BY POSITION.
+   * What saves it is that `readNames` picks up only the NON-EMPTY lines, so the letterhead's blank
+   * rows do not shift the index. This writes it down as a guarantee instead of an assumption.
    */
   it("el membrete no mueve el hotel ni la sucursal que el archivo declara", async () => {
     const original = importedYear();
@@ -166,7 +166,7 @@ describe("buildOccupancyWorkbook · el logo de la sucursal", () => {
     width: 640,
     height: 160,
   };
-  // Otro data URL, para que la deduplicación por URL no los funda en una sola imagen.
+  // Another data URL, so deduplication by URL does not fuse them into a single image.
   const CENTER_LOGO = {
     dataUrl:
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -176,7 +176,7 @@ describe("buildOccupancyWorkbook · el logo de la sucursal", () => {
   };
 
   function anchors(wb: ReturnType<typeof buildOccupancyWorkbook>) {
-    // `getImages()` es la lectura pública de dónde quedó anclada cada imagen de la hoja.
+    // `getImages()` is the public reading of where each image of the sheet ended up anchored.
     return wb.worksheets[0].getImages();
   }
 
@@ -200,8 +200,8 @@ describe("buildOccupancyWorkbook · el logo de la sucursal", () => {
     expect(anchors(wb)[0].range.tl.nativeCol).toBe(0);
   });
 
-  // Un hotel sin logo pero con uno en la sucursal no puede perder el segundo: el hueco lo abre
-  // quien tenga algo que poner en él, no el principal.
+  // A hotel with no logo but with one on the sucursal cannot lose the second one: the gap is opened
+  // by whoever has something to put in it, not by the main one.
   it("el logo de la sucursal se dibuja aunque el hotel no tenga ninguno", () => {
     expect(anchors(buildOccupancyWorkbook(importedYear(), undefined, CENTER_LOGO))).toHaveLength(1);
   });

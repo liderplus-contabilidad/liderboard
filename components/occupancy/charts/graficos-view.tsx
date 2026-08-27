@@ -124,8 +124,8 @@ export function GraficosView() {
     setMetric,
   } = useOccupancyData();
   const [openDay, setOpenDay] = useState<OpenDay | null>(null);
-  // Gráficas por defecto: la pestaña se llama Gráficos y lo primero que se busca es la forma de la
-  // temporada; la cifra exacta está a un clic, en la tabla.
+  // Charts by default: the tab is called Gráficos and the first thing anyone looks for is the shape
+  // of the season; the exact figure is one click away, in the table.
   const [view, setView] = useState<ReportView>("graficas");
 
   const universe = useMemo(
@@ -275,8 +275,8 @@ export function GraficosView() {
         }
       />
 
-      {/* El cierre del rango marcado, cifra por cifra. Una fila por sucursal-año: marcar dos es
-          pedir compararlas, y una cifra mezclada respondería una pregunta que nadie hizo. */}
+      {/* The close of the marked range, figure by figure. One row per sucursal-year: marking two is
+          asking to compare them, and a blended figure would answer a question nobody asked. */}
       <div className="flex flex-col gap-3">
         {totals.map((total) => (
           <div key={occupancySeriesId(total.key)} className="flex flex-col gap-1.5">
@@ -304,18 +304,18 @@ export function GraficosView() {
         ))}
       </div>
 
-      {/* Una lectura o la otra, nunca las dos: la tabla y las gráficas dicen lo MISMO —salen del mismo
-          `evolution`— y ponerlas juntas sería repetirlo. La tabla da la cifra exacta que se compara
-          contra el Excel; las gráficas, la forma de la temporada. */}
+      {/* One reading or the other, never both: the table and the charts say the SAME thing —they
+          come out of the same `evolution`— and putting them together would be repeating it. The
+          table gives the exact figure compared against the Excel; the charts, the season's shape. */}
       {view === "tabla" ? (
-        // A todo el ancho: la tabla tiene cinco columnas y el ancho de más es para las cifras.
+        // Full width: the table has five columns and the extra width is for the figures.
         <div className="flex flex-col gap-4">
           <ReportTables
             tables={tables}
             colorOf={colorOf}
             period={period}
             axisLabel={axisTitle}
-            // El mismo slot que la barra de ese periodo, para que la fila y la gráfica se reconozcan.
+            // The same slot as that period's bar, so the row and the chart recognise each other.
             occupancyColorAt={colorAt}
           />
           {channelsCard}
@@ -340,15 +340,15 @@ export function GraficosView() {
                     : null
                 }
                 table={seriesTable(bundle, { colorOf })}
-                // La tabla de estas cuatro es la vista «Tabla» de la sección, no un botón por tarjeta:
-                // cuatro botones abriendo cuatro tablitas es la misma cosa cuatro veces.
+                // The table for these four is the section's «Tabla» view, not a per-card button:
+                // four buttons opening four little tables is the same thing four times over.
                 tableToggle={false}
                 warnings={index === 0 ? evolution.warnings : undefined}
                 height={240}
               />
             );
           })}
-          {/* Ocupa la fila entera: los nombres de canal son palabras y se leen a lo ancho. */}
+          {/* Takes the whole row: channel names are words and read across the width. */}
           <div className="col-span-2">{channelsCard}</div>
         </div>
       )}

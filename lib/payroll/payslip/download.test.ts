@@ -31,8 +31,8 @@ describe("payslipZipEntryNames", () => {
     ]);
   });
 
-  // Sin esto el extractor pisa el primero en silencio y una de las dos personas se queda sin
-  // comprobante — un fallo que nadie ve, porque el .zip se abre y parece completo.
+  // Without this the extractor silently overwrites the first one and one of the two people is left
+  // with no payslip — a failure nobody sees, because the .zip opens and looks complete.
   it("dos empleados del mismo nombre no comparten archivo: desempata la posición en la nómina", () => {
     expect(payslipZipEntryNames(["JUAN PEREZ", "ANA LOPEZ", "JUAN PEREZ"], 2026, 2)).toEqual([
       "Rol-2026-03-JUAN-PEREZ.pdf",
@@ -49,8 +49,8 @@ describe("payslipZipEntryNames", () => {
     ]);
   });
 
-  // El desempate se busca hasta encontrar hueco: aquí el `-2` que le tocaría al segundo ya es el
-  // nombre de otro empleado, así que sigue en vez de pisarlo.
+  // The tie-break is searched until a free slot is found: here the `-2` the second one would get is
+  // already another employee's name, so it carries on instead of overwriting it.
   it("un desempate que choca con un nombre real sigue buscando", () => {
     expect(payslipZipEntryNames(["JUAN PEREZ", "JUAN PEREZ", "JUAN PEREZ 2"], 2026, 2)).toEqual([
       "Rol-2026-03-JUAN-PEREZ.pdf",

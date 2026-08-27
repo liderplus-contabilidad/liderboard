@@ -1,25 +1,25 @@
 /**
- * Del `SalariesGrid` a la tarjeta que se dibuja: barras agrupadas por mes, más su gemela en tabla.
- * Puro, así que las reglas que hacen honesta la lectura se prueban sin montar un DOM.
+ * From the `SalariesGrid` to the card that is drawn: bars grouped by month, plus its table twin. Pure,
+ * so the rules that make the reading honest are tested without mounting a DOM.
  *
- * Es un builder PROPIO y no el de PyG, siguiendo el precedente de Ocupaciones: `barOption` de
- * `lib/profit-loss/charts/option.ts` está escrito sobre los tipos de su motor de analytics
- * (`Series`, `SeriesKey`, `PeriodRef`), y traerlos aquí ataría Rol de Pagos a PyG por la
- * presentación. Lo que sí se comparte es lo que debe compartirse: los tipos `ChartOption`, la
- * paleta y los formateadores.
+ * It is an OWN builder and not PyG's, following Ocupaciones' precedent: `barOption` of
+ * `lib/profit-loss/charts/option.ts` is written over the types of its analytics engine (`Series`,
+ * `SeriesKey`, `PeriodRef`), and bringing them here would tie Rol de Pagos to PyG through
+ * presentation. What is shared is what should be: the `ChartOption` types, the palette and the
+ * formatters.
  *
- * Las tres reglas de la casa que este archivo respeta:
+ * The three house rules this file respects:
  *
- *   - **Un `null` sigue siendo `null`.** ECharts no dibuja marca, y la tabla lo deja en blanco. Un
- *     hueco convertido en 0 dibujaría una caída que nadie declaró.
- *   - **Un solo `yAxis`.** Aquí sobra con uno porque todo está en dólares: es una sola cifra.
- *   - **Ningún hex escrito.** El color sale de `colorForEntity`, y la tinta y las líneas de
+ *   - **A `null` stays `null`.** ECharts draws no mark, and the table leaves it blank. A gap turned
+ *     into 0 would draw a fall nobody declared.
+ *   - **One single `yAxis`.** One is enough here because everything is in dollars: it is one figure.
+ *   - **No hex written.** The colour comes from `colorForEntity`, and the ink and lines from
  *     `lib/charts/palette`.
  *
- * Y una propia: **el tope de series recorta la GRÁFICA, no la tabla**. `ChartCard` recibe `option` y
- * `table` por separado, así que la tabla lista todas las filas y la tarjeta declara al pie cuántas
- * no cupieron. La paleta son ocho ranuras y no cicla; la tabla no tiene ese límite y es la lectura
- * exacta.
+ * And one of its own: **the series cap trims the CHART, not the table**. `ChartCard` receives `option`
+ * and `table` separately, so the table lists every row and the card declares in its footer how many
+ * did not fit. The palette is eight slots and does not cycle; the table has no such limit and is the
+ * exact reading.
  */
 import {
   CHART_FONT,
@@ -42,31 +42,32 @@ import type {
 import { formatCurrency, pluralize } from "@/lib/format";
 import type { SalariesGrid, SalariesRow } from "./grid";
 
-/** Con una sola serie la leyenda sobra: el título de la tarjeta ya la nombra. */
+/** With a single series the legend is superfluous: the card's title already names it. */
 const MIN_LEGEND_SERIES = 2;
 
-/** Pasadas estas marcas —series × columnas— una cifra por barra deja de leerse y es textura. */
+/** Past this many marks —series × columns— a figure per bar stops being readable and is texture. */
 const MAX_DIRECT_LABEL_MARKS = 14;
 
-/** El alto de la tarjeta; el mismo que las de PyG y Ocupaciones. */
+/** The card's height; the same as PyG's and Ocupaciones'. */
 const CARD_HEIGHT = 300;
 
 /**
- * Las filas que la GRÁFICA dibuja: el cierre siempre —es la barra que el contador busca— más las de
- * mayor costo acumulado hasta llenar la paleta.
+ * The rows the CHART draws: the closing row always —it is the bar the accountant looks for— plus the
+ * ones with the highest accumulated cost until the palette is full.
  *
- * Se ordena por lo ACUMULADO y no por el último mes para que mover una marca de mes no cambie qué
- * series se dibujan: una gráfica cuyo elenco baila al filtrar no se puede comparar consigo misma.
+ * They are ordered by what is ACCUMULATED and not by the last month so moving a month mark does not
+ * change which series are drawn: a chart whose cast dances when filtering cannot be compared with
+ * itself.
  */
 function drawnRows(grid: SalariesGrid): { rows: SalariesRow[]; dropped: number } {
   const withTotal = grid.total ? [...grid.rows, grid.total] : [...grid.rows];
   if (withTotal.length <= CHART_MAX_SERIES) {
     return { rows: withTotal, dropped: 0 };
   }
-  // El cierre no compite por ranura: entra siempre y se reserva la suya.
+  // The closing row does not compete for a slot: it always goes in and reserves its own.
   const slots = grid.total ? CHART_MAX_SERIES - 1 : CHART_MAX_SERIES;
   const ranked = [...grid.rows].sort((a, b) => accumulated(b) - accumulated(a)).slice(0, slots);
-  // Se dibujan en el orden de la TABLA, no en el del ranking, para que las dos se lean en paralelo.
+  // They are drawn in the TABLE's order, not the ranking's, so the two can be read in parallel.
   const kept = new Set(ranked.map((row) => row.id));
   const rows = grid.rows.filter((row) => kept.has(row.id));
   return {
@@ -80,9 +81,9 @@ function accumulated(row: SalariesRow): number {
 }
 
 /**
- * El color de una fila sale de su posición estable en la lista COMPLETA, no en la dibujada: así una
- * fila conserva su color aunque el tope deje fuera a otra, y la marca de la tabla y la barra de la
- * gráfica siguen siendo del mismo tono.
+ * A row's colour comes from its stable position in the COMPLETE list, not in the drawn one: that way a
+ * row keeps its colour even if the cap leaves another out, and the table's mark and the chart's bar
+ * stay the same tone.
  */
 function colorResolver(grid: SalariesGrid): (rowId: string) => string {
   const order = [...grid.rows.map((row) => row.id), ...(grid.total ? [grid.total.id] : [])];
@@ -122,14 +123,15 @@ function valueAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      // La ÚNICA cifra sin centavos del módulo: un eje es la escala contra la que se estima el
-      // alto de una barra, y seis rótulos de «$12,345.67» se comen el ancho del dibujo.
+      // The module's ONLY figure without cents: an axis is the scale against which a bar's height is
+      // estimated, and six labels of «$12,345.67» eat the drawing's width.
       formatter: (value) => formatCurrency(Number(value)),
     },
   };
 }
 
-/** Un mes sin valor se OMITE del tooltip en vez de decir `$0.00`, que es la misma regla de la tabla. */
+/** A month with no value is OMITTED from the tooltip instead of saying `$0.00`, which is the table's
+ *  same rule. */
 function axisTooltip(): ChartTooltip {
   return {
     backgroundColor: CHART_SURFACE,
@@ -137,8 +139,8 @@ function axisTooltip(): ChartTooltip {
     borderWidth: 1,
     padding: [8, 10],
     textStyle: { color: CHART_INK.strong, fontSize: 12 },
-    // Dentro de la TARJETA y no de la ventana — ver `ChartTooltip.confine`. Aquí pesa igual que en
-    // PyG: los renglones son nombres de empleado con su cargo, así que la caja es ancha.
+    // Inside the CARD and not the window — see `ChartTooltip.confine`. It weighs the same here as in
+    // PyG: the lines are employee names with their job title, so the box is wide.
     confine: true,
     trigger: "axis",
     axisPointer: { type: "shadow", lineStyle: { color: CHART_LINES.axis, width: 1 } },
@@ -203,8 +205,9 @@ function buildOption(grid: SalariesGrid, rows: readonly SalariesRow[]): ChartOpt
         position: "top" as const,
         color: CHART_INK.muted,
         fontSize: 11,
-        // Con centavos, como el tooltip y la tabla: la cifra sobre la barra se coteja contra la
-        // hoja del contador. Solo el eje los suelta, porque ahí la cifra se estima, no se compara.
+        // With cents, like the tooltip and the table: the figure over the bar is checked against the
+        // accountant's sheet. Only the axis drops them, because there the figure is estimated, not
+        // compared.
         formatter: (param: ChartParam) =>
           param.value === null || param.value === undefined
             ? ""
@@ -216,10 +219,10 @@ function buildOption(grid: SalariesGrid, rows: readonly SalariesRow[]): ChartOpt
 }
 
 /**
- * La gemela en tabla, construida de TODAS las filas del grid — nunca de las que la gráfica dibuja.
+ * The table twin, built from ALL the grid's rows — never from the ones the chart draws.
  *
- * Los importes van con centavos porque esta tabla existe para cotejarse contra el Excel del
- * contador, no para dar una idea de la magnitud; el eje de la gráfica sí los redondea.
+ * The amounts go with cents because this table exists to be checked against the accountant's Excel,
+ * not to give an idea of the magnitude; the chart's axis does round them.
  */
 function buildTable(grid: SalariesGrid): ChartTable {
   const colorOf = colorResolver(grid);
@@ -229,9 +232,10 @@ function buildTable(grid: SalariesGrid): ChartTable {
     sublabel: row.sublabel,
     emphasis,
     color: colorOf(row.id),
-    // La raya, y no una celda en blanco: es lo que la hoja del contador escribe donde alguien no
-    // estuvo en la nómina, y dice «aquí no hay nada» en vez de dejar dudando si falta el dato o
-    // falta la carga. `$0.00` sigue reservado para un cero afirmado por una ficha que sí estuvo.
+    // The dash, and not a blank cell: it is what the accountant's sheet writes where someone was not
+    // in the nómina, and it says «there is nothing here» instead of leaving doubt about whether the
+    // datum or the upload is missing. `$0.00` stays reserved for a zero asserted by a record that was
+    // there.
     values: row.values.map((value) =>
       value === null ? "–" : formatCurrency(value, { cents: true }),
     ),
@@ -246,7 +250,7 @@ function buildTable(grid: SalariesGrid): ChartTable {
   };
 }
 
-/** El título: el consolidado no nombra área, el detalle nombra la suya. */
+/** The title: the consolidado names no area, the detail names its own. */
 function titleFor(grid: SalariesGrid): string {
   return grid.mode === "detalle" && grid.area ? `Área ${grid.area}` : "Sueldos por área";
 }

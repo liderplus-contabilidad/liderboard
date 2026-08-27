@@ -19,16 +19,16 @@ import { DeletePeriodDialog } from "./delete-period-dialog";
 import { NewPeriodForm } from "./new-period-popover";
 import { usePayrollData } from "./payroll-data-provider";
 
-/** Un período sin totales no tiene qué descargar: el control se apaga con un motivo visible en
- * vez de quedar ahí sin explicación. «Ver período» no comparte este apagado — la pantalla de
- * detalle rinde bien con y sin datos, así que un período recién creado también se puede abrir. */
+/** A período with no totals has nothing to download: the control switches off with a visible reason
+ * instead of sitting there unexplained. «Ver período» does not share this: the detail screen renders
+ * fine with and without data, so a freshly created período can be opened too. */
 const NO_DATA_REASON = "El período todavía no tiene datos cargados";
 
 const ROW_ACTION_CLASS =
   "rounded-[7px] p-1.5 text-faint transition-colors hover:bg-canvas hover:text-brand disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-faint";
 
-/** Ancho del popover que cuelga del `⋯` de una fila — el menú y el formulario que lo sustituye
- *  comparten el mismo ancho, así que pasar de uno a otro no salta de sitio. */
+/** Width of the popover hanging off a row's `⋯` — the menu and the form that replaces it share the
+ *  same width, so going from one to the other does not jump around. */
 const ROW_POPOVER_WIDTH = 300;
 
 const ROW_MENU_ITEM_CLASS =
@@ -36,10 +36,10 @@ const ROW_MENU_ITEM_CLASS =
 
 interface PayrollPeriodRowProps {
   period: PayrollPeriod;
-  /** Derivado de la nómina guardada del período — nunca un total que pudiera desactualizarse. */
+  /** Derived from the período's stored nómina — never a total that could go stale. */
   roster: PayrollRosterSummary;
-  /** Los cuatro totales del período, derivados igual que `roster`; `undefined` mientras no
-   *  reciba su archivo — no es cero, es «no hay». */
+  /** The período's four totals, derived like `roster`; `undefined` while it has not received its
+   *  file — it is not zero, it is «there is none». */
   financials: PayrollPeriodFinancials | undefined;
 }
 
@@ -50,13 +50,13 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
   const [downloading, setDownloading] = useState(false);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
-  // "menu": «Duplicar en otro período…» y «Eliminar período». "form": el mismo formulario del
-  // popover del encabezado, con la fuente ya fijada en este período — mismo rect, dos
-  // contenidos, así que pasar de uno a otro no cambia de sitio.
+  // "menu": «Duplicar en otro período…» and «Eliminar período». "form": the same form as the
+  // header's popover, with the source already fixed to this período — same rect, two contents, so
+  // going from one to the other does not move.
   const [stage, setStage] = useState<"closed" | "menu" | "form">("closed");
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
-  // El borrado NO es una tercera etapa del popover: es un diálogo modal que cuenta lo que
-  // descarta, el mismo que usa la pantalla de detalle. El menú se cierra al abrirlo.
+  // Deleting is NOT a third stage of the popover: it is a modal dialog that counts what it discards,
+  // the same one the detail screen uses. The menu closes on opening it.
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -74,13 +74,13 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
   }, []);
 
   /**
-   * Los comprobantes del período, sin abrirlo. Es el MISMO .zip que baja su pantalla de detalle,
-   * por el mismo constructor: desde el historial se bajan los roles de varios meses seguidos sin
-   * entrar y salir de cada uno.
+   * The período's payslips, without opening it. It is the SAME .zip its detail screen downloads, by
+   * the same builder: from the history the roles of several months in a row are downloaded without
+   * entering and leaving each one.
    *
-   * La nómina se lee AQUÍ, al pulsar, y no con un `useLiveQuery` de la fila: el historial lista
-   * todos los períodos del cliente, y sostener la nómina entera de cada uno en memoria por si
-   * alguien descarga uno es pagar la lista completa para el caso de una fila.
+   * The nómina is read HERE, on the click, and not with a `useLiveQuery` on the row: the history
+   * lists every período of the client, and holding each one's whole nómina in memory in case someone
+   * downloads one is paying for the whole list for the sake of a single row.
    */
   const downloadRoles = useCallback(async () => {
     setDownloading(true);
@@ -122,9 +122,10 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
     }
   }, [deletePeriod, period.id]);
 
-  // Escape cierra desde cualquier etapa; un clic fuera lo hace el backdrop transparente de abajo.
-  // `anchor` se captura UNA vez al abrir y no se vuelve a medir, así que un scroll (el `<main>`
-  // del layout, no la ventana) lo cierra en vez de dejarlo flotando lejos del botón que lo abrió.
+  // Escape closes from any stage; a click outside is handled by the transparent backdrop below.
+  // `anchor` is captured ONCE on opening and never measured again, so a scroll (the layout's
+  // `<main>`, not the window) closes it instead of leaving it floating far from the button that
+  // opened it.
   useEffect(() => {
     if (stage === "closed") {
       return;
@@ -221,10 +222,10 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
             >
               {stage === "menu" ? (
                 <div role="menu" className="p-1">
-                  {/* Duplicar solo aparece con nómina que duplicar: un período vacío ya se crea
-                      vacío desde «+ Nuevo período», así que el ítem no diría nada. Eliminar, en
-                      cambio, aplica siempre — un período creado por error es justo el que hay
-                      que poder quitar, y es el que menos nómina tiene. */}
+                  {/* Duplicar only appears with a nómina to duplicate: an empty período is already
+                      created empty from «+ Nuevo período», so the item would say nothing. Eliminar,
+                      on the other hand, always applies — a período created by mistake is exactly the
+                      one that has to be removable, and it is the one with the least nómina. */}
                   {hasRoster && (
                     <button
                       type="button"
@@ -259,9 +260,9 @@ function PayrollPeriodRowComponent({ period, roster, financials }: PayrollPeriod
           document.body,
         )}
 
-      {/* Al `body`, como el menú de arriba y por la misma razón que allí no se ve: esto se rinde
-          desde una FILA, así que sin portal el `<div>` del diálogo queda de hermano del `<tr>`
-          dentro del `<tbody>` — HTML inválido, y React lo delata como error de hidratación. */}
+      {/* To the `body`, like the menu above and for the same reason it is not visible there: this is
+          rendered from a ROW, so without a portal the dialog's `<div>` ends up a sibling of the
+          `<tr>` inside the `<tbody>` — invalid HTML, and React reports it as a hydration error. */}
       {deleting &&
         createPortal(
           <DeletePeriodDialog

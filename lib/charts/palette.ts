@@ -18,17 +18,17 @@
 /**
  * The eight slots, in the order that makes them separable. Never re-sort, never cycle.
  *
- * Saturados a pedido de la firma, que lee estos gráficos junto a su propio libro de Excel y los
- * veía apagados al lado. **Subir el croma no costó separabilidad: la mejoró.** Lo que un daltónico
- * distingue es sobre todo la LUMINOSIDAD y el eje azul-amarillo, así que el paso fue subir croma
- * manteniendo cada tono dentro de la banda y volver a medir, no elegir a ojo.
+ * Saturated at the firm's request, who read these charts next to their own Excel workbook and found
+ * them washed out beside it. **Raising the chroma did not cost separability: it improved it.** What a
+ * colourblind reader tells apart is above all LIGHTNESS and the blue-yellow axis, so the step was to
+ * raise chroma while keeping each hue inside the band and measure again, not to pick by eye.
  *
- * Lo que dice el validador de ESTE orden, para que nadie tenga que volver a derivarlo:
- * banda de luminosidad PASS (los ocho dentro de L 0.43–0.77), piso de croma PASS,
- * separación CVD PASS —peor par adyacente ámbar↔verde ΔE 10.8 protan (antes 9.1)— y piso de
- * visión normal PASS —peor par rosa↔ámbar ΔE 21.7 (antes 19.6)—. El contraste contra la
- * superficie sigue por debajo de 3:1 en verde, ámbar y rosa, igual que antes: por eso toda serie
- * lleva leyenda y toda tarjeta tiene su gemela en tabla, que es el relieve que eso exige.
+ * What the validator says about THIS order, so nobody has to derive it again:
+ * lightness band PASS (all eight inside L 0.43–0.77), chroma floor PASS,
+ * CVD separation PASS —worst adjacent pair amber↔green ΔE 10.8 protan (previously 9.1)— and the
+ * normal-vision floor PASS —worst pair pink↔amber ΔE 21.7 (previously 19.6)—. Contrast against the
+ * surface is still below 3:1 in green, amber and pink, just as before: that is why every series
+ * carries a legend and every card has its table twin, which is the relief that demands.
  */
 export const CHART_PALETTE = [
   "#1466c8",
@@ -63,11 +63,11 @@ export const CHART_SECTION = {
 export const CHART_NEUTRAL = "#b4bec9";
 
 /**
- * El relleno de una FRANJA de fondo — lo que separa un grupo de columnas del siguiente sin añadir
- * una línea a la retícula. Espeja `--color-border-soft`, un paso por debajo de la línea de la
- * retícula: tiene que decir «esto va junto» de un vistazo sin competir con la barra que le cae
- * encima. `--color-surface-sunken` se probó primero y no se veía — con las barras delante, tres
- * puntos de luminosidad sobre el blanco no son un tramo, son ruido de compresión.
+ * The fill of a background BAND — what separates one group of columns from the next without adding a
+ * line to the grid. It mirrors `--color-border-soft`, one step below the grid's line: it has to say
+ * «these go together» at a glance without competing with the bar that falls on it.
+ * `--color-surface-sunken` was tried first and could not be seen — with the bars in front, three
+ * points of lightness over white are not a span, they are compression noise.
  */
 export const CHART_BAND = "#edf1f5";
 
@@ -187,33 +187,33 @@ export const CHART_HEAT_RAMP = ["#fde68a", "#fcd34d", "#f0b429", "#d98b0b", "#a1
 export const CHART_HEAT_EMPTY = "#f6f8fa";
 
 /**
- * La pila de «Distribución», y NADA más. Cinco pasos azul marino → verde claro, monótonos en
- * luminosidad, más el neutro para «Otros».
+ * The «Distribución» stack, and NOTHING else. Five steps navy blue → light green, monotonic in
+ * lightness, plus the neutral for «Otros».
  *
- * Es una escala ORDENADA y no un set categórico, y esa es toda la diferencia con `CHART_PALETTE`.
- * Allí ocho entidades se comparan entre sí y el color es lo único que las distingue, así que el
- * orden de las ranuras existe para que ninguna se parezca a otra. Aquí los segmentos son PARTES
- * DE UNA MISMA CIFRA, apiladas de mayor a menor en una sola columna: lo que el color tiene que
- * decir es «esto es un reparto y este trozo pesa más que el de arriba», que es justo lo que ocho
- * tonos de identidad —azul, rojo, verde, ámbar— borran, porque cada columna sale pareciendo cuatro
- * asuntos distintos amontonados. El rango va de oscuro abajo a claro arriba porque el orden ya es
- * ese, así que el tono y la posición dicen lo mismo y se refuerzan.
+ * It is an ORDERED scale and not a categorical set, and that is the whole difference from
+ * `CHART_PALETTE`. There eight entities are compared with one another and the colour is the only
+ * thing telling them apart, so the order of the slots exists so none looks like another. Here the
+ * segments are PARTS OF ONE FIGURE, stacked largest to smallest in a single column: what the colour
+ * has to say is «this is a breakdown and this piece weighs more than the one above», which is exactly
+ * what eight identity hues —blue, red, green, amber— erase, because each column ends up looking like
+ * four different matters piled up. The range runs dark at the bottom to light at the top because the
+ * order already is that, so hue and position say the same thing and reinforce each other.
  *
- * **Son CINCO y no ocho, y eso está medido, no elegido.** El arco entero azul→verde mide unos 55
- * ΔE; repartido en ocho pasos deja pares vecinos en ΔE 8, por debajo del piso de visión NORMAL, y
- * en una pila los vecinos son exactamente lo que hay que distinguir. En cinco pasos el mismo arco
- * da 16.6 y pasa. Por eso `foldDistribution` pliega la cola a partir del sexto — el mismo corte
- * que `toPieSlices` ya aplica a la dona por la misma razón.
+ * **There are FIVE and not eight, and that is measured, not chosen.** The whole blue→green arc
+ * measures some 55 ΔE; split into eight steps it leaves neighbouring pairs at ΔE 8, below the NORMAL
+ * vision floor, and in a stack neighbours are exactly what has to be told apart. In five steps the
+ * same arc gives 16.6 and passes. That is why `foldDistribution` folds the tail from the sixth on —
+ * the same cut `toPieSlices` already applies to the doughnut for the same reason.
  *
- * Lo que dice el validador de este orden, para que nadie lo re-derive: piso de croma PASS,
- * separación CVD PASS —peor par adyacente azul↔azul ΔE 14.2 deutan—, piso de visión normal PASS
- * —peor par verde↔verde ΔE 16.6—. La banda de luminosidad NO se cumple y no debe cumplirse: es
- * un requisito de los rellenos categóricos, y una rampa secuencial existe justamente para salirse
- * de ella por los dos extremos (`CHART_HEAT_RAMP` hace lo mismo). El contraste del paso más claro
- * queda bajo 3:1, con el mismo relieve de siempre: leyenda, tooltip y la gemela en tabla.
+ * What the validator says about this order, so nobody re-derives it: chroma floor PASS,
+ * CVD separation PASS —worst adjacent pair blue↔blue ΔE 14.2 deutan—, normal-vision floor PASS
+ * —worst pair green↔green ΔE 16.6—. The lightness band is NOT met and must not be: it is a
+ * requirement of categorical fills, and a sequential ramp exists precisely to step outside it at both
+ * ends (`CHART_HEAT_RAMP` does the same). The lightest step's contrast stays below 3:1, with the
+ * usual relief: legend, tooltip and the table twin.
  *
- * El último tono es `CHART_NEUTRAL` a propósito: «Otros» no es un puesto de la escala sino lo que
- * sobra, y un gris arriba del todo es lo que lo dice sin fingir que es una cuenta más.
+ * The last hue is `CHART_NEUTRAL` on purpose: «Otros» is not a rung of the scale but what is left
+ * over, and a grey at the very top is what says so without pretending it is one more account.
  */
 export const CHART_DISTRIBUTION_RAMP = [
   "#1a237e",
@@ -224,58 +224,59 @@ export const CHART_DISTRIBUTION_RAMP = [
   CHART_NEUTRAL,
 ] as const;
 
-/** Cuántos segmentos dibuja una pila antes de plegar la cola: los pasos de su propia escala. */
+/** How many segments a stack draws before folding the tail: the steps of its own scale. */
 export const CHART_DISTRIBUTION_MAX = CHART_DISTRIBUTION_RAMP.length;
 
 /**
- * El tono por el LUGAR en la pila, que es el rango de la cuenta. No pasa por `colorForEntity`
- * porque aquí el color no sigue a la entidad: sigue a su tamaño, y ese es el encargo.
+ * The hue by PLACE in the stack, which is the account's rank. It does not go through `colorForEntity`
+ * because here colour does not follow the entity: it follows its size, and that is the brief.
  */
 export function colorForDistributionSlot(index: number): string {
   return CHART_DISTRIBUTION_RAMP[index] ?? CHART_NEUTRAL;
 }
 
 /**
- * «Composición de los ingresos», y NADA más. Seis tonos cálidos por el TAMAÑO de la parte, pedidos
- * por la firma sobre una tarta de referencia que trajeron. La tarjeta dejó de ser una tarta —hoy
- * son barras horizontales, como el ranking que tiene debajo— y el set se queda: lo que lo justifica
- * no es el círculo sino el reparto.
+ * «Composición de los ingresos», and NOTHING else. Six warm hues by the SIZE of the part, asked for
+ * by the firm over a reference pie they brought. The card stopped being a pie —today it is horizontal
+ * bars, like the ranking below it— and the set stays: what justifies it is not the circle but the
+ * breakdown.
  *
- * Que sea un set propio y no `CHART_PALETTE` no es capricho: allí el color sigue a la ENTIDAD para
- * que filtrar una serie no repinte a las demás, y aquí no hay entidades que vayan y vengan —
- * `toPieSlices` devuelve el reparto entero, siempre completo y siempre ordenado de mayor a menor,
- * y el color ya seguía a ese orden. Es el mismo argumento de `CHART_DISTRIBUTION_RAMP`, con una
- * diferencia que cambia la forma: una pila necesita una RAMPA porque sus vecinos se tocan y hay que
- * leer «este trozo pesa más», mientras que un reparto de seis partes que no se tocan solo necesita
- * que las seis se distingan. Por eso esto son hues y no pasos de una escala.
+ * That it is a set of its own and not `CHART_PALETTE` is not a whim: there colour follows the ENTITY
+ * so filtering one series does not repaint the others, and here there are no entities coming and
+ * going — `toPieSlices` returns the whole breakdown, always complete and always ordered largest to
+ * smallest, and the colour already followed that order. It is the same argument as
+ * `CHART_DISTRIBUTION_RAMP`, with one difference that changes the shape: a stack needs a RAMP because
+ * its neighbours touch and «this piece weighs more» has to be read, whereas a breakdown of six parts
+ * that do not touch only needs the six to be distinguishable. That is why these are hues and not
+ * steps of a scale.
  *
- * **Los tonos de la referencia NO son estos, y la razón está medida.** Aquellos —`#ff0000`,
- * `#ff5600`, `#ff8500`, `#99aa27`, `#00836f`— reprueban dos veces, y la que importa no es la de
- * daltonismo: `#ff5600`↔`#ff0000` dan ΔE 7.6 en visión NORMAL, o sea que la porción del 30 % y la
- * del 20 % son casi el mismo rojo para cualquiera (`#99aa27`↔`#ff8500` dan además ΔE 3.9 protan).
- * En la referencia eso no se nota porque cada porción lleva su «20%» impreso DENTRO: el número es
- * lo que desambigua, no el color. Aquí no: en barras el tono es lo que empareja una fila de la
- * tabla gemela con su barra —un punto de color de 8 px, sin cifra dentro que desambigüe—, así que
- * dos rojos casi iguales sí se confunden. Se conserva entonces el
- * CARÁCTER —el rojo, el naranja y el teal, que son tres de sus cinco tonos y los que dan el aire—
- * y se ensancha el arco: rojo, naranja y ámbar viven en unos 60° de tono, y tres de ellos no llegan
- * al piso de visión normal sin separarse en luminosidad, lo que saca al ámbar de la banda por
- * arriba. El verde oliva pasa a verde, y el quinto y el sexto —azul y magenta— los pone el arco,
- * no la referencia, que solo traía cinco porciones.
+ * **The reference's hues are NOT these, and the reason is measured.** Those —`#ff0000`, `#ff5600`,
+ * `#ff8500`, `#99aa27`, `#00836f`— fail twice, and the one that matters is not the colour-blindness
+ * one: `#ff5600`↔`#ff0000` give ΔE 7.6 in NORMAL vision, meaning the 30 % slice and the 20 % one are
+ * almost the same red to anyone (`#99aa27`↔`#ff8500` also give ΔE 3.9 protan). In the reference that
+ * goes unnoticed because each slice carries its «20%» printed INSIDE: the number is what
+ * disambiguates, not the colour. Here it does not: in bars the hue is what pairs a row of the table
+ * twin with its bar —an 8 px colour dot, with no figure inside to disambiguate—, so two nearly equal
+ * reds really do get confused. What is kept, then, is the CHARACTER —the red, the orange and the
+ * teal, which are three of its five hues and the ones that give it its air— and the arc is widened:
+ * red, orange and amber live within some 60° of hue, and three of them do not reach the normal-vision
+ * floor without separating in lightness, which takes the amber out of the band at the top. The olive
+ * green becomes green, and the fifth and the sixth —blue and magenta— are set by the arc, not by the
+ * reference, which only carried five slices.
  *
- * Ninguno de los seis es una ranura de `CHART_PALETTE`, la misma regla que cumple la rampa de
- * distribución: son dos trabajos distintos y compartir un hex invitaría a leer un parentesco entre
- * una fila de este reparto y una serie de la tarjeta de al lado. El azul se desplazó a `#0f5bb5`
- * justamente por eso, porque `#1466c8` es la primera ranura de identidad.
+ * None of the six is a slot of `CHART_PALETTE`, the same rule the distribution ramp meets: they are
+ * two different jobs and sharing a hex would invite reading a kinship between a row of this breakdown
+ * and a series of the card next to it. The blue was shifted to `#0f5bb5` precisely for that, because
+ * `#1466c8` is the first identity slot.
  *
- * Lo que dice el validador de este orden, para que nadie lo re-derive: banda de luminosidad PASS
- * (los seis dentro de L 0.43–0.77), piso de croma PASS, separación CVD PASS —peor par adyacente
- * magenta↔azul ΔE 15.0 protan, tritan 11.5— y piso de visión normal PASS —peor par verde↔teal
- * ΔE 16.2—. El contraste del naranja (2.3) y el verde (2.92) queda bajo 3:1, con el relieve de
- * siempre: leyenda, tooltip y la gemela en tabla.
+ * What the validator says about this order, so nobody re-derives it: lightness band PASS (all six
+ * inside L 0.43–0.77), chroma floor PASS, CVD separation PASS —worst adjacent pair magenta↔blue
+ * ΔE 15.0 protan, tritan 11.5— and normal-vision floor PASS —worst pair green↔teal ΔE 16.2—. The
+ * orange's contrast (2.3) and the green's (2.92) stay below 3:1, with the usual relief: legend,
+ * tooltip and the table twin.
  *
- * El orden es el del reparto y no se re-ordena: la comprobación de CVD es sobre pares ADYACENTES,
- * así que mover un tono de sitio invalida la medición de arriba.
+ * The order is the breakdown's and is not re-sorted: the CVD check is over ADJACENT pairs, so moving
+ * one hue invalidates the measurement above.
  */
 export const CHART_COMPOSITION_PALETTE = [
   "#e02b2b",
@@ -287,98 +288,103 @@ export const CHART_COMPOSITION_PALETTE = [
 ] as const;
 
 /**
- * Cuántas partes dibuja la composición antes de plegar la cola en «Otros»: los tonos de su propia
- * escala. `toPieSlices` recibe este número en vez de llevar un 6 suelto, que es lo que garantiza
- * que «Otros» caiga siempre en la última ranura y ninguna fila se quede sin color.
+ * How many parts the composition draws before folding the tail into «Otros»: the hues of its own
+ * scale. `toPieSlices` receives this number instead of carrying a loose 6, which is what guarantees
+ * «Otros» always lands in the last slot and no row is left without a colour.
  */
 export const CHART_COMPOSITION_MAX = CHART_COMPOSITION_PALETTE.length;
 
 /**
- * El tono por el LUGAR en el reparto, que es el tamaño de la parte. No pasa por `colorForEntity`
- * por lo dicho arriba: aquí el color no distingue entidades, ordena un reparto.
+ * The hue by PLACE in the breakdown, which is the size of the part. It does not go through
+ * `colorForEntity` for the reason stated above: here colour does not tell entities apart, it orders a
+ * breakdown.
  */
 export function colorForCompositionSlot(index: number): string {
   return CHART_COMPOSITION_PALETTE[index] ?? CHART_NEUTRAL;
 }
 
 /**
- * LA SECUENCIA DEL «Ranking de gastos», que es la única tarjeta que dibuja QUINCE barras: las ocho
- * ranuras de identidad seguidas de los doce tonos decorativos del periodo.
+ * THE SEQUENCE OF THE «Ranking de gastos», which is the only card that draws FIFTEEN bars: the eight
+ * identity slots followed by the twelve decorative period hues.
  *
- * Las ocho primeras se pintan como siempre, con `CHART_PALETTE`, y eso no es inercia: es el caso de
- * casi todos los clientes —un plan que no llega a nueve cuentas de gasto no ve nunca la cola—, así
- * que la tarjeta no cambia de aspecto hasta la novena barra. El problema empieza justo ahí, y ha
- * tenido dos formas. Con `colorForEntity` las siete últimas devolvían el mismo `CHART_NEUTRAL`
- * —siete barras grises idénticas al fondo de la lista, que es donde se mira para saber qué
- * recortar—. Se arregló con una gama de verde lima a siete luminosidades, y eso quitaba el gris
- * pero no el defecto: un mismo verde repetido sigue leyéndose como una mancha, y lo que la firma
- * pidió es lo que su propia tarta del anexo ya hace —que los tonos SEAN DISTINTOS—.
+ * The first eight are painted as always, with `CHART_PALETTE`, and that is not inertia: it is the
+ * case for almost every client —a chart of accounts that does not reach nine expense accounts never
+ * sees the tail—, so the card does not change look until the ninth bar. The problem starts right
+ * there, and it has taken two forms. With `colorForEntity` the last seven returned the same
+ * `CHART_NEUTRAL` —seven identical grey bars at the bottom of the list, which is where one looks to
+ * know what to cut—. It was fixed with a lime-green range at seven lightnesses, and that removed the
+ * grey but not the defect: one same green repeated still reads as a smear, and what the firm asked
+ * for is what its own annex pie already does —that the hues BE DIFFERENT—.
  *
- * **Por qué el set del periodo y no el de la tarta.** `CHART_SLICE_SEQUENCE` arranca con los seis
- * cálidos de «Composición de los ingresos», que es la tarjeta que va JUSTO ENCIMA del ranking en la
- * misma pantalla; las seis primeras barras saldrían del mismo tono que sus seis filas y, como en
- * las dos el color va por PUESTO y no por entidad, eso se leería como si la primera fila de una
- * fuera la primera de la otra. Los tres sets son disjuntos, así que empezar por las ranuras de
- * identidad evita el choque y deja veinte tonos sin repetir uno solo.
+ * **Why the period set and not the pie's.** `CHART_SLICE_SEQUENCE` starts with the six warm hues of
+ * «Composición de los ingresos», which is the card sitting JUST ABOVE the ranking on the same screen;
+ * the first six bars would come out in the same hue as its six rows and, since in both the colour
+ * goes by POSITION and not by entity, that would read as though the first row of one were the first
+ * of the other. The three sets are disjoint, so starting with the identity slots avoids the clash and
+ * leaves twenty hues without repeating a single one.
  *
- * **Y sí, `CHART_PERIOD_PALETTE` es el set DECORATIVO**, el que dice «nunca para series». La
- * excepción se paga aquí con el mismo relieve con el que la paga la dona del anexo, y está escrito
- * allí: cada barra lleva su cuenta rotulada en el canal de rótulos y su monto al lado, y la tarjeta
- * tiene su gemela en tabla con las quince cifras. El color no es la lectura —el orden lo dicen la
- * posición de la fila y la longitud de la barra—; lo único que hace es que la cola no sea una
- * mancha. Que su separación CVD entre vecinos no cierre es por eso admisible: un lector que no
- * distinga dos de estos tonos no pierde nada, porque el nombre de la cuenta está escrito al lado.
+ * **And yes, `CHART_PERIOD_PALETTE` is the DECORATIVE set**, the one that says «never for series».
+ * The exception is paid for here with the same relief the annex's doughnut pays it with, and it is
+ * written there: each bar carries its account labelled in the label channel and its amount beside it,
+ * and the card has its table twin with the fifteen figures. Colour is not the reading —the order is
+ * given by the row's position and the bar's length—; the only thing it does is keep the tail from
+ * being a smear. That its CVD separation between neighbours does not clear is therefore acceptable: a
+ * reader who cannot tell two of these hues apart loses nothing, because the account's name is written
+ * beside it.
  */
 export const CHART_RANKING_SEQUENCE = [...CHART_PALETTE, ...CHART_PERIOD_PALETTE] as const;
 
 /**
- * Cuántas barras dibuja el ranking. Quince es un límite de LEGIBILIDAD que pidió la firma y no un
- * número que la paleta imponga —hay veinte ranuras—, así que se DECLARA en vez de derivarse de la
- * longitud de la secuencia, que es lo que hacía cuando el corte y la cola eran el mismo 8 + 7. Lo
- * que sigue siendo obligatorio es que ninguna barra dibujada se quede sin tono, y eso pasa de ser
- * una identidad accidental a un invariante escrito en el test: `CHART_RANKING_MAX` ≤ la secuencia.
+ * How many bars the ranking draws. Fifteen is a LEGIBILITY limit the firm asked for and not a number
+ * the palette imposes —there are twenty slots—, so it is DECLARED instead of derived from the length
+ * of the sequence, which is what it did when the cut and the tail were the same 8 + 7. What remains
+ * mandatory is that no drawn bar is left without a hue, and that goes from being an accidental
+ * identity to an invariant written in the test: `CHART_RANKING_MAX` ≤ the sequence.
  */
 export const CHART_RANKING_MAX = 15;
 
 /**
- * El tono de una barra del ranking por su PUESTO: las ocho primeras del set de identidad, las
- * siguientes de los decorativos del periodo. Pasada la secuencia se cae en el neutro, como todo lo
- * demás en este archivo — pero no se llega, porque el corte del ranking es `CHART_RANKING_MAX`.
+ * A ranking bar's hue by its POSITION: the first eight from the identity set, the following ones from
+ * the decorative period hues. Past the sequence it falls back to the neutral, like everything else in
+ * this file — but it is never reached, because the ranking's cut is `CHART_RANKING_MAX`.
  */
 export function colorForRankingSlot(index: number): string {
   return index < 0 ? CHART_NEUTRAL : (CHART_RANKING_SEQUENCE[index] ?? CHART_NEUTRAL);
 }
 
 /**
- * La secuencia de la DONA DEL ANEXO, que es la única tarta de la app que no pliega su cola.
+ * The sequence of the ANNEX'S DOUGHNUT, which is the only pie in the app that does not fold its tail.
  *
- * «Composición de los ingresos» reparte seis porciones y cierra en «Otros» porque su pregunta es de
- * qué se compone el total: la séptima cuenta más grande no cambia esa respuesta. El anexo de gastos
- * hace la contraria — es una LISTA de rubros que tiene que aparecer entera, porque el contador la
- * coteja fila por fila contra su hoja—, y ahí «Otros · 16,6 %» esconde justo lo que se venía a leer.
+ * «Composición de los ingresos» breaks down six slices and closes with «Otros» because its question
+ * is what the total is made of: the seventh largest account does not change that answer. The expense
+ * annex does the opposite — it is a LIST of lines that has to appear whole, because the accountant
+ * checks it row by row against their sheet—, and there «Otros · 16.6 %» hides exactly what one came
+ * to read.
  *
- * Son los seis tonos cálidos de la composición seguidos de los doce decorativos del periodo, y ese
- * orden importa: las porciones grandes conservan el aspecto que la tarta ya tenía, y la cola —que es
- * la que aparece de más— toma el set que existe para «una serie con muchas marcas». Reusarlo aquí es
- * legal por el MISMO motivo que allí, escrito en `CHART_PERIOD_PALETTE`: cada porción lleva su nombre
- * y su porcentaje en la etiqueta y otra vez en la leyenda, así que el color no es la lectura — evita
- * que diecisiete porciones sean una sola mancha, nada más.
+ * They are the composition's six warm hues followed by the twelve decorative period ones, and that
+ * order matters: the large slices keep the look the pie already had, and the tail —which is the part
+ * that appears extra— takes the set that exists for «one series with many marks». Reusing it here is
+ * legitimate for the SAME reason as there, written in `CHART_PERIOD_PALETTE`: each slice carries its
+ * name and its percentage in the label and again in the legend, so the colour is not the reading — it
+ * keeps seventeen slices from being a single smear, nothing more.
  *
- * **Lo que NO arregla, y hay que saberlo:** una tarta de diecisiete porciones con cuatro por debajo
- * del 1 % no es legible por muchos tonos que tenga, y es el propio archivo de la firma el que lo
- * enseña. Lo que sostiene esta tarjeta no es el color sino los dos relieves de siempre — la etiqueta
- * que `hideOverlap` deja caer cuando no cabe, y la GEMELA EN TABLA, que lista los diecisiete con su
- * cifra. La dona da la forma; la tabla da el dato.
+ * **What it does NOT fix, and this has to be known:** a pie of seventeen slices with four of them
+ * below 1 % is not legible however many hues it has, and it is the firm's own file that shows it.
+ * What holds this card up is not the colour but the two usual reliefs — the label `hideOverlap` drops
+ * when it does not fit, and the TABLE TWIN, which lists the seventeen with their figures. The
+ * doughnut gives the shape; the table gives the datum.
  */
 export const CHART_SLICE_SEQUENCE = [
   ...CHART_COMPOSITION_PALETTE,
   ...CHART_PERIOD_PALETTE,
 ] as const;
 
-/** Cuántas porciones puede nombrar una tarta sin repetir tono. La decimonovena cae en el neutro. */
+/** How many slices a pie can name without repeating a hue. The nineteenth falls back to the
+ *  neutral. */
 export const CHART_SLICE_MAX = CHART_SLICE_SEQUENCE.length;
 
-/** El tono por el LUGAR en el reparto, como en la composición: aquí tampoco sigue a la entidad. */
+/** The hue by PLACE in the breakdown, as in the composition: here it does not follow the entity
+ *  either. */
 export function colorForSliceSlot(index: number): string {
   return index < 0 ? CHART_NEUTRAL : (CHART_SLICE_SEQUENCE[index] ?? CHART_NEUTRAL);
 }

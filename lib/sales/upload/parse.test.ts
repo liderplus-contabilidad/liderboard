@@ -25,7 +25,7 @@ describe("detección del formato", () => {
   it("un balance de MicroPlus NO se confunde con este reporte", () => {
     const result = parseSalesGrid(foreignGrid());
     expect(result.ok).toBe(false);
-    // Y el rechazo NOMBRA lo que esperaba, en vez de dejar al usuario adivinando.
+    // And the rejection NAMES what it expected, instead of leaving the user guessing.
     expect(result.ok === false && result.message).toContain("VENTA TOTAL");
   });
 
@@ -103,9 +103,9 @@ describe("las líneas", () => {
   });
 
   it("las columnas de los DATOS no son las de los rótulos, y se leen igual", () => {
-    // La cabecera centra `CANTIDAD` y `VENTA TOTAL` una columna a la derecha de sus valores. Leer
-    // por la columna del rótulo devolvía una celda vacía en todas las filas y el reporte salía
-    // «sin ninguna línea» — el fallo con el que este formato llegó.
+    // The header centres `CANTIDAD` and `VENTA TOTAL` one column to the right of their values.
+    // Reading by the label's column returned an empty cell in every row and the report came out «with
+    // no line at all» — the failure this format arrived with.
     const month = ok(salesGrid());
     expect(month.lines.every((line) => line.amount > 0)).toBe(true);
   });
@@ -140,8 +140,8 @@ describe("las líneas", () => {
 
 describe("el cuadre contra el total del archivo", () => {
   it("el total sale de la fila SIN RÓTULO del cierre, no del recuento de ítems", () => {
-    // `TOTAL ITEMS` vale 5 —son LÍNEAS—; el total en dólares es 1.900. Buscar un rótulo «TOTAL»
-    // habría cuadrado el mes contra un recuento.
+    // `TOTAL ITEMS` is worth 5 —they are LINES—; the total in dollars is 1,900. Looking for a `TOTAL`
+    // label would have squared the month against a count.
     const month = ok(salesGrid());
     expect(month.declaredTotal).toBe(1900);
   });

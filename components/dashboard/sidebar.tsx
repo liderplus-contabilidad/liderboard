@@ -10,8 +10,9 @@ import { MODULES } from "@/lib/modules";
 export function DashboardSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  // Se guarda lo PLEGADO y no lo desplegado: un módulo nuevo con hijos nace visible sin tener que
-  // sembrarlo en este estado, que es la regla que hace descubribles a los subitems.
+  // What is stored is what is COLLAPSED and not what is expanded: a new module with children is born
+  // visible without having to be seeded into this state, which is the rule that makes subitems
+  // discoverable.
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
 
   const toggleFold = useCallback((slug: string) => {
@@ -74,17 +75,18 @@ export function DashboardSidebar() {
           const href = `/${module.slug}`;
           const children = module.children ?? [];
           const childHrefs = children.map((child) => `${href}/${child.slug}`);
-          // El padre NO se enciende con su hijo: son dos destinos distintos, y marcar los dos haría
-          // pensar que la página abierta es la del padre.
+          // The parent does NOT light up with its child: they are two different destinations, and
+          // marking both would suggest the open page is the parent's.
           const active =
             (pathname === href || pathname.startsWith(`${href}/`)) &&
             !childHrefs.some((childHref) => pathname === childHref);
           const insideChild = childHrefs.some(
             (childHref) => pathname === childHref || pathname.startsWith(`${childHref}/`),
           );
-          // Dos casos ignoran lo plegado, y por el mismo motivo: un hijo escondido sin control a la
-          // vista es un destino inalcanzable. Colapsada la barra no hay dónde poner el chevron, y
-          // plegar el padre de la página ABIERTA la borraría del menú justo cuando estás en ella.
+          // Two cases ignore what is collapsed, and for the same reason: a hidden child with no
+          // control in sight is an unreachable destination. Collapsed, the bar has nowhere to put
+          // the chevron, and collapsing the parent of the OPEN page would erase it from the menu
+          // right when you are on it.
           const expanded = collapsed || insideChild || !folded.has(module.slug);
 
           return (
@@ -99,17 +101,17 @@ export function DashboardSidebar() {
                   children.length > 0 && !collapsed
                     ? {
                         expanded,
-                        // Un padre plegado a la fuerza —porque su hijo es la página abierta— enseña
-                        // el chevron desplegado y sin acción, en vez de esconderlo: la entrada no
-                        // cambia de forma según dónde estés parado.
+                        // A parent collapsed by force —because its child is the open page— shows the
+                        // chevron expanded and inert, rather than hiding it: the entry does not
+                        // change shape depending on where you are standing.
                         onToggle: insideChild ? undefined : () => toggleFold(module.slug),
                         label: module.label,
                       }
                     : undefined
                 }
               />
-              {/* Los hijos se rinden por defecto, no solo dentro de su padre: un subitem que aparece
-                  únicamente al entrar en él no se puede descubrir. Plegarlos es del usuario. */}
+              {/* The children render by default, not only inside their parent: a subitem that shows
+                  up only once you enter it cannot be discovered. Collapsing them is the user's. */}
               {expanded &&
                 children.map((child, index) => {
                   const childHref = childHrefs[index];
@@ -142,22 +144,22 @@ export function DashboardSidebar() {
 }
 
 /**
- * El chevron que pliega los hijos de un módulo. Es HERMANO del enlace y no va dentro, porque un
- * botón dentro de un `<a>` no es HTML válido y plegar no puede navegar.
+ * The chevron that collapses a module's children. It is a SIBLING of the link and not inside it,
+ * because a button inside an `<a>` is not valid HTML and collapsing cannot navigate.
  */
 interface NavDisclosure {
   expanded: boolean;
-  /** Ausente cuando el estado está forzado y el control no tiene nada que hacer. */
+  /** Absent when the state is forced and the control has nothing to do. */
   onToggle?: () => void;
   label: string;
 }
 
 /**
- * Una entrada de la navegación — módulo o subitem, que se rinden igual salvo por la sangría.
+ * A navigation entry — module or subitem, which render alike except for the indent.
  *
- * `nested` solo aplica EXPANDIDA: a 72 px la sangría no se distingue y lo que hace falta es que el
- * destino siga siendo alcanzable, así que colapsada un hijo se rinde como cualquier otra entrada,
- * con su icono y su `title`.
+ * `nested` only applies EXPANDED: at 72 px the indent cannot be told apart and what matters is that
+ * the destination stays reachable, so collapsed a child renders like any other entry, with its icon
+ * and its `title`.
  */
 function NavItem({
   href,

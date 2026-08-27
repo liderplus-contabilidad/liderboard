@@ -1,22 +1,22 @@
 /**
- * Genera el set de datos de prueba de PyG bajo `.context/generated/`, para manejar la app con
- * Playwright sin depender de los archivos reales de clientes que viven en `.context/`.
+ * Generates PyG's test data set under `.context/generated/`, so the app can be driven with Playwright
+ * without depending on the real client files that live in `.context/`.
  *
- * Cubre los cuatro formatos de carga registrados en `lib/profit-loss/upload/` — mensual por
- * centros de costo, estado único mensual, MicroPlus y Dingoo — por cada uno de los tres rubros de
- * `test-data/rubros.mts` y por cada uno de los tres años, con los doce meses llenos.
+ * It covers the four upload formats registered in `lib/profit-loss/upload/` — monthly by cost
+ * centers, monthly single statement, MicroPlus and Dingoo — for each of the three lines of business
+ * in `test-data/rubros.mts` and for each of the three years, with all twelve months filled.
  *
- * El eje que hace útil el set: para un mismo (rubro, año, mes) los cuatro sistemas emiten LOS
- * MISMOS números. Cada uno los escribe a su manera — MicroPlus guarda el gasto en negativo,
- * Dingoo el ingreso, y ambos numeran las cuentas con segmentos de dos dígitos — así que un test
- * que carga el mismo mes en dos sistemas y obtiene la misma utilidad está probando la
- * normalización de la estrategia y nada más. La columna `GENERAL` del formato por centros es, por
- * construcción, exactamente el valor del estado único del mismo mes.
+ * The axis that makes the set useful: for one same (line, year, month) the four systems emit THE SAME
+ * numbers. Each writes them its own way — MicroPlus stores the expense negative, Dingoo the revenue,
+ * and both number the accounts with two-digit segments — so a test that loads the same month in two
+ * systems and gets the same profit is testing the strategy's normalization and nothing else. The
+ * `GENERAL` column of the by-centers format is, by construction, exactly the single statement's value
+ * for the same month.
  *
- * Determinista: los valores salen de un PRNG sembrado con el propio (rubro, año, mes, cuenta), sin
- * `Math.random` ni fechas, así que regenerar produce los mismos bytes y un test puede fijar cifras.
+ * Deterministic: the values come from a PRNG seeded with the (line, year, month, account) itself, with
+ * no `Math.random` and no dates, so regenerating produces the same bytes and a test can pin figures.
  *
- * Ejecutar con `pnpm gen:testdata`.
+ * Run with `pnpm gen:testdata`.
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -30,11 +30,11 @@ type Cell = string | number | null;
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, ".context", "generated");
 const YEARS = [2024, 2025, 2026];
-/** Última columna del formato por centros; el contrato la lee por POSICIÓN, siempre al final. */
+/** The last column of the by-centers format; the contract reads it by POSITION, always at the end. */
 const SIN_CENTRO = "SIN CENTRO DE COSTO";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRNG sembrado por cadena — determinismo sin `Math.random`.
+// A PRNG seeded by string — determinism with no `Math.random`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function hashString(text: string): number {
@@ -46,7 +46,7 @@ function hashString(text: string): number {
   return hash >>> 0;
 }
 
-/** mulberry32 sobre el hash de la semilla: [0, 1). */
+/** mulberry32 over the seed's hash: [0, 1). */
 function rand(seed: string): number {
   let t = (hashString(seed) + 0x6d2b79f5) >>> 0;
   t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -63,28 +63,28 @@ function round2(value: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// El plan de cuentas, aplanado y numerado por posición.
+// The chart of accounts, flattened and numbered by position.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface FlatAccount {
-  /** Segmentos numéricos, sin formato: `[4, 1, 1, 1, 1]`. */
+  /** Numeric segments, unformatted: `[4, 1, 1, 1, 1]`. */
   path: number[];
   key: string;
-  /** El padre por ANIDAMIENTO, que no siempre es el código menos su último segmento — ver
-   * `segment`. `undefined` en las dos raíces. */
+  /** The parent by NESTING, which is not always the code minus its last segment — see `segment`.
+   * `undefined` in the two roots. */
   parentKey: string | undefined;
   name: string;
   level: number;
   root: "4" | "5";
   isLeaf: boolean;
-  /** Solo hojas; los padres se recalculan sumando. */
+  /** Leaves only; the parents are recomputed by summing. */
   weight: number;
 }
 
 /**
- * Los segmentos que una cuenta añade al código de su padre: su POSICIÓN entre las hermanas, salvo
- * que el plan declare otra cosa (`segment`). Varios segmentos son un nivel que el informe SALTA,
- * como el `4.1.01.01` que cuelga directamente de `4.1` en el plan de la clínica.
+ * The segments an account adds to its parent's code: its POSITION among the siblings, unless the plan
+ * declares otherwise (`segment`). Several segments are a level the report SKIPS, like the `4.1.01.01`
+ * that hangs directly off `4.1` in the clinic's plan.
  */
 function segmentsOf(spec: AccountSpec, position: number): number[] {
   if (spec.segment === undefined) {
@@ -119,16 +119,16 @@ function accountsOf(rubro: Rubro): FlatAccount[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Códigos: un mismo `path`, tres convenciones.
+// Codes: one same `path`, three conventions.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type SystemId = "centros" | "unitario" | "microplus" | "dingoo";
 
 /**
- * `4.1.1.1.1` en los formatos propios de la app; `4.1.01.01.01` en MicroPlus (dos dígitos desde el
- * tercer segmento) y `4.01.01.02` en Dingoo (dos dígitos desde el segundo). Las tres convenciones
- * son incompatibles entre sí a propósito: es lo que hace que el sistema forme parte de la
- * identidad del workspace.
+ * `4.1.1.1.1` in the app's own formats; `4.1.01.01.01` in MicroPlus (two digits from the third
+ * segment) and `4.01.01.02` in Dingoo (two digits from the second). The three conventions are
+ * incompatible with each other on purpose: it is what makes the system part of the workspace's
+ * identity.
  */
 function formatCode(path: number[], system: SystemId): string {
   const padFrom = system === "microplus" ? 2 : system === "dingoo" ? 1 : Infinity;
@@ -140,13 +140,13 @@ function formatCode(path: number[], system: SystemId): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Valores del mes.
+// The month's values.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ingreso y gasto del mes. El gasto es una parte FIJA más una proporción de la venta, así que en
- * temporada baja hay meses en pérdida y en alta en utilidad sin que ninguna cifra esté puesta a
- * mano — es lo que da algo que mirar en Gráficos y en Análisis.
+ * The month's revenue and expense. The expense is a FIXED part plus a proportion of the sales, so in
+ * low season there are months at a loss and in high season at a profit without any figure being set
+ * by hand — it is what gives something to look at in Gráficos and in Análisis.
  */
 function monthlyTotals(
   rubro: Rubro,
@@ -165,7 +165,7 @@ function monthlyTotals(
   return { income, expense };
 }
 
-/** Valor de cada HOJA del mes, repartiendo el total de su raíz por pesos con ruido. */
+/** Each LEAF's value for the month, splitting its root's total by weights with noise. */
 function leafValues(
   rubro: Rubro,
   accounts: FlatAccount[],
@@ -194,21 +194,22 @@ function leafValues(
 }
 
 /**
- * Las cifras REALES que un (rubro, año) tiene transcritas, y que sustituyen a las sintéticas —
- * solo en MICROPLUS, que es el sistema del que salieron. Los otros tres siguen sacando ese mismo
- * año del PRNG, así que para ese par se rompe a propósito el eje del set («los cuatro sistemas dan
- * las mismas cifras»): lo que se gana a cambio es un archivo que reproduce el anexo de la firma, y
- * lo dice el README.
+ * The REAL figures a (line, year) has transcribed, which replace the synthetic ones — only in
+ * MICROPLUS, which is the system they came from. The other three keep taking that same year from the
+ * PRNG, so for that pair the set's axis («the four systems give the same figures») is deliberately
+ * broken: what is gained in exchange is a file that reproduces the firm's annex, and the README says
+ * so.
  */
 const TRANSCRITAS: Record<string, Record<number, Record<string, number[]>>> = {
   "rubro-c-clinica": { 2026: CLINICA_2026 },
 };
 
 /**
- * Las hojas del mes tomadas de una transcripción, en la convención del generador: la tabla llega
- * VERBATIM del reporte —el gasto en negativo— y aquí es donde se vuelve del derecho, una sola vez.
- * Una hoja que la tabla no nombra vale 0, y una clave que no sea hoja de ESTE plan es un error: un
- * código mal escrito valdría si no como «esa cuenta no se movió», sin que ninguna cifra lo delate.
+ * The month's leaves taken from a transcription, in the generator's convention: the table arrives
+ * VERBATIM from the report —the expense negative— and here is where it is turned the right way round,
+ * just once. A leaf the table does not name is worth 0, and a key that is not a leaf of THIS plan is
+ * an error: a mistyped code would otherwise pass as «that account did not move», with no figure giving
+ * it away.
  */
 function transcribedLeafValues(
   accounts: FlatAccount[],
@@ -233,7 +234,8 @@ function transcribedLeafValues(
   return values;
 }
 
-/** Lo que MicroPlus escribe ese mes: la transcripción si el (rubro, año) la tiene, y si no, el PRNG. */
+/** What MicroPlus writes that month: the transcription if the (line, year) has one, and otherwise the
+ *  PRNG. */
 function microplusLeafValues(
   rubro: Rubro,
   accounts: FlatAccount[],
@@ -246,14 +248,14 @@ function microplusLeafValues(
     : transcribedLeafValues(accounts, table, month);
 }
 
-/** Los padres, sumando hijos de abajo hacia arriba. Nunca se declaran: se derivan. */
+/** The parents, summing children from the bottom up. They are never declared: they are derived. */
 function rollup(accounts: FlatAccount[], leaves: Map<string, number>): Map<string, number> {
   const values = new Map(leaves);
   const childrenOf = new Map<string, string[]>();
   for (const account of accounts) {
-    // Por el padre del ANIDAMIENTO y no por el código menos su último segmento: un plan puede
-    // saltarse un nivel (`4.1.01.01` cuelga de `4.1`), y ahí el padre por código no existe y su
-    // rama se quedaría sin sumar.
+    // By the NESTING parent and not by the code minus its last segment: a plan can skip a level
+    // (`4.1.01.01` hangs off `4.1`), and there the parent by code does not exist and its branch would
+    // be left unsummed.
     const parent = account.parentKey;
     if (parent === undefined) {
       continue;
@@ -278,14 +280,14 @@ function rootTotal(values: Map<string, number>, root: "4" | "5"): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reparto por centros de costo (solo modo «centros»).
+// Split by cost center (only in «centers» mode).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Peso de un centro sobre una hoja. Estable en el tiempo (la semilla no lleva el mes), porque un
- * centro que cambiara de mezcla cada mes no se parecería a ningún hotel real. Un 18% de las ramas
- * queda en cero para un centro dado: sin eso las columnas serían copias escaladas entre sí y
- * cualquier gráfico comparándolas diría lo mismo.
+ * A center's weight over a leaf. Stable in time (the seed does not carry the month), because a center
+ * that changed its mix every month would not resemble any real hotel. 18% of the branches are left at
+ * zero for a given center: without that the columns would be scaled copies of each other and any chart
+ * comparing them would say the same thing.
  */
 function centerWeight(rubro: Rubro, leaf: FlatAccount, center: string): number {
   if (center === SIN_CENTRO) {
@@ -304,9 +306,9 @@ function centerWeight(rubro: Rubro, leaf: FlatAccount, center: string): number {
 }
 
 /**
- * Reparte el valor de una hoja entre los centros. El último centro con peso absorbe el redondeo,
- * de modo que Σ centros es EXACTAMENTE el valor de la hoja: así `GENERAL` cuadra al céntimo (que
- * es lo que revisa `merge-month.ts`) y coincide con lo que trae el estado único del mismo mes.
+ * Splits a leaf's value across the centers. The last center with weight absorbs the rounding, so that
+ * Σ centers is EXACTLY the leaf's value: that way `GENERAL` squares to the cent (which is what
+ * `merge-month.ts` checks) and matches what the single statement of the same month brings.
  */
 function splitAcrossCenters(
   rubro: Rubro,
@@ -315,8 +317,8 @@ function splitAcrossCenters(
   centers: string[],
 ): number[] {
   const weights = centers.map((center) => centerWeight(rubro, leaf, center));
-  // Ninguna hoja se queda sin centro: si el azar apagó todas sus ramas, la primera columna se
-  // lleva el valor entero, y así `GENERAL` sigue siendo exactamente el valor de la cuenta.
+  // No leaf is left without a center: if chance switched off all its branches, the first column takes
+  // the whole value, and that way `GENERAL` is still exactly the account's value.
   if (!weights.some((weight) => weight > 0)) {
     weights[0] = 1;
   }
@@ -344,10 +346,10 @@ function writeWorkbook(
 ): void {
   const sheet = XLSX.utils.aoa_to_sheet(rows);
   if (startAtColumnB && sheet["!ref"]) {
-    // Los exports reales de Dingoo y de MicroPlus abren su rango en la columna B, y `readGrid`
-    // reindexa desde el rango: el índice 0 de la grilla es la columna B del archivo. Reproducirlo
-    // es lo que hace que el set sirva para probar que la estrategia localiza por etiqueta y no por
-    // coordenada — una copiada de lo que se ve al abrir el archivo leería otra columna.
+    // The real Dingoo and MicroPlus exports open their range in column B, and `readGrid` reindexes
+    // from the range: the grid's index 0 is the file's column B. Reproducing it is what makes the set
+    // useful for testing that the strategy locates by label and not by coordinate — one copied from
+    // what is seen on opening the file would read another column.
     const range = XLSX.utils.decode_range(sheet["!ref"]);
     range.s.c = 1;
     sheet["!ref"] = XLSX.utils.encode_range(range);
@@ -362,8 +364,8 @@ function lastDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
-/** Serial de fecha de Excel (días desde el 30/12/1899), que es como la muestra de MicroPlus
- * guarda su fecha de impresión. */
+/** Excel's date serial (days since 30/12/1899), which is how MicroPlus' sample stores its printing
+ * date. */
 function excelSerial(year: number, month: number, day: number): number {
   return Math.round((Date.UTC(year, month, day) - Date.UTC(1899, 11, 30)) / 86_400_000);
 }
@@ -377,21 +379,21 @@ function mm(month: number): string {
 }
 
 /**
- * El nombre VERBATIM, tal como el plan lo declara — ni una transformación.
+ * The VERBATIM name, exactly as the plan declares it — not one transformation.
  *
- * Los padres de un export real van en mayúsculas, y esto llegó a forzarlas aquí. Pero el plan real
- * de MicroPlus enseña que la mayúscula es del PLAN y no del reporte: sus cuentas padre son
- * mayúsculas salvo el paréntesis final de seis de ellas —`SEGUROS Y REASEGUROS (Primas y
- * Cesiones)`, `APORTES A LA SEGURIDAD SOCIAL (Incluído Fondo Res`—, que un reporte que las
- * transformara habría arrasado igual. Forzarlas aquí hacía imposible transcribir un plan tal cual,
- * que es justo lo que el rubro de la clínica necesita; los planes sintéticos declaran sus padres en
- * mayúsculas y salen igual que antes.
+ * A real export's parents go in capitals, and this used to force them here. But MicroPlus' real plan
+ * shows that the capitals belong to the PLAN and not to the report: its parent accounts are capitals
+ * except for the closing parenthesis of six of them —`SEGUROS Y REASEGUROS (Primas y Cesiones)`,
+ * `APORTES A LA SEGURIDAD SOCIAL (Incluído Fondo Res`—, which a report that transformed them would
+ * have flattened all the same. Forcing them here made it impossible to transcribe a plan as it is,
+ * which is exactly what the clinic's line of business needs; the synthetic plans declare their parents
+ * in capitals and come out just as before.
  */
 function systemName(account: FlatAccount): string {
   return account.name;
 }
 
-// ── Mensual por centros de costo ────────────────────────────────────────────
+// ── Monthly by cost centers ─────────────────────────────────────────────────
 
 function writeCentros(
   rubro: Rubro,
@@ -436,11 +438,11 @@ function writeCentros(
     ...perCenter.map((values) => resultOf(values)),
   ]);
 
-  // El formato por centros no declara su periodo: lo declara el NOMBRE del archivo.
+  // The by-centers format does not declare its period: the file's NAME declares it.
   writeWorkbook(rows, "Reporte", join(dir, `PyG-${year}-${mm(month)}.xlsx`));
 }
 
-// ── Estado único mensual ────────────────────────────────────────────────────
+// ── Monthly single statement ────────────────────────────────────────────────
 
 function writeUnitario(
   rubro: Rubro,
@@ -464,26 +466,26 @@ function writeUnitario(
   }
   rows.push([null, "Utilidad o Pérdida", round2(rootTotal(values, "4") - rootTotal(values, "5"))]);
 
-  // El nombre es libre a propósito: este formato declara su propio periodo dentro del archivo.
+  // The name is free on purpose: this format declares its own period inside the file.
   writeWorkbook(rows, "Consulta Personas", join(dir, `EstadoResultados-${year}-${mm(month)}.xlsx`));
 }
 
 // ── MicroPlus ───────────────────────────────────────────────────────────────
 
 /**
- * La columna del valor CODIFICA la profundidad (el reporte indenta hacia la derecha); `SALDO`, en
- * la 18, no rotula ninguna de ellas. Medidas sobre las 215 cuentas de `.context/microplus/mayo.xls`
- * — depende del NIVEL y nada más: una cuenta de nivel 5 valora en la 16 sea hoja o padre.
+ * The value's column ENCODES the depth (the report indents to the right); `SALDO`, in column 18,
+ * labels none of them. Measured over the 215 accounts of `.context/microplus/mayo.xls` — it depends on
+ * the LEVEL and nothing else: a level-5 account values in column 16 whether it is a leaf or a parent.
  */
 const MICROPLUS_VALUE_COL: Record<number, number> = { 1: 23, 2: 22, 3: 19, 4: 17, 5: 16, 6: 14 };
-/** A partir del nivel 6 la muestra deja de correrse: sus niveles 6 y 7 valoran en la misma. */
+/** From level 6 on the sample stops shifting: its levels 6 and 7 value in the same one. */
 const MICROPLUS_DEEPEST_VALUE_COL = 14;
 const MICROPLUS_WIDTH = 28;
 
 /**
- * Una fila de MicroPlus, declarada por las columnas de la GRILLA que ve el parser. La muestra real
- * abre su rango en la columna B, así que la grilla va corrida una posición respecto del archivo:
- * `writeWorkbook` recorta el rango y esta función deja la columna A vacía para compensarla.
+ * A MicroPlus row, declared by the columns of the GRID the parser sees. The real sample opens its
+ * range in column B, so the grid runs one position off from the file: `writeWorkbook` trims the range
+ * and this function leaves column A empty to compensate for it.
  */
 function sparseRow(entries: Record<number, Cell>): Cell[] {
   const row: Cell[] = Array.from({ length: MICROPLUS_WIDTH + 1 }, () => null);
@@ -493,8 +495,9 @@ function sparseRow(entries: Record<number, Cell>): Cell[] {
   return row;
 }
 
-/** MicroPlus escribe sus cifras como TEXTO con separador de miles. `|| 0` normaliza el `-0` que
- * deja invertir una cuenta en cero: numéricamente da igual, pero `-0.00` no lo escribe nadie. */
+/** MicroPlus writes its figures as TEXT with a thousands separator. `|| 0` normalizes the `-0` that
+ * inverting an account at zero leaves: numerically it makes no difference, but nobody writes
+ * `-0.00`. */
 function microplusAmount(value: number): string {
   return (value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
@@ -517,9 +520,9 @@ function writeMicroplus(
     sparseRow({
       3: "BALANCE DE PERDIDAS Y GANANCIAS",
       23: "Fecha:",
-      // La fecha de IMPRESIÓN, y va como serial de Excel igual que en la muestra. No es el
-      // periodo, y `microplus-grid.ts` la salta junto con la paginación — tenerla aquí es
-      // justamente lo que prueba que la salta.
+      // The PRINTING date, and it goes as an Excel serial just as in the sample. It is not the period,
+      // and `microplus-grid.ts` skips it along with the pagination — having it here is precisely what
+      // proves it skips it.
       26: excelSerial(year, month, lastDayOfMonth(year, month)),
     }),
     sparseRow({}),
@@ -535,15 +538,15 @@ function writeMicroplus(
   ];
 
   for (const account of accounts) {
-    // MicroPlus guarda el gasto en NEGATIVO y suma (`RESULTADO = 4 + 5`); la app lo guarda en
-    // positivo y resta, así que la rama 5 sale invertida del generador y `microplus.ts` la
-    // vuelve a invertir al importar.
+    // MicroPlus stores the expense NEGATIVE and adds (`RESULTADO = 4 + 5`); the app stores it positive
+    // and subtracts, so branch 5 comes out inverted from the generator and `microplus.ts` inverts it
+    // again on import.
     const value = (values.get(account.key) ?? 0) * (account.root === "5" ? -1 : 1);
     rows.push(
       sparseRow({
-        // El punto final marca cuenta padre — la app lo usa solo como contraste del árbol.
+        // The trailing dot marks a parent account — the app uses it only as a cross-check of the tree.
         1: formatCode(account.path, "microplus") + (account.isLeaf ? "" : "."),
-        // El reporte indenta por nivel y manda las hojas al fondo, igual que la muestra real.
+        // The report indents by level and sends the leaves to the bottom, just like the real sample.
         7: " ".repeat(account.isLeaf ? 10 : account.level) + systemName(account),
         [MICROPLUS_VALUE_COL[account.level] ?? MICROPLUS_DEEPEST_VALUE_COL]: microplusAmount(value),
       }),
@@ -577,8 +580,8 @@ function writeDingoo(
     blank(),
     [null, null, null, null, "REPORTE"],
     [null, null, null, null, "ESTADO DE RESULTADOS"],
-    // Razón social y nombre comercial, que en el export real solo se diferencian en el punto
-    // final: `findDingooCompany` se queda con la PRIMERA, y esa estabilidad es lo que se prueba.
+    // Razón social and nombre comercial, which in the real export differ only in the trailing dot:
+    // `findDingooCompany` keeps the FIRST, and that stability is what is being tested.
     [null, null, null, null, rubro.company],
     [null, null, null, null, rubro.company.replace(/\.$/, "")],
     [null, null, null, null, rubro.address],
@@ -596,7 +599,7 @@ function writeDingoo(
   ];
 
   for (const account of accounts) {
-    // Dingoo guarda el INGRESO en negativo y suma; espejo exacto de MicroPlus, que invierte la 5.
+    // Dingoo stores REVENUE negative and adds; an exact mirror of MicroPlus, which inverts branch 5.
     const value = (values.get(account.key) ?? 0) * (account.root === "4" ? -1 : 1) || 0;
     rows.push([
       null,
@@ -635,7 +638,7 @@ function writeDingoo(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Manifiesto: lo que un test puede afirmar sin volver a abrir los .xlsx.
+// Manifest: what a test can assert without opening the .xlsx files again.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface RubroManifest {
@@ -646,7 +649,8 @@ interface RubroManifest {
   cuentas: number;
   hojas: number;
   profundidadMaxima: number;
-  /** Por año: los doce meses y el acumulado, en la convención de la app (4 suma, 5 resta). */
+  /** Per year: the twelve months and the accumulated figure, in the app's convention (4 adds, 5
+   *  subtracts). */
   anios: Record<string, YearManifest & { microplus?: YearManifest }>;
 }
 
@@ -655,7 +659,7 @@ interface YearManifest {
   total: { ingresos: number; gastos: number; utilidad: number };
 }
 
-/** Los doce meses de un año, resumidos, a partir de quien decida el valor de cada hoja. */
+/** A year's twelve months, summarised, from whoever decides each leaf's value. */
 function yearManifest(
   rubro: Rubro,
   accounts: FlatAccount[],
@@ -685,9 +689,9 @@ function buildManifest(rubro: Rubro, accounts: FlatAccount[]): RubroManifest {
   for (const year of YEARS) {
     anios[String(year)] = {
       ...yearManifest(rubro, accounts, year, (month) => leafValues(rubro, accounts, year, month)),
-      // El año que MicroPlus trae transcrito no cuadra con el de los otros tres sistemas, así que
-      // sale APARTE en vez de sustituir al de arriba: un test que fije cifras tiene que poder
-      // decir de qué archivo habla.
+      // The year MicroPlus brings transcribed does not square with that of the other three systems, so
+      // it comes out SEPARATELY instead of replacing the one above: a test that pins figures has to be
+      // able to say which file it is talking about.
       ...(TRANSCRITAS[rubro.slug]?.[year] === undefined
         ? {}
         : {
@@ -711,8 +715,8 @@ function buildManifest(rubro: Rubro, accounts: FlatAccount[]): RubroManifest {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** El README va junto a los archivos y se reescribe con ellos: si algo cambia en el generador,
- * la descripción no puede quedarse contando la versión anterior. */
+/** The README travels with the files and is rewritten with them: if something changes in the
+ * generator, the description cannot be left describing the previous version. */
 function readme(manifests: RubroManifest[]): string {
   const rows = manifests
     .map(
@@ -815,13 +819,13 @@ sintéticos.
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ventas por servicio — el reporte de FACTURACIÓN, que no es el estado de resultados.
+// Ventas por servicio — the BILLING report, which is not the estado de resultados.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Los cinco servicios del reporte real, con su código verbatim y el peso con el que reparten la
- * facturación del mes. Los pesos son los del abril real de la clínica (46,7 % / 14,5 % / 13,5 % /
- * 12,7 % / 12,6 %), así que el set enseña la misma forma que la firma reconoce.
+ * The real report's five services, with their verbatim code and the weight they split the month's
+ * billing by. The weights are those of the clinic's real April (46.7 % / 14.5 % / 13.5 % / 12.7 % /
+ * 12.6 %), so the set shows the same shape the firm recognises.
  */
 const SERVICIOS: { code: string; name: string; weight: number }[] = [
   { code: "\\01", name: "HONORARIOS", weight: 0.467 },
@@ -831,8 +835,8 @@ const SERVICIOS: { code: string; name: string; weight: number }[] = [
   { code: "\\05", name: "IMAGENES", weight: 0.126 },
 ];
 
-/** Aseguradoras: nombres INVENTADOS con la forma de las reales (una palabra, o dos con una marca
- *  del ramo), que es lo que la heurística de `lib/sales/payer.ts` tiene que reconocer. */
+/** Insurers: INVENTED names with the shape of the real ones (one word, or two with a trade marker),
+ *  which is what `lib/sales/payer.ts`'s heuristic has to recognise. */
 const ASEGURADORAS = [
   "SALUDVIDA",
   "BMI IGUALAS MEDICAS",
@@ -844,9 +848,9 @@ const ASEGURADORAS = [
   "PREPAGADA ANDINA",
 ];
 
-/** Apellidos y nombres para componer pagadores PARTICULARES con la forma ecuatoriana —dos
- *  apellidos y dos nombres—, que es la que la heurística clasifica como persona. Inventados: un
- *  archivo versionado no es sitio para el nombre de un paciente. */
+/** Surnames and given names to compose INDIVIDUAL payers with the Ecuadorian shape —two surnames and
+ *  two given names—, which is the one the heuristic classifies as a person. Invented: a versioned
+ *  file is no place for a patient's name. */
 const APELLIDOS = [
   "MENDOZA",
   "PARRA",
@@ -867,30 +871,29 @@ const NOMBRES = [
 ];
 
 /**
- * Cuántos pagadores DISTINTOS ve un mes. Varía por (rubro, año, mes) para que el set no sea doce
- * copias del mismo tamaño: lo que hay que poder probar es que la tarjeta de concentración cuenta
- * bien su cola —«los diez mayores son el N %»— con listas de tamaños distintos, y que el número de
- * pagadores no se confunda con el de líneas.
+ * How many DIFFERENT payers a month sees. It varies by (line, year, month) so the set is not twelve
+ * copies of the same size: what has to be testable is that the concentration card counts its tail
+ * right —«the ten largest are N %»— with lists of different sizes, and that the number of payers is
+ * not confused with the number of lines.
  */
 function pagadoresDelMes(rubro: Rubro, year: number, month: number): number {
   return 40 + Math.floor(rand(`${rubro.slug}|${year}|${month}|pagadores`) * 80);
 }
 
 /**
- * Qué fracción de esos pagadores usó UN servicio. No todo el mundo compra de todo —en el archivo
- * real hay 2.774 líneas para 956 pagadores, o sea unos tres servicios por pagador—, y esto es lo
- * que hace que las líneas de un mes no sean pagadores × servicios y que dos meses traigan un
- * número de filas distinto.
+ * What fraction of those payers used ONE service. Not everybody buys everything —in the real file
+ * there are 2,774 lines for 956 payers, that is, some three services per payer—, and this is what
+ * makes a month's lines not be payers × services and two months bring a different number of rows.
  */
 function cobertura(rubro: Rubro, year: number, month: number, code: string): number {
   return 0.3 + rand(`${rubro.slug}|${year}|${month}|${code}|cobertura`) * 0.6;
 }
 
 /**
- * Un servicio del catálogo que este mes NO se movió: sale con importe CERO en un solo pagador, que
- * es como un sistema contable declara una línea sin venta. Existe para que el set ejercite el aviso
- * «N servicios del catálogo no se movió en el periodo y no se dibuja», que de otro modo no se
- * dispararía nunca — un servicio ausente del todo no se puede contar.
+ * A catalogue service that did NOT move this month: it comes out with a ZERO amount on a single
+ * payer, which is how an accounting system declares a line with no sale. It exists so the set
+ * exercises the «N catalogue services did not move in the period and are not drawn» notice, which
+ * otherwise would never fire — a service that is absent altogether cannot be counted.
  */
 function servicioParado(rubro: Rubro, year: number, month: number): string | null {
   return rand(`${rubro.slug}|${year}|${month}|parado`) < 0.25
@@ -903,10 +906,10 @@ function pagadorAt(index: number): string {
     return ASEGURADORAS[index];
   }
   const offset = index - ASEGURADORAS.length;
-  // Los tres componentes varían en ESCALAS distintas —unidades, ochos, sesenta y cuatros— para que
-  // cada índice dé un nombre distinto. Con los tres tomando `offset` en la misma escala, el par de
-  // apellidos quedaba determinado por `offset % 8` y sesenta pagadores se colapsaban en treinta y
-  // dos: la cola que la tarjeta de concentración cuenta desaparecía a la mitad.
+  // The three components vary on DIFFERENT scales —units, eights, sixty-fours— so each index gives a
+  // different name. With all three taking `offset` on the same scale, the pair of surnames was
+  // determined by `offset % 8` and sixty payers collapsed into thirty-two: the tail the concentration
+  // card counts disappeared by half.
   const apellido1 = APELLIDOS[offset % APELLIDOS.length];
   const apellido2 = APELLIDOS[Math.floor(offset / APELLIDOS.length) % APELLIDOS.length];
   const nombre =
@@ -915,25 +918,25 @@ function pagadorAt(index: number): string {
 }
 
 /**
- * El reporte «Venta de Servicios por FACTURA» de un mes.
+ * A month's «Venta de Servicios por FACTURA» report.
  *
- * **La facturación NO es el ingreso contable del mes, y eso es deliberado**: sale del ingreso del
- * estado más un desfase determinista de ±4 %, que es la diferencia que en la realidad producen los
- * tiempos de reconocimiento, las notas de crédito y el IVA. Un set en el que las dos cifras
- * coincidieran enseñaría lo contrario de lo que la app declara en esa pantalla.
+ * **The billing is NOT the month's accounting revenue, and that is deliberate**: it comes from the
+ * statement's revenue plus a deterministic offset of ±4 %, which is the difference recognition
+ * timings, credit notes and VAT produce in reality. A set in which the two figures coincided would
+ * show the opposite of what the app declares on that screen.
  *
- * La forma reproduce la del archivo real, y lo que hay que reproducir es esto:
+ * The shape reproduces the real file's, and what has to be reproduced is this:
  *
- *   - preámbulo repartido por celdas sueltas, con la paginación a veinte columnas de la empresa;
- *   - `Desde:` / `Hasta:` con su fecha en una celda SEPARADA del rótulo;
- *   - la cabecera de cuatro rótulos **desalineada de sus propios datos**, porque va centrada sobre
- *     celdas combinadas: `CANTIDAD` cae una columna a la derecha de las cantidades y `VENTA TOTAL`
- *     una a la derecha de los importes;
- *   - filas PLANAS: cada una es una línea completa que repite el código de su servicio. No hay
- *     agrupación por servicio, ni subtotales, ni la cabecera reimpresa por página — el archivo dice
- *     «1 de 53» y aun así sale como un bloque corrido;
- *   - el cierre en dos filas: `TOTAL ITEMS` con el RECUENTO de líneas, y debajo el total en dólares
- *     SIN NINGÚN RÓTULO, alineado bajo las columnas de cantidad e importe.
+ *   - a preamble spread across loose cells, with the pagination twenty columns from the company;
+ *   - `Desde:` / `Hasta:` with their date in a cell SEPARATE from the label;
+ *   - the four-label header **misaligned from its own data**, because it goes centred over merged
+ *     cells: `CANTIDAD` falls one column to the right of the quantities and `VENTA TOTAL` one to the
+ *     right of the amounts;
+ *   - FLAT rows: each one is a complete line that repeats its service's code. There is no grouping by
+ *     service, no subtotals and no header reprinted per page — the file says «1 de 53» and even so it
+ *     comes out as one continuous block;
+ *   - the close in two rows: `TOTAL ITEMS` with the line COUNT, and below it the total in dollars with
+ *     NO LABEL AT ALL, aligned under the quantity and amount columns.
  */
 function writeVentas(
   rubro: Rubro,
@@ -948,8 +951,8 @@ function writeVentas(
     ingreso * randRange(`${rubro.slug}|${year}|${month}|facturado`, 0.96, 1.04),
   );
 
-  // Las columnas del archivo real. Los rótulos van en OTRAS —ver el bloque de la cabecera—, y esa
-  // desalineación es justo lo que un parser que leyera por la columna del rótulo no sobreviviría.
+  // The real file's columns. The labels go in OTHERS —see the header block—, and that misalignment is
+  // exactly what a parser reading by the label's column would not survive.
   const CODE_COL = 1;
   const SERVICE_COL = 7;
   const PAYER_COL = 14;
@@ -962,7 +965,7 @@ function writeVentas(
   const rows: Cell[][] = [
     at({ 3: rubro.company, 23: "Página:", 26: "1 de 12" }),
     at({ 23: "Fecha:", 26: excelSerial(year, month, 5) }),
-    // Con el espacio sobrante que el reporte real escribe tras «FACTURA».
+    // With the spare space the real report writes after «FACTURA».
     at({ 3: "Venta de Servicios por FACTURA " }),
     at({}),
     at({
@@ -977,8 +980,8 @@ function writeVentas(
 
   const pagadores = pagadoresDelMes(rubro, year, month);
   const parado = servicioParado(rubro, year, month);
-  // Los servicios que SÍ se mueven reparten el mes ENTERO entre ellos: si uno queda parado, su peso
-  // se redistribuye, de modo que lo facturado no dependa de cuántos se movieron.
+  // The services that DO move split the WHOLE month between them: if one is idle, its weight is
+  // redistributed, so what is billed does not depend on how many moved.
   const activos = SERVICIOS.filter((servicio) => servicio.code !== parado);
   const pesoActivo = activos.reduce((acc, servicio) => acc + servicio.weight, 0);
 
@@ -1004,13 +1007,13 @@ function writeVentas(
 
   activos.forEach((servicio) => {
     const objetivo = round2((facturado * servicio.weight) / pesoActivo);
-    // Cuántos de los pagadores del mes compraron ESTE servicio — nunca todos.
+    // How many of the month's payers bought THIS service — never all of them.
     const cuantos = Math.max(
       1,
       Math.round(pagadores * cobertura(rubro, year, month, servicio.code)),
     );
-    // El reparto decae, así que unos pocos concentran — que es justo la lectura que la tarjeta de
-    // concentración existe para dar.
+    // The split decays, so a few concentrate — which is precisely the reading the concentration card
+    // exists to give.
     const pesos = Array.from(
       { length: cuantos },
       (_unused, index) =>
@@ -1020,8 +1023,8 @@ function writeVentas(
     const suma = pesos.reduce((acc, peso) => acc + peso, 0);
     let repartido = 0;
     pesos.forEach((peso, index) => {
-      // El último absorbe el redondeo, para que las líneas sumen su objetivo AL CENTAVO y el cuadre
-      // del parser no dispare un aviso que no es un hallazgo.
+      // The last one absorbs the rounding, so the lines add up to their target TO THE CENT and the
+      // parser's balance does not fire a notice that is not a finding.
       const monto =
         index === pesos.length - 1
           ? round2(objetivo - repartido)
@@ -1038,9 +1041,9 @@ function writeVentas(
     }
   }
 
-  // El recuento de LÍNEAS, que no son dólares…
+  // The count of LINES, which are not dollars…
   rows.push(at({ 0: "TOTAL ITEMS", 5: items }));
-  // …y el total de verdad, sin rótulo, bajo sus columnas.
+  // …and the real total, with no label, under its columns.
   rows.push(at({ [QUANTITY_COL]: cantidadTotal, [AMOUNT_COL]: total }));
 
   writeWorkbook(rows, "Sheet1", join(dir, `Ventas-${year}-${mm(month)}.xlsx`));
@@ -1062,13 +1065,12 @@ function main(): void {
         writeMicroplus(rubro, accounts, year, month, dirOf("microplus"));
         writeDingoo(rubro, accounts, year, month, dirOf("dingoo"));
         files += 4;
-        // El reporte de ventas por servicio existe solo donde la app lo lee: es el reporte de
-        // FACTURACIÓN de la clínica, no un cuarto formato del estado de resultados, y un hotel no
-        // lo emite.
+        // The sales-by-service report exists only where the app reads it: it is the clinic's BILLING
+        // report, not a fourth format of the estado de resultados, and a hotel does not issue it.
         if (rubro.slug === "rubro-c-clinica") {
-          // Fuera de `dirOf`, que se tipa contra `SystemId`: ventas no es un cuarto sistema que
-          // emita el estado de resultados, es OTRO reporte del mismo sistema contable, y meterlo
-          // en esa unión lo dejaría pareciendo un formato de carga de PyG.
+          // Outside `dirOf`, which is typed against `SystemId`: sales is not a fourth system issuing
+          // the estado de resultados, it is ANOTHER report of the same accounting system, and putting
+          // it in that union would leave it looking like a PyG upload format.
           writeVentas(
             rubro,
             accounts,

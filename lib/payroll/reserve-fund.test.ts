@@ -18,9 +18,9 @@ describe("reserveFundMode", () => {
     expect(reserveFundMode({ hasReserveFund: true, accumulatesReserveFund: true })).toBe("acumula");
   });
 
-  // El caso real de MORALES MENA SILVIA JIMENA en el rol de marzo 2026: `FR=N` con `AC FR=S`.
-  // `FR` manda —las dos ramas de §7 arrancan preguntando por él— así que acumular sin derecho es
-  // «no le corresponde», no un cuarto modo.
+  // MORALES MENA SILVIA JIMENA's real case in the March 2026 rol: `FR=N` with `AC FR=S`. `FR` leads
+  // —both branches of §7 start by asking about it— so accruing with no entitlement is «not entitled»,
+  // not a fourth mode.
   it("acumular sin derecho es sin derecho: FR manda sobre AC FR", () => {
     expect(reserveFundMode({ hasReserveFund: false, accumulatesReserveFund: true })).toBe(
       "sin-derecho",
@@ -46,10 +46,9 @@ describe("reserveFundFlags", () => {
 });
 
 describe("la traducción es asimétrica", () => {
-  // Fija la razón por la que la pantalla NO puede reescribir las banderas al abrir una ficha: la
-  // vuelta desde el modo perdería el `AC FR=S` que el archivo del contador trae en MORALES, y
-  // reescribirlo sería inventarse una corrección que nadie pidió. Solo un cambio deliberado de
-  // modo puede tocarlas.
+  // It fixes the reason why the screen CANNOT rewrite the flags on opening a record: coming back from
+  // the mode would lose the `AC FR=S` the accountant's file brings on MORALES, and rewriting it would
+  // be inventing a correction nobody asked for. Only a deliberate change of mode can touch them.
   it("(FR=N, AC FR=S) no sobrevive a la ida y vuelta", () => {
     const stored = { hasReserveFund: false, accumulatesReserveFund: true };
     expect(reserveFundFlags(reserveFundMode(stored))).not.toEqual(stored);

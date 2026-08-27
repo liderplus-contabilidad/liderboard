@@ -20,37 +20,38 @@ import { PAYSLIP_ZIP_LABEL } from "@/lib/payroll/payslip/download";
 import { periodLongLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
 
-/** La descarga necesita una nómina: sin empleados no hay comprobante que emitir. */
+/** The download needs a nómina: with no employees there is no payslip to issue. */
 const EMPTY_ROSTER_REASON = "El período todavía no tiene empleados";
 
-/** La caja de una flecha y la del selector comparten alto y radio: las tres piezas forman un solo
- *  control de período, y una de otro tamaño lo partiría en dos. */
+/** An arrow's box and the selector's share height and radius: the three pieces form a single período
+ *  control, and one of a different size would split it in two. */
 const BOX_CLASS = "h-[38px] rounded-[9px] border border-border bg-surface transition-colors";
 
 interface PeriodHeaderProps {
   period: PayrollPeriod;
-  /** Todos los períodos del cliente — el desplegable salta a cualquiera, no solo a los vecinos. */
+  /** Every período of the client — the dropdown jumps to any of them, not just the neighbours. */
   periods: readonly PayrollPeriod[];
   prev: PayrollPeriod | null;
   next: PayrollPeriod | null;
   employeeCount: number;
   financials: PayrollPeriodFinancials | undefined;
   onDelete: () => void;
-  /** Baja los comprobantes de toda la nómina: un PDF por empleado, en un .zip. */
+  /** Downloads the payslips of the whole nómina: one PDF per employee, in a .zip. */
   onDownloadPayslips: () => void;
-  /** Mientras `pdf-lib` se carga y se arma un PDF por empleado. Con nóminas de treinta empleados eso son unas
-   *  décimas: sin el aviso, el botón parece no haber respondido y se pulsa otra vez. */
+  /** While `pdf-lib` loads and one PDF per employee is assembled. With nóminas of thirty employees
+   *  that is a few tenths of a second: without the notice, the button looks unresponsive and gets
+   *  pressed again. */
   downloading: boolean;
 }
 
 /**
- * El encabezado de la pantalla: la vuelta al historial, el control de período —flechas a los
- * vecinos con un desplegable en medio que salta a cualquiera— y la sublínea que resume el mes.
+ * The screen's header: the way back to the history, the período control —arrows to the neighbours
+ * with a dropdown in between that jumps to any of them— and the subline summarising the month.
  *
- * Las flechas y el desplegable son el MISMO control partido en tres: moverse de mes en mes es lo
- * que se hace revisando una nómina, y saltar a un mes lejano es lo que se hace al volver a ella
- * semanas después. Con solo el desplegable, avanzar un mes cuesta dos clics; con solo las flechas,
- * ir de enero a diciembre cuesta once.
+ * The arrows and the dropdown are the SAME control split in three: moving month by month is what one
+ * does while reviewing a nómina, and jumping to a distant month is what one does on coming back to it
+ * weeks later. With only the dropdown, advancing one month costs two clicks; with only the arrows,
+ * going from January to December costs eleven.
  */
 export function PeriodHeader({
   period,
@@ -92,13 +93,13 @@ export function PeriodHeader({
           <Button variant="danger" size="toolbar" icon={<Trash2 size={15} />} onClick={onDelete}>
             Eliminar período
           </Button>
-          {/* El motivo va en tooltip, no en píldora: la píldora es la convención de `ExcelActions`
-              para el botón de CARGA, donde lo que falta es el paso anterior de todo el módulo y hay
-              que verlo sin apuntar. Aquí lo que falta es la nómina de este período, y decirlo a
-              gritos junto al título le robaría el sitio al período.
-              Va aquí y no dentro de `PayrollExcelActions` porque ese primitivo rinde «Cargar
-              Excel · Descargar Excel · ⓘ» y su forma se deriva de cuántas descargas de EXCEL
-              recibe: un PDF dentro lo obligaría a dejar de hablar de Excel en los tres módulos. */}
+          {/* The reason goes in a tooltip, not in a pill: the pill is `ExcelActions`' convention for
+              the UPLOAD button, where what is missing is the previous step of the whole module and it
+              has to be seen without pointing. Here what is missing is this período's nómina, and
+              shouting it next to the title would steal the período's place.
+              It goes here and not inside `PayrollExcelActions` because that primitive renders «Cargar
+              Excel · Descargar Excel · ⓘ» and its shape is derived from how many EXCEL downloads it
+              receives: a PDF inside would force it to stop speaking of Excel in all three modules. */}
           <span title={empty ? EMPTY_ROSTER_REASON : undefined}>
             <Button
               variant="secondary"
@@ -116,8 +117,9 @@ export function PeriodHeader({
   );
 }
 
-/** Una flecha a un período vecino: `Link` real cuando existe, o la misma caja apagada (sin `href`,
- *  para que no sea foco de teclado ni de lector de pantalla) cuando ese lado se acabó. */
+/** An arrow to a neighbouring período: a real `Link` when it exists, or the same box switched off
+ *  (with no `href`, so it is neither a keyboard nor a screen-reader stop) when that side has run
+ *  out. */
 function PeriodNavArrow({
   direction,
   target,
@@ -168,8 +170,9 @@ function PeriodPicker({
   );
 }
 
-/** Trigger propio en vez de `DropdownTrigger`: aquel es el botón de un FILTRO (se pinta en `brand`
- *  al tener selección), y aquí no hay selección que señalar — siempre hay un período abierto. */
+/** A trigger of its own instead of `DropdownTrigger`: that one is a FILTER's button (it paints in
+ *  `brand` when it has a selection), and here there is no selection to point at — there is always an
+ *  open período. */
 function PeriodPickerTrigger({ period }: { period: PayrollPeriod }) {
   const { open, setOpen, triggerRef } = useDropdown();
 
@@ -205,9 +208,9 @@ function PeriodPickerList({
   const router = useRouter();
   const { setOpen } = useDropdown();
 
-  // Navega por `router` y cierra a mano en vez de rendir `Link`s: al cambiar de período esta
-  // pantalla se re-rinde en el mismo sitio del árbol, así que el desplegable sobreviviría abierto
-  // sobre el mes nuevo.
+  // It navigates through `router` and closes by hand instead of rendering `Link`s: on switching
+  // período this screen re-renders in the same place of the tree, so the dropdown would survive open
+  // over the new month.
   const go = (target: PayrollPeriod) => {
     setOpen(false);
     if (target.id !== period.id) {

@@ -53,24 +53,25 @@ import { EmployeePeriodFields } from "./employee-period-fields";
 import { EmployeeTotals } from "./employee-totals";
 
 const EMPTY_LINES: PayrollEmployeeLine[] = [];
-/** Constante estable: recrearla en cada render invalidaría los `useMemo` de las tablas. */
+/** A stable constant: recreating it on every render would invalidate the tables' `useMemo`s. */
 const EMPTY_ADDED: ReadonlySet<string> = new Set();
 
 /**
- * La pantalla de un empleado: `/payroll/[periodId]/[employeeId]`.
+ * An employee's screen: `/payroll/[periodId]/[employeeId]`.
  *
- * Lee la nómina ENTERA del período, no solo a este empleado, porque las flechas ‹ › necesitan
- * saber quién va antes y quién después — y revisar un rol es justamente recorrerlo. Es una sola
- * consulta y son decenas de filas, así que traerlas todas cuesta menos que dos consultas.
+ * It reads the período's WHOLE nómina, not just this employee, because the ‹ › arrows need to know
+ * who comes before and who comes after — and reviewing a rol is precisely walking it. It is one
+ * query and a few dozen rows, so fetching them all costs less than two queries.
  *
- * Nada calculado se guarda: cada cifra sale de `computeLinePayroll` en el render. Es la misma
- * regla que el resto del módulo (`PayrollRosterSummary`, los totales del período) y aquí pesa más
- * que en ningún sitio: una cifra persistida quedaría obsoleta en cuanto alguien corrija los días
- * trabajados, y la pantalla diría una cosa y el Excel otra sin que nada lo delate.
+ * Nothing computed is stored: every figure comes out of `computeLinePayroll` at render time. It is
+ * the same rule as the rest of the module (`PayrollRosterSummary`, the período totals) and it
+ * matters here more than anywhere: a persisted figure would go stale the moment someone corrects the
+ * days worked, and the screen would say one thing and the Excel another with nothing to give it
+ * away.
  *
- * Cada edición persiste EN EL ACTO, al salir del campo — sin borrador ni botón de guardar. Es lo
- * que hace legible un rol: corriges los días y ves moverse el líquido, el aporte y el costo a la
- * vez, que es exactamente la relación que el usuario viene a comprobar.
+ * Every edit persists ON THE SPOT, on leaving the field — no draft and no save button. That is what
+ * makes a rol readable: you correct the days and watch the net pay, the contribution and the cost
+ * move at once, which is exactly the relationship the user comes to check.
  */
 export function EmployeeDetailView({
   periodId,
@@ -83,17 +84,17 @@ export function EmployeeDetailView({
   const lines = useLiveQuery(() => listEmployees(periodId), [periodId]) ?? EMPTY_LINES;
 
   /**
-   * Los conceptos capturados que el usuario añadió y todavía valen cero.
+   * The captured concepts the user added that are still worth zero.
    *
-   * Es estado de PANTALLA y no se guarda a propósito: en cuanto se teclea un importe, el propio
-   * importe hace visible la fila (`visibleIncomeConcepts`), así que persistir esto guardaría filas
-   * vacías que no dicen nada. Se vacía al cambiar de empleado — cada uno trae los suyos.
+   * It is SCREEN state and is deliberately not stored: as soon as an amount is typed, the amount
+   * itself makes the row visible (`visibleIncomeConcepts`), so persisting this would store empty
+   * rows that say nothing. It is cleared on switching employee — each brings their own.
    */
   const [added, setAdded] = useState<ReadonlySet<string>>(EMPTY_ADDED);
   useEffect(() => setAdded(EMPTY_ADDED), [employeeId]);
 
-  /** Los dos diálogos de esta pantalla. Se cierran al cambiar de empleado con las flechas: uno
-   *  abierto sobre otra ficha editaría a quien no se estaba mirando. */
+  /** This screen's two dialogs. They close when switching employee with the arrows: one left open
+   *  over another record would edit someone who was not being looked at. */
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   useEffect(() => {
@@ -106,10 +107,10 @@ export function EmployeeDetailView({
   const index = lines.findIndex((line) => line.id === employeeId);
   const line = index === -1 ? null : lines[index];
 
-  // Siempre hay rol que calcular: sin captura, lo capturado vale cero y las cifras derivadas
-  // salen igual de la ficha. La app sirve sin Excel, y este es el punto donde eso se decide.
-  // Las filas de bono viajan DENTRO de la captura, así que el rol de este empleado no necesita
-  // nada del período para calcularse.
+  // There is always a rol to compute: with no capture, what is captured is worth zero and the derived
+  // figures still come out of the record. The app works with no Excel, and this is the point where
+  // that is decided. The bonus rows travel INSIDE the capture, so this employee's rol needs nothing
+  // from the período to be computed.
   const computed = useMemo(
     () => (line ? computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS) : null),
     [line],
@@ -117,10 +118,10 @@ export function EmployeeDetailView({
   const capture = useMemo(() => line?.capture ?? emptyCapture(), [line]);
 
   /**
-   * Toda escritura pasa por aquí y persiste EN EL ACTO, al salir de cada campo. No hay borrador
-   * ni botón de guardar: `useLiveQuery` relee, el motor recalcula y la pantalla enseña el efecto
-   * inmediatamente — que es lo que hace legible un rol, ver moverse el líquido al corregir los
-   * días. Es la misma mecánica que la tabla de Datos de PyG.
+   * Every write goes through here and persists ON THE SPOT, on leaving each field. There is no draft
+   * and no save button: `useLiveQuery` re-reads, the engine recomputes and the screen shows the
+   * effect immediately — which is what makes a rol readable, watching the net pay move as the days
+   * are corrected. It is the same mechanic as PyG's Datos table.
    */
   const patchCapture = useCallback(
     (change: Partial<PayrollMonthlyCapture>) => {
@@ -167,10 +168,10 @@ export function EmployeeDetailView({
   );
 
   /**
-   * Da de baja al empleado de ESTE período y vuelve al listado: sin él, esta pantalla se queda
-   * enseñando «no existe» sobre una URL que ya no lleva a nada.
+   * Removes the employee from THIS período and goes back to the list: without them, this screen is
+   * left showing «does not exist» over a URL that no longer leads anywhere.
    *
-   * Se navega ANTES de que `useLiveQuery` relea, que es lo que evita ese parpadeo.
+   * The navigation happens BEFORE `useLiveQuery` re-reads, which is what avoids that flicker.
    */
   const [removing, setRemoving] = useState(false);
   const confirmDelete = useCallback(async () => {
@@ -187,15 +188,16 @@ export function EmployeeDetailView({
   }, [line, periodId, router]);
 
   /**
-   * Quita una fila del catálogo del rol de ESTE empleado: vacía lo tecleado y la deja de mostrar.
+   * Removes a catalogue row from THIS employee's rol: it empties what was typed and stops showing it.
    *
-   * No borra el concepto —los trece ingresos y los trece egresos son del libro del contador y
-   * existen siempre—, y por eso son dos escrituras: el importe (o las horas) a cero, que es lo que
-   * hace que `visibleIncomeConcepts` deje de rendirla, y la salida de `added`, sin la cual la fila
-   * seguiría a la vista en cero hasta recargar. Con una sola de las dos la fila no se va.
+   * It does not delete the concept —the thirteen income and thirteen deduction concepts belong to the
+   * accountant's book and always exist—, and that is why it is two writes: the amount (or the hours)
+   * to zero, which is what makes `visibleIncomeConcepts` stop rendering it, and the removal from
+   * `added`, without which the row would stay in sight at zero until a reload. With only one of the
+   * two the row does not go away.
    *
-   * Y se lleva el RÓTULO PROPIO en la misma escritura: dejarlo colgado lo resucitaría al volver a
-   * agregar ese concepto, poniéndole a una cifra nueva el nombre de otro mes.
+   * And it takes the ROW'S OWN LABEL with it in the same write: leaving it hanging would resurrect it
+   * on adding that concept again, putting another month's name on a new figure.
    */
   const removeConcept = useCallback(
     (code: string) => {
@@ -223,18 +225,17 @@ export function EmployeeDetailView({
   );
 
   /**
-   * Las filas de BONO de este empleado, y el rótulo propio de las filas del catálogo. Las cinco
-   * operaciones escriben en la CAPTURA, que es donde vive ahora todo rótulo del rol: una fila de
-   * bono lleva su nombre, su clase y su importe juntos, y una del catálogo guarda su nombre en
-   * `labels` bajo su código.
+   * This employee's BONUS rows, and the own label of the catalogue rows. The five operations write to
+   * the CAPTURE, which is where every label of the rol now lives: a bonus row carries its name, its
+   * class and its amount together, and a catalogue one stores its name in `labels` under its code.
    *
-   * El rechazo de un nombre (repetido, vacío, largo) se guarda para poder decirlo, y se limpia en
-   * cuanto una operación sale bien: un aviso que se queda pegado deja de leerse.
+   * A name's rejection (duplicate, empty, too long) is kept so it can be said out loud, and it is
+   * cleared as soon as an operation succeeds: a notice that stays stuck stops being read.
    */
   const [extraError, setExtraError] = useState<string | null>(null);
   useEffect(() => setExtraError(null), [employeeId]);
 
-  /** El universo contra el que se juzga la unicidad: todo lo que este empleado tiene a la vista. */
+  /** The universe uniqueness is judged against: everything this employee has in sight. */
   const labelUniverse = useMemo(
     () =>
       rowLabelUniverse(capture, [
@@ -246,9 +247,9 @@ export function EmployeeDetailView({
 
   const addExtra = useCallback(
     (kind: PayrollExtraConceptKind) => {
-      // Nace con un nombre provisional porque la fila tiene que existir para poder escribir en
-      // ella: el campo del rótulo ES la propia fila, así que pedirlo antes en un diálogo sería un
-      // paso de más y dejaría el nombre en dos sitios.
+      // It is born with a provisional name because the row has to exist before anything can be
+      // written into it: the label field IS the row itself, so asking for it beforehand in a dialog
+      // would be one step too many and would leave the name in two places.
       const base = line?.capture ?? emptyCapture();
       const rows = base.extras ?? [];
       setExtraError(null);
@@ -297,8 +298,8 @@ export function EmployeeDetailView({
     [line?.capture, patchCapture],
   );
 
-  /** El rótulo propio de una fila del CATÁLOGO. Un nombre vacío borra la entrada: la fila vuelve a
-   *  llamarse como el libro en vez de guardarse rotulada con nada. */
+  /** The own label of a CATALOGUE row. An empty name deletes the entry: the row goes back to being
+   *  called what the book calls it instead of being stored labelled with nothing. */
   const renameRow = useCallback(
     (code: string, label: string) => {
       const base = line?.capture ?? emptyCapture();
@@ -318,7 +319,7 @@ export function EmployeeDetailView({
     [line?.capture, patchCapture, labelUniverse],
   );
 
-  /** Los topes, contra el sueldo unificado que el motor acaba de derivar. */
+  /** The caps, against the unified salary the engine has just derived. */
   const capBreaches = useMemo(
     () =>
       computed ? extraCapBreaches(sumExtraIncome(capture.extras), computed.unifiedSalary) : [],
@@ -326,10 +327,10 @@ export function EmployeeDetailView({
   );
 
   /**
-   * El comprobante en PDF. Se arma EN EL MOMENTO desde la ficha, lo capturado y lo que acaba de
-   * derivar el motor — nada se persiste, por la misma razón que no se persiste ningún total del
-   * módulo: una copia guardada quedaría obsoleta al corregir los días trabajados y el papel diría
-   * una cosa y la pantalla otra.
+   * The payslip in PDF. It is assembled ON THE SPOT from the record, what was captured and what the
+   * engine has just derived — nothing is persisted, for the same reason no total of the module is:
+   * a stored copy would go stale on correcting the days worked and the paper would say one thing and
+   * the screen another.
    */
   const [downloading, setDownloading] = useState(false);
   const downloadPayslip = useCallback(async () => {
@@ -348,8 +349,8 @@ export function EmployeeDetailView({
         ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
         ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
         ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
-        // El libro llama `Codigo:` a su columna `A`, que es un contador 1…N por orden de nómina
-        // saltando las cabeceras de área — la misma posición que la cabecera ya muestra.
+        // The book calls its `A` column `Codigo:`, which is a 1…N counter in nómina order skipping
+        // the area headers — the same position the header already shows.
         position: index + 1,
       });
       await downloadPayslips(
@@ -371,8 +372,8 @@ export function EmployeeDetailView({
     period,
   ]);
 
-  // Antes de la primera lectura de Dexie no se sabe si el período existe: esperar evita el
-  // parpadeo del vacío «no existe» sobre uno que en realidad sí está.
+  // Before the first read from Dexie it is not known whether the período exists: waiting avoids the
+  // «does not exist» empty state flickering over one that is actually there.
   if (!ready) {
     return null;
   }
@@ -515,14 +516,13 @@ export function EmployeeDetailView({
 }
 
 /**
- * El centro de costo que el comprobante imprime bajo el área: «HOSPEDAJE» → «COSTO PERSONAL
- * HOSPEDAJE».
+ * The cost center the payslip prints under the area: «HOSPEDAJE» → «COSTO PERSONAL HOSPEDAJE».
  *
- * ⚠️ Es una DERIVACIÓN, no un dato: el rol no trae esta columna y el módulo todavía no guarda un
- * plan de centros de costo. Reproduce exactamente lo que el prototipo del diseño hace para
- * cualquier área, y sirve mientras la firma no dé el mapa real —que puede no ser una plantilla,
- * porque un área podría cargarse contra un centro con otro nombre—. El día que ese mapa exista,
- * esto se sustituye por una lectura y no por otra plantilla.
+ * ⚠️ It is a DERIVATION, not data: the rol does not carry this column and the module does not store a
+ * plan of cost centers yet. It reproduces exactly what the design prototype does for any area, and it
+ * serves while the firm does not provide the real map —which may not be a template, since an area
+ * could be charged against a center with another name—. The day that map exists, this is replaced by
+ * a read and not by another template.
  */
 
 function costCenterFor(area: string): string | null {

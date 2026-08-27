@@ -87,18 +87,18 @@ function account(code: string, name: string, value: FixtureCell): FixtureCell[] 
 }
 
 /**
- * Ingresos −3.500,00 (con una contra-cuenta positiva) · Egresos +1.215,50 (con una contra-cuenta
- * negativa) · Resultado del ejercicio −2.284,50.
+ * Ingresos −3,500.00 (with a positive counter-account) · Egresos +1,215.50 (with a negative
+ * counter-account) · Resultado del ejercicio −2,284.50.
  *
- * Tras el import, negada la rama 4: Ingresos +3.500,00 − Gastos 1.215,50 = Utilidad 2.284,50.
+ * After the import, with branch 4 negated: Ingresos +3,500.00 − Gastos 1,215.50 = Utilidad 2,284.50.
  */
 const BODY: FixtureCell[][] = [
   account("4", "INGRESOS", -3500),
   account("4.01", "INGRESOS DE VENTAS ORDINARIAS", -3350),
   account("4.01.01", "VENTA DE BIENES", -3500),
   account("4.01.01.02", "VENTA DE BIENES SIN IVA", -3500),
-  // La contra-cuenta que el propio archivo marca en su nombre: positiva dentro de una rama
-  // negativa, y por tanto restando ingreso una vez negada.
+  // The counter-account the file itself marks in its name: positive inside a negative branch, and
+  // therefore subtracting revenue once negated.
   account("4.01.11", "(-) DEVOLUCIONES EN VENTAS", 150),
   account("4.01.11.01", "(-) DEVOLUCIONES EN VENTAS", 150),
   account("4.03", "OTROS INGRESOS", -150),
@@ -108,7 +108,7 @@ const BODY: FixtureCell[][] = [
   account("5.01", "COSTO DE VENTAS Y PRODUCCION", 975),
   account("5.01.01", "MATERIALES UTILIZADOS O PRODUCTOS VENDIDOS", 1000),
   account("5.01.01.01", "COSTOS DE VENTA", 1000),
-  // Negativa dentro de la rama que NO se toca: sigue restando gasto tras el import.
+  // Negative inside the branch that is NOT touched: it still subtracts expense after the import.
   account("5.01.02", "DESCUENTOS EN COMPRAS", -25),
   account("5.01.02.01", "DESCUENTOS EN COMPRAS", -25),
   account("5.02", "GASTOS", 240.5),

@@ -1,34 +1,34 @@
 /**
- * EL CATÁLOGO DE CONCEPTOS DEL ROL — declarado UNA sola vez.
+ * THE ROL'S CONCEPT CATALOGUE — declared just ONCE.
  *
- * Cada entrada amarra tres cosas que tienen que decir lo mismo o el rol deja de cuadrar con el
- * Excel del contador: el **código** con el que la pantalla lo nombra (`I-01`, `E-04`), la
- * **columna** de la hoja `GENERAL` de la que sale, y el **campo** del motor o de la captura que
- * lo lleva. Nada de eso puede vivir suelto en un componente: un rótulo distinto en dos pantallas
- * o una columna mal atribuida en el parser son errores que ningún test de cifras detecta, porque
- * las cifras siguen sumando igual.
+ * Each entry ties together three things that have to say the same or the rol stops squaring with the
+ * accountant's Excel: the **code** the screen names it with (`I-01`, `E-04`), the **column** of the
+ * `GENERAL` sheet it comes from, and the **field** of the engine or of the capture that carries it.
+ * None of that can live loose in a component: a different label on two screens or a column
+ * misattributed in the parser are errors no test of figures detects, because the figures keep adding
+ * up the same.
  *
- * El orden de esta lista es el de PANTALLA: los `calculado` agrupados arriba, porque en la tabla
- * son las filas grises que no se editan. **No es el del comprobante impreso**, que ordena por
- * columna del libro y por eso pone `I-07 Fondo de reserva` (columna `U`) en duodécimo lugar,
- * detrás de `COMISION VARIABLE`, y no en séptimo. Esa diferencia no obliga a declarar una segunda
- * lista: `lib/payroll/payslip/` ordena por el campo `column`, que ya está aquí.
+ * This list's order is the SCREEN's: the `calculado` ones grouped at the top, because in the table
+ * they are the grey rows that are not edited. **It is not the printed payslip's**, which orders by
+ * the book's column and that is why it puts `I-07 Fondo de reserva` (column `U`) twelfth, behind
+ * `COMISION VARIABLE`, and not seventh. That difference does not force declaring a second list:
+ * `lib/payroll/payslip/` orders by the `column` field, which is already here.
  *
- * `calculado` = lo deriva `lib/payroll/engine/`; `capturado` = lo teclea quien captura el mes.
- * En la pantalla los calculados van en gris y no se editan, que es lo que el diseño llama «los
- * valores en gris se calculan solos».
+ * `calculado` = derived by `lib/payroll/engine/`; `capturado` = typed by whoever captures the month.
+ * On screen the calculated ones go grey and are not edited, which is what the design calls «the
+ * values in grey compute themselves».
  *
- * Fuera de este catálogo quedan, a propósito, dos columnas del libro:
- * - `M` (TOTAL HORAS EXTRAS) no es un concepto sino el TOTAL de I-02…I-04, y es donde vive el
- *   importe aprobado (`approvedOvertime`); la pantalla lo muestra como el recorte de esas tres
- *   filas, no como una fila propia.
- * - `AJ`–`AM`, cuatro columnas de egreso SIN RÓTULO que el libro incluye en su `SUM(X:AN)` y
- *   que siempre valen cero. Sin nombre no pueden entrar aquí — es la pregunta abierta §11.4.
+ * Two columns of the book are deliberately left outside this catalogue:
+ * - `M` (TOTAL HORAS EXTRAS) is not a concept but the TOTAL of I-02…I-04, and it is where the
+ *   approved amount lives (`approvedOvertime`); the screen shows it as the trim on those three rows,
+ *   not as a row of its own.
+ * - `AJ`–`AM`, four UNLABELLED deduction columns the book includes in its `SUM(X:AN)` and that are
+ *   always zero. With no name they cannot come in here — it is open question §11.4.
  */
 import type { CapturedDeductions, PayrollEmployeeComputation } from "./engine/types";
 import type { PayrollMonthlyCapture } from "./types";
 
-/** Los campos de `PayrollMonthlyCapture` que son un importe de ingreso tecleado. */
+/** The fields of `PayrollMonthlyCapture` that are a typed income amount. */
 export type CapturedIncomeField =
   | "vacationPay"
   | "privateInsurance"
@@ -37,7 +37,7 @@ export type CapturedIncomeField =
   | "variableCommission"
   | "bonus";
 
-/** Los campos de `PayrollEmployeeComputation` que son un importe de ingreso derivado. */
+/** The fields of `PayrollEmployeeComputation` that are a derived income amount. */
 export type ComputedIncomeField =
   | "unifiedSalary"
   | "overtimePay50"
@@ -47,53 +47,53 @@ export type ComputedIncomeField =
   | "thirteenthMonthly"
   | "reserveFundPaid";
 
-/** Las cantidades de horas, que solo tienen tres conceptos. */
+/** The hour quantities, which only three concepts have. */
 export type OvertimeHoursField = "overtimeHours50" | "overtimeHours100" | "overtimeHours25";
 
 export interface ConceptBase {
-  /** Como lo nombra la pantalla. No es un id de base de datos: no se persiste. */
+  /** How the screen names it. It is not a database id: it is not persisted. */
   code: string;
-  /** Columna de la hoja `GENERAL`. Es la trazabilidad al archivo del contador. */
+  /** Column of the `GENERAL` sheet. It is the traceability to the accountant's file. */
   column: string;
-  /** Rótulo en español, el de la PANTALLA: minúsculas, tildes normalizadas. */
+  /** Spanish label, the SCREEN's: lower case, normalized accents. */
   label: string;
   /**
-   * Rótulo VERBATIM del comprobante `INDIVIDUAL`, el que se imprime en el PDF — mayúsculas,
-   * puntuación y erratas del contador incluidas (`DESCUENTO TIEMPO PACIAL`,
-   * `COMISION FIJA POR VTAS.`). Son los rótulos contra los que él coteja papel y pantalla.
+   * VERBATIM label from the `INDIVIDUAL` payslip, the one printed in the PDF — capitals, punctuation
+   * and the accountant's typos included (`DESCUENTO TIEMPO PACIAL`, `COMISION FIJA POR VTAS.`). They
+   * are the labels they check paper against screen with.
    *
-   * Es OBLIGATORIO y vive aquí en vez de en un mapa `code → rótulo` aparte por la misma razón
-   * por la que existe este catálogo: un mapa suelto se queda corto cuando alguien añade un
-   * concepto, y ningún test de cifras lo delata porque las cifras siguen sumando igual. Como
-   * campo, el compilador rechaza el concepto incompleto.
+   * It is MANDATORY and lives here rather than in a separate `code → label` map for the same reason
+   * this catalogue exists: a loose map falls short when someone adds a concept, and no test of
+   * figures gives it away because the figures keep adding up the same. As a field, the compiler
+   * rejects the incomplete concept.
    *
-   * Dos se apartan del literal de la celda, a propósito:
-   * - `CONTRIBUCION SOLIDARIA` va sin el salto de línea que la celda trae dentro (`AG2`): una
-   *   fila de dos líneas rompería el paso fijo de las otras veinticinco.
-   * - La columna `Q` se imprime `SEGURO PRIVADO`. El libro se contradice —su copia izquierda lo
-   *   lee de la cabecera de esa columna y la derecha dice `GERENCIA DE TURNO` escrito a mano—, y
-   *   manda la cabecera, que es de donde sale el dato.
+   * Two depart from the cell's literal, on purpose:
+   * - `CONTRIBUCION SOLIDARIA` goes without the line break the cell carries inside it (`AG2`): a
+   *   two-line row would break the fixed rhythm of the other twenty-five.
+   * - Column `Q` is printed `SEGURO PRIVADO`. The book contradicts itself —its left-hand copy reads it
+   *   from that column's header and the right-hand one says `GERENCIA DE TURNO` written by hand— and
+   *   the header wins, which is where the datum comes from.
    */
   payslipLabel: string;
 }
 
 export type IncomeConcept = ConceptBase & {
   /**
-   * El `(*)` que el comprobante escribe en la columna `Cantidad`, y que su nota al pie explica:
-   * «No aporta IESS ni es Ingreso Gravado».
+   * The `(*)` the payslip writes in the `Cantidad` column, and which its footnote explains: «No
+   * aporta IESS ni es Ingreso Gravado».
    *
-   * Son exactamente los dos ingresos que `grossIncome` suma y que NINGUNA base toca — el fondo de
-   * reserva pagado y el bono—, según `lib/payroll/engine/bases.ts`. Se declara aquí en vez de
-   * derivarse en tiempo de ejecución para no meter una llamada al motor en la capa que solo tiene
-   * que producir un asterisco, y `concepts.test.ts` lo ata al motor con una afirmación ejecutable:
-   * sumar 1 al campo de un concepto marcado no puede mover `contributoryBase`.
+   * They are exactly the two income items `grossIncome` adds and NO base touches — the paid reserve
+   * fund and the bonus—, according to `lib/payroll/engine/bases.ts`. It is declared here rather than
+   * derived at runtime so as not to put a call to the engine in the layer that only has to produce an
+   * asterisk, and `concepts.test.ts` ties it to the engine with an executable assertion: adding 1 to
+   * the field of a marked concept cannot move `contributoryBase`.
    */
   notContributory?: true;
 } & (
     | {
         kind: "calculado";
         field: ComputedIncomeField;
-        /** Las tres clases de hora extra declaran de qué cantidad salen; el resto, no. */
+        /** The three overtime classes declare which quantity they come from; the rest do not. */
         hoursField?: OvertimeHoursField;
         hoursColumn?: string;
       }
@@ -106,7 +106,7 @@ export type DeductionConcept = ConceptBase &
     | { kind: "capturado"; field: keyof CapturedDeductions }
   );
 
-/** Los 13 ingresos, en el orden del libro. */
+/** The 13 income items, in the book's order. */
 export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
   {
     code: "I-01",
@@ -137,9 +137,9 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
     hoursColumn: "H",
   },
   {
-    // El libro rotula la CANTIDAD «HORAS EXTRAS 15%» y su VALOR «VALOR GANADO EXTRAS 25%», y
-    // una fila usa 0,15 donde las otras usan 0,25. Aquí se escribe 25 % porque es lo que dice
-    // la columna del valor, que es la que produce el importe — pendiente de §11.2.
+    // The book labels the QUANTITY «HORAS EXTRAS 15%» and its VALUE «VALOR GANADO EXTRAS 25%», and
+    // one row uses 0.15 where the others use 0.25. Here 25 % is written because it is what the value
+    // column says, which is the one that produces the amount — pending §11.2.
     code: "I-04",
     column: "L",
     label: "Horas extras 25%",
@@ -225,7 +225,7 @@ export const INCOME_CONCEPTS: readonly IncomeConcept[] = [
   },
 ];
 
-/** Los 13 egresos, en el orden del libro. El primero es el único derivado. */
+/** The 13 deductions, in the book's order. The first is the only derived one. */
 export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
   {
     code: "E-01",
@@ -300,8 +300,8 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     field: "inHouseConsumption",
   },
   {
-    // La celda `AG2` trae un salto de línea dentro («CONTRIBUCION \nSOLIDARIA»). Se normaliza a
-    // una sola línea: una fila de dos rompería el paso fijo de las otras veinticinco.
+    // Cell `AG2` carries a line break inside it («CONTRIBUCION \nSOLIDARIA»). It is normalized to a
+    // single line: a two-line row would break the fixed rhythm of the other twenty-five.
     code: "E-10",
     column: "AG",
     label: "Contribución solidaria",
@@ -321,7 +321,8 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
     code: "E-12",
     column: "AI",
     label: "Descuento tiempo parcial",
-    // «PACIAL», sic — así lo escribe el libro, y es el rótulo contra el que el contador coteja.
+    // «PACIAL», sic — that is how the book writes it, and it is the label the accountant checks
+    // against.
     payslipLabel: "DESCUENTO TIEMPO PACIAL",
     kind: "capturado",
     field: "partTimeDeduction",
@@ -337,59 +338,60 @@ export const DEDUCTION_CONCEPTS: readonly DeductionConcept[] = [
 ];
 
 /**
- * La CANTIDAD que un concepto de ingreso captura, si captura alguna.
+ * The QUANTITY an income concept captures, if it captures any.
  *
- * Solo las tres clases de hora extra: son los únicos conceptos del catálogo que derivan su VALOR
- * (`J`, `K`, `L` los calcula el motor) y a la vez capturan su CANTIDAD (`G`, `H`, `I` las teclea
- * quien arma el rol). Esa doble naturaleza es la que decide qué filas se ven y cuáles se pueden
- * elegir, así que tiene un nombre en vez de repetirse como `"hoursField" in concept`.
+ * Only the three overtime classes: they are the only concepts of the catalogue that derive their
+ * VALUE (`J`, `K`, `L` are computed by the engine) and at the same time capture their QUANTITY (`G`,
+ * `H`, `I` are typed by whoever assembles the rol). That double nature is what decides which rows are
+ * visible and which can be picked, so it has a name instead of being repeated as
+ * `"hoursField" in concept`.
  */
 export function capturedHoursField(concept: IncomeConcept): OvertimeHoursField | null {
   return concept.kind === "calculado" ? (concept.hoursField ?? null) : null;
 }
 
-/** Si algo de este concepto se TECLEA — y por tanto si puede añadirse, elegirse en un desplegable
- *  y desaparecer cuando está vacío. Lo contrario es lo que la app deriva sola. */
+/** Whether anything of this concept is TYPED — and therefore whether it can be added, picked in a
+ *  dropdown and disappear when empty. The opposite is what the app derives on its own. */
 function isChoosable(concept: IncomeConcept | DeductionConcept): boolean {
   return concept.kind === "capturado" || capturedHoursField(concept as IncomeConcept) !== null;
 }
 
 /**
- * QUÉ CONCEPTOS SE VEN — la regla que hace legible la tabla del rol.
+ * WHICH CONCEPTS ARE VISIBLE — the rule that makes the rol's table readable.
  *
- * Un concepto se juzga por LO QUE SE TECLEA de él: aparece si eso no está en cero, o si alguien lo
- * añadió a mano. Lo que la app deriva sola está SIEMPRE, porque su fila es informativa aunque
- * valga cero (un fondo de reserva en raya dice que este empleado no lo cobra, y eso hay que poder
- * leerlo).
+ * A concept is judged by WHAT IS TYPED into it: it appears if that is not zero, or if someone added
+ * it by hand. What the app derives on its own is ALWAYS there, because its row is informative even at
+ * zero (a reserve fund showing a dash says this employee does not receive it, and that has to be
+ * readable).
  *
- * **Las horas extras se juzgan por las HORAS, no por su valor.** Son `calculado` —el motor deriva
- * `J`, `K` y `L`—, pero lo que alguien escribe son las horas, y sin horas el valor es cero por
- * construcción: la fila solo puede estar en raya. Meterlas en la rama de «derivado ⇒ siempre
- * visible» ponía tres filas vacías en la tabla de todo empleado sin horas extras, que es
- * exactamente lo que esta regla existe para evitar. Ojo con el caso que las mantiene vivas: unas
- * horas recortadas por Gerencia (`approvedOvertime: 0`, el `*0` del libro) valen cero y SIGUEN
- * viéndose, porque las horas se trabajaron y el comprobante del contador las imprime (§10).
+ * **Overtime is judged by the HOURS, not by its value.** They are `calculado` —the engine derives
+ * `J`, `K` and `L`—, but what someone writes are the hours, and with no hours the value is zero by
+ * construction: the row can only be a dash. Putting them in the «derived ⇒ always visible» branch put
+ * three empty rows in the table of every employee with no overtime, which is exactly what this rule
+ * exists to avoid. Mind the case that keeps them alive: hours trimmed by Gerencia
+ * (`approvedOvertime: 0`, the book's `*0`) are worth zero and are STILL shown, because the hours were
+ * worked and the accountant's payslip prints them (§10).
  *
- * Sin esta regla la tabla listaría los 26 conceptos del libro, dieciocho de ellos en raya, y un
- * rol normal —sueldo, décimos y aporte— se leería como un formulario a medio llenar. El
- * comprobante del contador tampoco los imprime todos: imprime los que tienen algo que decir.
+ * Without this rule the table would list the book's 26 concepts, eighteen of them showing a dash, and
+ * a normal rol —salary, décimos and contribution— would read as a half-filled form. The accountant's
+ * payslip does not print them all either: it prints the ones that have something to say.
  *
- * `added` son los códigos que el usuario añadió con «Agregar ingreso»/«Agregar deducción». Hacen
- * falta aparte del importe porque un concepto recién añadido vale cero todavía: sin recordarlo,
- * la fila desaparecería en el instante en que se creó.
+ * `added` are the codes the user added with «Agregar ingreso»/«Agregar deducción». They are needed
+ * apart from the amount because a freshly added concept is still worth zero: without remembering it,
+ * the row would disappear the instant it was created.
  *
- * EL ORDEN son dos tramos. Lo que se ve por su propia cifra va en el orden del CATÁLOGO —el del
- * libro y el del comprobante impreso—, que es lo que deja leer dos empleados del mismo mes en
- * paralelo. Lo que alguien acaba de AÑADIR va al final, en el orden en que lo añadió, porque el
- * botón que lo crea está al pie de la tabla: colar la fila nueva en su sitio del catálogo la hace
- * aparecer lejos de donde se pulsó, a veces fuera de la vista. No hay contradicción entre las dos
- * mitades porque `added` solo vive mientras la pantalla está abierta — al recargar, una fila con
- * cifra vuelve sola a su sitio del libro, así que nada de lo GUARDADO se reordena.
+ * THE ORDER is two segments. What is visible by its own figure goes in the CATALOGUE's order —the
+ * book's and the printed payslip's—, which is what allows reading two employees of the same month in
+ * parallel. What someone has just ADDED goes at the end, in the order it was added, because the
+ * button that creates it is at the foot of the table: slipping the new row into its catalogue place
+ * makes it appear far from where it was clicked, sometimes out of sight. There is no contradiction
+ * between the two halves because `added` only lives while the screen is open — on reload, a row with
+ * a figure goes back to its place in the book on its own, so nothing STORED is reordered.
  */
 
 /**
- * Los dos tramos del orden. `typedOf` devuelve lo tecleado de cada concepto, o `null` cuando la
- * app lo deriva entero (y entonces la fila está siempre).
+ * The two segments of the order. `typedOf` returns what is typed of each concept, or `null` when the
+ * app derives it entirely (and then the row is always there).
  */
 function orderedVisible<T extends { code: string }>(
   catalogue: readonly T[],
@@ -399,21 +401,21 @@ function orderedVisible<T extends { code: string }>(
   const byCode = new Map(catalogue.map((concept) => [concept.code, concept]));
   const own = catalogue.filter((concept) => {
     if (added.has(concept.code)) {
-      return false; // va en el segundo tramo, para no salir dos veces
+      return false; // it goes in the second segment, so it does not come out twice
     }
     const typed = typedOf(concept);
     return typed === null || typed !== 0;
   });
-  // Un `Set` conserva el orden de inserción, que aquí ES el orden de adición. Los códigos de la
-  // otra tabla —ingresos y egresos comparten un solo `added`— no están en este catálogo y caen.
+  // A `Set` keeps insertion order, which here IS the order of addition. The codes of the other table
+  // —income and deductions share a single `added`— are not in this catalogue and drop out.
   const appended = [...added]
     .map((code) => byCode.get(code))
     .filter((concept): concept is T => concept !== undefined);
   return [...own, ...appended];
 }
 
-/** Lo tecleado de un ingreso: su importe si se captura, sus horas si es una hora extra, y `null`
- *  cuando la app lo deriva entero. */
+/** What is typed of an income item: its amount if it is captured, its hours if it is overtime, and
+ *  `null` when the app derives it entirely. */
 function typedIncome(concept: IncomeConcept, capture: PayrollMonthlyCapture): number | null {
   if (concept.kind === "capturado") {
     return capture[concept.field];
@@ -441,13 +443,13 @@ export function visibleDeductionConcepts(
 }
 
 /**
- * Los que «Agregar ingreso» puede ofrecer: todo lo que se teclea y todavía no se ve. Lo que la app
- * deriva sola nunca entra — no se añade un sueldo unificado.
+ * The ones «Agregar ingreso» can offer: everything that is typed and is not visible yet. What the app
+ * derives on its own never comes in — nobody adds a unified salary.
  *
- * Las horas extras SÍ entran, y no es un detalle: son las únicas filas que pueden esconderse
- * llevándose consigo el único sitio donde se teclean sus horas. Sin esta puerta, ocultarlas al
- * estar vacías las volvería inalcanzables — sin fila no hay dónde escribir las horas, y sin horas
- * la fila no vuelve.
+ * Overtime DOES come in, and that is not a detail: they are the only rows that can hide themselves
+ * away taking with them the only place their hours are typed. Without this door, hiding them when
+ * empty would make them unreachable — with no row there is nowhere to write the hours, and with no
+ * hours the row does not come back.
  */
 export function addableIncomeConcepts(
   capture: PayrollMonthlyCapture,
@@ -457,7 +459,8 @@ export function addableIncomeConcepts(
   return INCOME_CONCEPTS.filter((c) => isChoosable(c) && !visible.has(c.code));
 }
 
-/** El gemelo para egresos. Aquí no hay conceptos con cantidad, así que es solo lo capturado. */
+/** The twin for deductions. There are no concepts with a quantity here, so it is only what is
+ *  captured. */
 export function addableDeductionConcepts(
   capture: PayrollMonthlyCapture,
   added: ReadonlySet<string>,
@@ -467,15 +470,15 @@ export function addableDeductionConcepts(
 }
 
 /**
- * Lo que ofrece el desplegable de una fila CAPTURADA: ella misma más los conceptos libres.
+ * What a CAPTURED row's dropdown offers: itself plus the free concepts.
  *
- * Es lo que convierte «Agregar ingreso» en una elección de verdad en vez de una fila impuesta:
- * la fila nace con un concepto y se cambia ahí mismo. El propio concepto encabeza la lista
- * porque es el valor seleccionado — sin él, el desplegable arrancaría mostrando otro y parecería
- * que la fila ya cambió sola.
+ * It is what turns «Agregar ingreso» into a real choice instead of an imposed row: the row is born
+ * with a concept and it is changed right there. The concept itself heads the list because it is the
+ * selected value — without it, the dropdown would start showing another one and it would look as
+ * though the row had already changed by itself.
  *
- * Los que ya están puestos no se ofrecen: dos filas no pueden ser el mismo concepto, porque
- * ambas escribirían el mismo campo de la captura y la segunda pisaría a la primera.
+ * The ones already in place are not offered: two rows cannot be the same concept, because both would
+ * write the same field of the capture and the second would overwrite the first.
  */
 export function swapOptionsFor<T extends IncomeConcept | DeductionConcept>(
   code: string,
@@ -495,19 +498,19 @@ export function swapOptionsFor<T extends IncomeConcept | DeductionConcept>(
 }
 
 /**
- * Lo que hay que escribir en la captura para que una fila de INGRESO cambie de concepto, o `null`
- * si el cambio no procede (alguno de los dos lo deriva la app sola).
+ * What has to be written into the capture for an INCOME row to change concept, or `null` if the
+ * change does not apply (either of the two is derived by the app on its own).
  *
- * El origen SIEMPRE se vacía —si no, la cifra contaría dos veces— y lo tecleado se lleva a la
- * fila nueva **solo cuando las dos hablan la misma unidad**:
+ * The source is ALWAYS emptied —otherwise the figure would count twice— and what was typed is carried
+ * to the new row **only when both speak the same unit**:
  *
- *   - dos filas capturadas mueven el IMPORTE: quien teclea 120 y se da cuenta de que era «Comisión
- *     fija» y no «Viáticos» espera corregir la fila, no volver a escribirla;
- *   - dos filas de horas extras mueven las HORAS, que es lo tecleado ahí: 5,5 horas mal
- *     clasificadas al 50 % son 5,5 horas al 100 %;
- *   - cruzando de familia no se lleva NADA, porque 200 dólares de anticipo no son 200 horas y
- *     cualquier conversión sería inventada. En la práctica no se pierde nada: el desplegable solo
- *     ofrece conceptos LIBRES, y una fila con cifra ya está puesta.
+ *   - two captured rows move the AMOUNT: whoever types 120 and realises it was «Comisión fija» and
+ *     not «Viáticos» expects to correct the row, not to write it again;
+ *   - two overtime rows move the HOURS, which is what is typed there: 5.5 hours misclassified at
+ *     50 % are 5.5 hours at 100 %;
+ *   - crossing families carries NOTHING, because 200 dollars of an advance are not 200 hours and any
+ *     conversion would be invented. In practice nothing is lost: the dropdown only offers FREE
+ *     concepts, and a row with a figure is already taken.
  */
 export function incomeSwapPatch(
   origin: IncomeConcept,
@@ -533,8 +536,9 @@ export function incomeSwapPatch(
   return { [originField]: 0, [targetField]: capture[originField] };
 }
 
-/** El gemelo para EGRESOS, que no tienen cantidad: siempre mueve el importe, dentro del objeto
- *  anidado `deductions`. `null` cuando alguno de los dos es el aporte al IESS, que deriva el motor. */
+/** The twin for DEDUCTIONS, which have no quantity: it always moves the amount, inside the nested
+ *  `deductions` object. `null` when either of the two is the IESS contribution, which the engine
+ *  derives. */
 export function deductionSwapPatch(
   origin: DeductionConcept,
   target: DeductionConcept,
@@ -552,7 +556,7 @@ export function deductionSwapPatch(
   };
 }
 
-/** El importe de un concepto de ingreso, venga del motor o de la captura. */
+/** An income concept's amount, whether it comes from the engine or from the capture. */
 export function incomeAmount(
   concept: IncomeConcept,
   computed: PayrollEmployeeComputation,
@@ -561,7 +565,7 @@ export function incomeAmount(
   return concept.kind === "calculado" ? computed[concept.field] : capture[concept.field];
 }
 
-/** El importe de un concepto de egreso, venga del motor o de la captura. */
+/** A deduction concept's amount, whether it comes from the engine or from the capture. */
 export function deductionAmount(
   concept: DeductionConcept,
   computed: PayrollEmployeeComputation,

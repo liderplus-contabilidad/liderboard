@@ -16,38 +16,38 @@ import { usePygAnalytics } from "./pyg-analytics-provider";
 import { usePygData } from "./pyg-data-provider";
 
 /**
- * «Predeterminados»: las lecturas que la firma presenta siempre, en UN botón que cuelga su galería.
+ * «Predeterminados»: the readings the firm always presents, in ONE button that hangs its gallery.
  *
- * Vive en la barra y no en la cabecera de su tarjeta —donde va todo control que lee una sola
- * tarjeta— porque no es una opción de dibujo: es la otra forma de decidir QUÉ se compara, la misma
- * pregunta que responde «Cuenta contable», y por eso son excluyentes y por eso deja chip. Pero se
- * separa de los cinco desplegables con una línea y se va al extremo derecho de la fila, porque
- * aquellos ACOTAN lo que ya hay en pantalla y estas lo SUSTITUYEN por otra lectura.
+ * It lives in the bar and not in its card's header —where every control read by a single card goes—
+ * because it is not a drawing option: it is the other way of deciding WHAT is compared, the same
+ * question «Cuenta contable» answers, and that is why they are mutually exclusive and why it leaves a
+ * chip. But it is separated from the five dropdowns by a rule and moves to the far right of the row,
+ * because those NARROW what is already on screen and these REPLACE it with another reading.
  *
- * Fue un interruptor por vista puesto en la propia barra, y el precio era que una vista no cabe en
- * su rótulo: lo único que decía qué iba a pasar al pulsar «Ventas» era un `title=` que solo existe
- * si dejas el ratón encima y esperas. En una tarjeta caben las tres cosas que hay que saber antes
- * de pulsar —el nombre, la pregunta que responde y qué filtros va a mover—, y esa tercera es la que
- * más falta hacía: estas vistas marcan centros, meses y frecuencia por su cuenta, y un botón que
- * mueve marcas que el usuario no puso, sin decirlo, se lee como un fallo.
+ * It used to be a per-view switch in the bar itself, and the price was that a view does not fit in
+ * its label: the only thing that said what would happen on pressing «Ventas» was a `title=` that only
+ * exists if you leave the mouse on it and wait. A card has room for the three things you need to know
+ * before pressing —the name, the question it answers and which filters it is going to move—, and that
+ * third one was the one most needed: these views mark centers, months and frequency on their own, and
+ * a button that moves marks the user did not make, without saying so, reads as a bug.
  *
- * La galería CUELGA DEL BOTÓN (`DropdownPanel`) y no se pone en medio de la pantalla. Fue una
- * ventana, y una ventana apaga el fondo y se planta en el centro: eso es lo correcto para algo que
- * se lee SOLO, y esto es exactamente lo contrario —se elige mirando lo que ya hay dibujado, que es
- * lo que la vista va a sustituir—. Anclada al botón, además, el panel dice de dónde salió y se
- * cierra donde se abrió, como los cinco desplegables de al lado.
+ * The gallery HANGS OFF THE BUTTON (`DropdownPanel`) and is not planted in the middle of the screen.
+ * It used to be a window, and a window dims the background and stands in the centre: that is right
+ * for something read ALONE, and this is exactly the opposite —it is chosen while looking at what is
+ * already drawn, which is what the view is going to replace—. Anchored to the button, besides, the
+ * panel says where it came from and closes where it opened, like the five dropdowns next to it.
  *
- * **Se rinde entero** cuando el plan del cliente abierto no admite ninguna vista —la misma regla
- * con la que «Centro de costo» desaparece en modo estado único—, porque un botón que abre una
- * galería vacía enseña a no pulsar el de al lado.
+ * **It renders nothing at all** when the open client's chart of accounts admits no view —the same
+ * rule by which «Centro de costo» disappears in single-statement mode—, because a button that opens
+ * an empty gallery teaches you not to press the one next to it.
  */
 export function PresetFilter() {
   const { filters, selectPreset, clearPreset } = usePygData();
   const { context } = usePygAnalytics();
 
   const source = activeSource(context);
-  // Qué vistas se ofrecen depende del PLAN abierto: «Ventas» necesita que declare líneas de
-  // hotelería y el anexo, que declare cuentas de gasto que repartir.
+  // Which views are on offer depends on the open CHART OF ACCOUNTS: «Ventas» needs it to declare
+  // hotel business lines and the annex needs it to declare expense accounts to break down.
   const presets = useMemo(() => availablePresets({ source }), [source]);
   if (presets.length === 0) {
     return null;
@@ -59,8 +59,8 @@ export function PresetFilter() {
     <div className="ml-auto flex items-center border-l border-border-soft pl-3">
       <Dropdown>
         <PresetTrigger active={active} onClear={clearPreset} />
-        {/* Al borde derecho de la barra: alineado a la izquierda se saldría de la ventana, y
-            `DropdownPanel` lo devolvería adentro sin que ya apuntara a su botón. */}
+        {/* At the bar's right edge: left-aligned it would fall off the window, and `DropdownPanel`
+            would push it back in without it pointing at its button any more. */}
         <DropdownPanel align="right" width={620}>
           <PresetGallery
             presets={presets}
@@ -75,24 +75,24 @@ export function PresetFilter() {
 }
 
 /**
- * El botón. Tiene TRES estados y no dos, que es lo que lo separa de los desplegables de al lado:
- * apagado se lee como uno más de la fila; abierto toma el `brand-soft` con el que todo control de
- * la barra dice «me estás usando»; y con una vista puesta se RELLENA de `brand`.
+ * The button. It has THREE states and not two, which is what separates it from the dropdowns next to
+ * it: switched off it reads as one more of the row; open it takes the `brand-soft` with which every
+ * control of the bar says «you are using me»; and with a view in place it is FILLED with `brand`.
  *
- * Ese relleno es la única cosa maciza de toda la barra, y es deliberado: una vista predeterminada
- * no acota lo que hay en pantalla, lo SUSTITUYE, así que mientras está encendida es el dato más
- * importante de la fila. Pintarlo como un filtro con marcas —el mismo `brand-soft` que llevan
- * «Año · 2026» o «Periodo · 3»— lo dejaba indistinguible de ellos justo cuando más falta hace
- * distinguirlo. Y el rótulo dice CUÁL está puesta («Ventas», no «Predeterminados»), como hace
- * «Año · 2026», para que la vista abierta se lea sin abrir nada.
+ * That fill is the only solid thing in the whole bar, and it is deliberate: a preset view does not
+ * narrow what is on screen, it REPLACES it, so while it is on it is the most important datum of the
+ * row. Painting it as a filter with marks —the same `brand-soft` «Año · 2026» or «Periodo · 3» carry—
+ * left it indistinguishable from them exactly when telling it apart matters most. And the label says
+ * WHICH one is in place («Ventas», not «Predeterminados»), as «Año · 2026» does, so the open view can
+ * be read without opening anything.
  *
- * Encendido son DOS botones dentro de la misma píldora, partidos por una divisoria: el rótulo abre
- * la galería y la **✕** quita la vista. Sin ella no había forma de apagarla a la vista: los botones
- * por vista de antes se apagaban pulsando el que estaba encendido, y al plegarlos en uno solo ese
- * gesto se perdió — quedaba el pie del panel y el chip de abajo, o sea dos sitios donde hay que
- * saber mirar. Es el mismo gesto que ya tienen los chips de la tira, que es donde el usuario ya
- * aprendió a quitar cosas. Son dos `<button>` hermanos y no uno dentro de otro, que no es HTML
- * válido y deja el clic de dentro sin forma de no disparar el de fuera.
+ * Switched on it is TWO buttons inside the same pill, split by a divider: the label opens the gallery
+ * and the **✕** removes the view. Without it there was no way to switch it off in plain sight: the
+ * old per-view buttons were switched off by pressing the one that was on, and folding them into one
+ * lost that gesture — what was left was the panel's footer and the chip below, that is, two places
+ * you have to know to look at. It is the same gesture the strip's chips already have, which is where
+ * the user already learned to remove things. They are two sibling `<button>`s and not one inside the
+ * other, which is not valid HTML and leaves the inner click with no way not to fire the outer one.
  */
 function PresetTrigger({
   active,
@@ -167,8 +167,9 @@ function PresetGallery({
             preset={preset}
             active={preset.id === activeId}
             onSelect={() => {
-              // Lo que la vista declara de sí misma viaja al proveedor desde aquí: él no importa
-              // de `charts/`, y quién siembra qué es de la vista, igual que `isAvailable`.
+              // What the view declares about itself travels to the provider from here: the provider
+              // does not import from `charts/`, and who seeds what belongs to the view, like
+              // `isAvailable`.
               onSelect(preset.id, {
                 seeds: preset.seeds,
                 frequency: preset.frequency,
@@ -202,7 +203,7 @@ function PresetGallery({
   );
 }
 
-/** Una vista: su forma, su nombre, la pregunta que responde y qué va a mover al encenderse. */
+/** A view: its shape, its name, the question it answers and what it will move on being switched on. */
 function PresetCard({
   preset,
   active,
@@ -218,8 +219,8 @@ function PresetCard({
     <button
       type="button"
       onClick={onSelect}
-      // Exactamente una puede estar puesta, así que la fila es de opción única y no una casilla:
-      // es el mismo papel que `DropdownChoice` dentro del `role="menu"` del panel.
+      // Exactly one can be in place, so the row is single-choice and not a checkbox: it is the same
+      // role as `DropdownChoice` inside the panel's `role="menu"`.
       role="menuitemradio"
       aria-checked={active}
       className={cn(
@@ -253,18 +254,19 @@ function PresetCard({
 }
 
 /**
- * El glifo de cada vista dice la FORMA de su lectura —barras contra reparto—, que es lo que separa
- * de un vistazo dos tarjetas que por lo demás son dos párrafos iguales. No dice cuáles son los
- * datos: es una miniatura fija y no una previa de las cifras del cliente, porque dibujarla de
- * verdad exigiría una consulta al motor por tarjeta solo para adornar un menú.
+ * Each view's glyph says the SHAPE of its reading —bars against a breakdown—, which is what tells at
+ * a glance two cards that are otherwise two identical paragraphs apart. It does not say what the data
+ * is: it is a fixed thumbnail and not a preview of the client's figures, because drawing it for real
+ * would take one query to the engine per card just to decorate a menu.
  *
- * Los tonos salen de `lib/charts/palette.ts` y no de un hex suelto — es la misma regla por la que
- * ningún builder escribe un color a mano—, y de los DOS sets que le corresponden: barras que
- * comparan entidades toman las ranuras de identidad, y un reparto toma el set cálido con el que se
- * pinta la composición. Así el glifo se parece a lo que sale al pulsarlo.
+ * The hues come from `lib/charts/palette.ts` and not from a loose hex — the same rule by which no
+ * builder writes a colour by hand—, and from the TWO sets that correspond to it: bars that compare
+ * entities take the identity slots, and a breakdown takes the warm set the composition is painted
+ * with. That way the glyph looks like what comes out on pressing it.
  *
- * Vive aquí y no en el catálogo porque `lib/` no importa el renderizador, y cae en el genérico para
- * un id que no conozca, de modo que añadir una vista sigue siendo una entrada en `preset-views.ts`.
+ * It lives here and not in the catalogue because `lib/` does not import the renderer, and it falls
+ * back to the generic one for an id it does not know, so adding a view is still one entry in
+ * `preset-views.ts`.
  */
 const GLYPH_SIZE = 22;
 
@@ -289,9 +291,8 @@ function BarsGlyph() {
 }
 
 function PieGlyph() {
-  // Un disco dibujado con el trazo de un círculo: `r` a la mitad del grosor lo rellena entero, y
-  // cada porción es un tramo del `dasharray`. Girado un cuarto para que empiece arriba, como una
-  // tarta de verdad.
+  // A disc drawn with a circle's stroke: `r` at half the thickness fills it entirely, and each slice
+  // is a segment of the `dasharray`. Rotated a quarter turn so it starts at the top, like a real pie.
   const shares = [0.45, 0.3, 0.25];
   const radius = 5.5;
   const circumference = 2 * Math.PI * radius;

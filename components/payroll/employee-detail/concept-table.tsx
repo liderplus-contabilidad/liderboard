@@ -36,22 +36,21 @@ import type {
   PayrollMonthlyCapture,
 } from "@/lib/payroll/types";
 
-/** Un conjunto vacío estable: recrearlo en cada render rompería los `useMemo` de abajo. */
+/** A stable empty set: recreating it on every render would break the `useMemo`s below. */
 const EMPTY_ADDED: ReadonlySet<string> = new Set();
 
-/** Lo que la tabla de INGRESOS necesita para dibujar y editar los conceptos del período. Va en un
- *  objeto y no en cinco props sueltas para que la tabla de egresos, que no los tiene, no cargue
- *  con ellas. */
+/** What the INCOME table needs to draw and edit the período's concepts. It travels in an object and
+ *  not in five loose props so the deductions table, which has none of them, does not carry them. */
 export interface ExtraConceptControls {
-  /** Las filas de bono de ESTE empleado, con su rótulo, su clase y su importe dentro. */
+  /** THIS employee's bonus rows, with their label, their class and their amount inside. */
   rows: readonly PayrollExtraRow[];
-  /** Los topes superados, ya calculados por la capa pura. Vacío es «todo dentro». */
+  /** The caps that were exceeded, already computed by the pure layer. Empty is «all within». */
   breaches: readonly ExtraCapBreach[];
   onAdd: (kind: PayrollExtraConceptKind) => void;
   onRename: (rowId: string, label: string) => void;
   onRemove: (rowId: string) => void;
   onAmountChange: (rowId: string, value: number) => void;
-  /** El último rechazo de un nombre (repetido, vacío, demasiado largo), para poder decirlo. */
+  /** The last rejection of a name (duplicate, empty, too long), so it can be said out loud. */
   error: string | null;
 }
 
@@ -59,48 +58,48 @@ interface ConceptTableBaseProps {
   computed: PayrollEmployeeComputation;
   capture: PayrollMonthlyCapture;
   /**
-   * El total del pie. Llega del MOTOR (`grossIncome` / `totalDeductions`) y nunca se suma aquí, y
-   * eso no es purismo: en ingresos la suma de las filas y el total son distintos A PROPÓSITO —
-   * `I-02`…`I-04` enseñan el valor entero de las horas trabajadas mientras el total solo contiene
-   * lo que Gerencia aprobó (`overtimeTotal`). Sumar la columna daría una cifra que no está en
-   * ningún sitio del rol.
+   * The footer's total. It arrives from the ENGINE (`grossIncome` / `totalDeductions`) and is never
+   * summed here, and that is not purism: on the income side the sum of the rows and the total differ
+   * ON PURPOSE — `I-02`…`I-04` show the whole value of the hours worked while the total only holds
+   * what Gerencia approved (`overtimeTotal`). Summing the column would give a figure that is nowhere
+   * in the rol.
    */
   total: number;
   /**
-   * Los códigos que el usuario añadió con «Agregar …». Un capturado en cero solo se ve si está
-   * aquí — sin esta memoria, la fila que se acaba de crear desaparecería antes de teclearla.
+   * The codes the user added with «Agregar …». A captured concept at zero is only visible if it is
+   * here — without this memory, the row just created would disappear before it could be typed into.
    */
   added?: ReadonlySet<string>;
-  /** Añade el concepto capturado que se eligió en el menú. */
+  /** Adds the captured concept picked in the menu. */
   onAdd: (code: string) => void;
   /**
-   * Le pone a una fila del catálogo el nombre que este empleado quiere. Un nombre VACÍO la
-   * devuelve al rótulo del libro.
+   * Gives a catalogue row the name this employee wants. An EMPTY name returns it to the book's
+   * label.
    */
   onRename: (code: string, label: string) => void;
   /**
-   * Quita una fila CAPTURADA del rol de este empleado: vacía lo tecleado y la esconde.
+   * Removes a CAPTURED row from this employee's rol: it empties what was typed and hides it.
    *
-   * No «borra» nada, y por eso no dice borrar: los conceptos del catálogo son del libro del
-   * contador y existen siempre — lo que se quita es su fila de ESTE empleado, que es justo lo que
-   * «Agregar ingreso» había puesto. Un concepto extra sí se borra de verdad, y por eso su papelera
-   * dice otra cosa.
+   * It «deletes» nothing, and that is why it does not say delete: the catalogue's concepts belong to
+   * the accountant's book and always exist — what is removed is THIS employee's row, which is
+   * exactly what «Agregar ingreso» had put there. An extra concept really is deleted, and that is
+   * why its trash can says something else.
    */
   onRemove: (code: string) => void;
-  /** Apaga los capturados: período cerrado, o mientras se guarda. */
+  /** Switches the captured ones off: closed período, or while saving. */
   readOnly?: boolean;
 }
 
 export type ConceptTableProps =
   | (ConceptTableBaseProps & {
       kind: "ingresos";
-      /** Solo se llama con conceptos `capturado` — los `calculado` no se editan. */
+      /** Only called with `capturado` concepts — `calculado` ones are not edited. */
       onAmountChange: (concept: IncomeConcept, value: number) => void;
-      /** La CANTIDAD de horas de las tres clases de extra, que sí se teclea aunque su valor sea
-       *  derivado. */
+      /** The COUNT of hours of the three overtime classes, which is typed even though its value is
+       *  derived. */
       onHoursChange: (field: OvertimeHoursField, value: number) => void;
-      /** Los conceptos que el PERÍODO declara por su cuenta. Ausentes en una tabla de solo
-       *  lectura o antes de que el período exista. */
+      /** The concepts the PERÍODO declares on its own. Absent in a read-only table or before the
+       *  período exists. */
       extra?: ExtraConceptControls;
     })
   | (ConceptTableBaseProps & {
@@ -109,23 +108,23 @@ export type ConceptTableProps =
     });
 
 /**
- * La tabla de conceptos del rol — la MISMA para ingresos y egresos, porque el comprobante del
- * contador las imprime iguales salvo por la columna de CANTIDAD, que solo los ingresos tienen.
+ * The rol's concept table — the SAME one for income and deductions, because the accountant's payslip
+ * prints them alike except for the CANTIDAD column, which only income has.
  *
- * Ningún rótulo se escribe aquí: recorre `INCOME_CONCEPTS`/`DEDUCTION_CONCEPTS` de
- * `@/lib/payroll/concepts`, que es donde el catálogo está declarado UNA vez junto a su columna del
- * libro. Un rótulo tecleado en esta pantalla podría discrepar del que usa el parser y ningún test
- * de cifras lo notaría, porque las cifras seguirían sumando igual. Por lo mismo el orden es el del
- * catálogo, que es el del libro y el del comprobante impreso: la fila 3 de la pantalla es la fila 3
- * del rol.
+ * No label is written here: it walks `INCOME_CONCEPTS`/`DEDUCTION_CONCEPTS` from
+ * `@/lib/payroll/concepts`, which is where the catalogue is declared ONCE next to its column of the
+ * book. A label typed on this screen could disagree with the one the parser uses and no test of
+ * figures would notice, because the figures would keep adding up the same. For the same reason the
+ * order is the catalogue's, which is the book's and the printed payslip's: row 3 on screen is row 3
+ * of the rol.
  *
- * Un concepto `calculado` va en gris y no se edita; uno `capturado` es un campo. Es la misma
- * gramática de la rejilla de período, un poco más arriba.
+ * A `calculado` concept goes grey and is not edited; a `capturado` one is a field. It is the same
+ * grammar as the período grid, a little further up.
  */
 export function ConceptTable(props: ConceptTableProps) {
-  // Se reparte en dos cuerpos en vez de estrechar dentro de un `useCallback`: los despachadores de
-  // fila tienen que ser ESTABLES para que las filas memoizadas sirvan de algo, y una unión
-  // estrechada dentro del callback obliga a un cast o a una dependencia que cambia cada render.
+  // Split into two bodies instead of narrowing inside a `useCallback`: the row dispatchers have to
+  // be STABLE for the memoized rows to be worth anything, and a union narrowed inside the callback
+  // forces either a cast or a dependency that changes on every render.
   return props.kind === "ingresos" ? <IncomeTable {...props} /> : <DeductionTable {...props} />;
 }
 
@@ -209,8 +208,8 @@ function IncomeTable({
             disabled={readOnly}
             onAmount={handleAmount}
             onHours={handleHours}
-            // Solo lo que se TECLEA se puede quitar: un calculado no tiene fila que vaciar, la
-            // app lo deriva y volvería en el siguiente render.
+            // Only what is TYPED can be removed: a calculated concept has no row to empty, the app
+            // derives it and it would be back on the next render.
             onRemove={concept.kind === "capturado" || hoursField ? onRemove : undefined}
           />
         );
@@ -270,17 +269,17 @@ function DeductionTable({
   );
 }
 
-/** Estable por definición: la tabla de egresos no tiene columna de cantidad que despachar. */
+/** Stable by definition: the deductions table has no quantity column to dispatch. */
 function noop(): void {}
 
-/** Los anchos exactos del diseño. La tabla va `table-fixed` con un `<colgroup>` para que los
- *  declare UNA vez y no dependan de lo que mida el texto de cada fila: la columna de CANTIDAD y la
- *  de VALOR tienen que caer a plomo entre las dos tablas, que se leen una al lado de la otra. */
+/** The design's exact widths. The table is `table-fixed` with a `<colgroup>` so it declares them
+ *  ONCE and they do not depend on how wide each row's text measures: the CANTIDAD column and the
+ *  VALOR one have to line up plumb between the two tables, which are read side by side. */
 const CODE_WIDTH = 96;
 const QUANTITY_WIDTH = 116;
 const VALUE_WIDTH = 150;
-/** La quinta columna, vacía: el hueco donde vive la acción de fila. Reservarlo desde ahora es lo
- *  que evita que las columnas se corran el día que aparezca. */
+/** The fifth column, empty: the gap where the row action lives. Reserving it from now on is what
+ *  keeps the columns from shifting the day it appears. */
 const ACTION_WIDTH = 40;
 const CONCEPT_MIN_WIDTH = 240;
 
@@ -302,13 +301,13 @@ function ConceptSection({
   total: number;
   showQuantity: boolean;
   addLabel: string;
-  /** Los conceptos del catálogo que este empleado todavía no usa. Vacío = están todos puestos. */
+  /** The catalogue concepts this employee does not use yet. Empty = they are all in place. */
   addable: readonly { code: string; label: string }[];
   onAdd: (code: string) => void;
-  /** Declara una fila de BONO. Ausente donde no las hay (egresos, solo lectura). */
+  /** Declares a BONUS row. Absent where there are none (deductions, read-only). */
   onAddExtra?: (kind: PayrollExtraConceptKind) => void;
   footnote?: ReactNode;
-  /** Filas que van DESPUÉS del catálogo: las de bono que este empleado declara. */
+  /** Rows that come AFTER the catalogue: the bonus rows this employee declares. */
   appended?: ReactNode;
   children: ReactNode;
 }) {
@@ -323,9 +322,9 @@ function ConceptSection({
     <section>
       <div className="mb-2.5 flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-ink">{title}</h3>
-        {/* La leyenda del gris. Va sobre cada tabla y no una vez por pantalla porque cada tabla se
-            lee sola: quien mira solo los egresos también necesita saber por qué el aporte al IESS
-            no se deja teclear. */}
+        {/* The legend for the grey. It goes over each table and not once per screen because each
+            table is read on its own: whoever looks only at the deductions also needs to know why the
+            IESS contribution cannot be typed into. */}
         <p className="text-[11.5px] text-faint">Los valores en gris se calculan solos</p>
       </div>
 
@@ -361,8 +360,8 @@ function ConceptSection({
           {appended}
         </tbody>
         <tfoot>
-          {/* El mismo fondo que la cabecera y DENTRO del borde de la tabla: el total cierra la
-              rejilla, no es una línea aparte que casualmente esté debajo. */}
+          {/* The same fill as the header and INSIDE the table's border: the total closes the grid,
+              it is not a separate line that happens to sit below it. */}
           <GridRow className="bg-surface-header">
             <Cell />
             <Cell>
@@ -388,29 +387,29 @@ function ConceptSection({
 }
 
 interface ConceptRowProps {
-  /** El sitio del concepto en su catálogo. Viaja en vez de una función por fila para que el
-   *  despachador del padre pueda ser estable y `memo` sirva de algo. */
+  /** The concept's place in its catalogue. It travels instead of a per-row function so the parent's
+   *  dispatcher can be stable and `memo` can be worth something. */
   index: number;
   code: string;
   tone: "ingreso" | "egreso";
   label: string;
   amount: number;
-  /** El importe se teclea (concepto capturado) en vez de derivarse. */
+  /** The amount is typed (captured concept) instead of being derived. */
   amountEditable: boolean;
-  /** `null` = este concepto no se mide en horas. */
+  /** `null` = this concept is not measured in hours. */
   hours: number | null;
   showQuantity: boolean;
   disabled: boolean;
-  /** Si esta fila admite nombre propio: solo las que teclean su importe. */
+  /** Whether this row admits a name of its own: only the ones that type their amount. */
   renameable: boolean;
   onAmount: (index: number, value: number) => void;
   onHours: (index: number, value: number) => void;
   onRename: (code: string, label: string) => void;
-  /** Ausente en los calculados: no hay fila que quitar cuando la app la deriva. */
+  /** Absent on the calculated ones: there is no row to remove when the app derives it. */
   onRemove?: (code: string) => void;
 }
 
-/** El rótulo de una columna: micro-mayúsculas, la convención de cabecera de toda la app. */
+/** A column's label: micro-uppercase, the header convention of the whole app. */
 function ColumnLabel({ children }: { children: ReactNode }) {
   return (
     <span className="text-[10px] font-bold uppercase tracking-[0.6px] text-faint">{children}</span>
@@ -434,16 +433,16 @@ function ConceptRowComponent({
   onRemove,
 }: ConceptRowProps) {
   return (
-    // `group` es lo que deja que la papelera de la quinta columna aparezca al pasar por la FILA y
-    // no solo por su propia celda, que es un blanco de 40 px.
+    // `group` is what lets the fifth column's trash can appear on hovering the ROW and not only its
+    // own cell, which is 40 px of blank space.
     <GridRow className="group">
       <Cell>
         <ConceptCode code={code} tone={tone} />
       </Cell>
       <Cell>
-        {/* El concepto se eligió al AGREGAR la fila, así que aquí no queda nada que elegir y la
-            celda es el nombre. Un calculado va en texto plano: su rótulo es del libro —o una tasa
-            de ley— y no lo escribe nadie. */}
+        {/* The concept was picked when the row was ADDED, so there is nothing left to pick here and
+            the cell is the name. A calculated one goes in plain text: its label belongs to the book
+            —or to a statutory rate— and nobody writes it. */}
         {renameable ? (
           <RowNameField
             value={label}
@@ -458,10 +457,10 @@ function ConceptRowComponent({
 
       {showQuantity &&
         (hours !== null ? (
-          // HORAS, no dinero. La unidad se rotula junto al campo porque esta columna lleva las
-          // dos cosas —horas en las extras, importe en los capturados— y sin decirlo se teclean
-          // horas donde se creía escribir dólares: 4.654.651 «horas» pasan por un importe
-          // plausible y salen convertidas en catorce millones sin que nada chirríe.
+          // HOURS, not money. The unit is labelled next to the field because this column carries
+          // both things —hours on the overtime rows, an amount on the captured ones— and without
+          // saying so hours get typed where dollars were meant: 4,654,651 «hours» pass for a
+          // plausible amount and come out converted into fourteen million without anything jarring.
           <NumberFieldCell
             value={hours === 0 ? null : hours}
             disabled={disabled}
@@ -471,8 +470,9 @@ function ConceptRowComponent({
             onCommit={(value) => onHours(index, value)}
           />
         ) : amountEditable ? (
-          // Lo que se teclea de un capturado ES su importe, y va aquí y no en VALOR: toda la
-          // tabla se lee igual, izquierda lo que escribes y derecha lo que vale.
+          // What is typed into a captured concept IS its amount, and it goes here and not in VALOR:
+          // the whole table reads alike, on the left what you write and on the right what it is
+          // worth.
           <NumberFieldCell
             value={amount === 0 ? null : amount}
             disabled={disabled}
@@ -487,9 +487,9 @@ function ConceptRowComponent({
           </Cell>
         ))}
 
-      {/* VALOR es SIEMPRE la columna gris: lo que el concepto vale, con símbolo, se teclee o se
-          derive. Que el gris signifique «esto no se edita aquí» sin excepciones es lo que hace
-          que la leyenda de la cabecera sea cierta. */}
+      {/* VALOR is ALWAYS the grey column: what the concept is worth, with its symbol, whether typed
+          or derived. That the grey means «this is not edited here» without exceptions is what makes
+          the header's legend true. */}
       <Cell numeric className="bg-surface-calc">
         <span className="font-mono text-muted">{formatCurrencyOrDash(amount)}</span>
       </Cell>
@@ -508,8 +508,8 @@ function ConceptRowComponent({
 }
 
 /**
- * La papelera de una fila. Aparece al pasar por encima y no siempre: veintiséis papeleras
- * encendidas a la vez compiten con las cifras, que es lo que la tabla existe para enseñar.
+ * A row's trash can. It appears on hover and not always: twenty-six trash cans lit at once compete
+ * with the figures, which is what the table exists to show.
  */
 function RowAction({
   label,
@@ -533,16 +533,16 @@ function RowAction({
   );
 }
 
-/** Las dos tablas juntas son 26 filas que se repintan con cada tecla, porque el motor deriva sus
- *  veinte columnas de nuevo; memoizada con `code` de key, igual que `EmployeeRow`. */
+/** The two tables together are 26 rows that repaint with every keystroke, because the engine derives
+ *  its twenty columns again; memoized with `code` as the key, like `EmployeeRow`. */
 const ConceptRow = memo(ConceptRowComponent);
 
 /**
- * El código en una píldora teñida por su clase — verde el ingreso, ámbar el egreso —, que es lo que
- * deja reconocer de un vistazo en qué tabla se está mirando cuando las dos se leen en paralelo.
+ * The code in a pill tinted by its class — green for income, amber for a deduction —, which is what
+ * makes it possible to tell at a glance which table is being read when the two are read in parallel.
  *
- * No es un `Badge`: aquel es `rounded-full` y en versalitas, la forma de un ESTADO. Esto es un
- * código de cuenta, y en esta app un código va en mono y en una caja de esquina viva.
+ * It is not a `Badge`: that one is `rounded-full` and in small caps, the shape of a STATE. This is an
+ * account code, and in this app a code goes in mono and in a sharp-cornered box.
  */
 function ConceptCode({ code, tone }: { code: string; tone: "ingreso" | "egreso" }) {
   return (
@@ -558,9 +558,9 @@ function ConceptCode({ code, tone }: { code: string; tone: "ingreso" | "egreso" 
 }
 
 /**
- * Un `<td>` cuya área entera es el campo. El `<td>` se escribe a mano en vez de pasarle `p-0` a
- * `Cell`: aquel ya trae `px-3.5 py-2`, y quién gana entre `p-0` y `px-3.5` depende del orden en que
- * Tailwind emite las reglas, no del orden del string.
+ * A `<td>` whose entire area is the field. The `<td>` is written by hand instead of passing `p-0` to
+ * `Cell`: that one already carries `px-3.5 py-2`, and which of `p-0` and `px-3.5` wins depends on the
+ * order in which Tailwind emits the rules, not on the order of the string.
  */
 function NumberFieldCell({
   value,
@@ -570,23 +570,23 @@ function NumberFieldCell({
   unit,
   onCommit,
 }: {
-  /** `null` se siembra VACÍO: es lo que distingue «no se trabajaron horas extras» de un cero
-   *  tecleado a mano. Lo que vuelve por `onCommit` sí es siempre un número. */
+  /** `null` is seeded EMPTY: it is what tells «no overtime hours were worked» from a zero typed by
+   *  hand. What comes back through `onCommit` is always a number. */
   value: number | null;
   disabled: boolean;
   ariaLabel: string;
   format: "amount" | "plain";
-  /** Qué se escribe en esta casilla: «h» de horas, «$» de importe. Va PEGADO al campo y no en la
-   *  cabecera porque la columna lleva las dos cosas según la fila. */
+  /** What is written in this box: «h» for hours, «$» for an amount. It goes NEXT TO the field and not
+   *  in the header because the column carries both things depending on the row. */
   unit?: string;
   onCommit: (value: number) => void;
 }) {
   return (
     <td className="border-b border-border-soft px-2 py-1.5">
-      {/* La caja SE VE aunque no tenga el foco. Un input sin borde en una tabla llena de cifras
-          grises es indistinguible de una celda calculada, y la pantalla deja de decir dónde se
-          puede escribir — que es la única pregunta que alguien se hace al abrirla. Por eso el
-          recuadro es la afordancia y el foco solo la refuerza. */}
+      {/* The box IS VISIBLE even without focus. An input with no border in a table full of grey
+          figures is indistinguishable from a computed cell, and the screen stops saying where you
+          can write — which is the only question anyone asks on opening it. That is why the outline
+          is the affordance and focus only reinforces it. */}
       <span
         className={cn(
           "ml-auto flex max-w-[130px] items-center rounded-[7px] border px-2 py-1.5 transition-colors",
@@ -610,15 +610,15 @@ function NumberFieldCell({
 }
 
 /**
- * El botón de ancho completo y borde discontinuo bajo cada tabla. No usa `Button` a propósito: esa
- * primitiva son tres tallas de control de barra con su propio `border`/`bg`, y forzarle el trazo
- * discontinuo y otro color de borde sería competir con ella por las mismas propiedades, que es lo
- * que resuelve el orden de la hoja de estilos y no el del string.
+ * The full-width, dashed-border button under each table. It deliberately does not use `Button`: that
+ * primitive is three sizes of bar control with its own `border`/`bg`, and forcing a dashed stroke and
+ * another border colour onto it would compete with it for the same properties, which is settled by
+ * the order of the stylesheet and not the order of the string.
  */
 const DASHED_ADD_BUTTON =
   "mt-2.5 flex w-full items-center justify-center gap-2 rounded-[10px] border border-dashed border-chip-border py-[11px] text-[12.5px] font-semibold text-brand transition-colors hover:border-brand hover:bg-brand-soft";
 
-/** El mismo botón, cuando además abre un menú: solo cambia quién le da el `ref` y el click. */
+/** The same button, when it also opens a menu: only who gives it the `ref` and the click changes. */
 function AddConceptTrigger({ label }: { label: string }) {
   const { open, setOpen, triggerRef } = useDropdown();
   return (
@@ -637,15 +637,15 @@ function AddConceptTrigger({ label }: { label: string }) {
 }
 
 /**
- * SIEMPRE un menú, en las dos tablas.
+ * ALWAYS a menu, in both tables.
  *
- * Antes metía el primer concepto libre sin preguntar y la fila nacía con un desplegable para
- * corregirlo. Eligiendo aquí, ese desplegable se queda sin trabajo y la celda del rótulo queda
- * libre para escribir el nombre — que es lo que hace que TODAS las filas se lean igual, incluida
- * la de bono, que era la única con esa forma.
+ * It used to insert the first free concept without asking and the row was born with a dropdown to
+ * correct it. Picking here, that dropdown is left with no work and the label cell is free for writing
+ * the name — which is what makes ALL rows read alike, the bonus one included, which was the only one
+ * with that shape.
  *
- * Que las dos tablas usen el mismo gesto no es simetría por gusto: se leen una al lado de la otra,
- * y que una eligiera y la otra impusiera diría que hacen cosas distintas.
+ * That both tables use the same gesture is not symmetry for its own sake: they are read side by side,
+ * and one picking while the other imposed would say they do different things.
  */
 function AddConceptButton({
   label,
@@ -658,8 +658,8 @@ function AddConceptButton({
   onAdd: (code: string) => void;
   onAddExtra?: (kind: PayrollExtraConceptKind) => void;
 }) {
-  // Sin conceptos libres NI la posibilidad de declarar un bono no se rinde: un botón que no puede
-  // hacer nada estorba.
+  // With no free concepts NOR the possibility of declaring a bonus it does not render: a button that
+  // can do nothing is in the way.
   if (addable.length === 0 && !onAddExtra) {
     return null;
   }
@@ -668,10 +668,10 @@ function AddConceptButton({
     <Dropdown className="w-full">
       <AddConceptTrigger label={label} />
       <DropdownPanel width={300}>
-        {/* UNA sola lista, y los bonos dentro de ella. Estuvieron apartados bajo una línea fija al
-            pie del panel, y eso fallaba de las dos maneras: el usuario tenía que mirar en dos
-            sitios lo que es una única pregunta —qué fila agrego—, y el bloque fijo se quedaba
-            encima de la lista al hacer scroll, tapando el concepto que quedara debajo. */}
+        {/* ONE single list, with the bonuses inside it. They were set apart under a rule fixed at the
+            foot of the panel, and that failed in both ways: the user had to look in two places for
+            what is a single question —which row do I add—, and the fixed block stayed on top of the
+            list while scrolling, covering whichever concept fell underneath. */}
         <div className="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto">
           {addable.map((concept) => (
             <AddMenuItem
@@ -686,9 +686,9 @@ function AddConceptButton({
               <AddMenuItem
                 key={kind}
                 title={EXTRA_CONCEPT_KIND_LABEL[kind]}
-                // Donde un concepto del libro pone su código va, aquí, lo único que separa a los
-                // dos bonos: la clase se elige aquí porque después no se puede leer en la fila —el
-                // rótulo lo escribe el usuario—. Corto para que ocupe un renglón como los demás.
+                // Where a concept of the book puts its code goes, here, the only thing that separates
+                // the two bonuses: the class is picked here because afterwards it cannot be read off
+                // the row —the user writes the label—. Short so it takes one line like the rest.
                 hint={kind === "aportable" ? "Aporta al IESS" : "No aporta al IESS"}
                 onSelect={() => onAddExtra(kind)}
               />
@@ -725,11 +725,11 @@ function AddMenuItem({
 }
 
 /**
- * El campo del nombre de una fila — el mismo para una del catálogo y una de bono, porque después
- * de este cambio son la misma cosa: una fila con rótulo propio.
+ * A row's name field — the same one for a catalogue row and a bonus row, because after this change
+ * they are the same thing: a row with a label of its own.
  *
- * Borrador local: el rótulo se persiste al SALIR del campo, no en cada tecla — escribir
- * «Movilización» dispararía trece escrituras y trece relecturas de Dexie.
+ * Local draft: the label is persisted on LEAVING the field, not on every keystroke — typing
+ * «Movilización» would fire thirteen writes and thirteen re-reads of Dexie.
  */
 function RowNameField({
   value,
@@ -766,13 +766,13 @@ function RowNameField({
 }
 
 /**
- * Una fila de BONO: la clase en la píldora, el nombre EDITABLE en la columna Concepto y su importe
- * en Cantidad. Es la misma forma que una fila del catálogo — píldora, nombre, importe, valor,
- * papelera —, que es justamente lo que este cambio buscaba.
+ * A BONUS row: the class in the pill, the EDITABLE name in the Concepto column and its amount in
+ * Cantidad. It is the same shape as a catalogue row — pill, name, amount, value, trash can —, which
+ * is exactly what this change was after.
  *
- * La CLASE va en la píldora y no se cambia: cambiarla movería el importe entre bases y con él el
- * aporte al IESS y los décimos, sin que nada en esta fila lo enseñe. Para cambiarla se quita la
- * fila y se agrega la de la otra clase.
+ * The CLASS goes in the pill and is not changed: changing it would move the amount between bases and
+ * with it the IESS contribution and the décimos, without anything in this row showing it. To change
+ * it the row is removed and the one of the other class is added.
  */
 function ExtraConceptRowComponent({
   row,
@@ -790,10 +790,10 @@ function ExtraConceptRowComponent({
   return (
     <GridRow className="group">
       <Cell>
-        {/* La columna Código son 96 px menos el padding de la celda: cabe una píldora corta y no
-            «NO APORT.», que se parte en dos líneas y estira la fila por encima de las demás. Lo
-            que va aquí es la CLASE de fila —un bono—, y CUÁL de las dos clases se lee al lado del
-            nombre, en la columna elástica, donde además está lo que esa clase califica. */}
+        {/* The Código column is 96 px minus the cell's padding: a short pill fits and «NO APORT.»
+            does not, which breaks onto two lines and stretches the row above the others. What goes
+            here is the row's CLASS —a bonus—, and WHICH of the two classes is read next to the name,
+            in the elastic column, where what that class qualifies also is. */}
         <ConceptCode code="BONO" tone="ingreso" />
       </Cell>
       <Cell>
@@ -804,8 +804,8 @@ function ExtraConceptRowComponent({
             ariaLabel={`Nombre del ${EXTRA_CONCEPT_KIND_LABEL[row.kind].toLowerCase()}`}
             onCommit={(next) => onRename(row.id, next)}
           />
-          {/* En versalitas y no en píldora: una segunda píldora en la misma fila competiría con
-              la del código, y esto no es un código sino una propiedad del concepto. */}
+          {/* In small caps and not in a pill: a second pill on the same row would compete with the
+              code's, and this is not a code but a property of the concept. */}
           <span className="shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.5px] text-faint">
             {EXTRA_CONCEPT_KIND_SHORT[row.kind]}
           </span>
@@ -838,8 +838,9 @@ function ExtraConceptRowComponent({
 const ExtraConceptRow = memo(ExtraConceptRowComponent);
 
 /**
- * El aviso de tope. AVISA y no bloquea: la app reproduce lo que la firma decide —`approvedOvertime`
- * ya se teclea sin validar— y una liquidación o un acuerdo puntual no puede quedar bloqueado.
+ * The cap notice. It WARNS and does not block: the app reproduces what the firm decides
+ * —`approvedOvertime` is already typed without validation— and a settlement or a one-off agreement
+ * cannot end up blocked.
  */
 function ExtraCapNotice({
   breaches,
@@ -880,9 +881,9 @@ function ExtraCapNotice({
 }
 
 /**
- * Lo que Gerencia aprobó recorta lo que SUMA, no lo que se muestra: `I-02`…`I-04` siguen enseñando
- * el valor entero de las horas trabajadas. Sin esta línea la columna de ingresos no cuadra con su
- * propio total y la tabla parece rota.
+ * What Gerencia approved trims what ADDS UP, not what is shown: `I-02`…`I-04` still show the whole
+ * value of the hours worked. Without this line the income column does not square with its own total
+ * and the table looks broken.
  */
 function OvertimeFootnote({
   computed,

@@ -1,31 +1,31 @@
 /**
- * DÓNDE CAE CADA TEXTO DEL COMPROBANTE — puro, y por eso testeable.
+ * WHERE EACH TEXT OF THE PAYSLIP FALLS — pure, and therefore testable.
  *
- * Recibe un `PayslipDocument` y devuelve rellenos, reglas y cajas colocadas. `render.ts` los dibuja
- * sin decidir nada, que es lo que permite afirmar aquí —sin generar un PDF— que ninguna caja se sale
- * de la hoja y que el importe más largo cabe en su columna.
+ * It receives a `PayslipDocument` and returns fills, rules and placed boxes. `render.ts` draws them
+ * without deciding anything, which is what allows asserting here —without generating a PDF— that no
+ * box falls off the page and that the longest amount fits in its column.
  *
- * **Las proporciones son las del Excel; el tamaño no.** El bloque original mide 355 px (`B`–`G` a
- * 96 dpi = 266 pt): las columnas `H` e `I` que el `Print_Area` incluye son el CANAL entre las dos
- * copias que el contador imprime lado a lado, y no llevan nada. 266 pt en una A4 de 595 es menos
- * de la mitad de la hoja, y a esa escala el rótulo más largo —`PRESTAMOS QUIROGRAFARIOS E
- * HIPOTECARIOS`, 24.5 em de Helvetica— pediría un cuerpo de 6 pt. Así que se conserva la razón
- * entre las tres columnas (163 : 84 : 108) estirada al ancho útil, y la TIPOGRAFÍA no se escala
- * con ella: escalarla 1.82× daría 18 pt y un comprobante que parece un cartel.
+ * **The proportions are the Excel's; the size is not.** The original block measures 355 px (`B`–`G`
+ * at 96 dpi = 266 pt): the `H` and `I` columns the `Print_Area` includes are the CHANNEL between the
+ * two copies the accountant prints side by side, and they carry nothing. 266 pt on a 595 A4 is less
+ * than half the page, and at that scale the longest label —`PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS`,
+ * 24.5 em of Helvetica— would ask for a 6 pt size. So the ratio between the three columns
+ * (163 : 84 : 108) is kept, stretched to the usable width, and the TYPOGRAPHY is not scaled with it:
+ * scaling it 1.82× would give 18 pt and a payslip that looks like a poster.
  *
- * **El rótulo se extiende hasta donde el Excel lo deja extenderse.** En la hoja, un rótulo largo
- * desborda hacia las celdas vacías de su derecha — por eso los 39 caracteres de `PRESTAMOS
- * QUIROGRAFARIOS E HIPOTECARIOS` caben en una columna de 122 pt. Solo cinco filas tienen algo en
- * `Cantidad` (las tres de horas extras y las dos marcadas `(*)`) y las cinco tienen rótulo corto.
- * Aquí eso se escribe como REGLA en vez de heredarse del accidente de qué celdas quedaron vacías:
- * una fila con `Cantidad` ajusta su rótulo al inicio de esa columna, una sin ella llega hasta el
- * inicio de `Valores`.
+ * **The label extends as far as the Excel lets it extend.** On the sheet, a long label overflows into
+ * the empty cells to its right — that is why the 39 characters of `PRESTAMOS QUIROGRAFARIOS E
+ * HIPOTECARIOS` fit in a 122 pt column. Only five rows have anything in `Cantidad` (the three
+ * overtime ones and the two marked `(*)`) and all five have a short label. Here that is written as a
+ * RULE instead of being inherited from the accident of which cells happened to be empty: a row with
+ * `Cantidad` fits its label up to the start of that column, one without it reaches the start of
+ * `Valores`.
  *
- * **La jerarquía es del DOCUMENTO, no del Excel**, y es el punto donde este comprobante se aparta
- * del libro a propósito. La hoja es una rejilla de celdas sin más; aquí hay cinco bloques con peso
- * distinto —encabezado, identidad, las dos secciones y el líquido— para que se lea de un vistazo.
- * Los colores no son inventados: salen de `palette.ts`, y los dos que mandan son los rellenos que
- * el propio contador usa para ingresos y costos en su hoja.
+ * **The hierarchy is the DOCUMENT's, not the Excel's**, and it is the point where this payslip
+ * deliberately departs from the book. The sheet is a grid of cells and nothing more; here there are
+ * five blocks with different weight —header, identity, the two sections and the net pay— so it can be
+ * read at a glance. The colours are not invented: they come from `palette.ts`, and the two that lead
+ * are the fills the accountant themselves uses for income and costs on their sheet.
  */
 import { fitLogoBox } from "@/lib/logos";
 import { PAYSLIP_DECLARATION, PAYSLIP_SIGNATURE_CAPTION } from "./document";
@@ -49,28 +49,28 @@ const MARGIN_X = 48;
 const MARGIN_TOP = 44;
 const MARGIN_BOTTOM = 36;
 
-/** Las tres columnas del Excel en px (`B`–`D`, `E`–`F`, `G`), que es lo único que se conserva. */
+/** The Excel's three columns in px (`B`–`D`, `E`–`F`, `G`), which is the only thing that is kept. */
 const COLUMN_RATIO = { label: 163, quantity: 84, value: 108 } as const;
 
 const BODY_SIZE = 9;
-/** Los escalones a los que baja un texto que no cabe, antes de truncarse. */
+/** The steps a text that does not fit drops to, before being truncated. */
 const SIZE_STEPS = [9, 8, 7] as const;
 /**
- * Los escalones del rótulo de la empresa. Es el ÚNICO bloque de jerarquía que se deja encoger, y
- * la razón es que desde que existe el centro de costo su texto tiene DOS mitades («Delicmar ·
- * Planta Ambato»): truncarlo se lleva por delante la segunda, que es exactamente lo que el centro
- * existe para decir, mientras que bajar de cuerpo lo conserva entero. El último escalón, 11, queda
- * por debajo del título de la derecha (13) y eso es deliberado: solo lo alcanza un rótulo de más de
- * cuarenta caracteres —el nombre largo de un cliente MÁS el de su centro—, y ahí perder la mitad
- * que dice de qué centro es el papel es peor que perder el escalón. Sigue por encima del membrete
- * (8) y del mes (9), que son los que no puede igualar.
+ * The steps for the company's label. It is the ONLY hierarchy block allowed to shrink, and the reason
+ * is that ever since the cost center exists its text has TWO halves («Delicmar · Planta Ambato»):
+ * truncating it takes the second one away, which is exactly what the center exists to say, whereas
+ * dropping a size keeps it whole. The last step, 11, sits below the right-hand title (13) and that is
+ * deliberate: it is only reached by a label of more than forty characters —a client's long name PLUS
+ * its center's—, and there losing the half that says which center the paper belongs to is worse than
+ * losing the step. It stays above the letterhead (8) and the month (9), which are the ones it cannot
+ * match.
  */
 const COMPANY_SIZE_STEPS = [15, 13.5, 12, 11] as const;
 /**
- * El alto que RESERVA el renglón de la empresa, que es el primer escalón y no el que acabe
- * usándose. Un rótulo largo se dibuja más pequeño pero no sube lo que tiene debajo: si no, añadirle
- * el nombre del centro de costo movería el membrete, el título y hasta el logo, y dos comprobantes
- * del mismo cliente dejarían de superponerse.
+ * The height the company's line RESERVES, which is the first step and not the one that ends up being
+ * used. A long label is drawn smaller but does not lift what is below it: otherwise, adding the cost
+ * center's name would move the letterhead, the title and even the logo, and two payslips of the same
+ * client would stop overlapping.
  */
 const COMPANY_SIZE = COMPANY_SIZE_STEPS[0];
 const TITLE_SIZE = 13;
@@ -83,68 +83,69 @@ const FOOTNOTE_SIZE = 7.5;
 const ROW_PITCH = 12.6;
 const SECTION_BAND_HEIGHT = 15;
 const NET_BAND_HEIGHT = 24;
-/** Aire dentro de una banda o panel, a izquierda y derecha. */
+/** Breathing room inside a band or panel, left and right. */
 const PAD_X = 7;
 
 const ELLIPSIS = "…";
 
 /**
- * El hueco de CADA logo — el del cliente a la izquierda y el del centro de costo a la derecha. Es
- * el MISMO para los dos porque son pares: el mismo reparto con el que se encabezan los Excel y el
- * informe de PyG. Constante, y no derivado del alto del encabezado, porque el bloque centrado ya
- * depende de él: descontar su ancho es lo que fija cuánto sitio le queda al texto, y hacerlo al
- * revés sería una definición circular.
+ * EACH logo's gap — the client's on the left and the cost center's on the right. It is the SAME for
+ * both because they are a pair: the same layout that heads the Excel files and PyG's report. Constant,
+ * and not derived from the header's height, because the centred block already depends on it:
+ * subtracting its width is what fixes how much room is left for the text, and doing it the other way
+ * round would be a circular definition.
  *
- * **El ancho está MEDIDO, no elegido.** Centrar el bloque le cobra a cada línea del membrete los
- * dos huecos de logo, y la que decide es la ubicación: la del cliente real mide 324,7 pt a 8 pt, y
- * una más larga baja a 6,5 pt, donde mide 357,7. Con los 76 pt que tenía el hueco cuando el título
- * vivía a la derecha, al bloque le quedaban 327 pt — la real entraba raspando y la larga se
- * truncaba, que es justo lo que la firma dijo que no puede pasar. A 58 quedan 363, así que las dos
- * entran enteras y con holgura. El ALTO (44) se queda por debajo del encabezado más corto que
- * existe —empresa, título y mes sin membrete, 49 pt—, de modo que un logo nunca se sale de la banda
- * contra la que se centra.
+ * **The width is MEASURED, not chosen.** Centring the block charges each letterhead line both logo
+ * gaps, and the one that decides is the location: the real client's measures 324.7 pt at 8 pt, and a
+ * longer one drops to 6.5 pt, where it measures 357.7. With the 76 pt the gap had when the title
+ * lived on the right, the block was left with 327 pt — the real one just about fitted and the long one
+ * was truncated, which is exactly what the firm said cannot happen. At 58 there are 363 left, so both
+ * go in whole and with room to spare. The HEIGHT (44) stays below the shortest header there is
+ * —company, title and month with no letterhead, 49 pt—, so a logo never falls outside the band it is
+ * centred against.
  */
 const LOGO_SLOT = { width: 58, height: 44 } as const;
 
-/** Aire entre un logo y el bloque centrado del encabezado. */
+/** Breathing room between a logo and the header's centred block. */
 const LOGO_GAP = 10;
 
-/** Aire entre el membrete y el título del documento, que abre el segundo escalón del encabezado. */
+/** Breathing room between the letterhead and the document's title, which opens the header's second
+ *  step. */
 const TITLE_GAP = 8;
 
-/** Aire entre el título y el mes que va debajo. */
+/** Breathing room between the title and the month below it. */
 const TITLE_PERIOD_GAP = 4;
 
-/** El cuerpo de las líneas del membrete y los escalones a los que baja antes de truncarse. Empiezan
- *  por debajo del nombre —son su pie de identidad, no otro título— y llegan a 6.5 porque la línea de
- *  la ubicación pasa de setenta caracteres en un archivo real. */
+/** The size of the letterhead's lines and the steps they drop to before being truncated. They start
+ *  below the name —they are its identity footer, not another title— and reach 6.5 because the
+ *  location line runs past seventy characters in a real file. */
 const HEADER_LINE_STEPS = [8, 7, 6.5] as const;
 
-/** De una línea del membrete a la siguiente. */
+/** From one letterhead line to the next. */
 const HEADER_LINE_PITCH = 9.6;
 
-/** Aire entre el nombre de la empresa y la primera línea del membrete. */
+/** Breathing room between the company's name and the letterhead's first line. */
 const HEADER_LINE_GAP = 3;
 
 const contentWidth = PAGE_WIDTH - MARGIN_X * 2;
 const ratioTotal = COLUMN_RATIO.label + COLUMN_RATIO.quantity + COLUMN_RATIO.value;
 const scale = contentWidth / ratioTotal;
 
-/** Bordes verticales de las tres columnas. Las bandas sangran su texto `PAD_X`, así que las
- *  columnas viven dentro de ese margen y ningún rótulo toca el borde de su relleno. */
+/** The three columns' vertical edges. The bands indent their text by `PAD_X`, so the columns live
+ *  inside that margin and no label touches the edge of its fill. */
 const X_LEFT = MARGIN_X + PAD_X;
 const X_QUANTITY_START = MARGIN_X + COLUMN_RATIO.label * scale;
 const X_QUANTITY_END = MARGIN_X + (COLUMN_RATIO.label + COLUMN_RATIO.quantity) * scale;
 const X_RIGHT = MARGIN_X + contentWidth - PAD_X;
 
-/** Recorta un texto al ancho dado, bajando de cuerpo antes de truncar. */
+/** Trims a text to the given width, dropping a size before truncating. */
 function fit(
   text: string,
   maxWidth: number,
   bold: boolean,
   measure: MeasureText,
-  /** Los cuerpos que se prueban, del mayor al menor. El membrete pasa los suyos, que empiezan más
-   *  abajo que los del cuerpo de la tabla. */
+  /** The sizes that are tried, largest to smallest. The letterhead passes its own, which start lower
+   *  than the table body's. */
   steps: readonly number[] = SIZE_STEPS,
 ): { text: string; size: number } {
   for (const size of steps) {
@@ -153,7 +154,7 @@ function fit(
     }
   }
 
-  // Ya en el cuerpo más pequeño: se recorta carácter a carácter dejando sitio para la elipsis.
+  // Already at the smallest size: it is trimmed character by character leaving room for the ellipsis.
   const size = steps[steps.length - 1];
   let clipped = text;
   while (clipped.length > 1 && measure(`${clipped}${ELLIPSIS}`, size, bold) > maxWidth) {
@@ -163,8 +164,8 @@ function fit(
 }
 
 /**
- * Recorta un texto a un ancho SIN bajar de cuerpo — para los bloques cuyo tamaño es jerarquía (el
- * nombre de la empresa, el del empleado): encogerlos rompería el escalón que los distingue.
+ * Trims a text to a width WITHOUT dropping a size — for the blocks whose size is hierarchy (the
+ * company's name, the employee's): shrinking them would break the step that tells them apart.
  */
 function clip(text: string, maxWidth: number, size: number, bold: boolean, measure: MeasureText) {
   if (measure(text, size, bold) <= maxWidth) {
@@ -177,7 +178,7 @@ function clip(text: string, maxWidth: number, size: number, bold: boolean, measu
   return `${clipped}${ELLIPSIS}`;
 }
 
-/** Parte un texto en las líneas que quepan en `maxWidth`, por palabras. */
+/** Splits a text into the lines that fit in `maxWidth`, by words. */
 export function wrapText(
   text: string,
   maxWidth: number,
@@ -204,11 +205,11 @@ export function wrapText(
 }
 
 /**
- * Coloca un comprobante en una página A4 vertical.
+ * Places a payslip on a portrait A4 page.
  *
- * Devuelve además `overflow`, que es `true` si el contenido no cupo en el alto útil. Lo declara en
- * vez de recortar en silencio: un comprobante cortado por abajo pierde la línea de firma, que es
- * justamente para lo que existe el papel.
+ * It also returns `overflow`, which is `true` if the content did not fit in the usable height. It
+ * declares it instead of silently clipping: a payslip cut off at the bottom loses the signature line,
+ * which is precisely what the paper exists for.
  */
 export function layoutPayslip(
   document: PayslipDocument,
@@ -236,43 +237,44 @@ export function layoutPayslip(
     fills.push({ x: MARGIN_X, y, width: contentWidth, height, color });
   };
 
-  // ── Encabezado ──────────────────────────────────────────────────────────────────────────────
-  // El membrete de la firma, con el mismo reparto que encabeza sus Excel y el informe de PyG: el
-  // logo del cliente pegado al margen izquierdo, el bloque de identidad CENTRADO —la empresa, sus
-  // líneas de membrete, qué documento es y de qué mes— y el logo del centro de costo pegado al
-  // margen derecho. El mes va en su propia línea bajo el título porque es lo que distingue un
-  // comprobante de otro en una carpeta con doce.
+  // ── Header ──────────────────────────────────────────────────────────────────────────────────
+  // The firm's letterhead, with the same layout that heads their Excel files and PyG's report: the
+  // client's logo stuck to the left margin, the identity block CENTRED —the company, its letterhead
+  // lines, which document it is and for which month— and the cost center's logo stuck to the right
+  // margin. The month goes on its own line under the title because it is what tells one payslip from
+  // another in a folder with twelve.
   //
-  // Vivió a dos columnas —la empresa a la izquierda, el título a la derecha— y el precio de aquello
-  // era que cada bloque tenía que MEDIR al otro para no invadirlo: el nombre cedía el ancho del
-  // título, la primera línea del membrete cedía uno distinto del resto, y un rótulo con centro de
-  // costo se truncaba teniendo sitio libre al lado. Centrado no hay dos bloques que se disputen un
-  // renglón, así que todas las líneas ceden LO MISMO y el tope es uno solo.
+  // It lived in two columns —the company on the left, the title on the right— and the price of that
+  // was that each block had to MEASURE the other so as not to invade it: the name gave up the
+  // title's width, the letterhead's first line gave up a different one from the rest, and a label
+  // with a cost center was truncated while there was free room beside it. Centred there are no two
+  // blocks disputing a line, so every line gives up THE SAME and there is a single cap.
   //
-  // **Los dos lados reservan lo mismo aunque haya un solo logo**, y eso es lo que centra de verdad:
-  // descontando solo el lado que existe, el bloque quedaría centrado en lo que sobra y no en la
-  // hoja, y un comprobante con logo y otro sin él dejarían de alinearse entre sí. Las cajas salen
-  // de las dimensiones que cada logo trae guardadas, sin decodificar la imagen — que es lo que
-  // mantiene puro este archivo.
+  // **Both sides reserve the same even when there is only one logo**, and that is what really
+  // centres it: subtracting only the side that exists, the block would be centred in what is left
+  // over and not on the page, and a payslip with a logo and one without would stop aligning with each
+  // other. The boxes come from the dimensions each logo carries stored, without decoding the image —
+  // which is what keeps this file pure.
   const leftLogoBox = document.logo ? fitLogoBox(document.logo, LOGO_SLOT) : null;
   const rightLogoBox = document.rightLogo ? fitLogoBox(document.rightLogo, LOGO_SLOT) : null;
   const logoSide = Math.max(leftLogoBox?.width ?? 0, rightLogoBox?.width ?? 0);
-  /** Lo que le queda al bloque centrado: la hoja menos los dos huecos de logo. */
+  /** What is left for the centred block: the page minus the two logo gaps. */
   const centerLimit = contentWidth - 2 * (logoSide > 0 ? logoSide + LOGO_GAP : 0);
   const centerX = MARGIN_X + contentWidth / 2;
 
-  /** El mes tal como se imprime, sin su prefijo: se mide y se dibuja, así que se resuelve una vez. */
+  /** The month as printed, without its prefix: it is measured and drawn, so it is resolved once. */
   const periodText = document.period.replace(/^MES:\s*/, "");
 
-  // El rótulo de la empresa es el ÚNICO bloque de jerarquía que se deja encoger — ver
-  // `COMPANY_SIZE_STEPS`, y el motivo es su segunda mitad, la que dice de qué centro es el papel.
+  // The company's label is the ONLY hierarchy block allowed to shrink — see `COMPANY_SIZE_STEPS`,
+  // and the reason is its second half, the one that says which center the paper belongs to.
   const companyText = fit(document.company, centerLimit, true, measure, COMPANY_SIZE_STEPS);
   let headerY = y;
   push(companyText.text, centerX, companyText.size, true, PAYSLIP_COLORS.ink, "center", headerY);
   headerY += COMPANY_SIZE;
 
-  // El membrete, bajo el nombre y en tinta suave: la razón social con su RUC, la ubicación, los
-  // teléfonos y el correo. Llegan ya compuestos (`letterheadLines`), así que aquí solo se colocan.
+  // The letterhead, under the name and in soft ink: the razón social with its RUC, the location, the
+  // phone numbers and the email. They arrive already composed (`letterheadLines`), so here they are
+  // only placed.
   if (document.companyLines.length > 0) {
     headerY += HEADER_LINE_GAP;
     for (const line of document.companyLines) {
@@ -287,13 +289,13 @@ export function layoutPayslip(
   headerY += TITLE_SIZE + TITLE_PERIOD_GAP;
   push(periodText, centerX, SUBTITLE_SIZE, false, PAYSLIP_COLORS.muted, "center", headerY);
 
-  /** Lo que ocupa el encabezado, contado sobre lo que se COLOCÓ y no estimado aparte: dos cuentas
-   *  del mismo alto acabarían separándose la primera vez que una línea cambie de sitio. */
+  /** What the header takes up, counted over what was PLACED and not estimated separately: two
+   *  computations of the same height would end up drifting the first time a line moves. */
   const headerHeight = headerY + SUBTITLE_SIZE - y;
 
-  // Los dos logos, centrados contra el bloque ENTERO del encabezado y no colgados de su primera
-  // línea: alineados por arriba sobre un membrete de cuatro líneas dejan debajo un hueco que se lee
-  // como un error de composición. Es la misma regla que la banda de los Excel.
+  // The two logos, centred against the header's WHOLE block and not hung from its first line: aligned
+  // to the top over a four-line letterhead they leave a gap below that reads as a composition error.
+  // It is the same rule as the Excel files' band.
   if (document.logo && leftLogoBox) {
     images.push({
       dataUrl: document.logo.dataUrl,
@@ -325,9 +327,9 @@ export function layoutPayslip(
   });
   y += 15;
 
-  // ── Identidad ───────────────────────────────────────────────────────────────────────────────
-  // Un panel en vez de tres líneas sueltas: es la respuesta a «¿de quién es este papel?», y
-  // agruparla deja que las secciones de abajo empiecen sin competir con ella.
+  // ── Identity ────────────────────────────────────────────────────────────────────────────────
+  // A panel instead of three loose lines: it is the answer to «whose paper is this?», and grouping it
+  // lets the sections below start without competing with it.
   const panelTop = y;
   const panelHeight = 48;
   fills.push({
@@ -381,9 +383,9 @@ export function layoutPayslip(
   };
 
   const conceptRow = (row: PayslipRow, index: number) => {
-    // La franja alterna: una fila que cruza la hoja de una punta a otra se salta de renglón sin
-    // ella. Va tan clara que en fotocopia desaparece, que es justo lo que se quiere — ayuda a
-    // seguir la línea, no informa de nada.
+    // The alternating stripe: a row that crosses the page from end to end skips a line without it. It
+    // goes so light that it disappears in a photocopy, which is exactly what is wanted — it helps
+    // follow the line, it does not inform of anything.
     if (index % 2 === 1) {
       fills.push({
         x: MARGIN_X,
@@ -394,9 +396,9 @@ export function layoutPayslip(
       });
     }
 
-    // Aquí vive la regla del desbordamiento: con `Cantidad` el rótulo se para en esa columna, sin
-    // ella llega hasta `Valores`. Es lo que el Excel hace por su cuenta al desbordar hacia celdas
-    // vacías, escrito como decisión.
+    // Here lives the overflow rule: with `Cantidad` the label stops at that column, without it it
+    // reaches `Valores`. It is what the Excel does on its own when overflowing into empty cells,
+    // written as a decision.
     const limit = row.quantity === null ? X_QUANTITY_END : X_QUANTITY_START;
     const label = fit(row.label, limit - X_LEFT - 8, false, measure);
     push(label.text, X_LEFT, label.size, false, PAYSLIP_COLORS.inkSoft);
@@ -405,9 +407,9 @@ export function layoutPayslip(
       push(row.quantity, X_QUANTITY_END, BODY_SIZE, false, PAYSLIP_COLORS.muted, "right");
     }
 
-    // Todo importe va a peso completo. La tinta débil existía para que veintidós rayas no
-    // compitieran con las cuatro cifras que decían algo; ahora las rayas no se imprimen, así que
-    // cuanto queda en la columna es una cifra y todas pesan igual.
+    // Every amount goes at full weight. The faint ink existed so twenty-two dashes would not compete
+    // with the four figures that said something; now the dashes are not printed, so whatever is left
+    // in the column is a figure and they all weigh the same.
     push(row.value, X_RIGHT, BODY_SIZE, false, PAYSLIP_COLORS.ink, "right");
     y += ROW_PITCH;
   };
@@ -427,8 +429,8 @@ export function layoutPayslip(
     y += TOTAL_SIZE + 6;
   };
 
-  // La cabecera `Cantidad` solo se escribe si alguna fila impresa la usa: rotular una columna
-  // vacía es prometer un dato que no está en la hoja.
+  // The `Cantidad` header is only written if some printed row uses it: labelling an empty column is
+  // promising a datum that is not on the sheet.
   const quantityHeader = document.incomes.some((row) => row.quantity !== null) ? "Cantidad" : null;
   sectionHeader("INGRESOS", quantityHeader, PAYSLIP_COLORS.income);
   document.incomes.forEach(conceptRow);
@@ -440,18 +442,18 @@ export function layoutPayslip(
   totalRow("TOTAL DE EGRESOS", document.totalDeductions);
   y += 7;
 
-  // ── Líquido a recibir ───────────────────────────────────────────────────────────────────────
-  // La cifra que todo el mundo busca, y la única sobre fondo oscuro: es el importe que el empleado
-  // declara haber recibido al firmar, y no puede confundirse con los otros dos totales.
+  // ── Net pay ─────────────────────────────────────────────────────────────────────────────────
+  // The figure everyone looks for, and the only one on a dark fill: it is the amount the employee
+  // declares having received on signing, and it cannot be confused with the other two totals.
   band(NET_BAND_HEIGHT, PAYSLIP_COLORS.net);
   const netY = y + (NET_BAND_HEIGHT - NET_SIZE) / 2 + 1;
   push("LIQUIDO A RECIBIR", X_LEFT, NET_SIZE, true, PAYSLIP_COLORS.white, "left", netY);
   push(document.netPay, X_RIGHT, NET_SIZE, true, PAYSLIP_COLORS.white, "right", netY);
   y += NET_BAND_HEIGHT + 17;
 
-  // ── Pie ─────────────────────────────────────────────────────────────────────────────────────
-  // La declaración son ~168 caracteres que en la hoja van a una celda combinada de 355 px donde no
-  // caben: aquí se parte en líneas, que es una MEJORA sobre el original.
+  // ── Footer ──────────────────────────────────────────────────────────────────────────────────
+  // The declaration is ~168 characters that on the sheet go into a merged 355 px cell where they do
+  // not fit: here it is split into lines, which is an IMPROVEMENT on the original.
   if (document.footnote) {
     push(document.footnote, MARGIN_X, FOOTNOTE_SIZE, false, PAYSLIP_COLORS.faint);
     y += 13;
@@ -462,8 +464,8 @@ export function layoutPayslip(
     y += FOOTNOTE_SIZE + 2.5;
   }
 
-  // La raya de la firma se DIBUJA. El libro la escribe con guiones bajos porque una celda no puede
-  // trazar nada; aquí sí, y una línea de verdad no depende de cuántos `_` quepan.
+  // The signature line is DRAWN. The book writes it with underscores because a cell cannot draw
+  // anything; here it can, and a real line does not depend on how many `_` fit.
   y += 42;
   rules.push({ x1: MARGIN_X, x2: MARGIN_X + 190, y, thickness: 0.7, color: PAYSLIP_COLORS.ink });
   y += 11;
@@ -475,13 +477,13 @@ export function layoutPayslip(
   return { fills, rules, images, boxes, overflow: y > PAGE_HEIGHT - MARGIN_BOTTOM };
 }
 
-/** Los bordes de las columnas, para que el test afirme sobre ellos sin re-derivarlos. */
+/** The columns' edges, so the test can assert on them without re-deriving them. */
 export const PAYSLIP_COLUMNS = {
   left: X_LEFT,
   quantityStart: X_QUANTITY_START,
   quantityEnd: X_QUANTITY_END,
   right: X_RIGHT,
-  /** Los bordes de la hoja ÚTIL — las bandas llegan hasta aquí, el texto se queda dentro. */
+  /** The edges of the USABLE page — the bands reach here, the text stays inside. */
   pageLeft: MARGIN_X,
   pageRight: MARGIN_X + contentWidth,
 } as const;

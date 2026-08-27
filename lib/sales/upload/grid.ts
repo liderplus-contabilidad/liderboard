@@ -1,19 +1,19 @@
 /**
- * DÓNDE está cada cosa en el reporte «Venta de Servicios por FACTURA», y cómo se lee una celda.
+ * WHERE each thing is in the «Venta de Servicios por FACTURA» report, and how a cell is read.
  *
- * Todo se localiza por el RÓTULO que el propio reporte escribe —el título, `Desde:` / `Hasta:`,
- * y la cabecera `CODIGO` · `NOMBRE` · `CANTIDAD` · `VENTA TOTAL`— y jamás por una fila o una
- * columna fija: es la misma familia de reporte que `microplus-grid.ts` y `dingoo-grid.ts` ya leen,
- * y reparte su preámbulo por celdas sueltas, así que una coordenada empezaría a leer la celda
- * equivocada el día que cambien los márgenes de la plantilla — y lo haría en silencio.
+ * Everything is located by the LABEL the report itself writes —the title, `Desde:` / `Hasta:`, and the
+ * header `CODIGO` · `NOMBRE` · `CANTIDAD` · `VENTA TOTAL`— and never by a fixed row or column: it is
+ * the same family of report `microplus-grid.ts` and `dingoo-grid.ts` already read, and it spreads its
+ * preamble across loose cells, so a coordinate would start reading the wrong cell the day the
+ * template's margins change — and it would do it silently.
  *
- * Partido de la estrategia por el mismo motivo que en PyG: la mitad delicada —localizar rótulos y
- * decidir qué fila es un dato— se prueba sobre rejillas desnudas, sin un workbook de por medio.
+ * Split from the strategy for the same reason as in PyG: the delicate half —locating labels and
+ * deciding which row is a datum— is tested over bare grids, with no workbook in the way.
  */
 import { compactLabel, type Cell } from "@/lib/excel/workbook";
 
-/** El título que identifica al reporte. Se compara ya compactado (sin acentos, sin dobles
- *  espacios), así que da igual cómo lo escriba la plantilla. */
+/** The title that identifies the report. It is compared already compacted (no accents, no double
+ *  spaces), so it does not matter how the template writes it. */
 export const REPORT_TITLE = "venta de servicios por factura";
 
 const CODE_LABEL = "codigo";
@@ -23,16 +23,16 @@ const AMOUNT_LABEL = "venta total";
 const FROM_LABEL = "desde:";
 const TO_LABEL = "hasta:";
 
-/** Los rótulos del PIE de página, que describen la impresión y no el reporte. */
+/** The FOOTER's labels, which describe the print job and not the report. */
 const PRINT_LABELS = new Set(["pagina:", "página:", "fecha:", "hora:", "usuario:"]);
 
 const DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 
 /**
- * El código de un SERVICIO tal como el reporte lo escribe: una barra invertida y dos dígitos
- * (`\01`). Se conserva verbatim en el dato —es lo que el contador coteja—, pero para reconocerlo
- * se acepta también sin la barra, porque SheetJS puede devolver la celda ya limpia según cómo esté
- * formateada.
+ * A SERVICE's code exactly as the report writes it: a backslash and two digits (`\01`). It is kept
+ * verbatim in the datum —it is what the accountant checks—, but to recognise it it is also accepted
+ * without the backslash, because SheetJS may return the cell already cleaned depending on how it is
+ * formatted.
  */
 const SERVICE_CODE = /^\\?\d{2}$/;
 
@@ -45,11 +45,11 @@ function text(cell: Cell): string {
 }
 
 /**
- * Los importes llegan como TEXTO con separador de miles (`"107,231.22"`). Convertirlos con `Number`
- * a secas daría `NaN`, y un `NaN` redondeado a `0` dejaría el reporte entero en cero sin un solo
- * error visible — que es exactamente por lo que esto vive aquí con sus propios tests.
+ * The amounts arrive as TEXT with a thousands separator (`"107,231.22"`). Converting them with a bare
+ * `Number` would give `NaN`, and a `NaN` rounded to `0` would leave the whole report at zero with not
+ * a single visible error — which is exactly why this lives here with its own tests.
  *
- * `null` cuando la celda no es un número: es lo que separa una fila de datos de una de rótulos.
+ * `null` when the cell is not a number: it is what separates a data row from a label row.
  */
 export function toSalesNumber(cell: Cell): number | null {
   if (typeof cell === "number") {
@@ -59,7 +59,7 @@ export function toSalesNumber(cell: Cell): number | null {
   if (raw === "") {
     return null;
   }
-  // Los paréntesis del contador son el signo negativo.
+  // The accountant's parentheses are the negative sign.
   const negative = /^\(.*\)$/.test(raw);
   const parsed = Number(raw.replace(/[()]/g, "").replace(/,/g, ""));
   if (!Number.isFinite(parsed)) {
@@ -68,8 +68,8 @@ export function toSalesNumber(cell: Cell): number | null {
   return negative ? -parsed : parsed;
 }
 
-/** ¿Es este el reporte de ventas por servicio? Se busca el título por su rótulo, en cualquier
- *  celda del preámbulo — nunca en el nombre del archivo, que se renombra sin consecuencias. */
+/** Is this the sales-by-service report? The title is searched for by its label, in any cell of the
+ *  preamble — never in the file's name, which is renamed without consequence. */
 export function hasSalesTitle(grid: readonly Cell[][]): boolean {
   return grid.some((row) => row.some((cell) => salesLabel(cell).includes(REPORT_TITLE)));
 }
@@ -83,18 +83,17 @@ export interface SalesHeader {
 }
 
 /**
- * La fila de cabecera es la que lleva los CUATRO rótulos a la vez. Se exigen los cuatro y no solo
- * dos porque una cabecera de `CODIGO`+`NOMBRE` la escriben también los balances de MicroPlus, y con
- * dos este parser habría reclamado sus archivos — el mismo error que MicroPlus cometió una vez con
- * los de Dingoo.
+ * The header row is the one carrying all FOUR labels at once. All four are required and not just two
+ * because a `CODIGO`+`NOMBRE` header is also written by MicroPlus' balances, and with two this parser
+ * would have claimed their files — the same error MicroPlus once made with Dingoo's.
  *
- * **Sus columnas identifican el FORMATO, no localizan los datos**, y esa distinción es la que costó
- * la primera lectura de este reporte. Los rótulos van CENTRADOS sobre celdas combinadas, así que
- * caen en columnas distintas de las de sus propios valores: en el archivo real `CANTIDAD` está en
- * la columna 19 y las cantidades en la 18, `VENTA TOTAL` en la 25 y los importes en la 24. Leer los
- * datos por la columna del rótulo devuelve una celda vacía en TODAS las filas, que es exactamente
- * como se veía el fallo: el archivo se reconocía, el periodo se leía, y el reporte «no traía
- * ninguna línea». Quien localiza una línea es `readSalesRow`, por posición RELATIVA.
+ * **Its columns identify the FORMAT, they do not locate the data**, and that distinction cost the
+ * first reading of this report. The labels go CENTRED over merged cells, so they fall in different
+ * columns from those of their own values: in the real file `CANTIDAD` is in column 19 and the
+ * quantities in 18, `VENTA TOTAL` in 25 and the amounts in 24. Reading the data by the label's column
+ * returns an empty cell in EVERY row, which is exactly how the failure looked: the file was
+ * recognised, the period was read, and the report «brought no line at all». What locates a line is
+ * `readSalesRow`, by RELATIVE position.
  */
 export function findSalesHeader(grid: readonly Cell[][]): SalesHeader | null {
   for (let row = 0; row < grid.length; row++) {
@@ -125,12 +124,12 @@ export function findSalesHeader(grid: readonly Cell[][]): SalesHeader | null {
   return null;
 }
 
-/** ¿Es esta fila un pie de página impreso (`Pagina:`, `Fecha:`)? */
+/** Is this row a printed footer (`Pagina:`, `Fecha:`)? */
 export function isPrintRow(row: readonly Cell[]): boolean {
   return row.some((cell) => PRINT_LABELS.has(salesLabel(cell)));
 }
 
-/** Los índices de las celdas NO vacías de una fila, de izquierda a derecha. */
+/** The indices of a row's NON-empty cells, left to right. */
 function filledColumns(row: readonly Cell[]): number[] {
   const columns: number[] = [];
   for (let col = 0; col < row.length; col++) {
@@ -142,29 +141,29 @@ function filledColumns(row: readonly Cell[]): number[] {
 }
 
 export interface SalesRow {
-  /** Verbatim, con su barra (`\\01`) — es lo que el contador coteja. */
+  /** Verbatim, with its backslash (`\\01`) — it is what the accountant checks. */
   serviceCode: string;
   serviceName: string;
   payer: string;
   quantity: number;
   amount: number;
-  /** Dónde estaba el importe. Lo necesita la fila de CIERRE, que no tiene código del que colgarse. */
+  /** Where the amount was. It is needed by the CLOSING row, which has no code to hang off. */
   amountCol: number;
 }
 
 /**
- * Una LÍNEA de factura, leída por posición RELATIVA: el código del servicio, y detrás las cuatro
- * celdas no vacías que le siguen —nombre del servicio, pagador, cantidad e importe—.
+ * An invoice LINE, read by RELATIVE position: the service's code, and behind it the four non-empty
+ * cells that follow it —service name, payer, quantity and amount—.
  *
- * Cada fila del reporte es una línea COMPLETA; no hay agrupación por servicio ni subtotales, y el
- * código se repite en cada una. Se leen por posición relativa y no por columna fija porque los
- * valores viven en columnas que ningún rótulo nombra (ver `findSalesHeader`), y porque es la regla
- * que `microplus-grid.ts` ya aplica en esta misma familia de reportes: el valor es la siguiente
- * celda con algo, no la celda número N.
+ * Every row of the report is a COMPLETE line; there is no grouping by service and no subtotals, and
+ * the code is repeated on each one. They are read by relative position and not by a fixed column
+ * because the values live in columns no label names (see `findSalesHeader`), and because it is the
+ * rule `microplus-grid.ts` already applies in this same family of reports: the value is the next cell
+ * with something in it, not cell number N.
  *
- * `null` cuando la fila no es una línea — el preámbulo, la cabecera, el cierre —, y es `null` sin
- * excepciones: se exigen las CINCO celdas y que las dos últimas sean números, así que una fila de
- * rótulos no puede colarse como un pagador llamado «NOMBRE».
+ * `null` when the row is not a line — the preamble, the header, the close —, and it is `null` with no
+ * exceptions: all FIVE cells are required and the last two must be numbers, so a row of labels cannot
+ * slip in as a payer called «NOMBRE».
  */
 export function readSalesRow(row: readonly Cell[]): SalesRow | null {
   const columns = filledColumns(row);
@@ -184,17 +183,15 @@ export function readSalesRow(row: readonly Cell[]): SalesRow | null {
 }
 
 /**
- * El total que el reporte declara al cierre, leído en la MISMA columna en la que las líneas
- * escriben su importe.
+ * The total the report declares at the close, read in the SAME column the lines write their amount in.
  *
- * Esa fila no lleva ningún rótulo —es la cantidad y el importe, a secas, alineados bajo sus
- * columnas—, así que no hay ninguna palabra por la que buscarla; lo que la identifica es dónde
- * escribe su cifra. Buscarla por un rótulo `TOTAL` habría encontrado en su lugar la fila
- * `TOTAL ITEMS`, que cuenta LÍNEAS y no dólares, y el cuadre habría comparado el importe del mes
- * contra un recuento.
+ * That row carries no label at all —it is the quantity and the amount, bare, aligned under their
+ * columns—, so there is no word to look for it by; what identifies it is where it writes its figure.
+ * Looking for it by a `TOTAL` label would have found instead the `TOTAL ITEMS` row, which counts LINES
+ * and not dollars, and the balance would have compared the month's amount against a count.
  *
- * `null` si no la escribe: entonces no hay nada contra qué cuadrar, y eso es mejor que cuadrar
- * contra una cifra que significa otra cosa.
+ * `null` if it does not write one: then there is nothing to square against, and that is better than
+ * squaring against a figure that means something else.
  */
 export function findDeclaredTotal(
   grid: readonly Cell[][],
@@ -228,7 +225,7 @@ function parseDate(cell: Cell): { day: number; month: number; year: number } | n
     : null;
 }
 
-/** El índice de la primera celda no vacía estrictamente después de `from`, o `-1`. */
+/** The index of the first non-empty cell strictly after `from`, or `-1`. */
 function nextFilledCol(row: readonly Cell[], from: number): number {
   for (let col = from + 1; col < row.length; col++) {
     if (row[col] !== null && row[col] !== "") {
@@ -239,13 +236,13 @@ function nextFilledCol(row: readonly Cell[], from: number): number {
 }
 
 /**
- * El periodo, leído de `Desde:` / `Hasta:` — rótulo y fecha en celdas SEPARADAS, como en MicroPlus,
- * y no en la línea corrida `Desde el … hasta el …` del estado único. Los dos rótulos pueden estar
- * en la misma fila o en filas distintas, así que cada uno se busca por su cuenta.
+ * The period, read from `Desde:` / `Hasta:` — label and date in SEPARATE cells, as in MicroPlus, and
+ * not in the running `Desde el … hasta el …` line of the single statement. Both labels may be on the
+ * same row or on different rows, so each one is looked for on its own.
  *
- * `null` si falta cualquiera de los dos: sin periodo declarado NO hay carga, porque deducirlo de
- * otro sitio —el nombre del archivo, la fecha de impresión— es cómo un mes acaba aterrizando sobre
- * otro.
+ * `null` if either of the two is missing: with no declared period there is NO upload, because deducing
+ * it from somewhere else —the file's name, the printing date— is how a month ends up landing on
+ * another.
  */
 export function findSalesRange(grid: readonly Cell[][]): SalesRange | null {
   const from = findLabelledDate(grid, FROM_LABEL);
@@ -268,16 +265,16 @@ function findLabelledDate(
   label: string,
 ): { day: number; month: number; year: number } | null {
   for (const row of grid) {
-    // `startsWith` y no `===`: el reporte escribe la fecha en su propia celda («Desde:» ·
-    // «01/04/2026») unas veces y pegada al rótulo («Desde: 01/04/2026») otras, y con la igualdad
-    // estricta la segunda forma no encontraba el rótulo y el archivo se rechazaba por no declarar
-    // periodo.
+    // `startsWith` and not `===`: the report writes the date in its own cell («Desde:» ·
+    // «01/04/2026») some times and stuck to the label («Desde: 01/04/2026») others, and with strict
+    // equality the second form did not find the label and the file was rejected for not declaring a
+    // period.
     const col = row.findIndex((cell) => salesLabel(cell).startsWith(label));
     if (col === -1) {
       continue;
     }
-    // La fecha puede venir pegada al rótulo en la misma celda («Desde: 01/04/2026») o en la
-    // siguiente celda con algo — las dos formas se han visto en esta familia de reportes.
+    // The date may come stuck to the label in the same cell («Desde: 01/04/2026») or in the next cell
+    // with something in it — both forms have been seen in this family of reports.
     const inline = DATE.exec(text(row[col]).replace(/^[^:]*:\s*/, ""));
     if (inline) {
       return { day: Number(inline[1]), month: Number(inline[2]) - 1, year: Number(inline[3]) };
@@ -292,19 +289,19 @@ function findLabelledDate(
 }
 
 /**
- * La razón social: la primera línea de TEXTO del preámbulo que no sea el propio título del reporte
- * ni un rótulo de impresión. Es la misma regla que `dingoo-grid.ts` aplica saltándose `REPORTE` y
- * `ESTADO DE RESULTADOS` — sin ella, «la primera línea no vacía» devuelve el nombre del informe en
- * vez del de la empresa.
+ * The razón social: the first TEXT line of the preamble that is neither the report's own title nor a
+ * printing label. It is the same rule `dingoo-grid.ts` applies by skipping `REPORTE` and `ESTADO DE
+ * RESULTADOS` — without it, «the first non-empty line» returns the report's name instead of the
+ * company's.
  */
 export function findSalesCompany(grid: readonly Cell[][], headerRow: number): string {
   for (let row = 0; row < headerRow; row++) {
-    // La fila NO se salta entera aunque lleve un pie: el reporte escribe la razón social a la
-    // izquierda y la paginación veinte columnas a su derecha, en la MISMA fila. Lo que se filtra es
-    // cada celda.
+    // The row is NOT skipped whole even if it carries a footer: the report writes the razón social on
+    // the left and the pagination twenty columns to its right, on the SAME row. What is filtered is
+    // each cell.
     for (const cell of grid[row] ?? []) {
-      // Solo TEXTO: una razón social nunca llega como número, y un número suelto del preámbulo
-      // (la página, un correlativo) sí.
+      // TEXT only: a razón social never arrives as a number, and a loose number of the preamble (the
+      // page, a running number) does.
       if (typeof cell !== "string") {
         continue;
       }

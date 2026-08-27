@@ -29,9 +29,9 @@ export interface OccupancyHotel {
   /** The logo the user uploaded, if any — the other half of the label, and just as unrelated to
    *  what any file declares. Optional and NOT indexed, so it cost no Dexie migration. */
   logo?: EntityLogo;
-  /** Los logos de sus SUCURSALES, por `centerId`. Cuelgan del hotel porque una sucursal no es una
-   *  fila guardada —es la mitad de la clave `[hotelId+centerId+year]`—, y eso los borra en cascada
-   *  con él y los hace sobrevivir a recargar un año. Opcional y NO indexado: sin migración. */
+  /** Its SUCURSALES' logos, by `centerId`. They hang off the hotel because a sucursal is not a stored
+   *  row —it is half of the `[hotelId+centerId+year]` key—, and that deletes them in cascade with it
+   *  and makes them survive reloading a year. Optional and NOT indexed: no migration. */
   centerLogos?: CenterLogos;
 }
 

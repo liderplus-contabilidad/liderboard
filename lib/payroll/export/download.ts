@@ -1,7 +1,7 @@
 /**
- * El nombre del archivo y la descarga. Delgado a propósito, igual que `payslip/download.ts`:
- * `downloadBlob` ya es la única forma en que esta app baja un archivo, y aquí solo se decide cómo se
- * llama y quién lo genera.
+ * The file's name and the download. Deliberately thin, just like `payslip/download.ts`:
+ * `downloadBlob` is already the only way this app downloads a file, and all that is decided here is
+ * what it is called and who generates it.
  */
 import { downloadBlob } from "@/lib/download";
 import type { EntityLogo } from "@/lib/logos";
@@ -9,7 +9,7 @@ import type { RolExportInput } from "./rol-grid";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-/** Un trozo de nombre apto para un sistema de archivos: sin tildes, sin espacios, sin signos. */
+/** A piece of a name fit for a file system: no accents, no spaces, no punctuation. */
 function slug(text: string): string {
   return text
     .normalize("NFD")
@@ -20,11 +20,11 @@ function slug(text: string): string {
 }
 
 /**
- * `ROL_DE_PAGOS_03-2026_CULTURA_MANOR.xlsx` — el patrón con el que la firma nombra sus propios
- * archivos, para que el descargado caiga en la misma carpeta sin desentonar.
+ * `ROL_DE_PAGOS_03-2026_CULTURA_MANOR.xlsx` — the pattern the firm names its own files with, so the
+ * downloaded one lands in the same folder without standing out.
  *
- * Es `.xlsx` y no el `.xls` del original porque exceljs no escribe BIFF; SheetJS lee las dos, así
- * que el archivo vuelve a entrar a la app igual.
+ * It is `.xlsx` and not the original's `.xls` because exceljs does not write BIFF; SheetJS reads
+ * both, so the file comes back into the app all the same.
  */
 export function rolFilename(year: number, monthIndex: number, clientName: string): string {
   const period = `${String(monthIndex + 1).padStart(2, "0")}-${year}`;
@@ -32,7 +32,7 @@ export function rolFilename(year: number, monthIndex: number, clientName: string
   return `ROL_DE_PAGOS_${period}${client ? `_${client}` : ""}.xlsx`;
 }
 
-/** Genera y baja el rol. `exceljs` entra por el import dinámico de `workbook.ts`. */
+/** Generates and downloads the rol. `exceljs` comes in through `workbook.ts`'s dynamic import. */
 export async function downloadRolWorkbook(
   input: RolExportInput,
   logo?: EntityLogo | null,

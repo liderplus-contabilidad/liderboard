@@ -144,7 +144,7 @@ describe("comparación de periodos", () => {
     const filters = withPickToggled(resolved(), dia(2026, 0, 4));
     expect(filters.periodMode).toBe("comparar");
     expect(filters.picks).toEqual([dia(2026, 0, 4)]);
-    // «Ver por» no ofrece «Día»: una tabla del año día a día serían 365 filas.
+    // «Ver por» does not offer «Día»: a table of the year day by day would be 365 rows.
     expect(filters.scope).toBe("mensual");
   });
 

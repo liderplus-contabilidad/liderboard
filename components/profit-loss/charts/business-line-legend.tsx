@@ -3,21 +3,22 @@
 import { cn } from "@/lib/cn";
 
 /**
- * La leyenda de la tarjeta «Ventas por línea de negocio»: pulsar una categoría la quita del
- * gráfico, volver a pulsarla la repone. El mismo gesto que la leyenda de meses que ECharts dibuja
- * ahí abajo.
+ * The legend of the «Ventas por línea de negocio» card: clicking a category removes it from the
+ * chart, clicking it again puts it back. The same gesture as the legend of months ECharts draws down
+ * there.
  *
- * **La dibuja React y no ECharts** porque en esa tarjeta las líneas son el EJE X —las series son
- * los meses, que es justo la leyenda que ya está— y ECharts solo sabe hacer leyenda de series.
+ * **React draws it and not ECharts** because on that card the lines are the X AXIS —the series are the
+ * months, which is precisely the legend that is already there— and ECharts only knows how to make a
+ * legend of series.
  *
- * Dos cosas la separan de aquella para que no se lean como la misma cosa: el micro-rótulo que la
- * encabeza, y que sus marcas NO llevan color. Una línea no tiene color propio en esta tarjeta —lo
- * lleva el periodo—, así que seis puntos de colores prometerían una distinción que no existe; es la
- * misma razón por la que la tabla del anexo no lleva punto en sus filas. La marca es entonces de
- * TINTA: llena cuando la línea está encendida, hueca cuando no.
+ * Two things separate it from that one so they are not read as the same thing: the micro-label
+ * heading it, and that its marks carry NO colour. A line has no colour of its own on this card —the
+ * period carries it—, so six coloured dots would promise a distinction that does not exist; it is the
+ * same reason the annex's table carries no dot on its rows. The mark is therefore of INK: filled when
+ * the line is on, hollow when it is not.
  */
 export interface BusinessLineLegendProps {
-  /** Las líneas que se ofrecen, apagadas incluidas: es el único sitio desde el que se reponen. */
+  /** The lines on offer, the switched-off ones included: it is the only place they are put back. */
   lines: readonly { id: string; label: string }[];
   hidden: readonly string[];
   onToggle: (id: string) => void;

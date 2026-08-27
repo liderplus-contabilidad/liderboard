@@ -29,7 +29,7 @@ function line(
   };
 }
 
-/** El asiento de una nómina, que es lo que la pantalla arma. */
+/** The journal entry of one nómina, which is what the screen assembles. */
 function entryFor(lines: readonly ParsedPayrollEmployeeLine[]) {
   return buildJournalEntry(journalAmountsFor(lines, PARAMS));
 }
@@ -69,8 +69,9 @@ describe("el asiento derivado de la nómina CUADRA", () => {
   });
 
   it("CON SEGURO PRIVADO — el caso que la cuenta 25 existe para sostener", () => {
-    // Sin esa cuenta el haber superaba al debe por exactamente este importe: `Q` entra en el
-    // ingreso, llega al líquido por el haber, y ninguna de las 24 del libro lo recogía por el debe.
+    // Without that account the credit exceeded the debit by exactly this amount: `Q` enters the
+    // income, reaches the net pay through the credit, and none of the book's 24 picked it up on the
+    // debit side.
     const entry = entryFor([line({}, { privateInsurance: 60 })]);
 
     expect(entry.balanced).toBe(true);
@@ -85,8 +86,8 @@ describe("el asiento derivado de la nómina CUADRA", () => {
   });
 
   it("con un empleado a TIEMPO PARCIAL", () => {
-    // `Z`, `AI` y `AN` tienen destino en el haber, que es justo lo que `ASIENTOS` no les daba: sin
-    // esa cuenta el asiento descuadraba con el primer empleado a tiempo parcial.
+    // `Z`, `AI` and `AN` have a destination in the credit, which is precisely what `ASIENTOS` did not
+    // give them: without that account the entry went out of balance with the first part-time employee.
     const entry = entryFor([
       line(
         { contractType: "TP" },
@@ -113,7 +114,7 @@ describe("el asiento derivado de la nómina CUADRA", () => {
     ]);
 
     expect(entry.balanced).toBe(true);
-    // `M` es lo APROBADO, nunca `J+K+L`: el asiento no puede asentar horas que no se pagan.
+    // `M` is what is APPROVED, never `J+K+L`: the entry cannot post hours that are not paid.
     expect(entry.lines.find((l) => l.id === "horas-extras-administracion")?.amount).toBe(50);
   });
 
@@ -130,8 +131,8 @@ describe("el asiento derivado de la nómina CUADRA", () => {
 
 describe("journalAmountsFor", () => {
   it("devuelve las claves del catálogo COMPLETAS, con cero explícito", () => {
-    // Un `0` dice «esa columna no se movió»; una clave ausente diría «no se sabe», y alimentado del
-    // período eso ya no puede ocurrir: la nómina se conoce entera.
+    // A `0` says «that column did not move»; an absent key would say «it is not known», and fed from
+    // the período that can no longer happen: the nómina is known in full.
     const amounts = journalAmountsFor([line()], PARAMS);
 
     for (const account of JOURNAL_ACCOUNTS) {
@@ -171,7 +172,7 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
   };
 
   it("«Viaticos» lee R, no V", () => {
-    // `ASIENTOS` leía `V` (el Bono ND) en la fila de Viáticos; la corregida lee `R`.
+    // `ASIENTOS` read `V` (the Bono ND) on the Viáticos row; the corrected one reads `R`.
     const amounts = journalAmountsFor([line({}, capture)], PARAMS);
 
     expect(amounts.viaticos).toBe(111);
@@ -179,25 +180,25 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
   });
 
   it("los décimos van al derecho: 621004 ← AS+O y 621005 ← AT+N", () => {
-    // `ASIENTOS` los cruzaba entre sí.
+    // `ASIENTOS` crossed them with each other.
     const [row] = [line()];
     const amounts = journalAmountsFor([row], PARAMS);
     const tercero = amounts["decimo-tercer-sueldo-administracion"]!;
     const cuarto = amounts["decimo-cuarto-sueldo-administracion"]!;
 
-    // Con las provisiones apagadas, cada uno vale su mensualización: O y N.
+    // With the provisions switched off, each is worth its monthly share: O and N.
     expect(tercero).toBeGreaterThan(0);
     expect(cuarto).toBeGreaterThan(0);
     expect(tercero).not.toBe(cuarto);
-    // El décimo tercero mensual es el sueldo / 12; el cuarto es el SBU / 12. Con sueldo 800 y SBU
-    // por debajo, el tercero es el mayor — que es exactamente lo que el cruce invertía.
+    // The monthly décimo tercero is the salary / 12; the fourth is the SBU / 12. With a salary of 800
+    // and a lower SBU, the third is the larger one — which is exactly what the crossing inverted.
     expect(tercero).toBeGreaterThan(cuarto);
   });
 
   it("«Aportes IESS por Pagar» vale X+AU+Y+AW, o sea incluye el préstamo IESS", () => {
-    // Es la corrección de los 64.25: `ASIENTOS` leía `AB` («PRESTAMOS EMPRESARIALES») en vez de `Y`.
-    // Solo se mueve `Y`: los viáticos entran en la base aportable y moverlos arrastraría también a
-    // `X` y `AU`, que están en esta misma cuenta — la resta dejaría de aislar lo que se mide.
+    // It is the correction of the 64.25: `ASIENTOS` read `AB` («PRESTAMOS EMPRESARIALES») instead of
+    // `Y`. Only `Y` moves: viáticos enter the contributory base and moving them would also drag `X`
+    // and `AU`, which are in this same account — the subtraction would stop isolating what is measured.
     const sinPrestamo = journalAmountsFor([line()], PARAMS)["aportes-iess-por-pagar"]!;
     const conPrestamo = journalAmountsFor(
       [line({}, { deductions: { ...emptyCapture().deductions, iessLoans: 64.25 } })],
@@ -208,7 +209,8 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
   });
 
   it("un préstamo empresarial NO toca la cuenta del IESS", () => {
-    // El otro lado de la misma corrección: `AB` tiene su propia cuenta y no entra en `2.1.7.1.9`.
+    // The other side of the same correction: `AB` has an account of its own and does not enter
+    // `2.1.7.1.9`.
     const base = journalAmountsFor([line()], PARAMS);
     const conPrestamo = journalAmountsFor(
       [line({}, { deductions: { ...emptyCapture().deductions, companyLoans: 64.25 } })],
@@ -221,10 +223,10 @@ describe("el mapa respeta las correcciones del libro sobre `ASIENTOS`", () => {
 });
 
 describe("contraste contra el archivo real de MARZO 2026", () => {
-  // Los seis empleados del rol de HOTEL BOUTIQUE CULTURA MANOR, transcritos del `.xls`, y el
-  // asiento que `GENERAL!43-71` escribe para ellos. Si el mapa de columnas está bien, lo segundo
-  // sale de lo primero: es la única evidencia EXTERNA de que esta costura acierta, porque los dos
-  // lados vienen del archivo del contador y ninguno de este código.
+  // The six employees of HOTEL BOUTIQUE CULTURA MANOR's rol, transcribed from the `.xls`, and the
+  // entry `GENERAL!43-71` writes for them. If the column map is right, the second comes out of the
+  // first: it is the only EXTERNAL evidence that this seam is right, because both sides come from the
+  // accountant's file and neither from this code.
   const amounts = journalAmountsForInputs(
     GOLDEN_MARCH_2026.map((employee) => employee.input),
     PARAMS,
@@ -232,7 +234,7 @@ describe("contraste contra el archivo real de MARZO 2026", () => {
   const entry = buildJournalEntry(amounts);
 
   it("cuadra en 3,889.06, como la celda de control del libro", () => {
-    // `C71 = D71 = 3,889.06`, con `C73 = C71-D71 = 0`.
+    // `C71 = D71 = 3,889.06`, with `C73 = C71-D71 = 0`.
     expect(entry.debit).toBeCloseTo(3889.06, 2);
     expect(entry.credit).toBeCloseTo(3889.06, 2);
     expect(entry.balanced).toBe(true);
@@ -264,9 +266,9 @@ describe("contraste contra el archivo real de MARZO 2026", () => {
 });
 
 /**
- * Las filas de bono que la captura de un empleado declara. Es la prueba de que la cuenta 26
- * (`bonos-aportables`) hace falta: sin ella el asiento descuadraría por lo que la nómina sí pagó,
- * exactamente el mismo agujero que obligó a añadir `Seguro Privado`.
+ * The bonus rows an employee's capture declares. It is the proof that account 26
+ * (`bonos-aportables`) is needed: without it the entry would go out of balance by what the nómina did
+ * pay, exactly the same hole that forced adding `Seguro Privado`.
  */
 describe("las filas de bono en el asiento", () => {
   const APORTABLE = { id: "x1", label: "Movilización", kind: "aportable" as const };

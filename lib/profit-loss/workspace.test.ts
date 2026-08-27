@@ -30,8 +30,8 @@ describe("listCenters", () => {
     expect(centers.map((c) => c.id)).toEqual(["restaurante"]);
   });
 
-  // El mismo orden que fija `assignCenterSlots` y que el selector ya enseña: una segunda idea de
-  // en qué orden van los centros dejaría el diálogo de logos ordenado distinto que la barra.
+  // The same order `assignCenterSlots` fixes and the selector already shows: a second idea of what
+  // order the centers go in would leave the logo dialog ordered differently from the bar.
   it("va en el orden del selector, no en el de llegada", () => {
     const centers = listCenters([
       center("hospedaje", 2026, { order: 2 }),
@@ -65,8 +65,8 @@ describe("listCenters", () => {
     expect(centers[0].color).toBe("#1e3a5f");
   });
 
-  // Un estado único no tiene centros, y ofrecer «logos por centro de costo» ahí sería ofrecer una
-  // lista vacía bajo un título que promete una.
+  // A single statement has no centers, and offering «logos por centro de costo» there would be
+  // offering an empty list under a title that promises one.
   it("un workspace de estado único no declara ningún centro", () => {
     expect(listCenters([center("x", 2026, { role: "single", centerId: undefined })])).toEqual([]);
   });

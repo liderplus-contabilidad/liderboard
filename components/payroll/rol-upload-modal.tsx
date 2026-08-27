@@ -13,17 +13,17 @@ import { verifyRosterTarget } from "@/lib/payroll/upload/import";
 import { usePayrollData } from "./payroll-data-provider";
 
 /**
- * La carga del rol de pagos de UN período, con la misma forma en dos fases que ya tienen los
- * modales de PyG y de Ocupaciones: el archivo se PARSEA al soltarlo y no se escribe nada hasta que
- * quien carga ve qué declara y lo confirma.
+ * The upload of ONE período's rol de pagos, with the same two-phase shape PyG's and Ocupaciones'
+ * modals already have: the file is PARSED on being dropped and nothing is written until whoever
+ * uploads it sees what it declares and confirms it.
  *
- * Aquí es un archivo y no un lote porque un rol ES el mes entero —su hoja `GENERAL` lista a todos
- * los empleados que cobraron—, así que no hay nada que seleccionar dentro de una tanda.
+ * Here it is one file and not a batch because a rol IS the whole month —its `GENERAL` sheet lists
+ * every employee who was paid—, so there is nothing to select within a batch.
  *
- * Lo que esta pantalla previa existe para mostrar es lo que el archivo DICE de sí mismo: su mes
- * (leído de `GENERAL!B2`) y su razón social. El mes es lo que decide si puede aterrizar aquí; la
- * razón social se muestra y NO se compara contra el nombre del cliente — el contador llama «Manor
- * Galápagos» a lo que el archivo llama `HOTEL BOUTIQUE CULTURA MANOR`, y esa etiqueta la eligió él.
+ * What this preview exists to show is what the file SAYS about itself: its month (read from
+ * `GENERAL!B2`) and its razón social. The month is what decides whether it can land here; the razón
+ * social is shown and is NOT compared against the client's name — the accountant calls «Manor
+ * Galápagos» what the file calls `HOTEL BOUTIQUE CULTURA MANOR`, and that label is one they chose.
  */
 
 interface StagedFile {
@@ -33,16 +33,16 @@ interface StagedFile {
   monthIndex: number;
   lines: ParsedPayrollEmployeeLine[];
   warnings: string[];
-  /** El motivo por el que NO puede aterrizar en este período, o `null` si sí puede. */
+  /** The reason why it CANNOT land in this período, or `null` if it can. */
   rejection: string | null;
 }
 
 interface RolUploadModalProps {
   period: PayrollPeriod;
-  /** Todos los períodos del cliente — el rechazo por mes distinto necesita saber si el período al
-   *  que el archivo pertenece ya existe, para decir «ábrelo» en vez de «regístralo». */
+  /** Every período of the client — the rejection for a different month needs to know whether the
+   *  período the file belongs to already exists, so it can say «open it» instead of «register it». */
   periods: readonly PayrollPeriod[];
-  /** Cuántos empleados tiene ya el período: lo que esta carga reemplaza. */
+  /** How many employees the período already has: what this upload replaces. */
   currentCount: number;
   onClose: () => void;
 }
@@ -62,8 +62,8 @@ export function RolUploadModal({ period, periods, currentCount, onClose }: RolUp
       setFailure(null);
       setStaged(null);
       try {
-        // Dinámico: SheetJS pesa lo suyo y solo hace falta cuando alguien va a cargar algo — la
-        // misma razón por la que PyG importa su capa de exportación así.
+        // Dynamic: SheetJS weighs what it weighs and is only needed when someone is about to load
+        // something — the same reason PyG imports its export layer this way.
         const [{ parseRolGeneral }, { PayrollParseError }] = await Promise.all([
           import("@/lib/payroll/upload/rol-general"),
           import("@/lib/payroll/upload/errors"),
@@ -97,8 +97,8 @@ export function RolUploadModal({ period, periods, currentCount, onClose }: RolUp
   const onPick = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      // El valor se limpia SIEMPRE, incluso sin archivo: sin eso, volver a elegir el mismo archivo
-      // no dispara `change` y el modal se queda mudo.
+      // The value is ALWAYS cleared, even with no file: without that, picking the same file again
+      // does not fire `change` and the modal stays mute.
       event.target.value = "";
       if (file) {
         void readFile(file);
@@ -120,12 +120,12 @@ export function RolUploadModal({ period, periods, currentCount, onClose }: RolUp
     }
   }, [staged, importRoster, period.id, onClose]);
 
-  // La previa totaliza con el MOTOR, igual que la pantalla del período: así lo que se enseña
-  // antes de confirmar es exactamente lo que se verá después de cargar.
+  // The preview totals with the ENGINE, just like the período's screen: so what is shown before
+  // confirming is exactly what will be seen after loading.
   const totals = staged
     ? computePeriodFinancials(
-        // Sin conceptos extra: el archivo del contador no declara ninguno, y los que el PERÍODO
-        // tenga declarados no llegan con la carga sino con la ficha que ya está guardada.
+        // No extra concepts: the accountant's file declares none, and the ones the PERÍODO has
+        // declared do not arrive with the upload but with the record that is already stored.
         staged.lines.map((line) => computeLinePayroll(line, DEFAULT_PAYROLL_PARAMETERS)),
       )
     : undefined;

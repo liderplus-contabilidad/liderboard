@@ -21,6 +21,11 @@ en los tres manuales. También se evaluó y se descartó.
 Las capturas del manual de usuario se tomaron con **datos de demostración** generados
 (`pnpm gen:testdata`), no con información de clientes, así que el documento puede circular.
 
+Las de **Pérdidas y Ganancias** y **Ventas por servicio** están al día. Las de **Ocupaciones** y
+**Rol de Pagos** son de una sesión anterior: su contenido no ha cambiado, pero el menú lateral que
+sale al fondo todavía no muestra el subitem _Ventas por servicio_. Rehacerlas pide datos de
+demostración de esos dos módulos, que `gen:testdata` no produce.
+
 ## Cómo abrirlo
 
 Doble clic sobre el archivo, o `xdg-open deliverables/manual-tecnico.html`. Es un HTML autocontenido:

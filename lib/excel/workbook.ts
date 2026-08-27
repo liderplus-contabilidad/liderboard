@@ -4,7 +4,7 @@
  * `lib/profit-loss/upload/`, Rol de Pagos' `lib/payroll/upload/`). Extracted out of PyG's upload
  * layer because none of this is PyG's: reading a workbook, reading a sheet into a grid, coercing
  * a cell to a number, and comparing labels ignoring case/accents/whitespace are needs every
- * Excel-reading module in the app shares (`CLAUDE.md`'s "extrae lo general-purpose").
+ * Excel-reading module in the app shares (`CLAUDE.md`'s "extract what is general-purpose").
  *
  * Failure here returns `null` rather than throwing — which error to raise, and in what language,
  * belongs to the caller's own domain. PyG's `lib/profit-loss/upload/grid.ts` stays as a thin

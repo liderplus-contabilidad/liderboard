@@ -10,23 +10,23 @@ interface JournalEntryRowProps {
 }
 
 /**
- * El importe de una fila: con `$` y centavos, la misma moneda que el resto de la app —el contador
- * coteja esta tabla contra su hoja y contra las otras pantallas, y dos dialectos del dólar se leen
- * como dos clases de cifra.
+ * A row's amount: with `$` and cents, the same currency as the rest of the app — the accountant
+ * checks this table against their sheet and against the other screens, and two dialects of the dollar
+ * read as two kinds of figure.
  *
- * `formatCurrencyOrDash` NO sirve aquí: pinta el cero como ausencia, y en el asiento un `0` dice
- * «esa columna no se movió» mientras que `null` dice «no se sabe» — la distinción que sostiene el
- * interruptor «Ocultar ceros», que esconde los primeros y conserva los segundos.
+ * `formatCurrencyOrDash` does NOT serve here: it paints zero as absence, and in the journal entry a
+ * `0` says «that column did not move» while `null` says «it is not known» — the distinction that
+ * holds up the «Ocultar ceros» switch, which hides the former and keeps the latter.
  */
 function amount(value: number | null): string {
   return value === null ? "—" : formatCurrency(value, { cents: true });
 }
 
 /**
- * Una fila del asiento: código · cuenta · debe · haber. El nombre se envuelve en un `<span>`
- * propio (en vez de pasarle peso/color a `Cell` por `className`) porque `Cell` ya trae
- * `font-normal` puesto de fábrica — competir por la misma propiedad en el mismo `<td>` queda a
- * merced del orden con que Tailwind emite las reglas, y un `<span>` hijo no tiene ese problema.
+ * A row of the journal entry: code · account · debit · credit. The name is wrapped in a `<span>` of
+ * its own (instead of passing weight/colour to `Cell` through `className`) because `Cell` already
+ * ships `font-normal` — competing for the same property on the same `<td>` is at the mercy of the
+ * order in which Tailwind emits the rules, and a child `<span>` does not have that problem.
  */
 function JournalEntryRowComponent({ line }: JournalEntryRowProps) {
   const isHaber = line.side === "haber";
@@ -52,6 +52,6 @@ function JournalEntryRowComponent({ line }: JournalEntryRowProps) {
   );
 }
 
-// El asiento entero puede repintarse con cada toggle de «Ocultar ceros» — memoizada con key
-// estable (`line.id`), igual que `EmployeeRow`.
+// The whole entry can repaint on every «Ocultar ceros» toggle — memoized with a stable key
+// (`line.id`), like `EmployeeRow`.
 export const JournalEntryRow = memo(JournalEntryRowComponent);

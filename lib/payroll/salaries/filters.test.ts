@@ -34,7 +34,7 @@ describe("las marcas", () => {
   });
 
   it("guarda en el orden del universo, no en el de los clicks", () => {
-    // Se marca VENTAS (la última) antes que HOSPEDAJE (la segunda).
+    // VENTAS (the last one) is marked before HOSPEDAJE (the second).
     let filters = withAreaToggled(emptyFilters(), "VENTAS", UNIVERSE.areas);
     filters = withAreaToggled(filters, "HOSPEDAJE", UNIVERSE.areas);
 
@@ -45,7 +45,7 @@ describe("las marcas", () => {
     let filters = withAreaToggled(emptyFilters(), "HOSPEDAJE", UNIVERSE.areas);
     filters = withAreaToggled(filters, "COCINA", UNIVERSE.areas);
     filters = withAreaToggled(filters, "HOSPEDAJE", UNIVERSE.areas); // fuera
-    filters = withAreaToggled(filters, "HOSPEDAJE", UNIVERSE.areas); // y dentro otra vez
+    filters = withAreaToggled(filters, "HOSPEDAJE", UNIVERSE.areas); // and inside it again
 
     expect(filters.areas).toEqual(["HOSPEDAJE", "COCINA"]);
   });
@@ -67,7 +67,7 @@ describe("las marcas", () => {
 
 describe("sanitizeFilters", () => {
   it("descarta una marca que el universo ya no tiene", () => {
-    // El caso real: se cambia a un cliente que solo tiene 2026.
+    // The real case: switching to a client that only has 2026.
     const filters = withYearToggled(emptyFilters(), 2025, UNIVERSE.years);
     const sanitized = sanitizeFilters(filters, { ...UNIVERSE, years: [2026] });
 
@@ -100,7 +100,7 @@ describe("sanitizeFilters", () => {
   });
 
   it("devuelve el mismo objeto cuando no hay nada que podar", () => {
-    // Para que un `useMemo` río abajo no se invalide en cada render.
+    // So a `useMemo` downstream is not invalidated on every render.
     const filters = withAreaToggled(emptyFilters(), "COCINA", UNIVERSE.areas);
 
     expect(sanitizeFilters(filters, UNIVERSE)).toBe(filters);

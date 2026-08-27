@@ -35,8 +35,8 @@ describe("excel-metadata", () => {
   });
 
   it("una hoja se ata a su año por la metadata, no por su nombre", () => {
-    // El nombre de hoja se trunca a 31 caracteres y se desambigua, así que no puede ser el
-    // registro de a qué año pertenece.
+    // The sheet name is truncated to 31 characters and disambiguated, so it cannot be the record of
+    // which year it belongs to.
     const meta: AppWorkbookMeta = {
       years: [{ year: 2025, loadedMonths: [0] }],
       sheets: [{ sheetName: "UN NOMBRE LARGUISIMO QUE SE (2)", year: 2025, centerId: "cartago" }],
@@ -104,7 +104,7 @@ describe("excel-metadata", () => {
       years: [],
       sheets: [],
       mode: "centers",
-      // Un libro anterior a que se llevara el sistema solo pudo salir del estado único.
+      // A workbook from before the system was carried can only have come out of the single statement.
       system: "monthly-single",
       comments: [],
       adjustments: [],
@@ -118,7 +118,7 @@ describe("excel-metadata", () => {
   it("drops malformed comment and adjustment rows", () => {
     const rows: unknown[][] = [
       ["workspace", "single", "monthly-single"],
-      ["comment", "", 2026, "4", "x", "mes no numérico"], // monthIndex not a number → dropped
+      ["comment", "", 2026, "4", "x", "non-numeric month"], // monthIndex not a number → dropped
       ["adjustment", "", 2026, "4", 0], // missing originalValue → dropped
     ];
     const meta = rowsToAppWorkbookMeta(rows);

@@ -4,8 +4,8 @@
  * objects; `components/ui/chart.tsx` does the widening.
  *
  * Two invariants are encoded in the types, so violating them does not compile: no chart declares
- * two SCALES —`yAxis` is a single object, y `xAxis` admite un segundo solo como banda de rótulos,
- * sin serie atada— and `series` is always a list.
+ * two SCALES —`yAxis` is a single object, and `xAxis` admits a second one only as a band of labels,
+ * with no series tied to it— and `series` is always a list.
  */
 
 export type ChartValue = number | null;
@@ -66,7 +66,7 @@ export interface ChartAxisLabel extends ChartTextStyle {
 export interface ChartAxis {
   type: "category" | "value";
   data?: string[];
-  /** Solo la BANDA DE RÓTULOS la usa: se cuelga bajo el eje real, separada por `offset`. */
+  /** Only the BAND OF LABELS uses it: it hangs under the real axis, separated by `offset`. */
   position?: "bottom" | "top";
   offset?: number;
   min?: number | string;
@@ -91,7 +91,7 @@ export interface ChartItemStyle {
 export interface ChartMarkPoint {
   xAxis?: number;
   yAxis?: number;
-  /** `[índice de categoría, valor]`. */
+  /** `[category index, value]`. */
   coord?: [number, number];
   name?: string;
 }
@@ -112,8 +112,8 @@ export interface ChartMarkLine {
 }
 
 /**
- * Una FRANJA de fondo que abarca de una categoría a otra — con la que un eje agrupado dice hasta
- * dónde llega cada grupo sin dibujar una línea más en la retícula.
+ * A background BAND spanning from one category to another — with which a grouped axis says how far
+ * each group reaches without drawing one more line in the grid.
  */
 export interface ChartMarkArea {
   silent?: boolean;
@@ -197,14 +197,14 @@ export interface ChartTooltip {
   padding?: number | number[];
   textStyle?: ChartTextStyle;
   /**
-   * Que el tooltip se quede dentro del CONTENEDOR de la gráfica y no solo dentro de la ventana.
+   * Keeps the tooltip inside the chart's CONTAINER and not merely inside the window.
    *
-   * Sin esto el renderer lo cuelga del contenedor pero lo coloca contra la ventana, así que al
-   * pasar el cursor por las últimas barras la caja se sale por el borde de la tarjeta — y la
-   * tarjeta, que es un `overflow-hidden` para que su tabla no se salga de las esquinas
-   * redondeadas, la CORTA ahí. El texto nunca se recorta (la caja crece hasta el renglón más
-   * largo); lo que se pierde es el trozo que quedó fuera, y se pierde justo cuando el nombre de
-   * la cuenta es largo, que es cuando hace falta leerlo.
+   * Without this the renderer hangs it off the container but places it against the window, so on
+   * hovering the last bars the box falls off the card's edge — and the card, which is an
+   * `overflow-hidden` so its table does not spill out of the rounded corners, CUTS it there. The
+   * text is never clipped (the box grows to the longest line); what is lost is the part that ended
+   * up outside, and it is lost exactly when the account's name is long, which is when it needs
+   * reading.
    */
   confine?: boolean;
   /** Axis trigger receives the whole column; item trigger a single mark. */
@@ -216,11 +216,11 @@ export interface ChartOption {
   textStyle?: ChartTextStyle;
   grid?: ChartGrid;
   /**
-   * Uno, o DOS cuando el segundo es una BANDA DE RÓTULOS y no una segunda escala: las columnas
-   * agrupadas (categoría × establecimiento) necesitan un renglón que nombre el grupo bajo sus
-   * columnas, y ese eje no lleva serie ninguna —`xAxisIndex` no se escribe, así que todas siguen
-   * atadas al primero—. El invariante que sigue en pie es el de `yAxis`, que es donde una segunda
-   * entrada SÍ sería una segunda escala y haría comparables dos unidades que no lo son.
+   * One, or TWO when the second is a BAND OF LABELS and not a second scale: grouped columns
+   * (category × establishment) need a line naming the group under its columns, and that axis carries
+   * no series at all —`xAxisIndex` is not written, so they all stay tied to the first one—. The
+   * invariant still standing is `yAxis`'s, which is where a second entry WOULD be a second scale and
+   * would make two units comparable that are not.
    */
   xAxis?: ChartAxis | [ChartAxis, ChartAxis];
   yAxis?: ChartAxis;
@@ -246,9 +246,9 @@ export interface ChartTableRow {
    */
   emphasis?: boolean;
   /**
-   * El punto de color que empareja la fila con su marca en el gráfico. AUSENTE cuando la fila no es
-   * una serie: en la tabla del eje girado las filas son las categorías y el color lo llevan las
-   * COLUMNAS, así que un punto ahí emparejaría con algo que no existe.
+   * The colour dot that pairs the row with its mark in the chart. ABSENT when the row is not a
+   * series: in the rotated axis's table the rows are the categories and the colour is carried by the
+   * COLUMNS, so a dot there would pair with something that does not exist.
    */
   color?: string;
   /** Already formatted; `null` is a period with no coverage and must render EMPTY, not `$0`. */
@@ -268,33 +268,33 @@ export interface ChartTable {
  * question drift, and nothing downstream can tell which of the two numbers is the right one.
  */
 /**
- * La ayuda de una tarjeta: qué pregunta contesta, qué gestos la mueven y qué se puede afirmar con
- * lo que dibuja. Viaja en el `ChartCardSpec` y no en un catálogo aparte por la razón de siempre:
- * una tarjeta cambia de identidad con el estado —la primera de Gráficos es «Comparación», «Ventas
- * por línea de negocio» o el anexo de gastos según lo marcado—, y una segunda lista indexada por
- * `id` acabaría describiendo una tarjeta distinta de la que se está viendo.
+ * A card's help: what question it answers, which gestures move it and what can be claimed with what
+ * it draws. It travels in the `ChartCardSpec` and not in a separate catalogue for the usual reason: a
+ * card changes identity with the state —the first one of Gráficos is «Comparación», «Ventas por línea
+ * de negocio» or the expense annex depending on what is marked—, and a second list indexed by `id`
+ * would end up describing a card other than the one being looked at.
  *
- * `actions` nombra los controles por su RÓTULO real («Cuenta contable», «Ver como tabla»), porque
- * una ayuda que no dice dónde está el control obliga a buscarlo, y solo nombra gestos que existen
- * de verdad en ESA tarjeta.
+ * `actions` names the controls by their real LABEL («Cuenta contable», «Ver como tabla»), because a
+ * help text that does not say where the control is forces you to hunt for it, and it only names
+ * gestures that really exist on THAT card.
  */
 export interface ChartGuideAction {
-  /** El control, con su rótulo EXACTO de pantalla — es lo que el lector va a buscar. */
+  /** The control, with its EXACT on-screen label — it is what the reader is going to look for. */
   control: string;
-  /** Qué hace, en pocas palabras y sin repetir el nombre del control. */
+  /** What it does, in few words and without repeating the control's name. */
   effect: string;
 }
 
 export interface ChartGuide {
-  /** Para qué sirve la tarjeta, en una frase corta. */
+  /** What the card is for, in one short sentence. */
   purpose: string;
   /**
-   * Los controles que la mueven. Van PARTIDOS en dos —el rótulo y lo que hace— porque así se
-   * pintan en dos tintas y la lista se recorre de un vistazo por la columna de los nombres; una
-   * frase entera por gesto obliga a leerlas todas para encontrar el control que se busca.
+   * The controls that move it. They travel SPLIT in two —the label and what it does— because that way
+   * they are painted in two inks and the list is scanned at a glance down the column of names; a
+   * whole sentence per gesture forces you to read them all to find the control you are after.
    */
   actions: readonly ChartGuideAction[];
-  /** Lo que la forma no dice sola y se malinterpreta sin ello. Opcional. */
+  /** What the shape does not say on its own and gets misread without. Optional. */
   reading?: string;
 }
 
@@ -311,7 +311,7 @@ export interface ChartCardSpec {
   warnings?: string[];
   /** Footnote for what the card set aside, e.g. a negative slice left out of a pie. */
   note?: string;
-  /** Lo que el ⓘ de la cabecera abre. Una tarjeta sin guía no dibuja el icono. */
+  /** What the header's ⓘ opens. A card with no guide does not draw the icon. */
   guide?: ChartGuide;
   height: number;
 }

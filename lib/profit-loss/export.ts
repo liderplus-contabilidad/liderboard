@@ -52,7 +52,7 @@ const FIRST_VALUE_COL = 3;
  * cells their arithmetic and `app-workbook.ts` its round-trip.
  */
 const CURRENCY_FMT = "[$$-409]#,##0.00;-[$$-409]#,##0.00";
-/** Las columnas de rótulos de una hoja de estado: el código y el nombre de la cuenta. */
+/** A statement sheet's label columns: the account's code and name. */
 const LABEL_COLS = 2;
 const SHEET_NAME = "Estado de Resultados";
 
@@ -71,7 +71,7 @@ export function buildPygWorkbook(
   /** «Ocultar ceros» — omits the accounts and the months with no movement in ANY year of the
    * file. */
   hideEmpty = false,
-  /** El logo del cliente abierto, que encabeza cada hoja. */
+  /** The open client's logo, which heads each sheet. */
   logo?: EntityLogo,
 ): ExcelJS.Workbook {
   const wb = newWorkbook();
@@ -120,14 +120,14 @@ interface StatementSheet {
   /** Month indices actually loaded; `undefined` = no restriction (single-statement mode). */
   loadedMonths?: number[];
   /**
-   * El logo de la IZQUIERDA de esta hoja en concreto, cuando no es el mismo en todo el libro. Un
-   * libro de un cliente lo tiene único y lo pasa una vez; el consolidado entre clientes no tiene
-   * ninguno propio —son varias empresas— y cada hoja se lleva el de la suya.
+   * This particular sheet's LEFT-hand logo, when it is not the same across the whole workbook. A
+   * single client's workbook has a unique one and passes it once; the cross-client consolidado has
+   * none of its own —they are several companies— and each sheet takes its own's.
    */
   logo?: EntityLogo;
   /**
-   * El logo del centro al que pertenece esta hoja, si el usuario le subió uno. La hoja Consolidado
-   * no lleva: no es un centro, y `centerLogoOf` lo responde por sí solo sin caso propio aquí.
+   * The logo of the center this sheet belongs to, if the user uploaded one. The Consolidado sheet
+   * carries none: it is not a center, and `centerLogoOf` answers that on its own with no case here.
    */
   centerLogo?: EntityLogo;
 }
@@ -206,12 +206,12 @@ function writeStatementSheet(
   const written = isMonthly ? (months ?? MONTHS_FULL_ES.map((_, index) => index)) : [];
 
   const valueCols = written.length + (isMonthly ? 1 : 0);
-  // Los anchos van ANTES del membrete porque de ellos sale el ancla del logo derecho, y poner un
-  // ancho no escribe ninguna fila: nada más de la hoja se entera del adelanto.
+  // The widths go BEFORE the letterhead because the right-hand logo's anchor comes from them, and
+  // setting a width writes no row: nothing else about the sheet notices it being brought forward.
   setColumnWidths(ws, valueCols);
-  // Con la hoja aún vacía: el membrete se ESCRIBE, no se desplaza. La banda mide lo que mide la
-  // TABLA —los rótulos más las columnas de cifras—, que es donde cae la esquina a la que se pega
-  // el logo del centro.
+  // With the sheet still empty: the letterhead is WRITTEN, not shifted. The band measures what the
+  // TABLE measures —the labels plus the figure columns—, which is where the corner the center's logo
+  // sticks to falls.
   writeLetterhead(wb, ws, {
     leftLogo: logo,
     rightLogo: centerLogo,
@@ -285,13 +285,13 @@ function newWorkbook(): ExcelJS.Workbook {
   return wb;
 }
 
-/** La tinta de las líneas secundarias del membrete: el gris con el que la app escribe un dato
- *  que acompaña al título en vez de competir con él. */
+/** The ink of the letterhead's secondary lines: the grey the app writes a datum that accompanies the
+ *  title with instead of competing with it. */
 const LETTERHEAD_INK = "FF64748B";
 
-/** El título de una hoja de estado, en el orden en que se lee: quién, qué, de qué centro y de
- *  cuándo. Se compone aquí y lo CENTRA `writeLetterhead`, para que ninguna hoja decida por su
- *  cuenta dónde va su membrete. */
+/** A statement sheet's title, in the order it is read: who, what, of which center and of when. It is
+ *  composed here and CENTRED by `writeLetterhead`, so no sheet decides on its own where its
+ *  letterhead goes. */
 function statementLines(dataset?: PygDataset): LetterheadLine[] {
   const lines: LetterheadLine[] = [
     { text: dataset?.companyName || "LiderPlus", font: { bold: true, size: 14 } },
@@ -488,11 +488,11 @@ export interface MultiCenterInput {
    * file, never sheet by sheet, so every center keeps the same chart of accounts and the same
    * columns. */
   hideEmpty?: boolean;
-  /** El logo del cliente abierto, que encabeza cada hoja. */
+  /** The open client's logo, which heads each sheet. */
   logo?: EntityLogo;
   /**
-   * Los logos de los centros, por `centerId`. Solo alcanzan a la hoja de SU centro: el Consolidado
-   * no es uno, así que se queda con el del cliente y nada a la derecha.
+   * The centers' logos, by `centerId`. They only reach THEIR center's sheet: the Consolidado is not
+   * one, so it keeps the client's and nothing on the right.
    */
   centerLogos?: CenterLogos;
 }
@@ -652,7 +652,7 @@ export interface MonthSliceExportInput {
   month: number;
   /** In selector order — "Sin centro de costo" is just the last entry. */
   centers: { name: string; dataset: PygDataset; edits: CellEdit[] }[];
-  /** El logo del cliente abierto, que encabeza la hoja. */
+  /** The open client's logo, which heads the sheet. */
   logo?: EntityLogo;
 }
 
@@ -668,7 +668,7 @@ export function buildMonthSliceWorkbook(input: MonthSliceExportInput): ExcelJS.W
   const ws = wb.addWorksheet("Reporte");
 
   const centerLabels = input.centers.map((c) => c.name);
-  // Los anchos, antes del membrete: de ellos sale el ancla del logo y el ancho de la banda.
+  // The widths, before the letterhead: the logo's anchor and the band's width come from them.
   ws.getColumn(CODE_COL).width = 12;
   ws.getColumn(NAME_COL).width = 42;
   for (let i = 0; i < 1 + centerLabels.length; i++) {
@@ -746,7 +746,7 @@ export interface SingleMonthSliceInput {
   month: number;
   dataset: PygDataset;
   edits: CellEdit[];
-  /** El logo del cliente abierto, que encabeza la hoja. */
+  /** The open client's logo, which heads the sheet. */
   logo?: EntityLogo;
 }
 
@@ -762,7 +762,7 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
   const wb = newWorkbook();
   const ws = wb.addWorksheet("Reporte");
 
-  // Los anchos, antes del membrete: de ellos sale el ancla del logo y el ancho de la banda.
+  // The widths, before the letterhead: the logo's anchor and the band's width come from them.
   ws.getColumn(CODE_COL).width = 12;
   ws.getColumn(NAME_COL).width = 42;
   ws.getColumn(FIRST_VALUE_COL).width = 16;
@@ -776,8 +776,8 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
       { text: input.companyName || "LiderPlus", font: { bold: true, size: 14 } },
       { text: "Estado de Resultados", font: { bold: true, color: { argb: LETTERHEAD_INK } } },
       {
-        // La línea del periodo es la que `monthly-single` lee de vuelta; combinada, su valor sigue
-        // viviendo en la columna A, que es donde ese lector la busca.
+        // The period's line is the one `monthly-single` reads back; merged, its value still lives in
+        // column A, which is where that reader looks for it.
         text: `Desde el 01/${mm}/${input.year} hasta el ${String(lastDay).padStart(2, "0")}/${mm}/${input.year}`,
         font: { color: { argb: LETTERHEAD_INK } },
       },
@@ -807,44 +807,46 @@ export function buildSingleMonthSliceWorkbook(input: SingleMonthSliceInput): Exc
 }
 
 /**
- * El consolidado entre clientes: por año ascendente, la hoja del total y detrás **una por cada
- * pieza que lo sumó** —cada (cliente · centro) que entró y el estado entero de cada cliente de
- * estado único—. Es el equivalente entre empresas del «Excel completo», y por el mismo motivo:
- * quien recibe la suma pregunta enseguida de dónde sale, y una sola hoja no lo dice.
+ * The cross-client consolidado: per ascending year, the total's sheet and behind it **one for each
+ * piece that summed it** —each (client · center) that went in and the whole statement of each
+ * single-statement client—. It is the between-companies equivalent of the «Excel completo», and for
+ * the same reason: whoever receives the sum immediately asks where it comes from, and a single sheet
+ * does not say.
  *
- * Las piezas llegan HECHAS (`ConsolidatedWorkspace.summedDatasets`) en vez de recomponerse aquí:
- * cuáles entraron lo decidió el filtro al sumar, y volver a decidirlo es exactamente cómo el
- * archivo acaba con hojas que no cuadran con su propio total.
+ * The pieces arrive READY-MADE (`ConsolidatedWorkspace.summedDatasets`) instead of being recomposed
+ * here: which ones went in was decided by the filter when summing, and deciding it again is exactly
+ * how the file ends up with sheets that do not square with its own total.
  *
- * Deliberadamente **sin** la hoja de metadatos oculta, y añadir hojas no cambia esa regla: esa
- * hoja es lo que hace que un libro de la app vuelva a entrar reconstruyendo su workspace. Aquí
- * es exactamente lo que no debe pasar: este archivo es la suma de varias empresas, y re-subirlo a
- * un cliente lo reemplazaría por cuentas que no son suyas, con la razón social de otra. Sin
- * metadatos, `app-workbook.ts` no lo reclama y el archivo se queda donde sirve — en el correo del
- * contador, no de vuelta en la base.
+ * Deliberately **without** the hidden metadata sheet, and adding sheets does not change that rule:
+ * that sheet is what makes an app workbook come back in reconstructing its workspace. Here that is
+ * exactly what must not happen: this file is the sum of several companies, and re-uploading it into a
+ * client would replace it with accounts that are not its own, under another company's razón social.
+ * With no metadata, `app-workbook.ts` does not claim it and the file stays where it is useful — in
+ * the accountant's email, not back in the database.
  *
- * Los ajustes ya vienen aplicados en las cuentas (`consolidate.ts` los pliega antes de sumar), así
- * que no hay `edits` que pasar.
+ * The adjustments already arrive applied in the accounts (`consolidate.ts` folds them before
+ * summing), so there are no `edits` to pass.
  */
 export interface ConsolidatedInput {
-  /** El total, uno por año. El orden lo pone esta función, no el que llame. */
+  /** The total, one per year. The order is set by this function, not by the caller. */
   datasets: readonly PygDataset[];
   /**
-   * Las piezas que ese total sumó (`ConsolidatedWorkspace.summedDatasets`): una hoja cada una,
-   * detrás de la del año al que pertenece. Sin ellas el archivo es el de siempre — una hoja por
-   * año—, que es lo que sigue pasando cuando ningún cliente lleva centros.
+   * The pieces that total summed (`ConsolidatedWorkspace.summedDatasets`): one sheet each, behind the
+   * one of the year they belong to. Without them the file is the usual one —one sheet per year—,
+   * which is what still happens when no client carries centers.
    */
   details?: readonly ConsolidatedDetail[];
   loadedMonthsByYear: Record<number, number[]>;
-  /** «Ocultar ceros» — lo que ningún cliente movió, cuenta o mes, no llega al archivo. */
+  /** «Ocultar ceros» — what no client moved, account or month, does not reach the file. */
   hideEmpty?: boolean;
-  /** Los logos de los CLIENTES, por su id: el de la izquierda en la hoja de cada pieza suya. */
+  /** The CLIENTS' logos, by their id: the left-hand one on the sheet of each of their pieces. */
   clientLogos?: Record<string, EntityLogo>;
-  /** Los de los centros, por el id COMPUESTO `<clientId>::<centerId>` que las piezas llevan. */
+  /** The centers', by the COMPOSED id `<clientId>::<centerId>` the pieces carry. */
   centerLogos?: CenterLogos;
 }
 
-/** Una pieza de la suma y de qué cliente salió — el espejo de `SummedDetail` en `consolidate.ts`. */
+/** A piece of the sum and which client it came from — the mirror of `SummedDetail` in
+ *  `consolidate.ts`. */
 export interface ConsolidatedDetail {
   clientId: string;
   dataset: PygDataset;
@@ -866,8 +868,8 @@ export function buildConsolidatedWorkbook(input: ConsolidatedInput): ExcelJS.Wor
       edits: [],
       loadedMonths,
     });
-    // Detrás de su año y no todas al final: un estado se lee contra el total del que forma parte,
-    // y con dos años el archivo quedaría con las hojas de 2025 debajo del Consolidado de 2026.
+    // Behind its year and not all at the end: a statement is read against the total it is part of,
+    // and with two years the file would have 2025's sheets below 2026's Consolidado.
     for (const detail of details.filter((entry) => entry.dataset.year === dataset.year)) {
       sheets.push({
         name: uniqueSheetName(
@@ -883,23 +885,23 @@ export function buildConsolidatedWorkbook(input: ConsolidatedInput): ExcelJS.Wor
     }
   }
 
-  // El libro entero es el juicio de «ocultar ceros», piezas incluidas: así todas las hojas
-  // conservan el mismo plan de cuentas y las mismas columnas, y se pueden leer en paralelo.
+  // The whole workbook is the «hide zeros» judgement, the pieces included: that way every sheet keeps
+  // the same chart of accounts and the same columns, and they can be read in parallel.
   writeStatementSheets(wb, sheets, input.hideEmpty ?? false);
   return wb;
 }
 
 /**
- * Cómo se llama la hoja de una pieza: «Restaurante · Dingoo» para un centro —el mismo rótulo con
- * el que el chip y la leyenda lo nombran, porque el mismo centro existe en varias empresas— y el
- * cliente a secas para uno de estado único, que no tiene centro que nombrar.
+ * What a piece's sheet is called: «Restaurante · Dingoo» for a center —the same label the chip and
+ * the legend name it with, because the same center exists in several companies— and the bare client
+ * for a single-statement one, which has no center to name.
  */
 function detailTitle(dataset: PygDataset): string {
   const client = dataset.companyName || "Cliente";
   return dataset.costCenterName ? `${dataset.costCenterName} · ${client}` : client;
 }
 
-/** `PyG-<años>-consolidado-clientes.xlsx` — fuera del patrón mensual, como «completo». */
+/** `PyG-<years>-consolidado-clientes.xlsx` — outside the monthly pattern, like «completo». */
 export function consolidatedFilename(years: readonly number[]): string {
   const sorted = [...years].sort((a, b) => a - b);
   if (sorted.length === 0) {

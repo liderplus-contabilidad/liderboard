@@ -1,51 +1,52 @@
 /**
- * Los parámetros del PERÍODO (§3 de `docs/payroll/rol-de-pagos-formulas.md`).
+ * The PERÍODO's parameters (§3 of `docs/payroll/rol-de-pagos-formulas.md`).
  *
- * No son constantes del código: cambian por año —el SBU sube cada enero, las tasas del IESS
- * rara vez— y por eso se guardan junto al período. Es lo que permite que marzo de 2026 siga
- * cuadrando cuando 2027 traiga otro SBU, en vez de que un `const` reescriba la historia.
+ * They are not constants of the code: they change by year —the SBU rises every January, the IESS
+ * rates rarely— and that is why they are stored next to the período. It is what allows March 2026 to
+ * keep squaring when 2027 brings another SBU, instead of a `const` rewriting history.
  *
- * **Aquí SOLO entra lo que es igual para todos los empleados de un período.** La distinción es
- * de la firma y es la que separa este archivo del resto del motor: hay cifras fijadas por LEY
- * —que se aplican a todo el mundo y solo cambian por decreto— y hay decisiones DISCRECIONALES
- * —gerencia, acuerdos con cada empleado— que varían caso por caso y **se teclean**. Las segundas
- * no viven aquí: son entradas por empleado y por mes. `approvedOvertime` es el ejemplo, y por eso
- * es un IMPORTE en `PayrollEmployeeInput` y no una tasa en esta tabla — «más que un porcentaje
- * predeterminado no sería como tal» y «esa variación no es calculada, sino manual».
+ * **ONLY what is the same for every employee of a período comes in here.** The distinction belongs to
+ * the firm and it is what separates this file from the rest of the engine: there are figures fixed by
+ * LAW —which apply to everyone and only change by decree— and there are DISCRETIONARY decisions
+ * —management, agreements with each employee— that vary case by case and **are typed in**. The latter
+ * do not live here: they are inputs per employee and per month. `approvedOvertime` is the example,
+ * and that is why it is an AMOUNT in `PayrollEmployeeInput` and not a rate in this table — «anything
+ * more than a predetermined percentage would not be one» and «that variation is not computed, it is
+ * manual».
  *
- * Cada campo va marcado con su origen.
+ * Each field is marked with its origin.
  */
 export interface PayrollParameters {
-  /** [LEY] El SBU vigente. Es lo que reparte el décimo cuarto, y NO depende del sueldo del
-   *  empleado. Sube por decreto cada enero. */
+  /** [LAW] The current SBU. It is what the décimo cuarto is spread from, and it does NOT depend on
+   *  the employee's salary. It rises by decree every January. */
   unifiedBasicSalary: number;
-  /** [LEY] Aporte personal al IESS. `0.0945` = 9,45 %. */
+  /** [LAW] Personal IESS contribution. `0.0945` = 9.45 %. */
   iessEmployeeRate: number;
-  /** [LEY] Aporte patronal al IESS. `0.1215` = 12,15 %. */
+  /** [LAW] Employer IESS contribution. `0.1215` = 12.15 %. */
   iessEmployerRate: number;
-  /** [LEY] Fondo de reserva ACUMULADO. `0.0833` = 8,33 %. Ojo: el fondo de reserva PAGADO usa
-   *  un doceavo, no esta tasa, y no dan lo mismo — ver §8. */
+  /** [LAW] ACCRUED reserve fund. `0.0833` = 8.33 %. Careful: the PAID reserve fund uses a twelfth,
+   *  not this rate, and they are not the same — see §8. */
   reserveFundRate: number;
-  /** [CONVENCIÓN DEL LIBRO] Días que el libro considera un mes completo, para prorratear el
-   *  sueldo. No es una cifra legal: es cómo esta hoja reparte el mes. */
+  /** [BOOK CONVENTION] Days the book considers a full month, for prorating the salary. It is not a
+   *  legal figure: it is how this sheet divides up the month. */
   monthlyDays: number;
-  /** [CONVENCIÓN DEL LIBRO] Horas de una jornada, para el valor de la hora extra. */
+  /** [BOOK CONVENTION] Hours of a working day, for the overtime hourly rate. */
   dailyHours: number;
-  /** [CONVENCIÓN DEL LIBRO] Días que el libro considera un año, para repartir el décimo cuarto. */
+  /** [BOOK CONVENTION] Days the book considers a year, for spreading the décimo cuarto. */
   yearlyDays: number;
   /** [LEY] Horas suplementarias: hora + 50 % de recargo. */
   overtimeMultiplier50: number;
   /** [LEY] Horas extraordinarias: hora + 100 % de recargo. */
   overtimeMultiplier100: number;
-  /** [EN DISPUTA] La tercera clase. En el libro es `0.25`, que es SOLO el recargo, mientras las
-   *  otras dos son el total, y una fila usa `0.15` — ver §11.2. Pendiente de confirmación.
-   *  Cuando llegue la respuesta se corrige este número, no una fórmula. */
+  /** [DISPUTED] The third class. In the book it is `0.25`, which is ONLY the premium, while the
+   *  other two are the total, and one row uses `0.15` — see §11.2. Pending confirmation.
+   *  When the answer arrives this number gets corrected, not a formula. */
   overtimeMultiplier25: number;
 }
 
 /**
- * Los valores vigentes en 2026, leídos de las fórmulas del rol de marzo 2026 de HOTEL BOUTIQUE
- * CULTURA MANOR. Son el default de un período nuevo; un período guardado lleva los suyos.
+ * The values in force in 2026, read from the formulas of HOTEL BOUTIQUE CULTURA MANOR's March 2026
+ * rol. They are a new período's default; a stored período carries its own.
  */
 export const DEFAULT_PAYROLL_PARAMETERS: PayrollParameters = {
   unifiedBasicSalary: 482,

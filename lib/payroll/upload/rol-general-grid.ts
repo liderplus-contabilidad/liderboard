@@ -6,21 +6,21 @@
  * exactly the failure mode a coordinate-based reader would inherit silently. The same rule
  * `microplus-grid.ts`/`dingoo-grid.ts` follow.
  *
- * The rótulos live in TWO rows (row 2 rótula `M`–`BH`, row 3 rótula `A`–`L`), so — unlike those
+ * The labels live in TWO rows (row 2 labels `M`–`BH`, row 3 labels `A`–`L`), so — unlike those
  * two modules, whose header lives on one row — this module doesn't return a single "header row";
  * `findLabel` scans the whole sheet for each label independently and takes the FIRST match,
- * top-to-bottom then left-to-right. Varios rótulos se repiten más abajo (`LIQUIDO A RECIBIR` en
- * `BH` tras `AP`, `PAGADO` en `CC` tras `BZ`, `COSTO TOTAL` dentro del bloque de asientos tras
- * `AY`, y ese mismo bloque REPITE como descripción `PRESTAMOS EMPRESARIALES`, `ALMUERZOS` y
- * `CONTRIBUCION SOLIDARIA`, que son tres rótulos de egreso): the report always writes its real
+ * top-to-bottom then left-to-right. Several labels are repeated further down (`LIQUIDO A RECIBIR` in
+ * `BH` after `AP`, `PAGADO` in `CC` after `BZ`, `COSTO TOTAL` inside the journal entry block after
+ * `AY`, and that same block REPEATS as descriptions `PRESTAMOS EMPRESARIALES`, `ALMUERZOS` and
+ * `CONTRIBUCION SOLIDARIA`, which are three deduction labels): the report always writes its real
  * header first, so "first match" tells them apart without a coordinate, the same trick
  * `findMicroplusHeader`'s first-match assignment uses.
  *
- * La otra trampa es al revés y es de la fila 2: sobre las columnas de horas extras hay dos
- * rótulos AGRUPADORES (`" No. HORAS EXTRAS"` sobre `G`–`I`, `"VALOR DE HORAS EXTRAS"` sobre
- * `J`–`L`) que están por ENCIMA de los rótulos reales de la fila 3. El primero empieza igual que
- * el `"No. "` que nombra el ordinal, así que la comparación tiene que ser por la etiqueta ENTERA
- * —nunca por prefijo—, que es justo lo que `findLabel` hace.
+ * The other trap is the other way round and belongs to row 2: over the overtime columns there are two
+ * GROUPING labels (`" No. HORAS EXTRAS"` over `G`–`I`, `"VALOR DE HORAS EXTRAS"` over `J`–`L`) that
+ * sit ABOVE the real labels of row 3. The first one starts the same as the `"No. "` that names the
+ * ordinal, so the comparison has to be by the WHOLE label —never by prefix—, which is exactly what
+ * `findLabel` does.
  *
  * Split from `rol-general.ts` so the delicate half — label location, area attribution, and the
  * employee/area/skip row classification — is testable over bare grids, with no workbook fixtures
@@ -61,17 +61,18 @@ export function parsePeriodText(cell: Cell): PeriodRef | null {
 }
 
 /**
- * EL PERÍODO, POR SU FORMA Y NO POR SU CELDA — la última coordenada que quedaba en este archivo.
+ * THE PERIOD, BY ITS SHAPE AND NOT BY ITS CELL — the last coordinate left in this file.
  *
- * Se leía en `B2` fijo, que era la única excepción a la regla que la cabecera de este módulo
- * declara: todo se localiza por lo que el informe escribe. La excepción dejó de sostenerse cuando la
- * app empezó a GENERAR este mismo formato: su membrete abre unas filas por encima del preámbulo y
- * `B2` deja de ser `B2`, así que el archivo descargado no habría podido volver a entrar.
+ * It was read at a fixed `B2`, which was the only exception to the rule this module's header
+ * declares: everything is located by what the report writes. The exception stopped holding when the
+ * app started GENERATING this same format: its letterhead opens a few rows above the preamble and
+ * `B2` stops being `B2`, so the downloaded file could not have come back in.
  *
- * Se barre por encima de la cabecera `EMPLEADO` —donde vive el preámbulo y nada más— y se toma la
- * primera celda cuyo texto ENTERO sea «mes año». Los archivos que la firma ya tiene se leen igual:
- * su `B2` es la primera que casa. Y nada más de ese preámbulo puede casar por accidente, porque
- * `parsePeriodText` exige que el mes esté en `MONTHS_FULL_ES` y que la celda no lleve nada más.
+ * The rows above the `EMPLEADO` header are swept —where the preamble lives and nothing else— and the
+ * first cell whose WHOLE text is «month year» is taken. The files the firm already has read the same:
+ * their `B2` is the first one that matches. And nothing else in that preamble can match by accident,
+ * because `parsePeriodText` requires the month to be in `MONTHS_FULL_ES` and the cell to carry
+ * nothing else.
  */
 export function findPeriod(grid: readonly Cell[][], headerRow: number | null): PeriodRef | null {
   const end = headerRow ?? grid.length;
@@ -86,23 +87,23 @@ export function findPeriod(grid: readonly Cell[][], headerRow: number | null): P
   return null;
 }
 
-/** La columna donde el libro escribe la empresa y, bajo ella, el membrete: `B`, la misma de los
- *  nombres de área y de empleado. */
+/** The column where the book writes the company and, under it, the letterhead: `B`, the same one as
+ *  the area and employee names. */
 const COMPANY_COLUMN = 1;
 
 /**
- * LA EMPRESA, POR SU SITIO EN EL PREÁMBULO Y NO POR SU CELDA — la hermana de `findPeriod`, y por la
- * misma razón.
+ * THE COMPANY, BY ITS PLACE IN THE PREAMBLE AND NOT BY ITS CELL — `findPeriod`'s sibling, and for the
+ * same reason.
  *
- * Se leía en `B1` fijo, y eso dejó de ser cierto en cuanto la app empezó a generar este formato: su
- * banda de logo abre unas filas por encima del preámbulo, así que `B1` es una fila en blanco de esa
- * banda y el archivo descargado volvía a entrar SIN empresa. Con el membrete completo el preámbulo
- * crece más todavía.
+ * It was read at a fixed `B1`, and that stopped being true as soon as the app started generating this
+ * format: its logo band opens a few rows above the preamble, so `B1` is a blank row of that band and
+ * the downloaded file came back in WITH NO company. With the complete letterhead the preamble grows
+ * further still.
  *
- * Se barre la columna `B` por encima de la cabecera `EMPLEADO` y se toma la PRIMERA celda con texto
- * que no sea el período. Es el nombre del cliente, porque el membrete va debajo de él. Se exige que
- * la celda sea TEXTO —no un número convertido— porque el archivo real trae en su primera fila una
- * lista de índices de búsqueda, y un `5` no es la razón social de nadie.
+ * Column `B` is swept above the `EMPLEADO` header and the FIRST cell with text that is not the period
+ * is taken. It is the client's name, because the letterhead goes below it. The cell is required to be
+ * TEXT —not a converted number— because the real file brings a list of lookup indices on its first
+ * row, and a `5` is nobody's razón social.
  */
 export function findCompany(grid: readonly Cell[][], headerRow: number | null): string {
   const end = headerRow ?? grid.length;
@@ -140,13 +141,13 @@ export function excelSerialToISODate(cell: Cell): string | null {
 }
 
 /** Every column this parser reads, by its own key. `ordinalCol` (`No.`) is never stored on the
- * ficha — it exists purely so an area row (name only) can be told apart from an employee row
+ * record — it exists purely so an area row (name only) can be told apart from an employee row
  * (ordinal AND name).
  *
- * Qué CAMPO del motor lleva cada columna está declarado una sola vez en `lib/payroll/concepts.ts`
- * y no se repite aquí: lo que este archivo añade es lo único que aquel no puede tener, el RÓTULO
- * con el que el libro escribe esa columna —«Anticipo de sueldo» en la pantalla es `ANTICIPO
- * SUELDO` en la hoja, y el parser localiza por lo segundo. */
+ * Which engine FIELD each column carries is declared just once in `lib/payroll/concepts.ts` and is
+ * not repeated here: what this file adds is the only thing that one cannot have, the LABEL the book
+ * writes that column with — «Anticipo de sueldo» on screen is `ANTICIPO SUELDO` on the sheet, and the
+ * parser locates by the latter. */
 type ColumnKey =
   | "ordinalCol"
   | "employeeCol"
@@ -205,25 +206,25 @@ interface LabelSpec {
   display: string;
 }
 
-/** El orden es el del libro (`A` → `CA`), que es el mismo del comprobante `INDIVIDUAL` y el de
- * `concepts.ts`: así el aviso agrupado de columnas ausentes las nombra en el orden en que quien
- * abre el Excel las va a buscar. El comentario de cada entrada es su LETRA en la hoja. */
+/** The order is the book's (`A` → `CA`), which is the same as the `INDIVIDUAL` payslip's and
+ * `concepts.ts`': that way the grouped notice about missing columns names them in the order whoever
+ * opens the Excel is going to look for them. Each entry's comment is its LETTER on the sheet. */
 const LABEL_SPECS: readonly LabelSpec[] = [
   { key: "ordinalCol", label: "no.", display: "No." }, // A
   { key: "employeeCol", label: "empleado", display: "EMPLEADO" }, // B
   { key: "roleCol", label: "cargo", display: "CARGO" }, // C
   { key: "baseSalaryCol", label: "sueldo base", display: "SUELDO BASE" }, // D
   { key: "daysCol", label: "dias", display: "DIAS" }, // E
-  // G, H, I — las CANTIDADES de horas. El libro rotula la tercera clase «15 %» aquí y «25 %» en
-  // su valor (`L`): se copia tal cual, porque lo que se busca es el texto de la hoja, no el que
-  // debería decir. Es la pregunta abierta §11.2, y arreglarla aquí rompería la localización.
+  // G, H, I — the hour QUANTITIES. The book labels the third class «15 %» here and «25 %» on its
+  // value (`L`): it is copied as it is, because what is looked for is the sheet's text, not the one
+  // it should say. It is open question §11.2, and fixing it here would break the location.
   { key: "overtimeHours50Col", label: "horas extras 50%", display: "HORAS EXTRAS 50%" },
   { key: "overtimeHours100Col", label: "horas extras 100%", display: "HORAS EXTRAS 100%" },
   { key: "overtimeHours25Col", label: "horas extras 15%", display: "HORAS EXTRAS 15%" },
-  // J, K, L — su VALOR. No son campos de la captura (el motor los deriva), pero se leen porque
-  // son el término contra el que `M` se compara para recuperar el importe aprobado (§6), y
-  // recalcularlos aquí no serviría: en el archivo real una fila usa 0,15 donde las demás usan
-  // 0,25, así que un `J+K+L` derivado no coincidiría con el `M` que el libro guardó.
+  // J, K, L — their VALUE. They are not capture fields (the engine derives them), but they are read
+  // because they are the term `M` is compared against to recover the approved amount (§6), and
+  // recomputing them here would not serve: in the real file one row uses 0.15 where the others use
+  // 0.25, so a derived `J+K+L` would not match the `M` the book stored.
   { key: "overtimePay50Col", label: "valor ganado extras 50%", display: "VALOR GANADO EXTRAS 50%" },
   {
     key: "overtimePay100Col",
@@ -259,13 +260,13 @@ const LABEL_SPECS: readonly LabelSpec[] = [
     display: "CONSUMO LOCALES EMPLEADO",
   },
   {
-    key: "solidarityContributionCol", // AG — el libro lo parte en dos líneas; `compactLabel` lo une
+    key: "solidarityContributionCol", // AG — the book splits it into two lines; `compactLabel` joins it
     label: "contribucion solidaria",
     display: "CONTRIBUCION SOLIDARIA",
   },
-  { key: "otherDeductionsCol", label: "otros", display: "OTROS" }, // AH — con un espacio sobrante
-  // AI — «PACIAL» es la errata del libro, y se busca con ella: corregirla aquí dejaría de
-  // encontrar la columna en todos los archivos que la firma ya tiene.
+  { key: "otherDeductionsCol", label: "otros", display: "OTROS" }, // AH — with a spare space
+  // AI — «PACIAL» is the book's typo, and it is looked for with it: correcting it here would stop
+  // finding the column in every file the firm already has.
   {
     key: "partTimeDeductionCol",
     label: "descuento tiempo pacial",
@@ -343,10 +344,10 @@ function valueAt(row: readonly Cell[], col: number | null): Cell {
  * against `"CT" | "TP"` and `hireDateRaw` isn't yet converted from its Excel serial: both are
  * domain decisions (what counts as valid, what "unparseable" means) that `rol-general.ts` owns.
  *
- * Todo lo que termina en `Raw` sigue esa misma frontera: `hasReserveFundRaw`/
- * `accumulatesReserveFundRaw` traen el texto de la celda sin decidir qué cuenta como «sí», y
- * `thirteenthProvisionRaw`/`fourteenthProvisionRaw` traen el importe de `AS`/`AT` sin decidir qué
- * cuenta como «encendida». Aquí solo se lee lo que hay. */
+ * Everything ending in `Raw` follows that same boundary: `hasReserveFundRaw`/
+ * `accumulatesReserveFundRaw` bring the cell's text without deciding what counts as a «yes», and
+ * `thirteenthProvisionRaw`/`fourteenthProvisionRaw` bring `AS`/`AT`'s amount without deciding what
+ * counts as «switched on». Here only what is there is read. */
 export interface RolGeneralEmployeeRow {
   area: string;
   name: string;
@@ -363,24 +364,25 @@ export interface RolGeneralEmployeeRow {
   overtimeHours50: number;
   overtimeHours100: number;
   overtimeHours25: number;
-  /** `J`, `K`, `L` — su valor, TAL COMO EL LIBRO lo trae. No viajan a la captura (el motor los
-   * deriva): existen para que `rol-general.ts` pueda comparar `M` contra `J+K+L` y recuperar
-   * cuánto se reconoció. */
+  /** `J`, `K`, `L` — their value, JUST AS THE BOOK brings it. They do not travel to the capture (the
+   * engine derives them): they exist so `rol-general.ts` can compare `M` against `J+K+L` and recover
+   * how much was recognised. */
   overtimePay50: number;
   overtimePay100: number;
   overtimePay25: number;
-  /** `M` — el total reconocido. `null` solo cuando el libro no declara la columna, misma
-   * convención que `paid`: sin ella no se puede afirmar que no se reconociera ninguna hora. */
+  /** `M` — the recognised total. `null` only when the book does not declare the column, the same
+   * convention as `paid`: without it, it cannot be claimed that no hour was recognised. */
   overtimeTotal: number | null;
-  /** `P`…`T`, `V` — los ingresos capturados. */
+  /** `P`…`T`, `V` — the captured income items. */
   vacationPay: number;
   privateInsurance: number;
   allowances: number;
   fixedCommission: number;
   variableCommission: number;
   bonus: number;
-  /** `Y`…`AN` — los doce egresos con rótulo. `X` (aporte IESS) no está: lo deriva el motor, y
-   * `AJ`–`AM` tampoco, porque sin rótulo no hay forma de localizarlas (§11.4). */
+  /** `Y`…`AN` — the twelve labelled deductions. `X` (IESS contribution) is not there: the engine
+   * derives it, and neither are `AJ`–`AM`, because with no label there is no way to locate them
+   * (§11.4). */
   iessLoans: number;
   unpaidLeave: number;
   salaryAdvance: number;
@@ -393,21 +395,22 @@ export interface RolGeneralEmployeeRow {
   otherDeductions: number;
   partTimeDeduction: number;
   medicalLeaveDeduction: number;
-  /** `AS`, `AT` — el importe provisionado, del que se deduce si el mes provisiona los décimos. */
+  /** `AS`, `AT` — the provisioned amount, from which whether the month provisions the décimos is
+   *  deduced. */
   thirteenthProvisionRaw: number;
   fourteenthProvisionRaw: number;
   /**
-   * `null` cuando nadie declaró lo pagado: ni el libro trae la columna, ni la celda de este empleado
-   * tiene nada. Es la ÚNICA columna que distingue el blanco del cero, y no por simetría con el resto
-   * sino porque aquí las dos cosas significan distinto: sin `PAGADO` el empleado no está ni
-   * conciliado ni con diferencia, mientras que un `0` escrito afirma que se le transfirió cero y
-   * deja una diferencia igual a su líquido.
+   * `null` when nobody declared what was paid: neither does the book bring the column, nor does this
+   * employee's cell hold anything. It is the ONLY column that tells blank from zero, and not out of
+   * symmetry with the rest but because here the two things mean different: with no `PAGADO` the
+   * employee is neither reconciled nor in difference, whereas a written `0` claims zero was
+   * transferred to them and leaves a difference equal to their net pay.
    *
-   * Leía el blanco como `0`, con la convención de las otras cuarenta columnas. Se cambió al empezar
-   * a generar este formato: el rol descargado escribe en blanco al que no tiene pago declarado, y
-   * con la regla vieja volvía como «con diferencia» por todo su líquido — el archivo de la app no
-   * habría podido describir su propio estado. Acierta también con el libro del contador, donde una
-   * fila sin `PAGADO` es una que todavía no se ha pagado.
+   * It read blank as `0`, with the convention of the other forty columns. It was changed when this
+   * format started being generated: the downloaded rol writes blank for whoever has no declared
+   * payment, and with the old rule it came back as «with a difference» by their whole net pay — the
+   * app's file could not have described its own state. It is also right about the accountant's book,
+   * where a row with no `PAGADO` is one that has not been paid yet.
    */
   paid: number | null;
 }
@@ -462,14 +465,14 @@ export function readEmployeeRows(
     if (currentArea === null) {
       noAreaCount++;
     }
-    // Una columna que el libro no declara vale `0` como cualquier celda vacía: son cuarenta y
-    // tantas y escribir `?? null` en cada una convertiría «este concepto no se usó» en un caso
-    // aparte que ningún consumidor sabría tratar. Las dos excepciones —`PAGADO` y `M`— tienen su
-    // propio motivo escrito en el tipo: de las dos, la ausencia sí dice algo distinto del cero.
+    // A column the book does not declare is worth `0` like any empty cell: there are forty-odd of
+    // them and writing `?? null` on each would turn «this concept was not used» into a separate case
+    // no consumer would know how to handle. The two exceptions —`PAGADO` and `M`— have their own
+    // reason written into the type: for those two, absence does say something different from zero.
     const num = (key: ColumnKey): number => toNumber(valueAt(row, columns[key]));
     const text = (key: ColumnKey): string => cellText(valueAt(row, columns[key]));
-    /** Como `num`, pero distinguiendo la celda EN BLANCO del cero escrito. Solo `PAGADO` la usa, y
-     *  por eso está aquí abajo: para las otras cuarenta y tantas columnas vacío ES cero. */
+    /** Like `num`, but telling the BLANK cell from a written zero. Only `PAGADO` uses it, and that is
+     *  why it is down here: for the other forty-odd columns empty IS zero. */
     const numOrNull = (key: ColumnKey): number | null => {
       const cell = valueAt(row, columns[key]);
       return isFilled(cell) ? toNumber(cell) : null;

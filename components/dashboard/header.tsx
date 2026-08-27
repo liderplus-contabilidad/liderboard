@@ -11,13 +11,13 @@ export function DashboardHeader() {
   const pathname = usePathname();
   const [slug, secondSegment] = pathname.split("/").filter(Boolean);
   const current = findModuleBySlug(slug) ?? DEFAULT_MODULE;
-  // El tercer nivel de la miga aparece SOLO ante un hijo declarado. Un segundo segmento que es un
-  // parámetro de ruta —`/payroll/<uuid>`, el detalle de un período— no lo produce: un identificador
-  // no dice nada a quien lee.
+  // The third breadcrumb level appears ONLY for a declared child. A second segment that is a route
+  // parameter —`/payroll/<uuid>`, a período's detail— does not produce it: an identifier says
+  // nothing to the reader.
   const submodule = findSubmoduleBySlug(current, secondSegment);
   const title = submodule?.title ?? current.title;
-  // El selector de entidad lo resuelve el módulo PADRE, así que un subitem conserva el suyo sin
-  // declararlo.
+  // The entity selector is resolved by the PARENT module, so a subitem keeps its own without
+  // declaring it.
   const isPyg = current.slug === "profit-loss";
   const isOccupancy = current.slug === "occupancy";
   const isPayroll = current.slug === "payroll";
@@ -39,9 +39,9 @@ export function DashboardHeader() {
         <h1 className="truncate text-xl font-bold tracking-tight text-brand">{title}</h1>
       </div>
 
-      {/* Cada módulo monta su propio selector sobre el mismo bloque: PyG lista sus clientes,
-          Ocupaciones sus hoteles, Rol de Pagos los suyos. Las tres listas son distintas —cada una
-          con su base—; lo único que comparten es este control y las reglas de un nombre. */}
+      {/* Each module mounts its own selector over the same block: PyG lists its clients, Ocupaciones
+          its hotels, Rol de Pagos its own. The three lists are different —each with its own
+          database—; the only things they share are this control and the rules of a name. */}
       {isPyg && (
         <div className="ml-auto min-w-0">
           <PygClientActions />

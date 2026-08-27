@@ -230,12 +230,12 @@ describe("un solo eje por gráfica", () => {
     expect(option.series.map((entry) => entry.type)).toEqual(["bar", "bar", "line"]);
     expect(option.series.slice(0, 2).every((entry) => entry.stack === "total")).toBe(true);
     expect(Array.isArray(option.yAxis)).toBe(false);
-    // La línea es una lectura de la misma entidad, no una segunda: tinta, nunca una ranura.
+    // The line is a reading of the same entity, not a second one: ink, never a slot.
     expect(option.series[2].lineStyle?.color).toBe(CHART_INK.strong);
     expect(CHART_PALETTE).not.toContain(option.series[2].lineStyle?.color);
   });
 
-  /** El apilado como lo dibuja la tarjeta: sus hijas, su total y el reparto entre ambos. */
+  /** The stack as the card draws it: its children, its total and the split between the two. */
   function distributionOf(children: Series[], total: Series, periods = PERIODS): ChartOption {
     const shares = distributionShares(children, total, "Ventas");
     return stackedTotalOption(children, total, {
@@ -254,8 +254,9 @@ describe("un solo eje por gráfica", () => {
       makeSeries(year(2000), { code: "4.1", label: "Ventas" }),
     );
 
-    // Doce columnas no admiten un monto por segmento, pero sí el porcentaje: es más corto y es
-    // la lectura que la pila añade. El monto de la columna lo declara la línea, una sola vez.
+    // Twelve columns do not admit an amount per segment, but they do admit the percentage: it is
+    // shorter and it is the reading the stack adds. The column's amount is declared by the line, just
+    // once.
     expect(option.series[0].label?.formatter?.({ value: 1500, name: "Ene", dataIndex: 0 })).toBe(
       "{share|75.0 %}",
     );
@@ -292,9 +293,9 @@ describe("un solo eje por gráfica", () => {
       makeSeries(year(2000), { code: "4.1", label: "Ventas" }),
     );
 
-    // 2 % no cabe dentro de su propio trozo: se apaga en vez de desbordarlo…
+    // 2 % does not fit inside its own piece: it switches off instead of overflowing it…
     expect(option.series[1].label?.formatter?.({ value: 40, name: "Ene", dataIndex: 0 })).toBe("");
-    // …y el tooltip, donde sobra el ancho, lo dice nombrando además la base.
+    // …and the tooltip, where width is plentiful, says it while also naming the base.
     expect(
       tooltipOf(option, [
         { value: 1960, seriesId: "4.1.1|cultura-manor|2026" },
@@ -308,9 +309,9 @@ describe("un solo eje por gráfica", () => {
     const total = makeSeries([2100, 2250, 1900], { code: "4.1", label: "Ventas" });
     const option = stackedTotalOption([series, makeSeries([1100, 1050, 1000])], total, CONTEXT);
 
-    // A ocho segmentos las costuras parten la barra en trozos sueltos; aquí separa el color.
+    // At eight segments the seams split the bar into loose pieces; here the colour separates them.
     expect(option.series[0].itemStyle?.borderWidth).toBeUndefined();
-    // Y la pila SIN total las conserva: allí no hay nada que declare la columna como una sola.
+    // And the stack WITHOUT a total keeps them: there is nothing there declaring the column as one.
     expect(stackedOption([series], CONTEXT).series[0].itemStyle?.borderWidth).toBe(CHART_MARK.gap);
   });
 
@@ -416,7 +417,7 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
   const PARENT_ID = `4|cultura-manor|2026`;
   const CHILD_ID = `4.1|cultura-manor|2026`;
 
-  /** Padre e hija, con tantos periodos como pida el caso. */
+  /** Parent and child, with as many periods as the case asks for. */
   function pair(points: number): Series[] {
     const values = (amount: number) => Array.from({ length: points }, () => amount);
     return [
@@ -445,8 +446,9 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
   });
 
   it("apaga el monto pero conserva el porcentaje cuando el eje se aprieta", () => {
-    // Dos series sobre doce meses son 24 marcas y ningún monto cabe; el porcentaje lo lleva solo
-    // la hija, así que son 12 y sí caben. Es la lectura que se pidió, y sobrevive más densidad.
+    // Two series over twelve months are 24 marks and no amount fits; only the child carries the
+    // percentage, so there are 12 and they do fit. It is the reading that was asked for, and it
+    // survives more density.
     const option = barOption(pair(12), { ...CONTEXT, shares: sharesOf(Array(12).fill(28.4)) });
 
     expect(option.series[0].label?.show).toBe(false);
@@ -666,7 +668,7 @@ describe("interacción de la gráfica", () => {
 });
 
 describe("la cascada se dibuja como barras", () => {
-  /** Cultura Manor Ene–Jul, ya derivada: ingresos, dos grupos de gasto y la utilidad. */
+  /** Cultura Manor Ene–Jul, already derived: revenue, two expense groups and the profit. */
   const STEPS: WaterfallStep[] = [
     { kind: "total", code: "4", label: "Ingresos", value: 176_303, start: 0, end: 176_303 },
     {
@@ -688,7 +690,7 @@ describe("la cascada se dibuja como barras", () => {
     { kind: "total", code: RESULT_CODE, label: "Utilidad", value: 35_456, start: 0, end: 35_456 },
   ];
 
-  /** Un centro cuyos gastos se comen el ingreso: el escalón cruza el cero y el cierre queda bajo él. */
+  /** A center whose expenses eat the revenue: the step crosses zero and the close sits below it. */
   const PERDIDA: WaterfallStep[] = [
     { kind: "total", code: "4", label: "Ingresos", value: 10_000, start: 0, end: 10_000 },
     {
@@ -716,7 +718,7 @@ describe("la cascada se dibuja como barras", () => {
     const option = waterfallOption(STEPS);
     const base = seriesById(option, "cascada-base-positivo");
 
-    // Gastos Generales cierra en 98.456: esa es la altura de su tramo transparente.
+    // Gastos Generales closes at 98,456: that is the height of its transparent segment.
     expect(base?.data[1]).toBe(98_456);
     expect(base?.itemStyle?.color).toBe("transparent");
     expect(base?.label?.show).toBe(false);
@@ -744,7 +746,7 @@ describe("la cascada se dibuja como barras", () => {
     const negativo = seriesById(option, "cascada-negativo");
     const param = { value: 77_847, name: "Gastos Generales", dataIndex: 1 };
 
-    // La barra mide 77.847 hacia arriba desde su base, pero lo que dice es lo que restó.
+    // The bar measures 77,847 upwards from its base, but what it says is what it subtracted.
     expect(positivo?.label?.formatter?.(param)).toBe(formatCurrency(-77_847));
     expect(negativo?.label?.formatter?.(param)).toBe("");
   });
@@ -752,8 +754,8 @@ describe("la cascada se dibuja como barras", () => {
   it("abre con el color de SU bloque y pinta los pasos con el token de signo", () => {
     const fills = seriesById(waterfallOption(STEPS), "cascada-positivo")?.data as ChartBarDatum[];
 
-    // La barra de apertura dice «Ingresos»: el mismo tono que la tabla de Datos, no la ranura 1.
-    // El resto sigue codificando DIRECCIÓN, que es otra cosa y no se toca.
+    // The opening bar says «Ingresos»: the same hue as the Datos table, not slot 1.
+    // The rest still encodes DIRECTION, which is another thing and is not touched.
     expect(fills[0].itemStyle?.color).toBe(CHART_SECTION.income);
     expect(fills[1].itemStyle?.color).toBe(CHART_SIGN.negative);
     expect(fills[3].itemStyle?.color).toBe(CHART_SIGN.positive);
@@ -773,7 +775,7 @@ describe("la cascada se dibuja como barras", () => {
 
     expect(Number(option.yAxis?.min)).toBeLessThanOrEqual(-15_000);
     expect(Number(option.yAxis?.max)).toBeGreaterThanOrEqual(10_000);
-    // El escalón que cruza el cero se dibuja en dos tramos, uno a cada lado del eje.
+    // The step that crosses zero is drawn in two segments, one on each side of the axis.
     expect(positivo[1].value).toBe(10_000);
     expect(negativo[1].value).toBe(-15_000);
     expect(negativo[2].value).toBe(-15_000);
@@ -805,7 +807,7 @@ describe("el eje girado", () => {
     const axes = option.xAxis;
     expect(Array.isArray(axes)).toBe(true);
     expect(Array.isArray(axes) && axes[0].data).toEqual(columns);
-    // Hospedaje abarca dos columnas y su nombre cae en la izquierda del medio; Bar, en la suya.
+    // Hospedaje spans two columns and its name falls on the left one of the middle; Bar, on its own.
     expect(Array.isArray(axes) && axes[1].data).toEqual(["Hospedaje", "", "Bar"]);
   });
 
@@ -828,10 +830,10 @@ describe("el código de cuenta, al pasar el ratón", () => {
   ];
 
   it("el tooltip se queda dentro de la TARJETA, que es lo único que puede cortarlo", () => {
-    // El texto nunca se recorta —la caja crece hasta el renglón más largo—, pero la tarjeta es un
-    // `overflow-hidden` y el renderer coloca el tooltip contra la VENTANA, así que al pasar por
-    // las últimas barras la caja se salía por el borde y se cortaba ahí, justo con los nombres de
-    // cuenta largos, que es cuando hace falta leerla entera.
+    // The text is never clipped —the box grows to the longest line—, but the card is an
+    // `overflow-hidden` and the renderer places the tooltip against the WINDOW, so on hovering the
+    // last bars the box fell off the edge and was cut there, precisely with long account names, which
+    // is when it needs reading whole.
     const entries: AmountEntry[] = [{ code: "5.1.5.1", label: "Sueldos", value: 100 }];
 
     expect(barOption(series, CONTEXT).tooltip?.confine).toBe(true);
@@ -845,7 +847,7 @@ describe("el código de cuenta, al pasar el ratón", () => {
 
     expect(html).toContain("4.1.1.2 · Ventas Restaurante: $1,000");
     expect(html).toContain("4.1.1.3 · Ventas Eventos: $500");
-    // La primera línea es el PERIODO y no una cuenta: ahí el código no pinta nada.
+    // The first line is the PERIOD and not an account: there the code paints nothing.
     expect(html.startsWith("Ene")).toBe(true);
   });
 
@@ -865,8 +867,8 @@ describe("el código de cuenta, al pasar el ratón", () => {
   });
 
   /**
-   * En las de barras horizontales la cuenta NO es la serie —la serie es «Monto»— sino la
-   * categoría del eje, que el tooltip escribe como primera línea. Ahí es donde tiene que ir.
+   * In the horizontal bar ones the account is NOT the series —the series is «Monto»— but the axis'
+   * category, which the tooltip writes as its first line. That is where it has to go.
    */
   it("en el ranking va en la primera línea, que es donde está el nombre de la cuenta", () => {
     const entries: AmountEntry[] = [
@@ -878,7 +880,7 @@ describe("el código de cuenta, al pasar el ratón", () => {
 
     expect(html.startsWith("5.1.5.1 · Sueldos y Salarios")).toBe(true);
     expect(html).toContain("$9,000");
-    // Y sigue el orden del eje, no el del archivo: la segunda fila es la segunda categoría.
+    // And it follows the axis' order, not the file's: the second row is the second category.
     expect(
       tooltipOf(option, [{ value: 8000, name: "Arrendamiento Operativo", dataIndex: 1 }]),
     ).toContain("5.1.5.12 · Arrendamiento Operativo");
@@ -925,9 +927,9 @@ describe("el código de cuenta, al pasar el ratón", () => {
   });
 
   /**
-   * Las dos formas que NO son cuentas. Una línea de negocio agrupa varias cuentas de ramas
-   * distintas y un escalón de la cascada es un bloque del estado: ninguna tiene UN código, y
-   * escribir el de una de sus partes afirmaría algo falso.
+   * The two shapes that are NOT accounts. A business line groups several accounts from different
+   * branches and a cascade step is a block of the statement: neither has ONE code, and writing that
+   * of one of its parts would assert something false.
    */
   it("no lo inventa donde la serie no es una cuenta", () => {
     const category = categoryBarOption(
@@ -970,9 +972,9 @@ describe("los importes se escriben como en Datos", () => {
   const series = [makeSeries([204_045.51, null], { code: "4.1.1.2", label: "Restaurante" })];
 
   /**
-   * Dos decimales SIEMPRE, con el mismo `formatCurrency({ cents: true })` que la tabla de Datos:
-   * el contador coteja la barra contra su hoja, y `$204,045` contra `204.045,51` obliga a
-   * preguntarse si la diferencia son centavos o un error de carga.
+   * TWO decimals ALWAYS, with the same `formatCurrency({ cents: true })` as the Datos table: the
+   * accountant checks the bar against their sheet, and `$204,045` against `204.045,51` forces them to
+   * wonder whether the difference is cents or an upload error.
    */
   it("dice los centavos en la etiqueta, en el tooltip y en la tabla gemela", () => {
     const option = barOption(series, CONTEXT);
@@ -986,10 +988,10 @@ describe("los importes se escriben como en Datos", () => {
   });
 
   /**
-   * El EJE no: sus marcas son una escala y no una cifra que nadie coteja, y seis rótulos de
-   * «$204,045.51» se comen el ancho que le queda al dibujo. Es la misma regla que Ocupaciones ya
-   * escribió para `formatMetric` — «right for an axis, wrong for a figure someone compares
-   * against their own spreadsheet» —, y por eso Datos, que no tiene eje, no tiene este caso.
+   * The AXIS does not: its ticks are a scale and not a figure anybody checks, and six labels of
+   * «$204,045.51» eat the width the drawing has left. It is the same rule Ocupaciones already wrote
+   * for `formatMetric` — «right for an axis, wrong for a figure someone compares against their own
+   * spreadsheet» —, and that is why Datos, which has no axis, does not have this case.
    */
   it("pero no en las marcas del eje, que son una escala y no una cifra", () => {
     const option = barOption(series, CONTEXT);
@@ -1037,7 +1039,7 @@ describe("shareOfTotalOption · una cuenta como parte de un todo", () => {
     const option = shareOfTotalOption(ROWS, { colorOf });
 
     expect(option.series.map((series) => series.id)).toEqual(["parte", "resto"]);
-    // Apiladas: juntas son el 100 % de cada fila.
+    // Stacked: together they are 100 % of each row.
     expect(option.series[0].stack).toBe(option.series[1].stack);
   });
 
@@ -1056,7 +1058,7 @@ describe("shareOfTotalOption · una cuenta como parte de un todo", () => {
 
     expect(parte[0]).toBeCloseTo(27.4, 1);
     expect(parte[1]).toBeCloseTo(21.3, 1);
-    // El resto completa el 100 en las dos, que es lo que la hace leerse como un reparto.
+    // The rest completes the 100 in both, which is what makes it read as a breakdown.
     expect(parte[0] + resto[0]).toBeCloseTo(100, 6);
     expect(parte[1] + resto[1]).toBeCloseTo(100, 6);
   });
@@ -1100,9 +1102,9 @@ describe("shareOfTotalOption · una cuenta como parte de un todo", () => {
 
 describe("el código de cuenta llega al tooltip de las barras verticales", () => {
   it("lo pasa por categoría y en el ORDEN dibujado, que es el ordenado", () => {
-    // El eje trunca los nombres largos, así que el tooltip es donde el contador identifica la fila
-    // contra su plan. `byCategory` va por índice: leerlo de la lista sin ordenar pondría el código
-    // de una cuenta bajo el nombre de otra.
+    // The axis truncates long names, so the tooltip is where the accountant identifies the row
+    // against their plan. `byCategory` goes by index: reading it off the unordered list would put one
+    // account's code under another's name.
     const option = verticalBarOption(
       [
         { code: "5.2.01.02", label: "Costo Alimentación", value: 7_881.11 },

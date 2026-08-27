@@ -1,13 +1,13 @@
 /**
- * IDA Y VUELTA: el archivo que esta app genera, leído por el importador que lee el del contador.
+ * ROUND TRIP: the file this app generates, read by the importer that reads the accountant's.
  *
- * Es el test que sostiene la promesa de la descarga —«prácticamente igual al que se sube»— y el
- * único sitio donde se pueden ver las dos cosas que solo existen ya escritas en el `.xlsx`: que la
- * fecha de ingreso no se desplace un día al pasar por el serial de Excel, y que el membrete del logo
- * no le esconda el período al lector.
+ * It is the test that holds up the download's promise —«practically the same as the one uploaded»—
+ * and the only place where the two things that only exist once written into the `.xlsx` can be seen:
+ * that the hire date does not shift by a day on going through Excel's serial, and that the logo's
+ * letterhead does not hide the period from the reader.
  *
- * Pasa por exceljs de verdad y vuelve por SheetJS de verdad, sin mocks: lo que puede fallar aquí es
- * precisamente la frontera entre las dos librerías.
+ * It goes through real exceljs and comes back through real SheetJS, with no mocks: what can fail here
+ * is precisely the boundary between the two libraries.
  */
 import { describe, expect, it } from "vitest";
 import type { EntityLogo } from "@/lib/logos";
@@ -18,7 +18,7 @@ import { parseRolGeneral } from "../upload/rol-general";
 import type { RolExportInput } from "./rol-grid";
 import { buildRolWorkbook } from "./workbook";
 
-/** Un PNG de 1×1 transparente. Lo único que importa de él es que exceljs lo pueda embeber. */
+/** A transparent 1×1 PNG. The only thing that matters about it is that exceljs can embed it. */
 const LOGO: EntityLogo = {
   dataUrl:
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -57,7 +57,7 @@ function employee(
   };
 }
 
-/** El perfil de empresa del archivo real del cliente: tres líneas bajo el nombre. */
+/** The client's real file company profile: three lines under the name. */
 const COMPANY = {
   legalName: "DELICMAR S.A.S.",
   taxId: "1891234567001",
@@ -68,8 +68,8 @@ const COMPANY = {
   phones: "0991045439 - 0958780660",
 };
 
-/** El centro de costo declarado al crear el cliente: su nombre compone el rótulo de `B` y su logo
- *  encabeza a la izquierda, empujando el del cliente a la derecha. */
+/** The cost center declared when the client was created: its name composes `B`'s label and its logo
+ *  heads on the left, pushing the client's to the right. */
 const CENTER = { name: "Planta Ambato", logo: { ...LOGO, dataUrl: "data:image/png;base64,Q0M=" } };
 
 function input(
@@ -129,8 +129,8 @@ describe("el rol descargado vuelve a entrar", () => {
   });
 
   it("la fecha de ingreso no se mueve un día al pasar por el serial de Excel", async () => {
-    // exceljs convierte un `Date` restándole el desfase horario local: con medianoche UTC, en
-    // Ecuador (UTC−5) el serial cae en el día anterior y la fecha vuelve cambiada.
+    // exceljs converts a `Date` by subtracting the local time-zone offset: with UTC midnight, in
+    // Ecuador (UTC−5) the serial falls on the previous day and the date comes back changed.
     const parsed = await roundTrip([employee("ALFA", { hireDate: "2026-03-01" })]);
     expect(parsed.lines[0].hireDate).toBe("2026-03-01");
   });
@@ -143,7 +143,7 @@ describe("el rol descargado vuelve a entrar", () => {
     expect(capture.deductions.iessLoans).toBe(64.25);
     expect(capture.deductions.salaryAdvance).toBe(200);
     expect(capture.paid).toBe(457.69);
-    // `M` recortado a 0 con horas trabajadas: la app lo escribe y el lector lo vuelve a deducir.
+    // `M` trimmed to 0 with hours worked: the app writes it and the reader deduces it again.
     expect(capture.approvedOvertime).toBe(0);
   });
 
@@ -174,8 +174,8 @@ describe("el rol descargado vuelve a entrar", () => {
   });
 
   it("las filas de bono NO vuelven — la limitación declarada", async () => {
-    // El lector todavía no busca `OTROS INGRESOS`, así que su importe se pierde y el total baja.
-    // Está escrito aquí para que deje de ser cierto el día que alguien le enseñe esa columna.
+    // The reader does not look for `OTROS INGRESOS` yet, so its amount is lost and the total drops.
+    // It is written here so it stops being true the day someone teaches it that column.
     const line = employee("ALFA", {
       capture: {
         ...emptyCapture(),
@@ -187,8 +187,8 @@ describe("el rol descargado vuelve a entrar", () => {
   });
 
   it("un RÓTULO PROPIO tampoco vuelve, pero su importe sí — la cabecera es la del libro", async () => {
-    // La hoja `GENERAL` conserva `AH → OTROS` verbatim: una columna tiene UNA cabecera, y la letra
-    // es el contrato contra el que el contador coteja. El nombre vive en pantalla y en el papel.
+    // The `GENERAL` sheet keeps `AH → OTROS` verbatim: a column has ONE header, and the letter is the
+    // contract the accountant checks against. The name lives on screen and on paper.
     const line = employee("ALFA", {
       capture: {
         ...emptyCapture(),
@@ -205,8 +205,8 @@ describe("el rol descargado vuelve a entrar", () => {
 describe("con el membrete completo", () => {
   const LINES = [employee("MORALES MENA SILVIA JIMENA"), employee("ALFA", { area: "COCINA" })];
 
-  // El caso que junta las dos cosas que mueven el preámbulo: la banda del logo por encima y las
-  // líneas del membrete por debajo del nombre. Es lo que baja el usuario de verdad.
+  // The case that brings together the two things that move the preamble: the logo's band above and
+  // the letterhead's lines below the name. It is what the user actually downloads.
   it("recupera el período, la empresa y la nómina entera", async () => {
     const parsed = await roundTrip(LINES, LOGO, COMPANY);
     expect(parsed.company).toBe("HOTEL BOUTIQUE CULTURA MANOR");
@@ -222,8 +222,8 @@ describe("con el membrete completo", () => {
     expect(conMembrete.lines).toEqual(sinMembrete.lines);
   });
 
-  // Ninguna línea del membrete puede colarse como un área: las áreas viven bajo la cabecera y esto
-  // está por encima.
+  // No line of the letterhead can slip in as an area: the areas live under the header and this is
+  // above it.
   it("ninguna línea del membrete se lee como un área ni como un empleado", async () => {
     const parsed = await roundTrip(LINES, LOGO, COMPANY);
     expect(parsed.lines.map((line) => line.area)).toEqual(["HOSPEDAJE", "COCINA"]);
@@ -231,9 +231,9 @@ describe("con el membrete completo", () => {
 });
 
 /**
- * EL CENTRO DE COSTO EN LA HOJA. Lo que puede estar mal es el viaje de vuelta: el rótulo de `B` es
- * lo que el lector toma por empresa, y con DOS logos el preámbulo arranca más abajo. Las cifras no
- * las toca nada de esto, y eso es justamente lo que estas pruebas afirman.
+ * THE COST CENTER ON THE SHEET. What can be wrong is the round trip: `B`'s label is what the reader
+ * takes for the company, and with TWO logos the preamble starts further down. None of this touches
+ * the figures, and that is precisely what these tests assert.
  */
 describe("con centro de costo", () => {
   const LINES = [employee("MORALES MENA SILVIA JIMENA"), employee("ALFA", { area: "COCINA" })];

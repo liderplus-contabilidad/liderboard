@@ -85,13 +85,13 @@ export interface AnalyticsSource {
   centerName: string;
   year: number;
   baseFrequency: Frequency;
-  /** Código → valores en la frecuencia base, con rollups y ediciones ya aplicados. */
+  /** Code → values in the base frequency, with rollups and edits already applied. */
   valuesByCode: Map<string, number[]>;
-  /** Código → nombre de la cuenta; de aquí sale la etiqueta de cada serie y de su contenedor. */
+  /** Code → the account's name; each series' label and its container's come from here. */
   namesByCode: Map<string, string>;
-  /** Código → código del padre directo presente en la fuente; ausente para raíces. */
+  /** Code → the direct parent's code present in the source; absent for roots. */
   parentByCode: Map<string, string>;
-  /** Índices de la frecuencia base que tienen movimiento. */
+  /** Indices of the base frequency that have movement. */
   coverage: ReadonlySet<number>;
 }
 
@@ -104,17 +104,17 @@ export interface SeriesQuery {
   centerIds: string[];
   years: number[];
   frequency: Frequency;
-  /** Restringe el eje X; ausente = todos los periodos del año. */
+  /** Restricts the X axis; absent = every period of the year. */
   periods?: PeriodRef[];
-  /** Tope de series; por defecto MAX_SERIES. */
+  /** Series cap; MAX_SERIES by default. */
   limit?: number;
 }
 
 export interface SeriesBundle {
   series: Series[];
-  /** Eje X unificado y ordenado por (año, índice). */
+  /** Unified X axis, ordered by (year, index). */
   periods: PeriodRef[];
-  /** Series descartadas por el tope. */
+  /** Series discarded by the cap. */
   truncated: number;
   warnings: string[];
 }

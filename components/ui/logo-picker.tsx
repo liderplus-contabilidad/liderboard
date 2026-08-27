@@ -8,24 +8,23 @@ import { LogoFileError, readLogoFile } from "@/lib/logo-file";
 import { formatBytes, LOGO_ACCEPT_ATTRIBUTE, LOGO_MAX_BYTES, type EntityLogo } from "@/lib/logos";
 
 /**
- * El control que sube el LOGO de un workspace: vista previa, «Cambiar» y «Quitar».
+ * The control that uploads a workspace's LOGO: preview, «Cambiar» and «Quitar».
  *
- * Es un primitivo y no un trozo del diálogo de nombre porque lo mismo vale para el cliente de PyG,
- * el de Rol de Pagos y el hotel de Ocupaciones — los tres comparten ese diálogo, y cualquier otro
- * sitio que quiera pedir una imagen de identidad quiere exactamente esto.
+ * It is a primitive and not a piece of the name dialog because the same thing holds for PyG's client,
+ * Rol de Pagos' and Ocupaciones' hotel — the three share that dialog, and any other place that wants
+ * to ask for an identity image wants exactly this.
  *
- * **El límite de peso se anuncia ANTES de fallar.** La línea de ayuda dice el máximo desde el
- * primer render, así que el rechazo confirma una regla que ya estaba a la vista en vez de estrenar
- * una: enterarse del tope solo al chocar con él obliga a un segundo viaje al explorador de
- * archivos.
+ * **The size limit is announced BEFORE it fails.** The help line states the maximum from the first
+ * render, so the rejection confirms a rule that was already in sight instead of introducing one:
+ * learning the cap only on hitting it forces a second trip to the file browser.
  *
- * La vista previa se dibuja sobre un tablero de cuadros tenue porque casi todo logo llega con
- * fondo TRANSPARENTE, y sobre blanco un logo blanco parecería no haberse subido.
+ * The preview is drawn over a faint chequerboard because almost every logo arrives with a
+ * TRANSPARENT background, and over white a white logo would look as though it had not been uploaded.
  */
 /**
- * Leer el archivo, con su rechazo ya redactado. Lo comparten el picker del workspace y el de cada
- * centro: son dos formas del mismo control, y una segunda copia de «qué se hace con el archivo»
- * podría aceptar en una lo que la otra rechaza.
+ * Read the file, with its rejection already worded. The workspace picker and each center's share it:
+ * they are two forms of the same control, and a second copy of «what is done with the file» could
+ * accept in one what the other rejects.
  */
 function useLogoUpload(onChange: (logo: EntityLogo | null) => void) {
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +40,8 @@ function useLogoUpload(onChange: (logo: EntityLogo | null) => void) {
       try {
         onChange(await readLogoFile(file));
       } catch (cause) {
-        // Un rechazo previsto (tipo, peso, archivo ilegible) ya trae su frase; cualquier otra cosa
-        // se dice en genérico en vez de enseñar el mensaje de un error interno.
+        // A foreseen rejection (type, size, unreadable file) already carries its phrase; anything
+        // else is stated generically instead of showing an internal error's message.
         setError(cause instanceof LogoFileError ? cause.message : "No se pudo procesar la imagen.");
       } finally {
         setBusy(false);
@@ -86,8 +85,8 @@ export function LogoPicker({
           )}
         >
           {value ? (
-            // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta que el
-            // optimizador pueda tocar.
+            // No `next/image`: the source is a data URL from IndexedDB, not an asset with a path the
+            // optimizer could touch.
             // oxlint-disable-next-line next/no-img-element
             <img
               src={value.dataUrl}
@@ -141,8 +140,8 @@ export function LogoPicker({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          // Se limpia el input ANTES de procesar: sin esto, volver a elegir el mismo archivo tras
-          // un rechazo no dispara `change` y el control parece no responder.
+          // The input is cleared BEFORE processing: without this, picking the same file again after a
+          // rejection does not fire `change` and the control looks unresponsive.
           event.target.value = "";
           void pick(file);
         }}
@@ -152,15 +151,15 @@ export function LogoPicker({
 }
 
 /**
- * El mismo control en UNA FILA, para cada centro de costo de un cliente (cada sucursal de un
- * hotel). Es una forma y no un componente aparte: sube, cambia y quita exactamente lo mismo, con
- * las mismas reglas de archivo.
+ * The same control in ONE ROW, for each cost center of a client (each sucursal of a hotel). It is a
+ * form and not a separate component: it uploads, changes and removes exactly the same thing, with the
+ * same file rules.
  *
- * Se aprieta a una fila porque son VARIOS y opcionales — un cliente de seis centros con el bloque
- * completo repetido seis veces empujaría el botón de guardar fuera de la pantalla, y ninguno de los
- * seis es el logo principal. Por eso tampoco repite la línea de ayuda: el tope de peso y los
- * formatos ya los declara el picker de arriba, en el mismo diálogo, y decirlos siete veces no los
- * hace más ciertos. Lo que sí se dice aquí es el RECHAZO, que es del archivo de esta fila.
+ * It is squeezed into one row because there are SEVERAL of them and they are optional — a client with
+ * six centers and the full block repeated six times would push the save button off screen, and none
+ * of the six is the main logo. That is also why it does not repeat the help line: the size cap and
+ * the formats are already stated by the picker above, in the same dialog, and saying them seven times
+ * does not make them any truer. What IS said here is the REJECTION, which belongs to this row's file.
  */
 export function CenterLogoRow({
   name,
@@ -170,7 +169,7 @@ export function CenterLogoRow({
   disabled,
 }: {
   name: string;
-  /** El punto del selector, para que la fila se reconozca desde la barra de filtros. */
+  /** The selector's dot, so the row can be recognised from the filter bar. */
   color?: string | undefined;
   value: EntityLogo | null;
   onChange: (logo: EntityLogo | null) => void;

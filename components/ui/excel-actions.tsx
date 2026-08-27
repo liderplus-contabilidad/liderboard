@@ -8,28 +8,28 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/cn";
 
 /**
- * Las acciones de Excel de CUALQUIER módulo — cargar, descargar y el info tip de archivos
- * aceptados. Es deliberadamente agnóstico del dominio: no importa proveedores, modales ni capas
- * de exportación, así que un módulo nuevo solo escribe el envoltorio que le pasa qué abre
- * «Cargar», qué genera «Descargar» y qué dice el `ⓘ`.
+ * The Excel actions of ANY module — upload, download and the accepted-files info tip. It is
+ * deliberately domain-agnostic: it imports no providers, no modals and no export layers, so a new
+ * module only writes the wrapper that passes it what «Cargar» opens, what «Descargar» generates and
+ * what the `ⓘ` says.
  *
- * La FORMA del control de descarga se deriva de cuántas opciones reciba (una → botón plano,
- * dos o más → menú); ningún módulo la declara. El progreso y el error de la generación viven
- * aquí, porque son los mismos en todos lados: el módulo solo aporta una promesa.
+ * The SHAPE of the download control is derived from how many options it receives (one → a plain
+ * button, two or more → a menu); no module declares it. The generation's progress and error live
+ * here, because they are the same everywhere: the module only supplies a promise.
  */
 
 export interface ExcelDownloadOption {
   id: string;
-  /** Título del ítem de menú. Con una sola opción no se muestra: el botón dice `downloadLabel`. */
+  /** The menu item's title. With a single option it is not shown: the button says `downloadLabel`. */
   title: string;
   description: string;
-  /** Icono del ítem de menú — el componente, no el nodo: el tamaño lo pone quien lo rinde. */
+  /** The menu item's icon — the component, not the node: the size is set by whoever renders it. */
   icon?: LucideIcon;
   iconClassName?: string;
   disabled?: boolean;
-  /** Por qué no se puede; se ofrece como texto de ayuda al apuntar el control. */
+  /** Why it cannot be done; offered as help text on pointing at the control. */
   disabledReason?: string;
-  /** Construye el archivo y lo entrega al navegador. Rechazar es cómo reporta el fallo. */
+  /** Builds the file and hands it to the browser. Rejecting is how it reports failure. */
   run: () => Promise<void>;
 }
 
@@ -39,10 +39,10 @@ interface ExcelActionsProps {
     onClick: () => void;
     disabled?: boolean;
     /**
-     * Por qué no se puede cargar. A diferencia de las descargas, esto NO va en un tooltip: se
-     * rinde como una píldora junto al botón. Un control deshabilitado sin razón visible obliga a
-     * apuntarlo para descubrir qué falta, y aquí lo que falta es el paso anterior de todo el
-     * módulo.
+     * Why uploading is not possible. Unlike the downloads, this does NOT go in a tooltip: it renders
+     * as a pill beside the button. A disabled control with no visible reason forces you to point at
+     * it to find out what is missing, and what is missing here is the previous step of the whole
+     * module.
      */
     disabledReason?: string;
   };
@@ -102,8 +102,8 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
         setFailed(true);
       } finally {
         setBusy(null);
-        // El menú se cierra pase lo que pase: el fallo se cuenta abajo, donde se ve igual
-        // venga del menú o del botón plano.
+        // The menu closes whatever happens: the failure is reported below, where it looks the same
+        // whether it came from the menu or from the plain button.
         setOpen(false);
       }
     },
@@ -113,7 +113,7 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
   const single = options.length === 1 ? options[0] : undefined;
 
   return (
-    // El título va en el contenedor: un botón deshabilitado no dispara el tooltip del navegador.
+    // The title goes on the container: a disabled button does not fire the browser's tooltip.
     <div className="relative" title={single?.disabled ? single.disabledReason : undefined}>
       {open && (
         <button
@@ -202,12 +202,12 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
   );
 }
 
-/** El icono del control, igual sea botón plano o disparador de menú. */
+/** The control's icon, whether it is a plain button or a menu trigger. */
 function ControlIcon({ busy }: { busy: boolean }) {
   return busy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />;
 }
 
-/** El icono de un ítem de menú, o el spinner mientras esa opción corre. */
+/** A menu item's icon, or the spinner while that option runs. */
 function OptionIcon({ option, busy }: { option: ExcelDownloadOption; busy: boolean }) {
   if (busy) {
     return <Loader2 size={17} className="animate-spin text-brand" />;

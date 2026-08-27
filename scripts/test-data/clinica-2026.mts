@@ -1,29 +1,29 @@
 /**
- * Las cifras REALES de 2026 del rubro de la clínica, transcritas del estado de resultados que la
- * firma exporta de MicroPlus para ese cliente (`BALANCE DE PERDIDAS Y GANANCIAS AL 30-06-2026`).
+ * The clinic line of business' REAL 2026 figures, transcribed from the estado de resultados the firm
+ * exports from MicroPlus for that client (`BALANCE DE PERDIDAS Y GANANCIAS AL 30-06-2026`).
  *
- * El plan de cuentas de `rubros.mts` ya era el suyo —códigos y nombres—; lo que faltaba era que
- * las CIFRAS lo fueran. Con ellas, un archivo del set cargado en la app reproduce el anexo de
- * gastos que la firma coteja contra su propia hoja (`expense-distribution.test.ts` fija esas
- * mismas sumas: 307.005,37 de honorarios médicos, 94.886,27 de otros gastos operacionales), que
- * ninguna cifra sintética podía dar.
+ * `rubros.mts`' chart of accounts was already theirs —codes and names—; what was missing was for the
+ * FIGURES to be theirs too. With them, a file of the set loaded into the app reproduces the expense
+ * annex the firm checks against their own sheet (`expense-distribution.test.ts` pins those same sums:
+ * 307,005.37 of medical fees, 94,886.27 of other operating expenses), which no synthetic figure could
+ * give.
  *
- * **Van VERBATIM, con el gasto en NEGATIVO**, que es como MicroPlus lo guarda: así se pueden
- * cotejar renglón por renglón contra la hoja, que es lo único que hace comprobable una
- * transcripción. El generador las vuelve del derecho en UN solo sitio, el mismo punto en el que
- * `microplus.ts` invierte la rama al importar.
+ * **They go VERBATIM, with the expense NEGATIVE**, which is how MicroPlus stores it: that way they
+ * can be checked line by line against the sheet, which is the only thing that makes a transcription
+ * verifiable. The generator turns them the right way round in ONE single place, the same point where
+ * `microplus.ts` inverts the branch on import.
  *
- * Solo HOJAS. Los padres no se declaran: se derivan sumando, como los del resto del set — la hoja
- * cuadra al céntimo en los doce meses, así que declararlos sería una segunda definición de la
- * misma cifra. Una hoja del plan que no aparece aquí NO se movió (123 de las 270); el generador
- * rechaza una clave que no sea hoja de este plan, porque un código mal escrito valdría en silencio
- * como «esa cuenta está en cero».
+ * LEAVES only. The parents are not declared: they are derived by summing, like the rest of the set's —
+ * the sheet squares to the cent across the twelve months, so declaring them would be a second
+ * definition of the same figure. A leaf of the plan that does not appear here did NOT move (123 of the
+ * 270); the generator rejects a key that is not a leaf of this plan, because a mistyped code would
+ * silently pass as «that account is at zero».
  *
- * Son SEIS meses porque la hoja llega hasta junio. Julio a diciembre se generan igual, en cero:
- * son meses CARGADOS y vacíos, que no es lo mismo que un mes sin cargar.
+ * There are SIX months because the sheet runs to June. July to December are generated all the same, at
+ * zero: they are LOADED and empty months, which is not the same as an unloaded month.
  */
 
-/** Enero a junio de 2026, por código de MicroPlus. */
+/** January to June 2026, by MicroPlus code. */
 export const CLINICA_2026: Record<string, number[]> = {
   "4.1.01.01.01": [27718.97, 20859.32, 21958.13, 32038.12, 15924.88, 21136.33],
   "4.1.01.01.02": [20153.3, 16447.32, 22898.75, 30761.35, 18820.11, 17650.37],

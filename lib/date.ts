@@ -44,16 +44,16 @@ function pad2(value: number): string {
 }
 
 /**
- * `"2025-10-07"` → `"07/10/2025"`. La forma en que esta app escribe una fecha CIVIL —la de
- * ingreso de un empleado, los extremos de un período de nómina—, que es día/mes/año en Ecuador.
+ * `"2025-10-07"` → `"07/10/2025"`. The way this app writes a CIVIL date —an employee's hire date, the
+ * ends of a payroll período—, which is day/month/year in Ecuador.
  *
- * `null` cuando no hay fecha o cuando no se puede leer, nunca una cadena rota: el parser del rol
- * ya deja `null` en una fecha de ingreso ilegible, pero un dato viejo o tecleado a mano puede
- * llegar mal y una pantalla no debe pintar «NaN/NaN/NaN».
+ * `null` when there is no date or when it cannot be read, never a broken string: the rol's parser
+ * already leaves `null` on an unreadable hire date, but old or hand-typed data can arrive wrong and a
+ * screen must not paint «NaN/NaN/NaN».
  *
- * Parte la cadena en vez de construir un `Date`: `new Date("2026-03-01")` se interpreta como
- * medianoche UTC y, leída en un huso al oeste, retrocede al 28 de febrero. Un rol que empieza el
- * día anterior al que dice es un error que casi nadie mira dos veces.
+ * It splits the string instead of building a `Date`: `new Date("2026-03-01")` is interpreted as UTC
+ * midnight and, read in a western time zone, goes back to 28 February. A rol that starts the day
+ * before the one it says is an error almost nobody looks at twice.
  */
 export function formatDayMonthYear(iso: string | null): string | null {
   if (!iso) {
@@ -67,9 +67,9 @@ export function formatDayMonthYear(iso: string | null): string | null {
 }
 
 /**
- * «30 de julio de 2026, 14:22» — la lectura local de una fecha-hora, la que coteja el contador.
- * La usan los dos informes imprimibles (PyG y Sueldos por Áreas) para sellar «Generado el…», así
- * que vive aquí en vez de escribirse dos veces y arriesgarse a decir la fecha de dos maneras.
+ * «30 de julio de 2026, 14:22» — the local reading of a date-time, the one the accountant checks.
+ * Both printable reports (PyG and Sueldos por Áreas) use it to stamp «Generado el…», so it lives here
+ * instead of being written twice and risking saying the date in two ways.
  */
 export function formatTimestampEs(date: Date): string {
   const day = date.getDate();
@@ -80,13 +80,13 @@ export function formatTimestampEs(date: Date): string {
 }
 
 /**
- * Los dos extremos de un mes, ya formateados: `monthBounds(2026, 2)` → `01/03/2026` y
- * `31/03/2026`. `monthIndex` es 0–11, como en el resto de la app.
+ * The two ends of a month, already formatted: `monthBounds(2026, 2)` → `01/03/2026` and `31/03/2026`.
+ * `monthIndex` is 0–11, as in the rest of the app.
  *
- * El último día sale de `new Date(year, monthIndex + 1, 0)`, que es el día 0 del mes siguiente
- * —o sea, el último del pedido— y por eso acierta febrero bisiesto sin una tabla de longitudes
- * ni un caso especial. Construido con el constructor LOCAL de tres argumentos, que no sufre el
- * corrimiento de huso del que se guarda `formatDayMonthYear`.
+ * The last day comes out of `new Date(year, monthIndex + 1, 0)`, which is day 0 of the following
+ * month —that is, the last of the one asked for— and that is why it gets a leap February right
+ * without a table of lengths or a special case. Built with the LOCAL three-argument constructor,
+ * which does not suffer the time-zone shift `formatDayMonthYear` guards against.
  */
 export function monthBounds(year: number, monthIndex: number): { start: string; end: string } {
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();

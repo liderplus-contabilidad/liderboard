@@ -138,7 +138,7 @@ describe("la lista fija — cada formato cae en su estrategia", () => {
   });
 
   it("Dingoo y MicroPlus no se quitan archivos entre sí", () => {
-    // La firma de encabezado es la misma; lo que los separa es cómo declara cada uno su rango.
+    // The header signature is the same; what separates them is how each one declares its range.
     const dingoo = resolveUpload("x.xlsx", dingooBuffer(DINGOO_AOA)) as Extract<
       StagedUpload,
       { kind: "month-slice" }

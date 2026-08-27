@@ -1,33 +1,33 @@
 /**
- * El ASIENTO CONTABLE del período: el catálogo fijo de cuentas que el rol de pagos genera cada
- * mes (sacado de las filas `GENERAL!43-71` del Excel del contador — la versión que CUADRA, no la de
- * la hoja `ASIENTOS`) y las derivaciones puras sobre él. Los importes llegan por parámetro; quien
- * los produce es `journal-amounts.ts`, sumando la nómina entera del período a través del motor.
+ * The período's JOURNAL ENTRY: the fixed catalogue of accounts the rol de pagos generates each month
+ * (taken from rows `GENERAL!43-71` of the accountant's Excel — the version that BALANCES, not the one
+ * on the `ASIENTOS` sheet) and the pure derivations over it. The amounts arrive by parameter; what
+ * produces them is `journal-amounts.ts`, summing the período's whole nómina through the engine.
  *
- * Son **26** cuentas: las 24 del libro y dos que añade esta app —`seguro-privado`, sin la cual el
- * asiento descuadra por el importe de `Q`, y `bonos-aportables`, sin la cual descuadra por los
- * conceptos de ingreso extra aportables que un período declare—. El porqué, con el álgebra, está
- * en la entrada de cada una; las dos están pendientes de confirmar con la firma.
+ * There are **26** accounts: the book's 24 and two this app adds —`seguro-privado`, without which the
+ * entry goes out of balance by `Q`'s amount, and `bonos-aportables`, without which it goes out of
+ * balance by the contributory extra income concepts a período declares—. The why, with the algebra, is
+ * in each one's entry; both are pending confirmation with the firm.
  *
- * Dos de sus `sourceColumns` NO son columnas del libro sino pseudo-columnas (`EXTRA_AP`,
- * `EXTRA_NA`): los conceptos extra no tienen sitio en la hoja `GENERAL`, y darles el nombre de una
- * columna que sí existe haría creer al contador que puede cotejarlas contra ella.
+ * Two of its `sourceColumns` are NOT columns of the book but pseudo-columns (`EXTRA_AP`, `EXTRA_NA`):
+ * the extra concepts have no place on the `GENERAL` sheet, and giving them the name of a column that
+ * does exist would make the accountant believe they can check them against it.
  *
- * Por qué la clave de una cuenta es `id` y no `code`: `621001` aparece DOS VECES en el catálogo
- * (el gasto de sueldos en el `debe`, `GENERAL!C44`, y en el `haber` las licencias/permisos/tiempo
- * parcial, `GENERAL!D44` — el libro las pone en la misma fila, una en cada columna) y dos cuentas más no traen código ninguno
- * (`Viaticos`, `Impuesto a la Renta Empleados`). Si la clave fuera `code`, las dos filas de
- * `621001` colapsarían en una y las dos sin código quedarían sin ninguna clave. `code: null`
- * significa «el plan del contador no le asignó código» — no «falta por poner», y no debe
- * rellenarse con uno inventado.
+ * Why an account's key is `id` and not `code`: `621001` appears TWICE in the catalogue (the salary
+ * expense on the `debe`, `GENERAL!C44`, and on the `haber` the leave/permits/part-time,
+ * `GENERAL!D44` — the book puts them on the same row, one in each column) and two more accounts carry
+ * no code at all (`Viaticos`, `Impuesto a la Renta Empleados`). If the key were `code`, the two
+ * `621001` rows would collapse into one and the two with no code would be left with no key at all.
+ * `code: null` means «the accountant's chart assigned it no code» — not «still to be filled in», and
+ * it must not be filled with an invented one.
  *
- * `sourceColumns` declara qué columnas del rol componen cada cuenta, y **es lo que el asiento
- * ejecuta**: `journal-amounts.ts` lo RECORRE para sumar. No es documentación al lado del código
- * —eso fue mientras la conexión no existía—, y esa es la razón de que siga siendo un dato del
- * catálogo: una segunda lista de sumas escrita a mano por cuenta podría separarse de esta anotación
- * sin que nada lo delate, y entonces el catálogo diría una cosa mientras el asiento hace otra.
- * Recorriéndola, la única forma de equivocarse es equivocarse aquí, que es lo que el contador puede
- * revisar contra su hoja.
+ * `sourceColumns` declares which rol columns make up each account, and **it is what the entry
+ * executes**: `journal-amounts.ts` WALKS it to sum. It is not documentation next to the code —that is
+ * what it was while the connection did not exist—, and that is the reason it is still a datum of the
+ * catalogue: a second list of sums written by hand per account could drift from this annotation with
+ * nothing giving it away, and then the catalogue would say one thing while the entry does another. By
+ * walking it, the only way to get it wrong is to get it wrong here, which is what the accountant can
+ * review against their sheet.
  */
 import { sameToTheCentavo } from "./amounts";
 
@@ -42,18 +42,17 @@ export interface JournalAccount {
 }
 
 /**
- * Las 24 cuentas del asiento, en el orden en que las lista `GENERAL!43-71`: primero el `debe` (10
- * cuentas de gasto de administración), luego el `haber` (14 cuentas por pagar/retener). Los
- * `name` van VERBATIM, erratas incluidas («Anticpo Empleados», «Vacaciones Pagar») — son los
- * rótulos con los que el contador coteja la pantalla contra su hoja, y corregirlos rompe ese
- * cotejo sin ganar nada.
+ * The entry's 24 accounts, in the order `GENERAL!43-71` lists them: first the `debe` (10 administrative
+ * expense accounts), then the `haber` (14 payable/withholding accounts). The `name`s go VERBATIM,
+ * typos included («Anticpo Empleados», «Vacaciones Pagar») — they are the labels the accountant checks
+ * the screen against their sheet with, and correcting them breaks that check while gaining nothing.
  *
- * `as const satisfies readonly JournalAccount[]` comprueba la forma sin ensanchar los literales:
- * si se anotara la constante como `: readonly JournalAccount[]`, cada `id` pasaría a ser `string`
- * y `JournalAccountId` (abajo) no podría acotarse a las 24 claves reales.
+ * `as const satisfies readonly JournalAccount[]` checks the shape without widening the literals: were
+ * the constant annotated as `: readonly JournalAccount[]`, every `id` would become `string` and
+ * `JournalAccountId` (below) could not be narrowed to the 24 real keys.
  */
 export const JOURNAL_ACCOUNTS = [
-  // --- Debe: 10 cuentas de gasto de administración (GENERAL!44-53) ---
+  // --- Debe: 10 administrative expense accounts (GENERAL!44-53) ---
   {
     id: "sueldos-administracion",
     code: "621001",
@@ -73,7 +72,7 @@ export const JOURNAL_ACCOUNTS = [
     code: "621003",
     name: "Comisiones Administracion",
     side: "debe",
-    // La de `ASIENTOS` suma Q+R+S+T; la corregida solo S+T — Q y R son otras columnas del rol.
+    // `ASIENTOS`' one sums Q+R+S+T; the corrected one only S+T — Q and R are other columns of the rol.
     sourceColumns: ["S", "T"],
   },
   {
@@ -116,20 +115,21 @@ export const JOURNAL_ACCOUNTS = [
     code: null,
     name: "Viaticos",
     side: "debe",
-    // La de `ASIENTOS` lee `V` (la columna del Bono ND, de abajo); la corregida lee `R`.
+    // `ASIENTOS`' one reads `V` (the Bono ND column, below); the corrected one reads `R`.
     sourceColumns: ["R"],
   },
   {
     id: "bono-nd",
-    // `GENERAL!A53` trae literalmente `6`, no un código `6210xx`. Va verbatim: inventarle un
-    // código sería adivinar, y ponerlo en `null` borraría la evidencia de que ahí hay algo por
-    // preguntarle al contador.
+    // `GENERAL!A53` literally carries `6`, not a `6210xx` code. It goes verbatim: inventing a code
+    // would be guessing, and setting it to `null` would erase the evidence that there is something
+    // there to ask the accountant about.
     code: "6",
     name: "Bono ND",
     side: "debe",
-    // `EXTRA_NA` son los conceptos extra NO APORTABLES que el período declare. Van aquí y no a una
-    // cuenta propia porque esta cuenta ES exactamente eso: el destino del bono que no aporta.
-    // Sumárselos dice la verdad en vez de abrir una segunda cuenta para lo mismo.
+    // `EXTRA_NA` is the NON-CONTRIBUTORY extra concepts a período declares. They go here and not to an
+    // account of their own because this account IS exactly that: the destination of the bonus that
+    // does not contribute. Adding them to it tells the truth instead of opening a second account for
+    // the same thing.
     sourceColumns: ["V", "EXTRA_NA"],
   },
   {
@@ -137,15 +137,15 @@ export const JOURNAL_ACCOUNTS = [
     code: null,
     name: "Bonos Aportables",
     side: "debe",
-    // ⚠ La SEGUNDA cuenta que no sale de `GENERAL!43-71`, por el mismo álgebra que `seguro-privado`
-    // (abajo): un concepto extra APORTABLE entra en `W` y le llega al empleado por el haber dentro
-    // de `AP`, así que sin destino en el debe el asiento descuadraría por su importe. Sus efectos
-    // sobre `X`, `AU`, `AS`, `AV` y `AW` sí los recogen las cuentas que ya leen esas columnas, así
-    // que esta solo tiene que cubrir el ingreso en sí.
+    // ⚠ The SECOND account that does not come from `GENERAL!43-71`, by the same algebra as
+    // `seguro-privado` (below): a CONTRIBUTORY extra concept enters `W` and reaches the employee
+    // through the credit inside `AP`, so with no destination on the debit the entry would go out of
+    // balance by its amount. Its effects on `X`, `AU`, `AS`, `AV` and `AW` are picked up by the
+    // accounts that already read those columns, so this one only has to cover the income itself.
     //
-    // Sin código, el mismo trato que `Viaticos` y `Seguro Privado`. **Pendiente de confirmar con la
-    // firma**: si prefieren repartirlo entre cuentas existentes —`Comisiones Administracion`, o una
-    // por concepto— se cambia esta entrada y su fila del mapa de `journal-amounts.ts`.
+    // With no code, the same treatment as `Viaticos` and `Seguro Privado`. **Pending confirmation with
+    // the firm**: if they prefer to spread it across existing accounts —`Comisiones Administracion`,
+    // or one per concept— this entry and its row of `journal-amounts.ts`'s map get changed.
     sourceColumns: ["EXTRA_AP"],
   },
   {
@@ -153,35 +153,36 @@ export const JOURNAL_ACCOUNTS = [
     code: null,
     name: "Seguro Privado",
     side: "debe",
-    // ⚠ La ÚNICA cuenta del catálogo que NO sale de `GENERAL!43-71`. La añade esta app, y existe
-    // porque sin ella el asiento DESCUADRA por el importe del seguro privado:
+    // ⚠ The ONLY account of the catalogue that does NOT come from `GENERAL!43-71`. This app adds it,
+    // and it exists because without it the entry GOES OUT OF BALANCE by the private insurance amount:
     //
-    //   Debe  = F+M+S+T+AS+O+AT+N+AV+P+AU+AW+U+R+V  = (W − Q) + AS+AT+AV+AU+AW
-    //   Haber = (Z+AN+AI)+AP+AS+AT+AV+AA+AE+AD
-    //         + (X+AU+Y+AW)+AB+AC+AF+AG+AH           =  W      + AS+AT+AV+AU+AW
+    //   Debit  = F+M+S+T+AS+O+AT+N+AV+P+AU+AW+U+R+V  = (W − Q) + AS+AT+AV+AU+AW
+    //   Credit = (Z+AN+AI)+AP+AS+AT+AV+AA+AE+AD
+    //          + (X+AU+Y+AW)+AB+AC+AF+AG+AH           =  W      + AS+AT+AV+AU+AW
     //
-    // `Q` entra en `W` (el ingreso), le llega al empleado por el haber dentro de `AP` (el líquido),
-    // y ninguna de las 24 cuentas del libro la recoge por el debe: Haber − Debe = Q. En el archivo
-    // real de marzo `Q` vale cero, y por eso el descuadre no se ve ahí.
+    // `Q` enters `W` (the income), reaches the employee through the credit inside `AP` (the net pay),
+    // and none of the book's 24 accounts picks it up on the debit: Credit − Debit = Q. In the real
+    // March file `Q` is zero, and that is why the imbalance cannot be seen there.
     //
-    // Va al DEBE porque es lo que la columna significa —la empresa paga un seguro como beneficio:
-    // es un GASTO que llega al líquido del empleado— y porque es donde el álgebra dice que falta.
-    // Sin código, el mismo trato que `Viaticos`: el plan del contador tampoco le asignó uno.
+    // It goes to the DEBIT because that is what the column means —the company pays an insurance as a
+    // benefit: it is an EXPENSE that reaches the employee's net pay— and because it is where the
+    // algebra says it is missing. With no code, the same treatment as `Viaticos`: the accountant's
+    // chart did not assign it one either.
     //
-    // **Pendiente de confirmar con la firma.** Si prefieren otro destino para `Q`, se cambia esta
-    // entrada y su fila del mapa de `journal-amounts.ts`; nada más depende de ella.
+    // **Pending confirmation with the firm.** If they prefer another destination for `Q`, this entry
+    // and its row of `journal-amounts.ts`'s map get changed; nothing else depends on it.
     sourceColumns: ["Q"],
   },
-  // --- Haber: 14 cuentas por pagar/retener (GENERAL!44,54-60,63,66-70) ---
+  // --- Haber: 14 payable/withholding accounts (GENERAL!44,54-60,63,66-70) ---
   {
     id: "licencias-permisos-tiempo-parcial",
     code: "621001",
-    // Sin nombre propio en la hoja: este crédito (`GENERAL!D44 = Z39+AN39+AI39`) comparte fila
-    // con el débito de `621001` de arriba, así que la columna del nombre ya la ocupa «Sueldos
-    // Administracion». Las tres columnas que lo componen: `Z` (LICENCIA SIN SUELDO), `AN`
-    // (Descuento PERMISO MEDICO) y `AI` (DESCUENTO TIEMPO PACIAL). Es lo que hace que el asiento
-    // cuadre cuando entra un empleado a tiempo parcial — la versión de `ASIENTOS` no les daba
-    // destino y por eso descuadraba.
+    // With no name of its own on the sheet: this credit (`GENERAL!D44 = Z39+AN39+AI39`) shares a row
+    // with `621001`'s debit above, so the name column is already occupied by «Sueldos
+    // Administracion». The three columns that make it up: `Z` (LICENCIA SIN SUELDO), `AN` (Descuento
+    // PERMISO MEDICO) and `AI` (DESCUENTO TIEMPO PACIAL). It is what makes the entry balance when a
+    // part-time employee comes in — `ASIENTOS`' version gave them no destination and that is why it
+    // went out of balance.
     name: "Licencias, permisos y tiempo parcial",
     side: "haber",
     sourceColumns: ["Z", "AN", "AI"],
@@ -238,12 +239,12 @@ export const JOURNAL_ACCOUNTS = [
   {
     id: "aportes-iess-por-pagar",
     code: "2.1.7.1.9",
-    // Funde en una sola cuenta las CUATRO que la hoja anula justo debajo (`GENERAL!61,62,64,65`:
-    // dos aportes IESS 214001 al 9.45% y al 12.15%, `214002 Prestamos IESS por Pagar` y `214003
-    // Fondo Reserva IESS por Pagar`), cada una con su fórmula multiplicada por cero. No entran al
-    // catálogo — serían cuatro filas que nunca pueden llevar cifra, y `214002` chocaría de código
-    // con «Prestamos Empresariales» de abajo, que sí está viva. `GENERAL!E61 = SUM(D61:D65)`
-    // confirma que esta cuenta vale exactamente lo que las cuatro juntas: X + AU + Y + AW.
+    // Fuses into one single account the FOUR the sheet cancels right below (`GENERAL!61,62,64,65`:
+    // two IESS contributions 214001 at 9.45% and at 12.15%, `214002 Prestamos IESS por Pagar` and
+    // `214003 Fondo Reserva IESS por Pagar`), each with its formula multiplied by zero. They do not
+    // enter the catalogue — they would be four rows that can never carry a figure, and `214002` would
+    // clash by code with «Prestamos Empresariales» below, which is alive. `GENERAL!E61 = SUM(D61:D65)`
+    // confirms this account is worth exactly what the four together are: X + AU + Y + AW.
     name: "Aportes IESS por Pagar",
     side: "haber",
     sourceColumns: ["X", "AU", "Y", "AW"],
@@ -286,17 +287,17 @@ export const JOURNAL_ACCOUNTS = [
 ] as const satisfies readonly JournalAccount[];
 
 /**
- * Las 24 claves válidas de importe, derivadas del propio catálogo — nunca declaradas a mano
- * aparte, porque una segunda lista se desincroniza en cuanto el catálogo cambie.
+ * The 24 valid amount keys, derived from the catalogue itself — never declared separately by hand,
+ * because a second list falls out of sync as soon as the catalogue changes.
  */
 export type JournalAccountId = (typeof JOURNAL_ACCOUNTS)[number]["id"];
 
 /**
- * Un `id` mal tecleado por quien conecte las cifras reales debe fallar en COMPILACIÓN, no en
- * pantalla: con `Record<string, number>` cualquier clave colaba, la fila correspondiente se
- * quedaba en `null` para siempre y la tarjeta decía «Descuadra» sin señalar por qué. `Partial`
- * porque un mes puede no traer cifra para alguna cuenta (así lo modela `buildJournalEntry`, más
- * abajo, tratando la ausencia como «no se sabe», no como cero).
+ * An `id` mistyped by whoever wires the real figures must fail at COMPILE time, not on screen: with
+ * `Record<string, number>` any key got through, the corresponding row stayed `null` forever and the
+ * card said «Descuadra» without pointing at why. `Partial` because a month may bring no figure for
+ * some account (that is how `buildJournalEntry` models it, further below, treating absence as «it is
+ * not known», not as zero).
  */
 export type JournalAmounts = Partial<Record<JournalAccountId, number>>;
 
@@ -312,26 +313,26 @@ export interface JournalEntry {
 }
 
 /**
- * Arma el asiento completo recorriendo `JOURNAL_ACCOUNTS` en orden. Un importe ausente en
- * `amounts` es `null` — no cero: la misma distinción que ya hace `PayrollEmployeeFigures` con un
- * período que no recibió su archivo. No decir «cero» a lo que en realidad es «no se sabe» evita
- * que una fila sin dato se lea como una cuenta que de verdad no tuvo movimiento.
+ * Assembles the complete entry by walking `JOURNAL_ACCOUNTS` in order. An amount absent from `amounts`
+ * is `null` — not zero: the same distinction `PayrollEmployeeFigures` already makes for a período that
+ * did not receive its file. Not saying «zero» to what is really «not known» keeps a row with no datum
+ * from reading as an account that really had no movement.
  */
 export function buildJournalEntry(amounts: JournalAmounts): JournalEntry {
   const lines: JournalLine[] = JOURNAL_ACCOUNTS.map((account) => ({
     ...account,
-    // `?? null` en vez del `Object.hasOwn` de antes: con `JournalAmounts` ya tipado por
-    // `JournalAccountId`, un `undefined` solo puede venir de una clave ausente (nunca de una
-    // ausente-pero-igual-presente), así que la semántica es la misma y esta forma no deja colar
-    // un `undefined` que pintaría `NaN` si alguna ronda futura relajara el tipo.
+    // `?? null` instead of the earlier `Object.hasOwn`: with `JournalAmounts` already typed by
+    // `JournalAccountId`, an `undefined` can only come from an absent key (never from an
+    // absent-but-still-present one), so the semantics are the same and this form does not let through
+    // an `undefined` that would paint `NaN` if some future round relaxed the type.
     amount: amounts[account.id] ?? null,
   }));
 
   let debit = 0;
   let credit = 0;
   for (const line of lines) {
-    // Para la SUMA un importe ausente sí cuenta como 0 — es el total del asiento hasta donde se
-    // conoce, no una afirmación de que las cuentas sin dato valen cero.
+    // For the SUM an absent amount does count as 0 — it is the entry's total as far as it is known,
+    // not a claim that the accounts with no datum are worth zero.
     const amount = line.amount ?? 0;
     if (line.side === "debe") {
       debit += amount;
@@ -344,11 +345,10 @@ export function buildJournalEntry(amounts: JournalAmounts): JournalEntry {
 }
 
 /**
- * Las filas «con movimiento» del asiento: las que el usuario necesita ver. Una fila en
- * exactamente `0` se esconde porque no aporta nada a la lectura; una fila en `null` se queda —no
- * se sabe cuánto vale todavía, y esconderla sería afirmar que es cero cuando no lo es. Filtra
- * `lines`, nunca toca `debit`/`credit`: encender o apagar el interruptor no puede mover el total
- * que el usuario ya vio arriba.
+ * The entry's rows «with movement»: the ones the user needs to see. A row at exactly `0` is hidden
+ * because it adds nothing to the reading; a row at `null` stays —how much it is worth is not known
+ * yet, and hiding it would be claiming it is zero when it is not. It filters `lines`, it never touches
+ * `debit`/`credit`: switching the toggle on or off cannot move the total the user already saw above.
  */
 export function movingJournalLines(entry: JournalEntry): readonly JournalLine[] {
   return entry.lines.filter((line) => line.amount !== 0);

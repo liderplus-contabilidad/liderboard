@@ -1,40 +1,40 @@
 /**
- * CÓMO SE LLAMA UNA FILA DEL ROL — la única resolución, y la única validación, de un rótulo.
+ * WHAT A ROL ROW IS CALLED — the only resolution, and the only validation, of a label.
  *
- * El catálogo (`concepts.ts`) declara los rótulos del libro: el de pantalla (`label`) y el verbatim
- * del comprobante (`payslipLabel`). Este archivo es lo que deja que un empleado escriba el suyo
- * encima, y existe porque `E-11 OTROS` es un comodín: es la columna `AH` del libro, significa cosas
- * distintas en empleados distintos, y el comprobante que cada uno firma imprimía el nombre de la
- * COLUMNA en vez del nombre del descuento.
+ * The catalogue (`concepts.ts`) declares the book's labels: the screen one (`label`) and the payslip's
+ * verbatim one (`payslipLabel`). This file is what lets an employee write their own over it, and it
+ * exists because `E-11 OTROS` is a wildcard: it is the book's `AH` column, it means different things
+ * in different employees, and the payslip each of them signs printed the COLUMN's name instead of the
+ * deduction's name.
  *
- * Vive aparte de `concepts.ts` a propósito: aquel declara una CONSTANTE sin dependencias de lo que
- * se teclea, y esto es una función de la captura. Fundirlos haría que el catálogo importara el tipo
- * de lo que se captura, que es justo la dirección contraria.
+ * It lives apart from `concepts.ts` on purpose: that one declares a CONSTANT with no dependencies on
+ * what is typed, and this is a function of the capture. Fusing them would make the catalogue import
+ * the type of what is captured, which is precisely the opposite direction.
  *
- * Un rótulo propio pisa LOS DOS rótulos del libro. Pisar solo el de pantalla dejaría el comprobante
- * —el papel que el empleado firma, que es el motivo de todo esto— diciendo `OTROS`.
+ * An own label overrides BOTH of the book's labels. Overriding only the screen one would leave the
+ * payslip —the paper the employee signs, which is the reason for all of this— saying `OTROS`.
  */
 import { normalizeEntityName, normalizeLabel } from "@/lib/workspaces";
 import type { EntityNameCheck } from "@/lib/workspaces";
 import type { ConceptBase, DeductionConcept, IncomeConcept } from "./concepts";
 import type { PayrollMonthlyCapture } from "./types";
 
-/** Un concepto del catálogo, de cualquiera de las dos tablas. */
+/** A catalogue concept, from either of the two tables. */
 export type CatalogueConcept = IncomeConcept | DeductionConcept;
 
 /**
- * Si esta fila admite rótulo propio: solo las que TECLEAN SU IMPORTE.
+ * Whether this row admits an own label: only the ones that TYPE THEIR AMOUNT.
  *
- * No es `isChoosable`, que ya existe en `concepts.ts` y devuelve `true` también para las tres horas
- * extras: aquellas son `calculado` —el motor deriva su valor— y capturan su CANTIDAD, pero su
- * rótulo es una tasa de ley. Renombrarlas dejaría rotular `50%` como `100%` sobre un cálculo que
- * sigue siendo al 50 %, y esa es una mentira que ninguna cifra delata.
+ * It is not `isChoosable`, which already exists in `concepts.ts` and returns `true` for the three
+ * overtime rows too: those are `calculado` —the engine derives their value— and they capture their
+ * QUANTITY, but their label is a statutory rate. Renaming them would allow labelling `50%` as `100%`
+ * over a computation that is still at 50 %, and that is a lie no figure gives away.
  */
 export function isRenameable(concept: CatalogueConcept): boolean {
   return concept.kind === "capturado";
 }
 
-/** El rótulo propio guardado, ya recortado, o `null` si esta fila se llama como el libro. */
+/** The stored own label, already trimmed, or `null` if this row is called what the book calls it. */
 function ownLabel(concept: CatalogueConcept, capture: PayrollMonthlyCapture): string | null {
   if (!isRenameable(concept)) {
     return null;
@@ -43,14 +43,14 @@ function ownLabel(concept: CatalogueConcept, capture: PayrollMonthlyCapture): st
   return raw ? raw : null;
 }
 
-/** Como se llama esta fila EN PANTALLA para este empleado. */
+/** What this row is called ON SCREEN for this employee. */
 export function labelFor(concept: CatalogueConcept, capture: PayrollMonthlyCapture): string {
   return ownLabel(concept, capture) ?? concept.label;
 }
 
 /**
- * Como se llama esta fila EN EL COMPROBANTE. En mayúsculas, que es la convención de todos los
- * `payslipLabel` del catálogo — un rótulo propio en minúsculas rompería el paso de las 26 filas.
+ * What this row is called ON THE PAYSLIP. In capitals, which is the convention of every
+ * `payslipLabel` of the catalogue — an own label in lower case would break the rhythm of the 26 rows.
  */
 export function payslipLabelFor(
   concept: ConceptBase & { kind: "calculado" | "capturado" },
@@ -60,21 +60,21 @@ export function payslipLabelFor(
   return own ? own.toUpperCase() : concept.payslipLabel;
 }
 
-/** Una fila y su rótulo efectivo. La `key` es el código del concepto o el `id` de la fila de bono:
- *  es lo que permite excluir del cotejo la fila que se está renombrando. */
+/** A row and its effective label. The `key` is the concept's code or the bonus row's `id`: it is what
+ *  allows excluding from the check the row being renamed. */
 export interface RowLabelRef {
   key: string;
   label: string;
 }
 
 /**
- * TODOS los rótulos que este empleado tiene a la vista — los conceptos que se le pasen, con su
- * rótulo efectivo, más sus filas de bono.
+ * ALL the labels this employee has in sight — the concepts passed in, with their effective label,
+ * plus their bonus rows.
  *
- * Es el universo contra el que se juzga la unicidad, y por eso el ámbito ya no es el período: lo que
- * esta regla protege es que dos filas de un MISMO comprobante no se llamen igual, porque entonces
- * quien lo revisa no puede saber cuál es cuál. Dos empleados llamando `Uniformes` a su fila es
- * legítimo y siempre lo fue.
+ * It is the universe uniqueness is judged against, and that is why the scope is no longer the período:
+ * what this rule protects is that two rows of the SAME payslip are not called the same, because then
+ * whoever reviews it cannot tell which is which. Two employees calling their row `Uniformes` is
+ * legitimate and always was.
  */
 export function rowLabelUniverse(
   capture: PayrollMonthlyCapture,
@@ -87,14 +87,13 @@ export function rowLabelUniverse(
 }
 
 /**
- * Valida el rótulo de una fila contra las demás filas de ese empleado.
+ * Validates a row's label against that employee's other rows.
  *
- * Se apoya en las reglas genéricas de `lib/workspaces.ts` —no vacío, tope de 60, comparación sin
- * mayúsculas ni acentos— que ya usan los clientes de PyG y los hoteles de Ocupaciones, en vez de
- * abrir una tercera definición de «este nombre ya está tomado».
+ * It leans on the generic rules of `lib/workspaces.ts` —non-empty, a cap of 60, comparison ignoring
+ * case and accents— which PyG's clients and Ocupaciones' hotels already use, instead of opening a
+ * third definition of «this name is already taken».
  *
- * `selfKey` es la fila que se está renombrando: sin ella, dejar un rótulo como está chocaría
- * consigo mismo.
+ * `selfKey` is the row being renamed: without it, leaving a label as it is would clash with itself.
  */
 export function validateRowLabel(
   raw: string,
@@ -115,10 +114,10 @@ export function validateRowLabel(
 }
 
 /**
- * Escribe —o borra— el rótulo propio de una fila del catálogo.
+ * Writes —or deletes— a catalogue row's own label.
  *
- * Un nombre vacío BORRA la entrada en vez de guardarla vacía: una fila sin rótulo propio se llama
- * como el libro, y guardar `""` afirmaría que alguien la nombró así.
+ * An empty name DELETES the entry instead of storing it empty: a row with no own label is called what
+ * the book calls it, and storing `""` would claim somebody named it that.
  */
 export function withRowLabel(
   labels: Readonly<Record<string, string>> | undefined,
@@ -136,9 +135,9 @@ export function withRowLabel(
 }
 
 /**
- * Quita el rótulo propio de una fila. Se llama al QUITAR la fila, junto con su importe y en la
- * misma escritura: un rótulo huérfano volvería a la vida al agregar de nuevo ese concepto,
- * poniéndole a una cifra nueva el nombre de otro mes.
+ * Removes a row's own label. It is called on REMOVING the row, together with its amount and in the
+ * same write: an orphan label would come back to life on adding that concept again, putting another
+ * month's name on a new figure.
  */
 export function withoutRowLabel(
   labels: Readonly<Record<string, string>> | undefined,

@@ -87,8 +87,9 @@ describe("una vista predeterminada y las cuentas marcadas son excluyentes", () =
   });
 
   it("elegir una vista SIEMBRA los centros y los periodos que reparte, y quitarla los limpia", () => {
-    // Lo dibujado y lo marcado son lo mismo: se quita un establecimiento o un mes desmarcándolo
-    // donde el usuario ya sabe buscar, y apagar la vista no deja detrás chips que él no puso.
+    // What is drawn and what is marked are the same: an establishment or a month is removed by
+    // unmarking it where the user already knows to look, and switching the view off leaves behind no
+    // chips they did not make.
     const meses = [
       { frequency: "mensual" as const, index: 0 },
       { frequency: "mensual" as const, index: 1 },
@@ -241,8 +242,8 @@ describe("saneamiento de los filtros", () => {
   });
 
   it("devuelve el MISMO objeto cuando no hay nada que podar", () => {
-    // La tabla de Datos memoiza sus columnas contra `filters.periods`, y esto corre con un
-    // contexto reconstruido en cada edición: un objeto nuevo aquí re-renderiza el estado entero.
+    // The Datos table memoizes its columns against `filters.periods`, and this runs with a context
+    // rebuilt on every edit: a new object here re-renders the whole statement.
     const vacio = makeFilters();
     expect(sanitizeFilters(vacio, makeContext())).toBe(vacio);
 
@@ -292,8 +293,9 @@ describe("una vista que se deja ACOTAR por cuentas", () => {
   const RUBROS = ["5.1.1", "5.1.2", "5.2.1"];
 
   it("entrar en ella borra las marcas de cuenta: ninguna vista las siembra", () => {
-    // El anexo de gastos las sembró —sus rubros SON cuentas del plan—, y no salía: son todas las
-    // de movimiento del árbol de gastos, más de cien en un plan real, o sea más de cien chips.
+    // The expense annex seeded them —its lines ARE accounts of the plan—, and it did not work out:
+    // they are all the movement ones of the expense tree, over a hundred in a real plan, that is, over
+    // a hundred chips.
     const conMarcas = { ...emptyFilters(), codes: ["4.1"] };
     const next = withPresetSelected(conMarcas, "anexo");
 
@@ -302,8 +304,8 @@ describe("una vista que se deja ACOTAR por cuentas", () => {
   });
 
   it("marcar un rubro ACOTA el reparto en vez de apagar la vista", () => {
-    // Sin `keepPreset`, acotar apagaría la vista entera — lo contrario de para lo que están las
-    // marcas. Solo lo puede declarar una vista cuyas categorías SON cuentas del plan.
+    // Without `keepPreset`, narrowing would switch the whole view off — the opposite of what marks are
+    // for. Only a view whose categories ARE accounts of the plan can declare it.
     const conVista = withPresetSelected(emptyFilters(), "anexo");
     const next = withCodeToggled(conVista, "5.1.2", RUBROS, { keepPreset: true });
 

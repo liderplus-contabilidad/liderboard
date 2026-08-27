@@ -46,14 +46,15 @@ export function ReportVertical({
   baseRow: DatosRow | undefined;
   centerName: string;
   collapsed: ReadonlySet<string>;
-  /** El logo del CLIENTE, a la izquierda de la banda — el mismo membrete que lleva el estado. */
+  /** The CLIENT's logo, on the left of the band — the same letterhead the statement carries. */
   logo?: EntityLogo | undefined;
-  /** El del CENTRO que esta tabla es, a la derecha. El Consolidado no tiene. */
+  /** The one of the CENTER this table is, on the right. The Consolidado has none. */
   centerLogo?: EntityLogo | undefined;
 }) {
   const rows = flattenSorted(grid.rows, new Set(collapsed), null).filter(
-    // Las filas de resumen no son cuentas del plan: «Utilidad» sobre Ingresos es el margen, que
-    // ya cierra el estado. Aquí sobraría y rompería la lectura de un reparto que suma 100 %.
+    // The summary rows are not accounts of the plan: «Utilidad» over Ingresos is the margin, which
+    // the statement already closes with. Here it would be superfluous and would break the reading of
+    // a breakdown that adds up to 100 %.
     ({ row }) => !row.isResult,
   );
 
@@ -65,8 +66,8 @@ export function ReportVertical({
     ? `% sobre ${baseRow.code} ${baseRow.name} · ${centerName}`
     : `${centerName}`;
 
-  // Una columna cuya base no vale nada no tiene porcentajes, y eso se dice UNA vez y no una por
-  // cada una de las decenas de cuentas que quedan en raya.
+  // A column whose base is worth nothing has no percentages, and that is said ONCE and not once for
+  // each of the dozens of accounts left showing a dash.
   const blind = periods.filter((_, index) => {
     const base = baseRow?.cells[index]?.value ?? null;
     return base === null || base === 0;
@@ -97,8 +98,8 @@ export function ReportVertical({
         </ul>
       )}
 
-      {/* Mismo reparto declarado que el estado, por la misma razón: el ancho lo fija el colgroup
-          y el número de columnas es lo que hace que el contenido quepa dentro de él. */}
+      {/* The same declared split as the statement, for the same reason: the width is fixed by the
+          colgroup and the number of columns is what makes the content fit inside it. */}
       <table className="w-full table-fixed border-collapse text-[10.5px]">
         <colgroup>
           <col style={{ width: `${100 - columnCount * columnPct}%` }} />
@@ -139,7 +140,7 @@ export function ReportVertical({
               <tr key={row.code} className={sectionTone(row.code, row.level)?.print}>
                 <th
                   scope="row"
-                  // El nombre va también aquí porque la celda lo compone de dos trozos.
+                  // The name goes here too because the cell composes it from two pieces.
                   aria-label={`${row.code} ${row.name}`}
                   className={cn(
                     "border-b border-border-faint py-1.5 pr-3 text-left align-top",
@@ -159,9 +160,9 @@ export function ReportVertical({
                 ))}
                 {comparing && (
                   <Cell bordered>
-                    {/* Puntos porcentuales, no la variación del porcentaje: pasar del 20 % al
-                        25 % es +5 p.p., y llamarlo «+25 %» son dos lecturas distintas del mismo
-                        movimiento en una tabla que ya está llena de porcentajes. */}
+                    {/* Percentage points, not the variation of the percentage: going from 20 % to
+                        25 % is +5 p.p., and calling it «+25 %» is two different readings of the same
+                        move in a table that is already full of percentages. */}
                     {points(shares[0] ?? null, shares[1] ?? null)}
                   </Cell>
                 )}

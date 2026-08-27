@@ -1,53 +1,53 @@
 /**
- * EL CENTRO DE COSTO DE UN WORKSPACE — un nombre más específico que el del cliente, con su propio
- * logo, para el papel que ese centro emite.
+ * A WORKSPACE'S COST CENTER — a name more specific than the client's, with its own logo, for the
+ * paper that center issues.
  *
- * Vive en `lib/` y no dentro de un módulo por la misma razón que `lib/company-profile.ts`: quien lo
- * CAPTURA es el diálogo compartido del header (`ClientNameDialog`, de `components/dashboard/`), y un
- * componente del dashboard que importara de Rol de Pagos invertiría la dependencia. Es la vecindad
- * de `lib/workspaces.ts` y `lib/logos.ts` — las reglas genéricas de la identidad de un workspace,
- * que cada módulo decide si usa. Hoy solo lo cablea Rol de Pagos.
+ * It lives in `lib/` and not inside a module for the same reason as `lib/company-profile.ts`: what
+ * CAPTURES it is the header's shared dialog (`ClientNameDialog`, from `components/dashboard/`), and a
+ * dashboard component importing from Rol de Pagos would invert the dependency. It is the
+ * neighbourhood of `lib/workspaces.ts` and `lib/logos.ts` — the generic rules of a workspace's
+ * identity, which each module decides whether to use. Today only Rol de Pagos wires it.
  *
- * **NO es la estructura de centros de PyG ni de Ocupaciones**, y esa diferencia es lo que justifica
- * un archivo aparte de `CenterLogos`. Allí un centro es una fila que sale de los datos —un slug de
- * los datasets, la mitad de una clave— y puede haber muchos, así que sus logos se guardan por
- * `centerId` en un registro. Aquí el centro es UNO, opcional, y lo declara el usuario al crear el
- * cliente: no hay lista que recorrer, ni nada de dónde derivarlo, ni jerarquía que mantener.
+ * **It is NOT PyG's or Ocupaciones' structure of centers**, and that difference is what justifies a
+ * file apart from `CenterLogos`. There a center is a row that comes out of the data —a slug of the
+ * datasets, half of a key— and there can be many, so their logos are stored by `centerId` in a
+ * registry. Here the center is ONE, optional, and the user declares it when creating the client:
+ * there is no list to walk, nothing to derive it from and no hierarchy to maintain.
  *
- * **La regla que sostiene el archivo es `costCenterHeading`**: devuelve el rótulo YA compuesto que
- * encabeza los papeles del cliente. Las tres superficies que lo imprimen —el comprobante en PDF, la
- * hoja `GENERAL` del rol y el informe de Sueldos por Áreas— reciben esa cadena y la escriben;
- * ninguna sabe que las dos mitades se unen con un punto medio. El modo de fallo real de esto no es
- * que el rótulo salga mal: es que salga de DOS maneras —con `·` en el PDF y con guion en el Excel—
- * sin que ninguna cifra lo delate. Es el mismo argumento de `letterheadLines`.
+ * **The rule that holds the file up is `costCenterHeading`**: it returns the ALREADY composed label
+ * that heads the client's papers. The three surfaces that print it —the payslip in PDF, the rol's
+ * `GENERAL` sheet and the Sueldos por Áreas report— receive that string and write it; none of them
+ * knows the two halves are joined with a middle dot. The real failure mode of this is not the label
+ * coming out wrong: it is it coming out in TWO ways —with a `·` in the PDF and with a hyphen in the
+ * Excel— without any figure giving it away. It is the same argument as `letterheadLines`.
  */
 import { normalizeEntityName, type EntityLogo } from "@/lib/workspaces";
 
 /**
- * El centro GUARDADO: su nombre y —si el usuario subió uno— su logo. El nombre no es opcional
- * porque un centro sin nombre no se puede identificar en ninguna pantalla; lo opcional es el CENTRO
- * ENTERO, que es lo que dice el `?` de quien lo declara.
+ * The STORED center: its name and —if the user uploaded one— its logo. The name is not optional
+ * because a center with no name cannot be identified on any screen; what is optional is the WHOLE
+ * CENTER, which is what the `?` of whoever declares it says.
  */
 export interface CostCenter {
   name: string;
   logo?: EntityLogo;
 }
 
-/** Lo que el diálogo tiene en la mano mientras se teclea: el nombre siempre presente, el logo o no. */
+/** What the dialog holds while typing: the name always present, the logo or not. */
 export interface CostCenterDraft {
   name: string;
   logo: EntityLogo | null;
 }
 
-/** El borrador de un cliente que todavía no declaró centro. */
+/** The draft of a client that has not declared a center yet. */
 export function emptyCostCenterDraft(): CostCenterDraft {
   return { name: "", logo: null };
 }
 
 /**
- * El borrador precargado con lo guardado. Sin centro da el borrador vacío, por lo mismo que el
- * perfil de empresa: el diálogo abre mostrando lo que hay, y si un centro ausente diera otra cosa,
- * renombrar un cliente antiguo parecería estar borrándole datos que nunca tuvo.
+ * The draft preloaded with what is stored. With no center it gives the empty draft, for the same
+ * reason as the company profile: the dialog opens showing what is there, and if an absent center gave
+ * anything else, renaming an old client would look like it was erasing data it never had.
  */
 export function costCenterDraftFrom(center: CostCenter | null | undefined): CostCenterDraft {
   if (!center) {
@@ -61,22 +61,22 @@ export type CostCenterCheck =
   | { ok: false; message: string };
 
 /**
- * Valida el borrador y devuelve el centro que se guarda, `undefined` si el usuario no declaró
- * ninguno, o el motivo del rechazo.
+ * Validates the draft and returns the center to be stored, `undefined` if the user declared none, or
+ * the reason for the rejection.
  *
- * Las dos reglas que pueden estar mal:
+ * The two rules that can be wrong:
  *
- * - **Vacío del todo es legítimo** y da `undefined`, no un centro con el nombre en blanco: el
- *   centro es opcional, y un `{ name: "" }` guardado convertiría «este cliente no tiene centro» en
- *   dos preguntas distintas — la misma razón por la que `withCenterLogo` descarta el registro vacío.
- * - **Un logo sin nombre se RECHAZA.** Un logo es una imagen sin rótulo: no se puede nombrar en el
- *   selector, ni en el diálogo, ni en el encabezado que este archivo compone, así que guardarlo
- *   dejaría una identidad que ninguna pantalla puede decir en voz alta. Se pide el nombre en vez de
- *   descartar el logo en silencio, que es lo que haría desaparecer un archivo que el usuario subió.
+ * - **Completely empty is legitimate** and gives `undefined`, not a center with a blank name: the
+ *   center is optional, and a stored `{ name: "" }` would turn «this client has no center» into two
+ *   different questions — the same reason `withCenterLogo` discards the empty registry.
+ * - **A logo with no name is REJECTED.** A logo is an image with no label: it cannot be named in the
+ *   selector, nor in the dialog, nor in the heading this file composes, so storing it would leave an
+ *   identity no screen can say out loud. The name is asked for instead of silently discarding the
+ *   logo, which is what would make a file the user uploaded disappear.
  *
- * El nombre pasa por `normalizeEntityName`, el mismo recorte y el mismo tope de 60 que el del
- * workspace: son rótulos del mismo papel y dos topes distintos no se podrían justificar por
- * separado.
+ * The name goes through `normalizeEntityName`, the same trimming and the same 60-character cap as the
+ * workspace's: they are labels of the same paper and two different caps could not be justified
+ * separately.
  */
 export function checkCostCenter(draft: CostCenterDraft): CostCenterCheck {
   const raw = draft.name.trim();
@@ -98,13 +98,14 @@ export function checkCostCenter(draft: CostCenterDraft): CostCenterCheck {
   };
 }
 
-/** Lo que separa el nombre del workspace del de su centro. El mismo punto medio con el que
- *  `letterheadLines` separa la razón social del RUC: un solo dialecto en los tres papeles. */
+/** What separates the workspace's name from its center's. The same middle dot with which
+ *  `letterheadLines` separates the razón social from the RUC: one single dialect across all three
+ *  papers. */
 const HEADING_SEPARATOR = " · ";
 
 /**
- * EL RÓTULO QUE ENCABEZA EL PAPEL, la única definición que hay. Sin centro es el nombre del
- * workspace tal cual, que es lo que deja intacto a todo cliente que no declare ninguno.
+ * THE LABEL THAT HEADS THE PAPER, the only definition there is. With no center it is the workspace's
+ * name as it is, which is what leaves every client that declares none untouched.
  */
 export function costCenterHeading(name: string, center: CostCenter | null | undefined): string {
   if (!center || center.name.trim().length === 0) {
@@ -114,17 +115,17 @@ export function costCenterHeading(name: string, center: CostCenter | null | unde
 }
 
 /**
- * El logo que va a la IZQUIERDA del membrete y el que va a la DERECHA, resueltos de una vez para
- * las tres superficies que los imprimen.
+ * The logo that goes on the LEFT of the letterhead and the one that goes on the RIGHT, resolved once
+ * for the three surfaces that print them.
  *
- * La regla, escrita aquí y en ningún otro sitio: **el del CLIENTE encabeza a la izquierda y el de
- * su CENTRO va a la derecha** — el mismo reparto con el que PyG y Ocupaciones timbran sus hojas,
- * donde el logo del workspace abre y el del centro de esa hoja cierra. Sin centro, o con un centro
- * que no subió logo, no hay segundo logo y el del cliente se queda donde siempre estuvo.
+ * The rule, written here and nowhere else: **the CLIENT's heads on the left and its CENTER's goes on
+ * the right** — the same layout with which PyG and Ocupaciones stamp their sheets, where the
+ * workspace's logo opens and that sheet's center closes. With no center, or with a center that
+ * uploaded no logo, there is no second logo and the client's stays where it always was.
  *
- * Que exista esta función y no un `if` en cada superficie es lo que importa: preguntar «¿y si este
- * cliente no tiene centro?» en el PDF, en el Excel y en el informe es exactamente cómo dos de los
- * tres acaban respondiendo distinto.
+ * That this function exists instead of an `if` on each surface is what matters: asking «and what if
+ * this client has no center?» in the PDF, in the Excel and in the report is exactly how two of the
+ * three end up answering differently.
  */
 export function letterheadLogos(
   clientLogo: EntityLogo | null | undefined,

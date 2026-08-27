@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import { classifyPayer, payerLabel } from "./payer";
 
 /**
- * Los nombres de empresa son los del archivo real de abril de 2026 del Hospital General Privado
- * Durán; los de persona son inventados con la FORMA del archivo (dos apellidos y dos nombres),
- * porque transcribir el nombre de un paciente a un test versionado es justo lo que este módulo
- * existe para no hacer.
+ * The company names are those of the real April 2026 file of the Hospital General Privado Durán; the
+ * personal ones are invented with the SHAPE of the file (two surnames and two given names), because
+ * transcribing a patient's name into a versioned test is exactly what this module exists not to do.
  */
 describe("classifyPayer", () => {
   it("una aseguradora del archivo real es empresa", () => {
@@ -39,7 +38,7 @@ describe("classifyPayer", () => {
   });
 
   it("una marca societaria no se confunde con una sílaba dentro de una palabra", () => {
-    // «ROSA» contiene «sa»; buscarla como subcadena habría hecho empresa a una persona.
+    // «ROSA» contains «sa»; searching for it as a substring would have made a person into a company.
     expect(classifyPayer("MENDOZA ROSA ELENA")).toBe("particular");
   });
 

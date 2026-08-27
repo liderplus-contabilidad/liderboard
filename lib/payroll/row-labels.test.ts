@@ -35,8 +35,8 @@ describe("isRenameable", () => {
   });
 
   it("rechaza las horas extras, aunque capturen su cantidad", () => {
-    // Su rótulo es una tasa de ley: renombrar `50%` como `100%` mentiría sobre un cálculo que
-    // sigue siendo al 50 %, y ninguna cifra lo delataría.
+    // Its label is a statutory rate: renaming `50%` as `100%` would lie about a computation that is
+    // still at 50 %, and no figure would give it away.
     expect(isRenameable(EXTRAS_50)).toBe(false);
   });
 });

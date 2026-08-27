@@ -1,38 +1,38 @@
 /**
- * Las marcas de la barra de «Ventas por servicio»: **Año** y **Mes**, y nada más. No hay «Cuenta
- * contable» ni «Centro de costo» porque ninguna de las dos significa nada sobre una factura, que
- * es exactamente el motivo por el que esto no es una cuarta pestaña de PyG.
+ * The marks of the «Ventas por servicio» bar: **Año** and **Mes**, and nothing else. There is no
+ * «Cuenta contable» and no «Centro de costo» because neither means anything about an invoice, which is
+ * exactly why this is not a fourth tab of PyG.
  *
- * **Los dos son de marca MÚLTIPLE, y el año lo es porque la comparación interanual es la pregunta
- * más útil de un informe de ventas**: «abril de 2026 contra abril de 2025». Nació de elección única
- * con el argumento de que dos años no tendrían eje sobre el que dibujarse, y eso era falso — el eje
- * son los doce meses y cada AÑO es una serie, que es la figura que Ocupaciones y PyG ya usan.
+ * **Both are MULTIPLE-mark, and the year is because the year-on-year comparison is the most useful
+ * question of a sales report**: «April 2026 against April 2025». It was born single-choice with the
+ * argument that two years would have no axis to be drawn on, and that was false — the axis is the
+ * twelve months and each YEAR is a series, which is the figure Ocupaciones and PyG already use.
  *
- * El MES es independiente del año: una marca de «Abr» acota el eje de TODOS los años marcados en
- * vez de elegir el abril de uno, que es lo que hace que la comparación signifique algo. Es la misma
- * regla por la que un `PeriodSlot` de PyG no es un `PeriodRef`.
+ * The MONTH is independent of the year: a mark of «Abr» narrows the axis of ALL the marked years
+ * instead of picking one's April, which is what makes the comparison mean something. It is the same
+ * rule by which a `PeriodSlot` of PyG is not a `PeriodRef`.
  *
- * **`years` nunca queda vacío**, y ahí se separa de la regla de la casa a propósito: «ninguna marca
- * es todas» convertiría la pantalla de entrada en la suma de tres ejercicios, y una tarjeta que
- * abre diciendo «Venta total $3,1M» de tres años a la vez se lee mal antes de que nadie toque un
- * filtro. Sin marcas se resuelve al año MÁS RECIENTE, que es lo último que la firma cargó.
+ * **`years` is never left empty**, and there it deliberately departs from the house rule: «no mark is
+ * all of them» would turn the entry screen into the sum of three exercises, and a card that opens
+ * saying «Venta total $3.1M» of three years at once reads badly before anyone touches a filter. With
+ * no marks it resolves to the MOST RECENT year, which is the last thing the firm loaded.
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 
 export interface SalesFilters {
-  /** Años marcados, ascendentes. Vacío se resuelve al más reciente al leer, nunca a «todos». */
+  /** Marked years, ascending. Empty resolves to the most recent on read, never to «all». */
   years: number[];
-  /** Índices 0–11, en orden. Vacío = todos los meses CARGADOS de los años marcados. */
+  /** Indices 0–11, in order. Empty = every LOADED month of the marked years. */
   months: number[];
 }
 
-/** Lo que el cliente tiene, y lo que los años marcados dejan elegir. */
+/** What the client has, and what the marked years allow choosing. */
 export interface SalesUniverse {
-  /** Todos los años cargados, ascendentes. */
+  /** Every loaded year, ascending. */
   years: number[];
-  /** Los meses cargados EN LOS AÑOS MARCADOS — la unión, no la intersección: un mes que solo tiene
-   *  uno de los años sigue siendo un mes que se puede mirar, y la comparación dirá que al otro le
-   *  falta. */
+  /** The months loaded IN THE MARKED YEARS — the union, not the intersection: a month only one of the
+   *  years has is still a month that can be looked at, and the comparison will say the other one is
+   *  missing it. */
   months: number[];
 }
 
@@ -41,8 +41,8 @@ export function emptyFilters(): SalesFilters {
 }
 
 /**
- * Poda contra lo que el cliente tiene AHORA, en la LECTURA y nunca en un efecto: cambiar de cliente
- * no puede dejar un render marcando un año que este cliente no tiene.
+ * Pruned against what the client has NOW, on READ and never in an effect: switching client cannot
+ * leave a render marking a year this client does not have.
  */
 export function sanitizeFilters(filters: SalesFilters, universe: SalesUniverse): SalesFilters {
   const years = universe.years.filter((year) => filters.years.includes(year));
@@ -67,14 +67,14 @@ export function withYearToggled(
   } else {
     marked.add(year);
   }
-  // Los meses SOBREVIVEN al cambio de año, al revés que cuando el año era de elección única: una
-  // marca de «Abr» ya no significa «el abril de 2026» sino «abril», así que quitar un año no la
-  // invalida. Lo que sí la poda es `sanitizeFilters`, si ese mes deja de existir en lo marcado.
+  // The months SURVIVE a change of year, the opposite of when the year was single-choice: a mark of
+  // «Abr» no longer means «April 2026» but «April», so removing a year does not invalidate it. What
+  // does prune it is `sanitizeFilters`, if that month stops existing in what is marked.
   return { ...filters, years: universe.filter((entry) => marked.has(entry)) };
 }
 
-/** Marca TODOS los años. No es «vaciar la lista»: aquí una lista vacía significa «el más
- *  reciente», así que el atajo tiene que poblarla de verdad. */
+/** Marks ALL the years. It is not «emptying the list»: here an empty list means «the most recent»,
+ *  so the shortcut has to populate it for real. */
 export function withAllYears(filters: SalesFilters, universe: readonly number[]): SalesFilters {
   return { ...filters, years: [...universe] };
 }
@@ -98,22 +98,22 @@ export function withMonthsCleared(filters: SalesFilters): SalesFilters {
 }
 
 /**
- * Los meses que la lectura suma: los marcados, o TODOS los cargados de los años marcados. Es la
- * única traducción de las marcas al periodo, así que las tarjetas, los tiles y el informe no pueden
- * acabar sumando tramos distintos.
+ * The months the reading sums: the marked ones, or ALL the loaded ones of the marked years. It is the
+ * only translation of the marks into the period, so the cards, the tiles and the report cannot end up
+ * summing different spans.
  */
 export function selectedMonths(filters: SalesFilters, universe: SalesUniverse): number[] {
   return filters.months.length > 0 ? filters.months : universe.months;
 }
 
 /**
- * El periodo en castellano llano — lo que dicen los tiles, el subtítulo de cada tarjeta y la
- * cabecera del informe, para que nada de la pantalla nombre un tramo distinto del de al lado.
+ * The period in plain Spanish — what the tiles, each card's subtitle and the report's header say, so
+ * nothing on the screen names a different span from the one beside it.
  *
- * Un conjunto de meses con huecos se ENUMERA («Ene, Mar, Abr») en vez de afirmar un rango: «Ene–Abr»
- * diría que febrero está sumado, la misma regla de `periodRangeLabel` en PyG. Con VARIOS años los
- * meses se escriben una sola vez y los años detrás («Abr · 2025, 2026»), porque repetir «abril» por
- * cada año es justo lo que hace ilegible un rótulo de comparación.
+ * A set of months with gaps is ENUMERATED («Ene, Mar, Abr») instead of asserting a range: «Ene–Abr»
+ * would say February is summed, `periodRangeLabel`'s same rule in PyG. With SEVERAL years the months
+ * are written once and the years behind them («Abr · 2025, 2026»), because repeating «abril» for each
+ * year is precisely what makes a comparison label illegible.
  */
 export function periodLabel(months: readonly number[], years: readonly number[]): string {
   if (years.length === 0) {
@@ -125,8 +125,8 @@ export function periodLabel(months: readonly number[], years: readonly number[])
   }
   const single = years.length === 1;
   if (months.length === 1) {
-    // Con un solo año el mes va entero («Abril 2026»); con varios, abreviado, porque el rótulo ya
-    // carga la lista de años.
+    // With a single year the month goes in full («Abril 2026»); with several, abbreviated, because
+    // the label already carries the list of years.
     return single
       ? `${MONTHS_FULL_ES[months[0]]} ${yearsLabel}`
       : `${MONTHS_SHORT_ES[months[0]]} · ${yearsLabel}`;
@@ -140,9 +140,9 @@ export function periodLabel(months: readonly number[], years: readonly number[])
 }
 
 /**
- * Cuántas marcas hay puestas — lo que decide si la tira de chips se dibuja. Cuenta solo los MESES:
- * `years` nunca está vacío, así que un chip de año no siempre se podría quitar, y el desplegable ya
- * enseña la selección entera en su rótulo.
+ * How many marks are set — what decides whether the chip strip is drawn. It counts only the MONTHS:
+ * `years` is never empty, so a year chip could not always be removed, and the dropdown already shows
+ * the whole selection in its label.
  */
 export function activeMarkCount(filters: SalesFilters): number {
   return filters.months.length;

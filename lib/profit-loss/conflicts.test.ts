@@ -75,8 +75,8 @@ describe("detectReloadConflicts", () => {
   });
 
   it("no marca un ajuste del MISMO mes de otro año", () => {
-    // El lote reescribió marzo de 2026; el ajuste vive en marzo de 2025 y no se toca. Sin el
-    // año en la clave, `monthIndex` los haría indistinguibles.
+    // The batch rewrote March of 2026; the adjustment lives in March of 2025 and is not touched.
+    // Without the year in the key, `monthIndex` would make them indistinguishable.
     const before = [dataset(715, 2025)];
     const after = [dataset(165, 2025)];
     expect(detectReloadConflicts(before, after, [{ year: 2026, month: 2 }], [edit()])).toEqual([]);

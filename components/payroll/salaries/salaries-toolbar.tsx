@@ -21,13 +21,13 @@ export interface SalariesToolbarProps {
 }
 
 /**
- * La ÚNICA superficie de selección de Sueldos por Áreas: Área · Año · Mes, y debajo la tira de
- * marcas activas.
+ * Sueldos por Áreas' ONLY selection surface: Área · Año · Mes, and below it the strip of active
+ * marks.
  *
- * Las tres siguen la misma regla que el resto de la app —ninguna marca equivale a todas, y el atajo
- * «Todas/Todos» vacía la lista en vez de marcarlo todo— y ninguna declara el MODO de la tabla: que
- * marcar exactamente un área dé el detalle por empleado se lee de las marcas (`resolveAreaMode`),
- * no de un control aparte que pudiera contradecirlas.
+ * The three follow the same rule as the rest of the app —no mark is the same as all of them, and the
+ * «Todas/Todos» shortcut empties the list instead of marking everything— and none of them declares
+ * the table's MODE: that marking exactly one area gives the per-employee detail is read off the marks
+ * (`resolveAreaMode`), not off a separate control that could contradict them.
  */
 export function SalariesToolbar({
   universe,
@@ -77,8 +77,8 @@ export function SalariesToolbar({
                   </DropdownOption>
                 ))}
               </div>
-              {/* Lo que hace la pantalla al marcar una sola no es obvio y se dice aquí, que es
-                  donde se decide, en vez de dejar que el usuario lo descubra por accidente. */}
+              {/* What the screen does on marking a single one is not obvious and is said here, which
+                  is where it is decided, instead of letting the user find out by accident. */}
               <p className="mt-1.5 border-t border-border-soft px-1 pt-1.5 text-[11px] leading-snug text-faint">
                 Marca una sola para ver sus empleados uno por uno.
               </p>
@@ -169,7 +169,7 @@ export function SalariesToolbar({
   );
 }
 
-/** El atajo «todas»: vacía la lista, que es como esta app escribe «sin filtro». */
+/** The «all» shortcut: it empties the list, which is how this app writes «no filter». */
 function AllOption({
   label,
   active,

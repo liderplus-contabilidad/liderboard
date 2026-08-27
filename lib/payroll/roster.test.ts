@@ -19,7 +19,7 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
     accumulatesReserveFund: false,
     provisionsThirteenth: false,
     provisionsFourteenth: false,
-    days: 15, // un ingreso a mitad de mes: NO debe sobrevivir a la copia
+    days: 15, // a mid-month start: it must NOT survive the copy
     ...overrides,
   };
 }
@@ -52,10 +52,10 @@ describe("copyRoster", () => {
   });
 
   it("no arrastra nada de lo que es del mes: la ficha copiada solo tiene sus 13 campos", () => {
-    // Este test es la frontera de la copia escrita como lista cerrada, a propósito: cualquier
-    // campo nuevo de `PayrollEmployeeLine` obliga a decidir aquí, explícitamente, si es de la
-    // ficha o del mes. Sin él, un campo del MES entraría en la copia sin que nada lo delate y
-    // abril heredaría las horas extras de marzo.
+    // This test is the copy's boundary written as a closed list, on purpose: any new field of
+    // `PayrollEmployeeLine` forces a decision here, explicitly, on whether it belongs to the record or
+    // to the month. Without it, a field of the MONTH would enter the copy with nothing giving it away
+    // and April would inherit March's overtime.
     const [copied] = copyRoster([line()]);
     expect(Object.keys(copied).sort()).toEqual(
       [
@@ -77,8 +77,8 @@ describe("copyRoster", () => {
   });
 
   it("NO copia la captura del mes: el período nuevo nace sin archivo", () => {
-    // Ausente, no en ceros. Un `capture` vacío haría que la pantalla pintara un rol completo
-    // —con su décimo cuarto y su costo empresa— de un mes que nadie cargó todavía.
+    // Absent, not at zeros. An empty `capture` would make the screen paint a complete rol —with its
+    // décimo cuarto and its employer cost— for a month nobody has loaded yet.
     const [copied] = copyRoster([
       line({
         capture: {
@@ -120,9 +120,9 @@ describe("copyRoster", () => {
   });
 
   /**
-   * El motivo por el que las dos provisiones se mudaron de la captura a la ficha: viviendo en la
-   * captura, abril nacía sin ellas y había que volver a marcarlas empleado por empleado — y
-   * olvidarse un mes dejaba de provisionar sin que nada avisara.
+   * The reason the two provisions moved from the capture to the record: living in the capture, April
+   * was born without them and they had to be marked again employee by employee — and forgetting one
+   * month stopped provisioning with nothing warning about it.
    */
   it("SÍ copia las dos banderas de provisión de décimos, que también son de la ficha", () => {
     const [copied] = copyRoster([line({ provisionsThirteenth: true, provisionsFourteenth: true })]);
@@ -148,9 +148,9 @@ describe("copyRoster", () => {
   });
 
   /**
-   * La EXCEPCIÓN a «lo de la captura no viaja»: una fila de bono es FORMA del rol —la columna que
-   * esa empresa nombra `MOVILIZACION NO APORTABLE` y repite cada mes—, y lo que no viaja es lo que
-   * cada empleado cobró en ella.
+   * The EXCEPTION to «what belongs to the capture does not travel»: a bonus row is the rol's SHAPE
+   * —the column that company names `MOVILIZACION NO APORTABLE` and repeats every month—, and what
+   * does not travel is what each employee received in it.
    */
   it("arrastra las filas de bono con su rótulo y su clase, y el importe en CERO", () => {
     const [copied] = copyRoster([
@@ -188,9 +188,9 @@ describe("copyRoster", () => {
   });
 
   /**
-   * La asimetría que conviene tener escrita: una fila del catálogo existe en el libro con o sin
-   * cifra y solo se VE si tiene una, así que arrastrar su nombre sin su importe pondría el rótulo
-   * de marzo esperando a la cifra de abril.
+   * The asymmetry worth having written down: a catalogue row exists in the book with or without a
+   * figure and is only VISIBLE if it has one, so dragging its name without its amount would put
+   * March's label waiting for April's figure.
    */
   it("NO arrastra el rótulo propio de una fila del catálogo", () => {
     const [copied] = copyRoster([

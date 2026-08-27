@@ -75,10 +75,10 @@ describe("reconciliationStatusOf", () => {
     expect(reconciliationStatusOf(0.01)).toBe("diferencia");
   });
 
-  // El colapso del ruido sub-centavo es del MOTOR, no de aquí: esta función clasifica lo que
-  // aquél ya decidió. Si volviera a compararse por tolerancia en este punto habría dos
-  // definiciones de «cuadra» y podrían separarse, que es exactamente lo que pasaba cuando esto
-  // comparaba lo que declaraba el archivo mientras el motor comparaba lo tecleado.
+  // The collapse of the sub-cent noise belongs to the ENGINE, not here: this function classifies what
+  // the engine already decided. If it were compared by tolerance again at this point there would be
+  // two definitions of «it squares» and they could drift apart, which is exactly what happened when
+  // this compared what the file declared while the engine compared what was typed.
   it("no aplica tolerancia propia: un valor no nulo es diferencia aunque sea ínfimo", () => {
     expect(reconciliationStatusOf(5.7e-14)).toBe("diferencia");
   });
@@ -110,9 +110,10 @@ describe("computePeriodFinancials", () => {
     ).toEqual({ gross: 800, deductions: 80, net: 720, cost: 960 });
   });
 
-  // Antes el corte era «ningún empleado trae figures», o sea «no llegó el archivo». Ese estado ya
-  // no existe: el motor deriva el rol de la ficha, así que una nómina copiada del mes anterior
-  // totaliza desde el primer momento y lo único sin totales es un período SIN empleados.
+  // The cut used to be «no employee brings figures», that is, «the file did not arrive». That state
+  // no longer exists: the engine derives the rol from the record, so a nómina copied from the previous
+  // month totals from the first moment and the only thing with no totals is a período WITH NO
+  // employees.
   it("una nómina sin nada capturado SÍ totaliza: el motor la deriva de la ficha", () => {
     const totals = computePeriodFinancials([
       computeLinePayroll(line(), DEFAULT_PAYROLL_PARAMETERS),
@@ -142,11 +143,11 @@ describe("matchesEmployeeSearch", () => {
 });
 
 describe("conciliación del rol REAL de marzo 2026, a través del motor", () => {
-  // El mismo fixture de oro del motor, leído por la tarjeta de KPIs: así lo que se afirma no es
-  // que esta función clasifique bien un número inventado, sino que el archivo del contador da
-  // 5 conciliados y 1 con diferencia CUANDO las cifras las calcula la app. Sin esto, el ruido de
-  // coma flotante del libro (`457.69000000000005` contra `457.69` tecleado) podría volver a
-  // teñir de «con diferencia» a cuatro de los seis y nada lo notaría.
+  // The engine's same golden fixture, read by the KPI card: what is asserted is not that this function
+  // classifies an invented number correctly, but that the accountant's file gives 5 reconciled and 1
+  // with a difference WHEN the figures are computed by the app. Without this, the book's floating-point
+  // noise (`457.69000000000005` against a typed `457.69`) could tint four of the six as «with a
+  // difference» again and nothing would notice.
   const computations = GOLDEN_MARCH_2026.map((employee) =>
     computeEmployeePayroll(employee.input, DEFAULT_PAYROLL_PARAMETERS),
   );

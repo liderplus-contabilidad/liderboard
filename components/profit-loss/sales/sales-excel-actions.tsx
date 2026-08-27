@@ -5,13 +5,14 @@ import { useSalesData } from "./sales-data-provider";
 import { SalesUploadModal } from "./sales-upload-modal";
 
 /**
- * El envoltorio de `ExcelActions` para ventas: un módulo solo cablea qué abre «Cargar» y qué dice
- * el `ⓘ`, nunca su propio markup de botones.
+ * The `ExcelActions` wrapper for sales: a module only wires what «Cargar» opens and what the `ⓘ`
+ * says, never its own button markup.
  *
- * **No hay descarga**, y la FORMA del control lo refleja sola: `ExcelActions` deriva el control de
- * cuántas opciones recibe, y con cero no dibuja ninguno. El Excel aquí es la FUENTE y la pantalla
- * lee; volver a escribirlo sería ofrecer un archivo que ningún sistema contable espera recibir. Lo
- * que la firma entrega es el informe en PDF, que tiene su propio botón al lado.
+ * **There is no download**, and the SHAPE of the control reflects that on its own: `ExcelActions`
+ * derives the control from how many options it receives, and with zero it draws none. The Excel here
+ * is the SOURCE and the screen reads; writing it back would be offering a file no accounting system
+ * expects to receive. What the firm hands over is the PDF report, which has its own button next to
+ * it.
  */
 export function SalesExcelActions({
   open,
@@ -28,8 +29,8 @@ export function SalesExcelActions({
         upload={{
           onClick: () => onOpenChange(true),
           disabled: clientId === null,
-          // Un control apagado sin razón a la vista obliga a apuntarlo para descubrir qué falta, y
-          // lo que falta aquí es el paso anterior de todo el módulo.
+          // A control switched off with no reason in sight forces you to point at it to find out what
+          // is missing, and what is missing here is the previous step of the whole module.
           disabledReason: clientId === null ? "Abre un cliente en Pérdidas y Ganancias" : undefined,
         }}
         downloads={[]}

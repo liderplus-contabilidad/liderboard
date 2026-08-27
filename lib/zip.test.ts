@@ -4,14 +4,14 @@ import { crc32, zipStore } from "./zip";
 const encoder = new TextEncoder();
 const bytes = (text: string) => encoder.encode(text);
 
-/** 1 de marzo de 2026, 14:05:20 — la hora que se le pasa al escritor en todos los casos. */
+/** 1 March 2026, 14:05:20 — the time passed to the writer in every case. */
 const MODIFIED = new Date(2026, 2, 1, 14, 5, 20);
 
 /**
- * Un lector mínimo del DIRECTORIO CENTRAL, que es por donde un extractor entra de verdad: recorre
- * las fichas del final, y de cada una saca el nombre y va a buscar su contenido al desplazamiento
- * que declara. Es justo el camino que un `zipStore` con la aritmética mal rota, y el que un test
- * que solo mirara las cabeceras locales no probaría.
+ * A minimal reader of the CENTRAL DIRECTORY, which is where an extractor really comes in: it walks
+ * the records at the end, and out of each one takes the name and goes to look for its content at the
+ * offset it declares. It is exactly the path a `zipStore` with broken arithmetic would break, and the
+ * one a test that only looked at the local headers would not exercise.
  */
 function readCentralDirectory(
   archive: Uint8Array,
@@ -33,7 +33,7 @@ function readCentralDirectory(
     const offset = view.getUint32(at + 42, true);
     const name = decoder.decode(archive.subarray(at + 46, at + 46 + nameLength));
 
-    // La cabecera local del archivo al que esa ficha apunta, y su contenido justo detrás.
+    // The local header of the file that record points at, and its content right behind it.
     expect(view.getUint32(offset, true)).toBe(0x04034b50);
     const localNameLength = view.getUint16(offset + 26, true);
     const extraLength = view.getUint16(offset + 28, true);
@@ -51,8 +51,8 @@ function readCentralDirectory(
 }
 
 describe("crc32", () => {
-  // El vector de siempre del CRC-32: es lo único de este archivo que se puede cotejar contra algo
-  // de fuera, y es también lo que un extractor comprueba antes de entregar un archivo.
+  // CRC-32's usual vector: it is the only thing in this file that can be checked against something
+  // external, and it is also what an extractor checks before handing over a file.
   it("da el valor conocido de «123456789»", () => {
     expect(crc32(bytes("123456789"))).toBe(0xcbf43926);
   });
@@ -89,8 +89,8 @@ describe("zipStore", () => {
     const [file] = readCentralDirectory(archive);
 
     expect(file?.name).toBe("Añó ñandú.pdf");
-    // Bit 11 encendido en la cabecera local: es lo que le dice al extractor que el nombre no está
-    // en la tabla de códigos del sistema.
+    // Bit 11 set in the local header: it is what tells the extractor the name is not in the system's
+    // code page.
     const view = new DataView(archive.buffer);
     expect(view.getUint16(6, true) & 0x0800).toBe(0x0800);
   });
@@ -129,7 +129,7 @@ describe("zipStore", () => {
     const archive = zipStore([{ name: "a.pdf", data: bytes("x") }], MODIFIED);
     const view = new DataView(archive.buffer);
 
-    // 14:05:20 → los segundos van en pasos de dos; 1 de marzo de 2026 → año contado desde 1980.
+    // 14:05:20 → the seconds go in steps of two; 1 March 2026 → the year counted from 1980.
     expect(view.getUint16(10, true)).toBe((14 << 11) | (5 << 5) | 10);
     expect(view.getUint16(12, true)).toBe(((2026 - 1980) << 9) | (3 << 5) | 1);
   });

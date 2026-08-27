@@ -27,17 +27,17 @@ const TAB_DATOS: ModuleTab = { id: "datos", label: "Datos", icon: Table2 };
 const TAB_ANALISIS: ModuleTab = { id: "analisis", label: "Análisis", icon: Microscope };
 
 /**
- * Un SUBITEM de un módulo: una página que cuelga de él (`/<padre>/<hijo>`) y que se rinde indentada
- * bajo su padre en el sidebar.
+ * A module's SUBITEM: a page hanging off it (`/<parent>/<child>`) rendered indented under its parent
+ * in the sidebar.
  *
- * El anidamiento es de UN SOLO nivel a propósito —un hijo no declara hijos—: esta navegación es una
- * lista de módulos y no un árbol, y un segundo nivel no tendría dónde rendirse con la barra
- * colapsada.
+ * The nesting is ONE single level on purpose —a child declares no children—: this navigation is a
+ * list of modules and not a tree, and a second level would have nowhere to render with the bar
+ * collapsed.
  *
- * No tiene `tabs`: un subitem es una página entera, como lo es Rol de Pagos.
+ * It has no `tabs`: a subitem is a whole page, as Rol de Pagos is.
  */
 export interface DashboardSubmodule {
-  /** Segmento que cuelga del padre, e.g. "salaries" → `/payroll/salaries`. */
+  /** Segment hanging off the parent, e.g. "salaries" → `/payroll/salaries`. */
   slug: string;
   label: string;
   title: string;
@@ -54,7 +54,7 @@ export interface DashboardModule {
   icon: LucideIcon;
   /** Tabs shown inside the module, in display order. First tab is the default. */
   tabs: ModuleTab[];
-  /** Páginas que cuelgan de este módulo. Un módulo sin hijos se rinde exactamente como antes. */
+  /** Pages hanging off this module. A module with no children renders exactly as before. */
   children?: DashboardSubmodule[];
 }
 
@@ -65,14 +65,14 @@ export const MODULES: DashboardModule[] = [
     title: "Pérdidas y Ganancias",
     icon: LineChart,
     tabs: [TAB_GRAFICOS, TAB_DATOS, TAB_ANALISIS],
-    // Ventas por servicio cuelga de aquí y no es un módulo hermano por el mismo motivo que Sueldos
-    // por Áreas cuelga de Rol de Pagos: sus ventas necesitan un CLIENTE, y el cliente lo guarda
-    // PyG. Como módulo de primer nivel estrenaría su propia lista de clientes —lo que Ocupaciones
-    // hace con «hotel»— y el usuario acabaría manteniendo dos listas para la misma firma.
+    // Ventas por servicio hangs off here and is not a sibling module for the same reason Sueldos por
+    // Áreas hangs off Rol de Pagos: its sales need a CLIENT, and the client is stored by PyG. As a
+    // top-level module it would introduce its own list of clients —what Ocupaciones does with
+    // «hotel»— and the user would end up maintaining two lists for the same firm.
     //
-    // Se ve SIEMPRE, para todo cliente: un ítem del sidebar que aparece y desaparece según qué
-    // cliente esté abierto no se puede descubrir. Lo que el archivo decide es quién puede subir,
-    // no quién ve el menú.
+    // It is ALWAYS visible, for every client: a sidebar item that appears and disappears depending on
+    // which client is open cannot be discovered. What the file decides is who can upload, not who
+    // sees the menu.
     children: [
       {
         slug: "sales",
@@ -94,12 +94,12 @@ export const MODULES: DashboardModule[] = [
     label: "Rol de Pagos",
     title: "Rol de Pagos",
     icon: Receipt,
-    // Sin pestañas: la vista inicial (Historial de nómina) es la página entera, y no monta
+    // No tabs: the initial view (Historial de nómina) is the whole page, and it does not mount
     // `ModuleTabs`.
     tabs: [],
-    // Sueldos por Áreas cuelga de aquí y no es un módulo hermano porque no tiene datos propios: lee
-    // los períodos y la nómina del CLIENTE ACTIVO de Rol de Pagos. Como módulo de primer nivel se
-    // quedaba sin el selector de cliente que necesita para significar algo.
+    // Sueldos por Áreas hangs off here and is not a sibling module because it has no data of its own:
+    // it reads the períodos and the nómina of Rol de Pagos' ACTIVE CLIENT. As a top-level module it
+    // would be left without the client selector it needs in order to mean anything.
     children: [
       {
         slug: "salaries",
@@ -118,12 +118,12 @@ export function findModuleBySlug(slug: string | undefined): DashboardModule | un
 }
 
 /**
- * El subitem que nombra el SEGUNDO segmento de una ruta, o `undefined`.
+ * The subitem that names a route's SECOND segment, or `undefined`.
  *
- * Devolver `undefined` es la respuesta correcta —y la importante— para un segmento que es un
- * PARÁMETRO de ruta: `/payroll/<uuid>` es el detalle de un período, no un subitem, y sin esta
- * comprobación su identificador acabaría en la miga y en el título de la página. Un identificador
- * no dice nada a quien lee y delata la forma interna de los datos.
+ * Returning `undefined` is the right answer —and the important one— for a segment that is a route
+ * PARAMETER: `/payroll/<uuid>` is a período's detail, not a subitem, and without this check its
+ * identifier would end up in the breadcrumb and in the page's title. An identifier says nothing to
+ * the reader and gives away the internal shape of the data.
  */
 export function findSubmoduleBySlug(
   module: DashboardModule | undefined,

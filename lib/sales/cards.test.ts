@@ -24,7 +24,7 @@ function input(lines: SalesLine[], monthly?: MonthPoint[]): SalesCardsInput {
   };
 }
 
-/** La forma COMPARATIVA: dos años, cada uno con sus líneas y sus doce meses. */
+/** The COMPARATIVE shape: two years, each with its lines and its twelve months. */
 function comparing(
   byYear: { year: number; lines: SalesLine[]; months?: SalesMonth[] }[],
 ): SalesCardsInput {
@@ -158,7 +158,7 @@ describe("evolución mensual", () => {
     );
     const { evolution } = buildSalesCards(input([line({ amount: 1 })], monthly));
     expect(evolution.note).toContain("los doce meses del eje");
-    // Su barra y su línea: la evolución es un combo desde que la línea existe.
+    // Its bar and its line: the evolution is a combo now that the line exists.
     expect(evolution.option?.series.map((entry) => entry.type)).toEqual(["bar", "line"]);
   });
 });
@@ -186,17 +186,17 @@ describe("la forma COMPARATIVA (varios años)", () => {
     const cards = buildSalesCards(spec);
     for (const card of [cards.services, cards.payers, cards.evolution]) {
       const years = card.option?.series.filter((s) => s.id.startsWith("year-")) ?? [];
-      // La evolución trae dos por año —barra y línea— y las dos comparten nombre, así que lo que se
-      // compara es el conjunto de años nombrados.
+      // The evolution brings two per year —bar and line— and both share a name, so what is compared
+      // is the set of named years.
       expect([...new Set(years.map((s) => s.name))]).toEqual(["2025", "2026"]);
     }
   });
 
   it("un servicio que un año no tocó vale null, y NO cero", () => {
-    // Cero afirmaría que ese año no vendió medicinas; null dice que no hay nada que afirmar.
+    // Zero would claim that year sold no medicines; null says there is nothing to claim.
     const services = buildSalesCards(spec).services;
     const y2026 = services.option?.series.find((s) => s.id === "year-2026");
-    // Las filas van ordenadas por el agregado: HONORARIOS (300) y luego MEDICINAS (40).
+    // The rows are ordered by the aggregate: HONORARIOS (300) and then MEDICINAS (40).
     expect(y2026?.data).toEqual([200, null]);
   });
 
@@ -205,7 +205,7 @@ describe("la forma COMPARATIVA (varios años)", () => {
     expect(table.columns).toEqual(["2025", "2026", "Total", "% del periodo"]);
     expect(table.rows[0].values).toEqual(["$100.00", "$200.00", "$300.00", "88.2 %"]);
     expect(table.rows[1].values[0]).toBe("$40.00");
-    // El año que no tocó ese servicio lleva RAYA.
+    // The year that did not touch that service carries a DASH.
     expect(table.rows[1].values[1]).toBe("–");
   });
 
@@ -215,19 +215,19 @@ describe("la forma COMPARATIVA (varios años)", () => {
   });
 
   it("los mayores pagadores se eligen por el AGREGADO, no por un año", () => {
-    // Si el elenco cambiara con las marcas, la tarjeta no se podría comparar consigo misma.
+    // If the cast changed with the marks, the card could not be compared with itself.
     const payers = buildSalesCards(spec).payers;
     expect(payers.option?.yAxis?.data).toEqual(["SALUDSA", "CONFIAMED"]);
     expect(payers.note).toContain("no por un año");
   });
 
   it("con varios años el color de un pagador lo lleva el AÑO, no su clase", () => {
-    // Teñir por clase pintaría del mismo tono los tres años de un mismo pagador, que es justo lo
-    // que la comparación necesita distinguir.
+    // Tinting by class would paint the three years of one same payer in the same hue, which is
+    // precisely what the comparison needs to tell apart.
     const series = buildSalesCards(spec).payers.option?.series ?? [];
     expect(series).toHaveLength(2);
     expect(series[0].itemStyle?.color).not.toBe(series[1].itemStyle?.color);
-    // Y las barras ya no llevan color por dato.
+    // And the bars no longer carry a colour per datum.
     expect(series[0].data.every((datum) => typeof datum !== "object" || datum === null)).toBe(true);
   });
 
@@ -240,11 +240,11 @@ describe("la forma COMPARATIVA (varios años)", () => {
   });
 
   it("comparando NO se dibujan marcas de ausencia: la barra que falta ya se ve", () => {
-    // Una fila de topes grises bajo cada grupo añadiría hasta tres marcas falsas por columna a un
-    // gráfico que ya lleva tres reales.
+    // A row of grey caps under each group would add up to three false marks per column to a chart
+    // that already carries three real ones.
     const evolution = buildSalesCards(spec).evolution;
     expect(evolution.option?.series.some((s) => s.id === "sin-cargar")).toBe(false);
-    // Con UN solo año sí se dibujan.
+    // With ONE single year they are drawn.
     const single = buildSalesCards(
       input([line({ amount: 10 })], monthlySeries([month(3, [line({ amount: 10 })])], 2026)),
     );
@@ -271,7 +271,7 @@ describe("la forma COMPARATIVA (varios años)", () => {
 });
 
 describe("el eje de la evolución obedece la marca de Mes", () => {
-  /** Tres años completos, y luego el eje acotado a dos meses. */
+  /** Three complete years, and then the axis narrowed to two months. */
   function threeYears(months: number[] | null) {
     const all = [0, 1, 2, 3];
     const axis = months ?? all;
@@ -287,7 +287,7 @@ describe("el eje de la evolución obedece la marca de Mes", () => {
   }
 
   it("con «Mes» acotado el eje dibuja SOLO lo marcado", () => {
-    // El subtítulo decía «Ene–Feb» sobre doce columnas: la tarjeta se contradecía a sí misma.
+    // The subtitle said «Ene–Feb» over twelve columns: the card contradicted itself.
     const evolution = buildSalesCards(threeYears([0, 1])).evolution;
     expect(evolution.table.columns).toEqual(["Ene", "Feb"]);
     expect(evolution.option?.xAxis).toMatchObject({ data: ["Ene", "Feb"] });
@@ -361,7 +361,7 @@ describe("«Ocultar meses en 0» quita del eje las columnas sin facturación", (
   });
 
   it("el informe NO hereda la poda: construye con la misma entrada y sin estas opciones", () => {
-    // Un interruptor impreso es un botón que nadie puede pulsar, la regla del informe de PyG.
+    // A printed toggle is a button nobody can press, PyG's report's rule.
     const input = spec([year({ 0: 500, 3: 300 })]);
 
     expect(buildSalesCards(input).evolution.table.columns).toHaveLength(12);
@@ -394,14 +394,14 @@ describe("barras CON línea en la evolución", () => {
   });
 
   it("las dos series de un año comparten NOMBRE, así que la leyenda saca un ítem por año", () => {
-    // Y al apagarlo se van su barra y su línea a la vez.
+    // And switching it off takes its bar and its line at once.
     const series = seriesOf([2025, 2026], 12);
     expect(series.map((entry) => entry.name)).toEqual(["2025", "2025", "2026", "2026"]);
     expect(new Set(series.map((entry) => entry.id)).size).toBe(4);
   });
 
   it("la línea va POR ENCIMA de las barras y sin suavizar", () => {
-    // Una curva inventa valores entre dos meses que nadie midió.
+    // A curve invents values between two months nobody measured.
     const line2025 = seriesOf([2025, 2026], 12)[1];
     expect(line2025.z).toBe(3);
     expect(line2025.smooth).toBe(false);

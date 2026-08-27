@@ -14,8 +14,8 @@ describe("verifyRosterTarget", () => {
     const verdict = verifyRosterTarget(MARZO, JULIO, [MARZO, JULIO]);
 
     expect(verdict.ok).toBe(false);
-    // La instrucción de qué hacer sale de tener los dos: sin el destino abierto, el contador no
-    // sabe en qué pantalla está parado.
+    // The instruction of what to do comes from having both: without the open destination, the
+    // accountant does not know which screen they are standing on.
     expect(verdict.ok === false && verdict.message).toContain("MARZO 2026");
     expect(verdict.ok === false && verdict.message).toContain("JULIO 2026");
   });

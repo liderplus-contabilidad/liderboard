@@ -24,15 +24,15 @@ interface StagedFile {
 }
 
 /**
- * El modal de carga de ventas, con la forma del de PyG: cada archivo se PARSEA al soltarlo, se
- * lista con el mes que declaró —o con su propio error— y se puede quitar uno a uno **antes de que
- * se escriba nada**. Un archivo inválido no arrastra al resto, que es la razón entera de que la
- * carga sea en dos fases.
+ * The sales upload modal, with the shape of PyG's: each file is PARSED on being dropped, listed with
+ * the month it declared —or with its own error— and can be removed one by one **before anything is
+ * written**. An invalid file does not drag the rest down, which is the entire reason the upload is in
+ * two phases.
  *
- * Lo que se comprueba a nivel de LOTE, y no por archivo, son dos cosas que solo tienen sentido
- * mirando el conjunto: que no se repita un mes —dos archivos del mismo periodo se pisarían y el
- * usuario no sabría cuál quedó— y que la empresa que declaran no contradiga la que el cliente ya
- * tiene.
+ * What is checked at the BATCH level, and not per file, are two things that only make sense looking
+ * at the whole: that a month is not repeated —two files of the same period would overwrite each other
+ * and the user would not know which one was left— and that the company they declare does not
+ * contradict the one the client already has.
  */
 export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { clientName, months, importMonths } = useSalesData();
@@ -47,7 +47,7 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
   } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Cerrar limpia TODO, para que no vuelva a abrirse sobre el estado de la carga anterior.
+  // Closing clears EVERYTHING, so it does not reopen over the previous upload's state.
   useEffect(() => {
     if (!open) {
       setFiles([]);
@@ -58,13 +58,13 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
   }, [open]);
 
   const addFiles = useCallback(async (list: FileList | null) => {
-    // Materializada ANTES del primer `await`: quien llama limpia `input.value` justo después, y
-    // eso vacía la `FileList` viva.
+    // Materialized BEFORE the first `await`: the caller clears `input.value` right afterwards, and
+    // that empties the live `FileList`.
     const picked = list ? Array.from(list) : [];
     if (picked.length === 0) {
       return;
     }
-    // Import dinámico: SheetJS no entra en el bundle inicial.
+    // Dynamic import: SheetJS does not go into the initial bundle.
     const { parseSalesWorkbook } = await import("@/lib/sales/upload/parse");
     const staged = await Promise.all(
       picked.map(async (file): Promise<StagedFile> => {
@@ -95,7 +95,8 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     [files],
   );
 
-  /** Dos archivos del mismo periodo se pisarían en silencio, y el usuario no sabría cuál quedó. */
+  /** Two files of the same period would overwrite each other in silence, and the user would not know
+   *  which one was left. */
   const duplicate = useMemo(() => {
     const seen = new Set<string>();
     for (const month of valid) {
@@ -108,7 +109,7 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     return null;
   }, [valid]);
 
-  /** Qué meses REEMPLAZA esta carga, para decirlo antes en vez de después. */
+  /** Which months this upload REPLACES, so it can be said before instead of after. */
   const replaced = useMemo(() => {
     const held = new Set(months.map((month) => `${month.year}-${month.monthIndex}`));
     return valid
@@ -136,8 +137,8 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     if (busy || valid.length === 0 || duplicate) {
       return;
     }
-    // La identidad se compara ANTES de escribir. Un cliente sin ventas no tiene ninguna, así que
-    // la primera carga la adopta y este camino no se recorre.
+    // The identity is compared BEFORE writing. A client with no sales has none, so the first upload
+    // adopts it and this path is not walked.
     const current = deriveSalesIdentity(months);
     const incoming = incomingSalesIdentity(valid);
     if (current && incoming && !sameSalesIdentity(current, incoming)) {
@@ -210,8 +211,8 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                   <span className="text-[13px] font-medium text-ink">
                     Arrastra los archivos o haz clic para seleccionar
                   </span>
-                  {/* El nombre del archivo NO participa: el mes lo declara el propio reporte, así
-                      que renombrarlo no puede cambiar dónde aterriza. */}
+                  {/* The file's name plays NO part: the month is declared by the report itself, so
+                      renaming it cannot change where it lands. */}
                   <span className="text-[11.5px] text-faint">
                     El reporte «Venta de Servicios por FACTURA», un archivo por mes (.xls / .xlsx).
                     El periodo se lee del propio reporte, no del nombre del archivo.

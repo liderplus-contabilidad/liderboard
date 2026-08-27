@@ -7,8 +7,8 @@ import {
 } from "./account-breakdown";
 
 /**
- * Las siete hijas de `5.3.03.01 HONORARIOS MEDICOS`, el rubro con el que nació esta lectura. Los
- * montos son los del archivo generado, así que la suma es el monto que la barra del anexo enseña.
+ * The seven children of `5.3.03.01 HONORARIOS MEDICOS`, the line this reading was born with. The
+ * amounts are the generated file's, so the sum is the amount the annex's bar shows.
  */
 const HONORARIOS: AmountEntry[] = [
   { code: "5.3.03.01.01", label: "Honorarios Medicos-Externos", value: 358_500 },
@@ -56,7 +56,8 @@ describe("el desglose de una cuenta", () => {
 
     expect(breakdown.idle).toBe(1);
     expect(breakdown.all.map((row) => row.code)).toContain("5.3.03.01.09");
-    // Al final del reparto, que es donde un valor negativo cae al ordenar por valor con signo.
+    // At the end of the breakdown, which is where a negative value falls when ordering by signed
+    // value.
     expect(breakdown.all.at(-1)?.code).toBe("5.3.03.01.09");
     expect(breakdown.balances).toBe(true);
   });
@@ -80,7 +81,7 @@ describe("el desglose de una cuenta", () => {
   });
 
   it("corta el DIBUJO y no la tabla, y la nota dice dónde están las demás", () => {
-    // Una rama ancha de verdad: `5.5.01.02` cuelga veintisiete secciones.
+    // A genuinely wide branch: `5.5.01.02` hangs twenty-seven sections.
     const anchas: AmountEntry[] = Array.from({ length: 27 }, (_, index) => ({
       code: `5.5.01.02.${String(index + 1).padStart(2, "0")}`,
       label: `Sección ${index + 1}`,

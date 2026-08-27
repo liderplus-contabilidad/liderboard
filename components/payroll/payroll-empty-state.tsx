@@ -7,14 +7,14 @@ import { NewPeriodButton } from "./new-period-popover";
 import { usePayrollData } from "./payroll-data-provider";
 
 /**
- * El vacío de Rol de Pagos, en sus dos formas — como en PyG, solo una se resuelve dentro de este
- * módulo:
+ * Rol de Pagos' empty state, in its two forms — as in PyG, only one of them is resolved inside this
+ * module:
  *
- * - **Sin clientes**: no falta un período, falta el paso anterior. La única salida es crear el
- *   primero; el texto dice qué se gana al hacerlo (cada cliente guarda SU historial de nómina).
- * - **Con cliente y sin períodos**: la salida es «+ Nuevo período» — la misma acción que ya vive
- *   en el encabezado de la tarjeta, repetida aquí porque este vacío ocupa el sitio de la tabla
- *   cuando no hay ninguna fila que rendir.
+ * - **No clients**: no período is missing, the previous step is. The only exit is creating the
+ *   first one; the copy says what is gained by doing it (each client holds ITS OWN payroll history).
+ * - **A client with no períodos**: the exit is «+ Nuevo período» — the same action that already
+ *   lives in the card's header, repeated here because this empty state takes the table's place when
+ *   there is no row to render.
  */
 export function PayrollEmptyState() {
   const { activeClientId } = usePayrollData();

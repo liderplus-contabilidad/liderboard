@@ -74,7 +74,7 @@ function ratio(numerator: number, denominator: number): number | null {
 
 /** The four figures the accountant's own reporte carries. `null` is "no data", never zero. */
 export interface MonthlyFigures {
-  /** "Venta en $": ingresos en habitaciones. */
+  /** "Venta en $": room revenue. */
   revenue: number | null;
   /** A fraction, not points: 0.51 is 51 %. */
   occupancy: number | null;

@@ -1,15 +1,15 @@
 /**
- * EL CONTRASTE CONTRA EL LIBRO REAL — la única evidencia externa de que esta descarga acierta.
+ * THE CONTRAST AGAINST THE REAL BOOK — the only external evidence that this download is right.
  *
- * `GOLDEN_MARCH_2026` son los seis empleados del rol de marzo de 2026 de HOTEL BOUTIQUE CULTURA
- * MANOR, transcritos del `.xls`: lo que el archivo declara como entrada y lo que sus propias
- * fórmulas calculan. `engine/golden.test.ts` ya exige que el motor reproduzca esas veinte columnas
- * al bit; lo que este test añade es la COSTURA — que cada una aterrice en la LETRA que el contador
- * va a mirar. Un motor exacto escribiendo el aporte patronal en la columna de al lado sigue dando
- * un archivo que no cuadra con el suyo, y ninguna suma lo delata.
+ * `GOLDEN_MARCH_2026` is the six employees of HOTEL BOUTIQUE CULTURA MANOR's March 2026 rol,
+ * transcribed from the `.xls`: what the file declares as input and what its own formulas compute.
+ * `engine/golden.test.ts` already requires the engine to reproduce those twenty columns to the bit;
+ * what this test adds is the SEAM — that each one lands in the LETTER the accountant is going to look
+ * at. An exact engine writing the employer contribution in the column next to it still gives a file
+ * that does not square with theirs, and no sum gives it away.
  *
- * Por eso el mapa de abajo se escribe a mano en vez de derivarse del catálogo: es la afirmación, no
- * una consecuencia de lo afirmado.
+ * That is why the map below is written by hand instead of derived from the catalogue: it is the
+ * assertion, not a consequence of what is asserted.
  */
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PAYROLL_PARAMETERS } from "../engine/parameters";
@@ -19,8 +19,9 @@ import type { ParsedPayrollEmployeeLine } from "../types";
 import { columnIndexOf } from "./columns";
 import { buildRolGrid, type RolExportRow } from "./rol-grid";
 
-/** La entrada del motor, vuelta ficha + captura. Es el camino inverso de `toEngineInput`, y existe
- *  solo aquí: el fixture habla el vocabulario del motor y la descarga el del almacenamiento. */
+/** The engine's input, turned back into a record + capture. It is the inverse path of
+ *  `toEngineInput`, and it exists only here: the fixture speaks the engine's vocabulary and the
+ *  download the storage's. */
 function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmployeeLine {
   return {
     name,
@@ -33,7 +34,7 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
     sectorCode: "1608551004134",
     hasReserveFund: input.hasReserveFund,
     accumulatesReserveFund: input.accumulatesReserveFund,
-    // Las dos provisiones son de la FICHA, no de la captura: el motor las lee de aquí.
+    // The two provisions belong to the RECORD, not to the capture: the engine reads them from here.
     provisionsThirteenth: input.flags.provisionsThirteenth,
     provisionsFourteenth: input.flags.provisionsFourteenth,
     days: input.days,
@@ -54,7 +55,7 @@ function toLine(name: string, input: PayrollEmployeeInput): ParsedPayrollEmploye
   };
 }
 
-/** Qué columna de la hoja lleva cada cifra derivada. Es el mapa que el contador coteja. */
+/** Which column of the sheet carries each derived figure. It is the map the accountant checks. */
 const DERIVED: readonly [string, keyof PayrollEmployeeComputation][] = [
   ["F", "unifiedSalary"],
   ["J", "overtimePay50"],
@@ -123,8 +124,8 @@ describe("marzo de 2026, contra la hoja GENERAL del archivo", () => {
   }
 
   it("SUMAN cuadra con la fila 39 del archivo", () => {
-    // Las cifras del `SUMAN` real: sueldo base 2.918,58 · total ingreso 3.402,81 · egresos 540,05 ·
-    // líquido 2.862,76 · costo total 3.889,06 · pagado 2.904,47 · diferencia −41,71.
+    // The real `SUMAN` figures: base salary 2,918.58 · total income 3,402.81 · deductions 540.05 ·
+    // net pay 2,862.76 · total cost 3,889.06 · paid 2,904.47 · difference −41.71.
     const suman = grid.rows.at(-1)!;
     expect(at(suman, "D") as number).toBeCloseTo(2918.58, 2);
     expect(at(suman, "W") as number).toBeCloseTo(3402.81, 2);

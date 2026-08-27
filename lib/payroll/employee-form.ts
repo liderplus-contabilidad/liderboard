@@ -1,20 +1,20 @@
 /**
- * El formulario de alta de un empleado: sus valores, su validación y su traducción a una ficha.
+ * The employee creation form: its values, its validation and its translation into a record.
  *
- * Vive aquí y no dentro del modal porque es la única parte del alta con reglas que puedan estar
- * mal — qué es obligatorio, qué forma tiene una cédula, qué rango admiten los días — y una regla
- * sin test es una regla que nadie comprueba. El componente se queda con lo que sí es suyo: pintar
- * los controles y decidir CUÁNDO enseñar los errores.
+ * It lives here and not inside the modal because it is the only part of the creation with rules that
+ * can be wrong — what is required, what shape a cédula has, what range the days admit — and a rule
+ * with no test is a rule nobody checks. The component keeps what really is its own: drawing the
+ * controls and deciding WHEN to show the errors.
  *
- * `validateEmployeeForm` devuelve errores **por campo** y no un booleano: la pantalla tiene que
- * poder señalar cuál falla, y con un `false` solo podría decir «algo está mal».
+ * `validateEmployeeForm` returns errors **per field** and not a boolean: the screen has to be able to
+ * point at which one fails, and with a `false` it could only say «something is wrong».
  *
- * Sobre la CÉDULA: se exige la forma —diez dígitos— y **no** el dígito verificador. Es deliberado.
- * El importador escribe lo que el archivo del contador diga, sin juzgarlo, así que un formulario
- * más estricto que el importador crearía empleados que la app deja cargar por Excel pero no dar de
- * alta a mano; y un documento que el algoritmo del registro civil rechaza —un pasaporte, una cédula
- * antigua— bloquearía un alta real sin que quien la hace pueda hacer nada. La forma atrapa el
- * teclazo, que es el error frecuente; el dígito verificador atraparía además al empleado legítimo.
+ * About the CÉDULA: the shape is required —ten digits— and **not** the check digit. That is
+ * deliberate. The importer writes whatever the accountant's file says, without judging it, so a form
+ * stricter than the importer would create employees the app allows loading by Excel but not adding by
+ * hand; and a document the civil registry's algorithm rejects —a passport, an old cédula— would block
+ * a real creation with nothing the person doing it could do. The shape catches the typo, which is the
+ * frequent error; the check digit would also catch the legitimate employee.
  */
 import { STANDARD_PAYROLL_AREAS } from "./areas";
 import { DEFAULT_PAYROLL_PARAMETERS } from "./engine/parameters";
@@ -22,12 +22,12 @@ import { reserveFundFlags, reserveFundMode, type ReserveFundMode } from "./reser
 import type { ParsedPayrollEmployeeLine, PayrollEmployeeLine } from "./types";
 
 /**
- * Lo que el formulario tiene en la mano. Las cifras son `number | null` y no texto porque
- * `NumericInput` ya resuelve el paso de texto a número (y lo tiene testeado): aquí se juzgan
- * VALORES, no lo que alguien está tecleando a medias. `null` es «el campo está vacío».
+ * What the form holds. The figures are `number | null` and not text because `NumericInput` already
+ * resolves the step from text to number (and it is tested): here VALUES are judged, not what someone
+ * is halfway through typing. `null` is «the field is empty».
  */
 export interface EmployeeFormValues {
-  // La ficha
+  // The record
   name: string;
   idCard: string;
   role: string;
@@ -35,19 +35,20 @@ export interface EmployeeFormValues {
   baseSalary: number | null;
   days: number | null;
   contractType: "CT" | "TP";
-  /** Los tres casos de §7, ya cruzados — ver `reserve-fund.ts`. */
+  /** §7's three cases, already crossed — see `reserve-fund.ts`. */
   reserveFund: ReserveFundMode;
-  /** ISO `YYYY-MM-DD`, o `""` si no se declara. */
+  /** ISO `YYYY-MM-DD`, or `""` if not declared. */
   hireDate: string;
   sectorCode: string;
 
   /**
-   * `AS`, `AT` · si se provisionan los décimos. Son de la FICHA (ver `PayrollEmployeeLine`), y por
-   * eso están aquí y no entre lo que se captura del mes.
+   * `AS`, `AT` · whether the décimos are provisioned. They belong to the RECORD (see
+   * `PayrollEmployeeLine`), and that is why they are here and not among what is captured of the
+   * month.
    *
-   * El `M` del libro —el importe aprobado de horas extras— NO está en este formulario, y es
-   * deliberado: es del MES, lo aprueba Gerencia según la ocupación, y este formulario no captura
-   * las horas que ese importe recorta. Se teclea en la pantalla del empleado, junto a ellas.
+   * The book's `M` —the approved overtime amount— is NOT in this form, and that is deliberate: it
+   * belongs to the MONTH, Gerencia approves it according to occupancy, and this form does not capture
+   * the hours that amount trims. It is typed on the employee's screen, next to them.
    */
   provisionsThirteenth: boolean;
   provisionsFourteenth: boolean;
@@ -55,13 +56,14 @@ export interface EmployeeFormValues {
 
 export type EmployeeFormErrors = Partial<Record<keyof EmployeeFormValues, string>>;
 
-/** Lo que hace falta saber de la nómina ya registrada para detectar un alta repetida. */
+/** What needs to be known about the already registered nómina to detect a duplicate creation. */
 export interface EmployeeFormContext {
   existing?: readonly { id?: string; name: string; idCard: string }[];
   /**
-   * El empleado que se está EDITANDO, cuando lo hay. Sin él, abrir una ficha y guardarla sin
-   * tocar la cédula la acusaría de duplicada contra sí misma, y el formulario no se podría
-   * guardar sin cambiarla — que es justo lo contrario de lo que hace falta al corregir el cargo.
+   * The employee being EDITED, when there is one. Without them, opening a record and saving it
+   * without touching the cédula would accuse it of being a duplicate of itself, and the form could
+   * not be saved without changing it — which is exactly the opposite of what is needed when
+   * correcting the job title.
    */
   selfId?: string;
 }
@@ -71,13 +73,12 @@ const ID_CARD_DIGITS = 10;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Un formulario recién abierto. Los dos defaults con criterio:
+ * A freshly opened form. The two considered defaults:
  *
- *   - **30 días**, el mismo que `copyRoster` pone al copiar una nómina — un mes completo es el
- *     caso normal y los días se corrigen solo cuando hubo un ingreso a mitad de mes, una salida o
- *     una licencia.
- *   - **El SBU vigente** como sueldo base, leído de los parámetros del período y no escrito a
- *     mano, para que el enero en que el SBU suba no deje aquí el número del año pasado.
+ *   - **30 days**, the same one `copyRoster` sets when copying a nómina — a full month is the normal
+ *     case and the days are only corrected when there was a mid-month start, a departure or a leave.
+ *   - **The current SBU** as the base salary, read from the período's parameters and not written by
+ *     hand, so the January the SBU rises does not leave last year's number here.
  */
 export function emptyEmployeeForm(): EmployeeFormValues {
   return {
@@ -96,7 +97,7 @@ export function emptyEmployeeForm(): EmployeeFormValues {
   };
 }
 
-/** Una fecha ISO que además EXISTE: `2026-02-30` pasa el patrón y no es un día del calendario. */
+/** An ISO date that also EXISTS: `2026-02-30` passes the pattern and is not a day of the calendar. */
 function isRealIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) {
     return false;
@@ -106,12 +107,12 @@ function isRealIsoDate(value: string): boolean {
 }
 
 /**
- * Qué campos del formulario están mal, y por qué. Un formulario correcto devuelve `{}`.
+ * Which fields of the form are wrong, and why. A correct form returns `{}`.
  *
- * `context.existing` es la nómina que el período ya tiene: con ella, dar de alta dos veces a la
- * misma persona se rechaza NOMBRANDO a quien ya la ocupa. Sin esa comprobación las dos filas
- * suman por separado en los KPIs del período y nada en pantalla lo delata, porque el nombre
- * tecleado dos veces rara vez sale idéntico.
+ * `context.existing` is the nómina the período already has: with it, adding the same person twice is
+ * rejected while NAMING whoever already occupies it. Without that check the two rows add up
+ * separately in the período's KPIs and nothing on screen gives it away, because a name typed twice
+ * rarely comes out identical.
  */
 export function validateEmployeeForm(
   values: EmployeeFormValues,
@@ -133,9 +134,9 @@ export function validateEmployeeForm(
   } else if (!new RegExp(`^\\d{${ID_CARD_DIGITS}}$`).test(idCard)) {
     errors.idCard = `La cédula son ${ID_CARD_DIGITS} dígitos.`;
   } else {
-    // El `selfId === undefined` NO se puede omitir: sin él, un alta (que no lo trae) contra una
-    // nómina cuyas entradas tampoco traen `id` compararía `undefined !== undefined`, saltándose
-    // TODOS los duplicados en silencio.
+    // The `selfId === undefined` CANNOT be left out: without it, a creation (which does not bring
+    // one) against a nómina whose entries do not bring an `id` either would compare
+    // `undefined !== undefined`, silently skipping ALL duplicates.
     const clash = context.existing?.find(
       (line) =>
         line.idCard.trim() === idCard &&
@@ -149,8 +150,9 @@ export function validateEmployeeForm(
   if (values.baseSalary === null) {
     errors.baseSalary = "El sueldo base es obligatorio.";
   } else if (!Number.isFinite(values.baseSalary) || values.baseSalary <= 0) {
-    // Con el sueldo base en cero todo el rol del empleado cae a cero —unificado, décimo tercero,
-    // aporte al IESS— y la fila queda sumando nada: es un error de captura, no un caso del negocio.
+    // With a base salary of zero the employee's whole rol falls to zero —unified, décimo tercero,
+    // IESS contribution— and the row is left adding up nothing: it is a capture error, not a case of
+    // the business.
     errors.baseSalary = "El sueldo base tiene que ser mayor que cero.";
   }
 
@@ -170,18 +172,18 @@ export function validateEmployeeForm(
 }
 
 /**
- * El formulario ya validado, como la ficha que `db.ts` escribe. No lleva `id` ni `periodId`: los
- * estampa la puerta, igual que con `copyRoster` y con el importador.
+ * The already validated form, as the record `db.ts` writes. It carries no `id` and no `periodId`: the
+ * door stamps them, just as with `copyRoster` and with the importer.
  *
- * **`capture` queda SIEMPRE ausente**, y eso es lo correcto: lo único que este formulario tenía
- * del mes era el importe aprobado de horas extras, y ya no lo pide. Un empleado dado de alta a
- * mano nace por tanto exactamente igual que uno copiado del mes anterior — sin captura, no con
- * una captura en ceros, que no es lo mismo: la segunda haría que la pantalla pintara un mes que
- * nadie declaró.
+ * **`capture` is ALWAYS left absent**, and that is right: the only thing this form had of the month
+ * was the approved overtime amount, and it no longer asks for it. An employee added by hand is
+ * therefore born exactly like one copied from the previous month — with no capture, not with a
+ * capture at zeros, which is not the same: the second would make the screen paint a month nobody
+ * declared.
  *
- * Sin captura no hay `PAGADO` declarado, así que el empleado nace «sin conciliar» — que es
- * exactamente lo que es. En cuanto alguien teclee lo transferido, concilia contra el rol que el
- * motor calcula, sin ningún archivo de por medio.
+ * With no capture there is no declared `PAGADO`, so the employee is born «unreconciled» — which is
+ * exactly what they are. As soon as someone types what was transferred, it reconciles against the rol
+ * the engine computes, with no file in between.
  */
 export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmployeeLine {
   return {
@@ -201,11 +203,11 @@ export function toEmployeeLine(values: EmployeeFormValues): ParsedPayrollEmploye
 }
 
 /**
- * La ficha guardada, de vuelta al formulario: lo que siembra el modo EDICIÓN.
+ * The stored record, back into the form: what seeds EDIT mode.
  *
- * `days` y `baseSalary` se siembran aunque la edición no los pinte, para que UN solo tipo de
- * valores y UNA sola validación sirvan a los dos modos — dos formularios distintos podrían
- * separarse en qué exigen. `toEmployeePatch` es quien decide que no se escriban.
+ * `days` and `baseSalary` are seeded even though the edit does not draw them, so ONE single type of
+ * values and ONE single validation serve both modes — two different forms could drift apart in what
+ * they require. `toEmployeePatch` is what decides they are not written.
  */
 export function employeeFormFrom(line: PayrollEmployeeLine): EmployeeFormValues {
   return {
@@ -224,7 +226,7 @@ export function employeeFormFrom(line: PayrollEmployeeLine): EmployeeFormValues 
   };
 }
 
-/** Lo que una edición de ficha escribe. Es `Partial` por el fondo de reserva — ver abajo. */
+/** What an edit of the record writes. It is a `Partial` because of the reserve fund — see below. */
 export type EmployeePatch = Partial<
   Pick<
     PayrollEmployeeLine,
@@ -243,19 +245,19 @@ export type EmployeePatch = Partial<
 >;
 
 /**
- * El formulario ya validado, como el parche que una edición escribe.
+ * The already validated form, as the patch an edit writes.
  *
- * **No lleva `days` ni `baseSalary`**, aunque el formulario los tenga: los dos se editan en línea
- * en la pantalla del mes, donde se ve moverse el líquido al corregirlos, y una segunda puerta a
- * los mismos campos sería un sitio más donde decir otra cosa. En el ALTA sí viajan, porque ahí no
- * hay ficha previa de la que salir.
+ * **It carries neither `days` nor `baseSalary`**, even though the form has them: both are edited
+ * inline on the month's screen, where the net pay can be watched moving as they are corrected, and a
+ * second door to the same fields would be one more place to say something different. In the CREATION
+ * they do travel, because there is no previous record to start from.
  *
- * **Las dos banderas del fondo de reserva solo se escriben si el MODO cambió**, y eso no es una
- * optimización: la traducción de `reserve-fund.ts` es asimétrica a propósito —`(FR=N, AC FR=S)` se
- * lee «sin derecho» y volvería como `(N, N)`— y MORALES MENA SILVIA JIMENA trae exactamente esa
- * combinación en el rol real de marzo 2026. Escribirlas siempre corregiría, al guardar cualquier
- * otro campo, un archivo que nadie pidió corregir: las cifras no se moverían (con `FR=N` las dos
- * ramas dan cero) pero el Excel descargado dejaría de coincidir con el que entró.
+ * **The two reserve-fund flags are only written if the MODE changed**, and that is not an
+ * optimization: `reserve-fund.ts`'s translation is asymmetric on purpose —`(FR=N, AC FR=S)` reads as
+ * «not entitled» and would come back as `(N, N)`— and MORALES MENA SILVIA JIMENA brings exactly that
+ * combination in the real March 2026 rol. Always writing them would correct, on saving any other
+ * field, a file nobody asked to have corrected: the figures would not move (with `FR=N` both branches
+ * give zero) but the downloaded Excel would stop matching the one that came in.
  */
 export function toEmployeePatch(
   values: EmployeeFormValues,

@@ -15,17 +15,18 @@ import {
 } from "./business-lines";
 
 /**
- * El plan REAL del hotel, transcrito de sus capturas — con las cinco trampas que lo hacen difícil
- * y que ninguna lectura estructural resuelve sola:
+ * The hotel's REAL chart of accounts, transcribed from its screenshots — with the five traps that
+ * make it difficult and that no structural reading resolves on its own:
  *
- * - `Ventas Restaurante` colgando de `Habitaciones Sencillas`: es HOSPEDAJE, porque la línea la
- *   define la rama y no el nombre de la hoja.
- * - `Ventas Eventos` colgando de `Venta de Hospedaje`: NO es hospedaje aunque el plan lo anide ahí.
- * - Restaurante y bar mezclados bajo una sola cuenta de Alimentos y Bebidas, con un `Sin desglosar`
- *   que ninguna lista de palabras recoge.
- * - Lavandería y Tours DUPLICADOS en dos ramas distintas y a distinta profundidad.
- * - `Servicios de Lavandería` escondido bajo un padre llamado «Otros Ingresos de Actividades
- *   Ordinarias», y un `Rebaja y/o Descuentos` que por dentro tiene un ingreso.
+ * - `Ventas Restaurante` hanging off `Habitaciones Sencillas`: it is HOSPEDAJE, because the line is
+ *   defined by the branch and not by the leaf's name.
+ * - `Ventas Eventos` hanging off `Venta de Hospedaje`: it is NOT hospedaje even though the plan nests
+ *   it there.
+ * - Restaurante and bar mixed under a single Alimentos y Bebidas account, with a `Sin desglosar` that
+ *   no list of words picks up.
+ * - Lavandería and Tours DUPLICATED in two different branches and at different depths.
+ * - `Servicios de Lavandería` hidden under a parent called «Otros Ingresos de Actividades
+ *   Ordinarias», and a `Rebaja y/o Descuentos` that has an income item inside it.
  */
 const HOTEL: [string, string, number?][] = [
   ["4", "Ingresos"],
@@ -72,9 +73,9 @@ const HOTEL: [string, string, number?][] = [
 ];
 
 /**
- * Un plan REAL de otro hotel que NO escribe «hospedaje» en ninguna parte: llama a su rama
- * `Ingresos de Actividades Ordinarias` —igual que a la sección— y cuelga debajo lo que vende. El
- * nodo se reconoce por sus hijas, no por su rótulo.
+ * A REAL plan of another hotel that does NOT write «hospedaje» anywhere: it calls its branch
+ * `Ingresos de Actividades Ordinarias` —just like the section— and hangs what it sells underneath.
+ * The node is recognised by its children, not by its label.
  */
 const HOTEL_SIN_LA_PALABRA: [string, string, number?][] = [
   ["4", "Ingresos"],
@@ -89,7 +90,7 @@ const HOTEL_SIN_LA_PALABRA: [string, string, number?][] = [
   ["4.1.8.4", "Ventas Otros Servicios", 4],
 ];
 
-/** Un plan que no es de hotelería: ninguna cuenta nombra hospedaje ni alojamiento. */
+/** A plan that is not a hotel's: no account names hospedaje or alojamiento. */
 const COMERCIO: [string, string, number?][] = [
   ["4", "Ingresos"],
   ["4.1", "Ventas"],
@@ -130,7 +131,7 @@ function lineByLabel(label: string) {
   return buildBusinessLines(source).lines.find((line) => line.label === label);
 }
 
-/** El total anual de cada línea, por el mismo camino que la tarjeta. */
+/** Each line's annual total, by the same path as the card. */
 function totals(): Map<string, number | null> {
   const set = buildBusinessLines(source);
   const bundle = buildSeries([source], {
@@ -162,30 +163,30 @@ describe("buildBusinessLines", () => {
 
   it("funde en Hospedaje las dos ramas de tarifa enteras, y solo esas", () => {
     expect(lineByLabel("Hospedaje")?.codes).toEqual(["4.1.1.1", "4.1.1.2"]);
-    // 100 + 17 (tarifa 0%) + 17 + 4 + 18 + 7 (tarifa 15%) × 12 meses.
+    // 100 + 17 (tarifa 0%) + 17 + 4 + 18 + 7 (tarifa 15%) × 12 months.
     expect(totals().get("Hospedaje")).toBe((100 + 17 + 17 + 4 + 18 + 7) * 12);
   });
 
   it("cuenta como hospedaje una `Ventas Restaurante` colgada dentro de Habitaciones Sencillas", () => {
-    // La rama entera es hospedaje: el corte es de PROFUNDIDAD y no de nombre.
+    // The whole branch is hospedaje: the cut is one of DEPTH and not of name.
     expect(lineByLabel("Restaurante")?.codes).not.toContain("4.1.1.2.1.1");
   });
 
   it("saca de Hospedaje lo que el plan colgó ahí y es otro negocio", () => {
-    // Eventos no es ninguna de las cinco: cae en el resto. Lavandería sí lo es.
+    // Eventos is none of the five: it falls into the rest. Lavandería is one of them.
     expect(lineByLabel("Otros ingresos ordinarios")?.codes).toContain("4.1.1.3");
     expect(lineByLabel("Lavandería")?.codes).toContain("4.1.1.5");
   });
 
   it("junta las cuentas DUPLICADAS de una categoría, estén donde estén del plan", () => {
-    // Lavandería vive en dos ramas y a distinta profundidad; Tours, en tres y una fuera de 4.1.
+    // Lavandería lives in two branches and at different depths; Tours, in three and one outside 4.1.
     expect(lineByLabel("Lavandería")?.codes).toEqual(["4.1.1.5", "4.1.11.1"]);
     expect(totals().get("Lavandería")).toBe((323 + 581) * 12);
     expect(lineByLabel("Tours")?.codes).toEqual(["4.1.3", "4.1.5", "4.2.4"]);
   });
 
   it("encuentra una categoría escondida bajo un padre llamado «Otros Ingresos»", () => {
-    // `4.1.11` no dice lavandería; su única hija sí, y por eso se desciende.
+    // `4.1.11` does not say lavandería; its only child does, and that is why it is descended into.
     expect(lineByLabel("Lavandería")?.codes).toContain("4.1.11.1");
     expect(lineByLabel("Otros ingresos ordinarios")?.codes).not.toContain("4.1.11");
   });
@@ -221,7 +222,7 @@ describe("buildBusinessLines", () => {
   });
 
   it("recoge en el resto lo que no es ninguna de las cinco", () => {
-    // Eventos, el teléfono y el parqueadero (los dos en cero) y las «Ventas Otros Servicios».
+    // Eventos, the telephone and the car park (both at zero) and the «Ventas Otros Servicios».
     expect(lineByLabel("Otros ingresos ordinarios")?.codes).toEqual([
       "4.1.1.3",
       "4.1.1.6",
@@ -232,8 +233,9 @@ describe("buildBusinessLines", () => {
   });
 
   it("entra en la hermana que el PLAN declara ordinaria, y solo en esa", () => {
-    // `4.2 Otros Ingresos de Actividades Ordinarias` trae `Comisiones Tours`, que el informe del
-    // contador cuenta como Tours; `4.3 Otros Ingresos Financieros` no lo declara y queda fuera.
+    // `4.2 Otros Ingresos de Actividades Ordinarias` brings `Comisiones Tours`, which the
+    // accountant's report counts as Tours; `4.3 Otros Ingresos Financieros` does not declare it and is
+    // left out.
     expect(lineByLabel("Tours")?.codes).toEqual(["4.1.3", "4.1.5", "4.2.4"]);
     expect(totals().get("Tours")).toBe((6407 + 1525 + 40) * 12);
     const codes = buildBusinessLines(source).lines.flatMap((line) => line.codes);
@@ -255,9 +257,9 @@ describe("buildBusinessLines", () => {
   });
 
   it("reconoce el nodo por sus HIJAS cuando el plan no escribe «hospedaje»", () => {
-    // Y no toma la sección entera por el negocio: `4.1` también tiene una hija que vende cuartos,
-    // pero se prefiere siempre la coincidencia por rótulo y, en su defecto, la más somera que no
-    // sea la sección — aquí `4.1.1`, cuyo padre es la sección.
+    // And it does not take the whole section for the business: `4.1` also has a child that sells
+    // rooms, but a match by label is always preferred and, failing that, the shallowest one that is
+    // not the section — here `4.1.1`, whose parent is the section.
     const otro = buildBusinessLines(makeSource(HOTEL_SIN_LA_PALABRA));
     expect(otro.sectionLabels).toEqual(["Ingresos de Actividades Ordinarias"]);
     expect(otro.lines.map((line) => `${line.label}: ${line.codes.join(",")}`)).toEqual([
@@ -277,7 +279,7 @@ describe("buildBusinessLines", () => {
   });
 });
 
-/* ------------------------------------------------------------------ la suma */
+/* ------------------------------------------------------------------ the sum */
 
 function pointsOf(values: (number | null)[]): SeriesPoint[] {
   return values.map((value, index) => ({
@@ -299,8 +301,8 @@ describe("el cuadre contra el estado", () => {
   const set = buildBusinessLines(source);
 
   it("dice cuánto suman las líneas y por qué no es lo que declara el estado", () => {
-    // Es la primera cuenta que hace cualquiera al ver seis barras, y hacerla a mano contra otra
-    // pestaña es lo que convierte una lectura correcta en una sospecha.
+    // It is the first computation anyone does on seeing six bars, and doing it by hand against
+    // another tab is what turns a correct reading into a suspicion.
     const note = describeBusinessLines(set, {
       lines: 204_045.51,
       section: 201_998.26,
@@ -336,12 +338,12 @@ describe("el cuadre contra el estado", () => {
 });
 
 /**
- * La LEYENDA: apagar una categoría y volver a encenderla, el mismo gesto que la leyenda de meses.
+ * The LEGEND: switching a category off and back on, the same gesture as the legend of months.
  *
- * Lo que puede estar mal no es qué columnas se dibujan —eso se ve— sino el CUADRE: la nota afirma
- * cuánto suman las líneas contra lo que declara el estado, y con una apagada esa resta deja de
- * cerrar. Sin contarla, la nota declararía miles «sin clasificar», que es justo el aviso de que
- * algo va mal en la lectura.
+ * What can be wrong is not which columns are drawn —that is visible— but the BALANCE: the note claims
+ * how much the lines add up to against what the statement declares, and with one switched off that
+ * subtraction stops closing. Without counting it, the note would declare thousands «unclassified»,
+ * which is precisely the warning that something is wrong in the reading.
  */
 describe("apagar una línea en la leyenda", () => {
   const set = buildBusinessLines(source);
@@ -350,13 +352,14 @@ describe("apagar una línea en la leyenda", () => {
     const selected = selectBusinessLines(set, ["bar"]);
     expect(selected.lines.map((line) => line.label)).not.toContain("Bar");
     expect(selected.hidden.map((line) => line.label)).toEqual(["Bar"]);
-    // Nada más se mueve: lo excluido y la sección contra la que se cuadra son los mismos.
+    // Nothing else moves: what is excluded and the section it is squared against are the same.
     expect(selected.excluded).toEqual(set.excluded);
     expect(selected.sectionCodes).toEqual(set.sectionCodes);
   });
 
   it("una marca huérfana —de un plan que ya no está abierto— vale como ninguna", () => {
-    // La misma defensa que el resto del módulo: vaciar la pantalla sería peor que no acotar.
+    // The same defence as the rest of the module: emptying the screen would be worse than not
+    // narrowing.
     expect(selectBusinessLines(set, ["spa"]).lines).toEqual(set.lines);
   });
 
@@ -409,13 +412,13 @@ describe("sumBusinessLines", () => {
       [seriesOf("a", [10, null]), seriesOf("b", [null, null]), seriesOf("c", [1, 1])],
       lines,
     );
-    // El primero lo cubre una sola cuenta y vale lo de esa; el segundo no lo cubre ninguna.
+    // The first is covered by a single account and is worth that one's; the second is covered by none.
     expect(summed.series[0].points.map((point) => point.value)).toEqual([10, null]);
   });
 
   it("quita las líneas que no se mueven en todo el tramo, y las cuenta", () => {
-    // El plan real declara `Venta Parqueadero` y `Ventas Telefono` en cero todo el año: una
-    // leyenda de barras invisibles entierra a la que importa.
+    // The real plan declares `Venta Parqueadero` and `Ventas Telefono` at zero all year: a legend of
+    // invisible bars buries the one that matters.
     const withIdle = [
       { id: "hospedaje", label: "Hospedaje", codes: ["a"] },
       { id: "bar", label: "Bar", codes: ["z"] },
@@ -443,7 +446,7 @@ describe("sumBusinessLines", () => {
   });
 });
 
-/* --------------------------------------------------------------- el eje girado */
+/* --------------------------------------------------------------- the rotated axis */
 
 describe("las tres lecturas del eje girado", () => {
   const lines = [
@@ -463,8 +466,8 @@ describe("las tres lecturas del eje girado", () => {
   });
 
   it("por PERIODO: lee por el ÍNDICE del eje, no por la posición en la lista", () => {
-    // Un año cargado hasta el segundo mes tiene dos marcas de doce columnas: si `readByPeriod`
-    // contara posiciones, la segunda leería la columna 1 del eje en vez de la suya.
+    // A year loaded up to the second month has two marks out of twelve columns: if `readByPeriod`
+    // counted positions, the second would read column 1 of the axis instead of its own.
     const reading = readByPeriod(
       columnsByCategory(summed({ h: [10, null, 30], b: [1, null, 3] })),
       [
@@ -480,8 +483,9 @@ describe("las tres lecturas del eje girado", () => {
   });
 
   it("por CENTRO: una columna por (categoría, establecimiento), agrupadas por categoría", () => {
-    // Es la forma de la hoja del contador: bajo cada actividad, una fila por sucursal. Y el par
-    // que no se mueve NO abre columna — un hotel sin bar dejaría una columna vacía por cada mes.
+    // It is the shape of the accountant's sheet: under each activity, one row per sucursal. And the
+    // pair that does not move opens NO column — a hotel with no bar would leave an empty column for
+    // every month.
     const columns = columnsByCenter(
       [
         { id: "isamar", label: "ISAMAR", summed: summed({ h: [10, 20] }) },
@@ -494,7 +498,7 @@ describe("las tres lecturas del eje girado", () => {
       "Hospedaje · CARTAGO",
       "Bar · CARTAGO",
     ]);
-    // La categoría viaja aparte para que el eje la escriba UNA vez sobre sus columnas.
+    // The category travels separately so the axis writes it ONCE over its columns.
     expect(readTotal(columns, "Ene–Feb").groups).toEqual([
       { label: "Hospedaje", span: 2 },
       { label: "Bar", span: 1 },

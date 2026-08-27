@@ -1,38 +1,38 @@
 /**
- * Con qué se reconoce que dos fichas de PERÍODOS distintos son la misma persona.
+ * What tells that two records of DIFFERENT PERÍODOS are the same person.
  *
- * Hace falta porque cada período guarda su propia `PayrollEmployeeLine`: copiar la nómina del mes
- * anterior crea filas nuevas con `id` nuevo (ver `roster.ts`), y una carga las reemplaza enteras.
- * Sin una clave estable, «SANDOVAL» sería tres filas de un mes cada una y la pantalla de sueldos
- * por área no podría enseñar la evolución de nadie.
+ * It is needed because each período stores its own `PayrollEmployeeLine`: copying the previous month's
+ * nómina creates new rows with a new `id` (see `roster.ts`), and an upload replaces them entirely.
+ * Without a stable key, «SANDOVAL» would be three rows of one month each and the salaries-by-area
+ * screen could not show anybody's evolution.
  *
- * La clave es la **cédula**, y el **nombre** solo cuando la ficha no la trae. El reparto no es
- * arbitrario: el alta a mano ya exige la cédula y rechaza la repetida dentro del período
- * (`validateEmployeeForm`), así que donde existe es de fiar; el importador, en cambio, escribe lo
- * que diga el archivo sin exigirla, y una regla de solo-cédula dejaría filas anónimas que el
- * contador no puede leer.
+ * The key is the **cédula**, and the **name** only when the record does not bring one. The split is
+ * not arbitrary: a manual creation already requires the cédula and rejects a duplicate within the
+ * período (`validateEmployeeForm`), so where it exists it is trustworthy; the importer, on the other
+ * hand, writes whatever the file says without requiring it, and a cédula-only rule would leave
+ * anonymous rows the accountant cannot read.
  *
- * Las dos claves viven en ESPACIOS SEPARADOS —el prefijo es lo que los separa— para que una ficha
- * sin cédula nunca se funda con una que sí la declara aunque el nombre coincida: son dos evidencias
- * distintas, y mezclarlas inventaría una coincidencia que nadie afirmó.
+ * The two keys live in SEPARATE SPACES —the prefix is what separates them— so a record with no cédula
+ * never fuses with one that does declare it even if the name matches: they are two different pieces of
+ * evidence, and mixing them would invent a match nobody asserted.
  *
- * Lo que esta regla NO intenta: decidir cuál es la buena cuando dos fichas del mismo mes repiten
- * cédula. Ahí sumaría dos costos en una fila, y el síntoma —una fila con dos cargos alternándose—
- * se ve en pantalla. Dentro de un período eso ya lo rechaza el formulario.
+ * What this rule does NOT attempt: deciding which is the right one when two records of the same month
+ * repeat a cédula. There it would add two costs into one row, and the symptom —a row with two job
+ * titles alternating— is visible on screen. Within a período that is already rejected by the form.
  */
 import { normalizeLabel } from "@/lib/workspaces";
 import type { ParsedPayrollEmployeeLine } from "../types";
 
-/** Lo mínimo que hace falta para identificar a alguien: no se pide la ficha entera para que la
- *  clave se pueda calcular sobre cualquier proyección de ella. */
+/** The minimum needed to identify somebody: the whole record is not required so the key can be
+ *  computed over any projection of it. */
 export type EmployeeIdentityFields = Pick<ParsedPayrollEmployeeLine, "name" | "idCard">;
 
 /**
- * La clave con la que agrupar las fichas de una misma persona a lo largo de varios períodos.
+ * The key to group the records of one same person across several períodos.
  *
- * Devuelve `null` únicamente cuando la ficha no tiene NI cédula NI nombre, que es una fila sin
- * nada con lo que identificarla: quien llame decide qué hacer con ella (la pantalla la descarta,
- * porque una fila sin rótulo no se puede leer).
+ * It returns `null` only when the record has NEITHER cédula NOR name, which is a row with nothing to
+ * identify it by: the caller decides what to do with it (the screen discards it, because a row with no
+ * label cannot be read).
  */
 export function employeeKey(line: EmployeeIdentityFields): string | null {
   const idCard = line.idCard.trim();

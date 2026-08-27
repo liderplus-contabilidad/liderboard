@@ -16,8 +16,8 @@ const UNIVERSE: SalesUniverse = { years: [2024, 2025, 2026], months: [0, 1, 3] }
 
 describe("sanitizeFilters", () => {
   it("sin marcas abre en el año MÁS RECIENTE, no en todos", () => {
-    // La regla de la casa es «ninguna marca es todas», y aquí se rompe a propósito: entrar sumando
-    // tres ejercicios se lee mal antes de tocar un filtro.
+    // The house rule is «no mark is all of them», and here it is broken on purpose: entering while
+    // summing three exercises reads badly before touching a filter.
     expect(sanitizeFilters(emptyFilters(), UNIVERSE).years).toEqual([2026]);
   });
 
@@ -116,7 +116,7 @@ describe("periodLabel", () => {
   });
 
   it("con varios años el mes se escribe UNA vez y los años detrás", () => {
-    // Repetir «abril» por cada año es lo que hace ilegible un rótulo de comparación.
+    // Repeating «abril» for each year is what makes a comparison label illegible.
     expect(periodLabel([3], [2025, 2026])).toBe("Abr · 2025, 2026");
     expect(periodLabel([0, 1, 2], [2024, 2025, 2026])).toBe("Ene–Mar · 2024, 2025, 2026");
   });

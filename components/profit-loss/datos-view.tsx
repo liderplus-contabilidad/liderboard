@@ -237,7 +237,8 @@ export function DatosView() {
 
   const editingRow = editing ? findRow(grid.rows, editing.code) : null;
 
-  // Sin cliente no hay tabla que rendir vacía: el vacío nombra el paso que falta y lo ofrece.
+  // With no client there is no table to render empty: the empty state names the missing step and
+  // offers it.
   if (activeClientId === null) {
     return <PygEmptyState />;
   }

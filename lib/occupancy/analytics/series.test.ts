@@ -4,7 +4,7 @@ import type { OccupancyDataset } from "../types";
 import { buildOccupancyEvolution, buildOccupancySeries } from "./series";
 import type { DateRef, OccupancyPeriod, OccupancyQuery } from "./types";
 
-/** Una sucursal-año con los meses dados llenos a cifra plana por día. */
+/** A sucursal-year with the given months filled at a flat figure per day. */
 function dataset(
   centerId: string,
   year: number,
@@ -77,7 +77,7 @@ describe("buildOccupancySeries · rango", () => {
   });
 
   it("los meses de los extremos son PARCIALES", () => {
-    // Del 21 de enero al 5 de marzo: 11 días de enero, 28 de febrero, 5 de marzo.
+    // From 21 January to 5 March: 11 days of January, 28 of February, 5 of March.
     const bundle = buildOccupancySeries(
       [MANOR],
       query({ period: rango(date(2026, 0, 20), date(2026, 2, 4)) }),
@@ -91,7 +91,7 @@ describe("buildOccupancySeries · rango", () => {
       query({ period: rango(date(2025, 11, 0), date(2026, 1, 27)) }),
     );
     expect(bundle.axis.map((point) => point.label)).toEqual(["Dic 25", "Ene 26", "Feb 26"]);
-    // Diciembre de 2025 no tiene datos; enero y febrero de 2026 sí.
+    // December 2025 has no data; January and February 2026 do.
     expect(bundle.series[0].values[0]).toBeNull();
     expect(bundle.series[0].values[1]).toBe(31 * 500);
   });

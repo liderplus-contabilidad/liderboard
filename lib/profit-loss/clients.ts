@@ -1,18 +1,17 @@
 /**
- * El CLIENTE de PyG: un nombre elegido por el usuario más exactamente un estado de resultados.
- * Esta capa es pura — el nombre y su validación, el orden de la lista, el buscador del selector y
- * la resolución de a qué cliente pertenece una identidad entrante. Quién guarda qué es `db.ts`.
+ * PyG's CLIENT: a name chosen by the user plus exactly one estado de resultados. This layer is pure —
+ * the name and its validation, the list's order, the selector's search box and the resolution of which
+ * client an incoming identity belongs to. Who stores what is `db.ts`.
  *
- * La mitad GENÉRICA de todo eso vive en `@/lib/workspaces` y la comparte con Ocupaciones, que
- * guarda varios hoteles con las mismas reglas de nombre. Aquí queda lo que habla de PyG: los
- * nombres con que el módulo la llama y la identidad `(sistema, empresa, modo)`, que es la única
- * parte que sabe de qué van los datos.
+ * The GENERIC half of all that lives in `@/lib/workspaces` and is shared with Ocupaciones, which holds
+ * several hotels with the same name rules. What is left here is what speaks of PyG: the names the
+ * module calls it by and the identity `(system, company, mode)`, which is the only part that knows
+ * what the data is about.
  *
- * La distinción que sostiene todo el módulo: **la etiqueta NO es la identidad**. El usuario llama
- * «Manor Galápagos» a lo que el archivo llama `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, así
- * que el nombre nunca se compara contra un archivo. Lo que se compara es la identidad
- * `(sistema, empresa, modo)` que el cliente ADOPTÓ en su primera carga, y de eso se ocupa
- * `findClientForIdentity`.
+ * The distinction that holds the whole module up: **the label is NOT the identity**. The user calls
+ * «Manor Galápagos» what the file calls `DARWIN & WOLF HOTELES Y TURISMO DARWOLF S.A.`, so the name is
+ * never compared against a file. What is compared is the identity `(system, company, mode)` the client
+ * ADOPTED on its first upload, and `findClientForIdentity` takes care of that.
  */
 import {
   findByName,
@@ -29,21 +28,21 @@ import { compareIdentity, type WorkspaceIdentity } from "./workspace-identity";
 
 export interface PygClient {
   id: string;
-  /** Etiqueta del usuario. No es la razón social del archivo, y nunca se compara con ella. */
+  /** The user's label. It is not the file's razón social, and it is never compared with it. */
   name: string;
-  /** El logo que subió el usuario, si subió alguno. La otra mitad de la etiqueta: tampoco sale de
-   *  ningún archivo. Campo opcional y NO indexado, así que no costó migración de Dexie. */
+  /** The logo the user uploaded, if they uploaded one. The other half of the label: it does not come
+   *  from any file either. An optional and NOT indexed field, so it cost no Dexie migration. */
   logo?: EntityLogo;
-  /** Los logos de sus CENTROS DE COSTO, por `centerId`. Cuelgan del cliente porque un centro no es
-   *  una fila guardada —es un slug que sale de los datasets—, y eso además los borra en cascada con
-   *  él y los hace sobrevivir a recargar un año. Opcional y NO indexado: tampoco costó migración. */
+  /** Its COST CENTERS' logos, by `centerId`. They hang off the client because a center is not a stored
+   *  row —it is a slug that comes out of the datasets—, and that also deletes them in cascade with it
+   *  and makes them survive reloading a year. Optional and NOT indexed: it cost no migration either. */
   centerLogos?: CenterLogos;
 }
 
-/** El sujeto del módulo, lo que sus mensajes nombran cuando falta o choca un nombre. */
+/** The module's subject, what its messages name when a name is missing or clashes. */
 const SUBJECT = "cliente";
 
-/** Tope del nombre. Un selector de header no puede rendir más, y nadie escribe tanto a propósito. */
+/** The name's cap. A header selector cannot render more, and nobody writes that much on purpose. */
 export const MAX_CLIENT_NAME_LENGTH = MAX_ENTITY_NAME_LENGTH;
 
 export type ClientNameCheck = EntityNameCheck;
@@ -51,18 +50,18 @@ export type ClientNameCheck = EntityNameCheck;
 export { matchesSearch, normalizeLabel } from "@/lib/workspaces";
 
 /**
- * Recorta el nombre y lo rechaza si queda vacío o pasa del tope. NO comprueba duplicados: eso
- * necesita la lista y lo hace `isNameTaken`, que además puede nombrar al cliente que ya lo usa.
+ * Trims the name and rejects it if it is left empty or exceeds the cap. It does NOT check duplicates:
+ * that needs the list and is done by `isNameTaken`, which can also name the client already using it.
  */
 export function normalizeClientName(raw: string): ClientNameCheck {
   return normalizeEntityName(raw, SUBJECT);
 }
 
 /**
- * El cliente que ya usa ese nombre, ignorando mayúsculas y acentos, o `undefined`. Devuelve el
- * cliente y no un booleano porque el rechazo tiene que poder nombrarlo (`ya existe «Manor»`).
+ * The client already using that name, ignoring case and accents, or `undefined`. It returns the client
+ * and not a boolean because the rejection has to be able to name it (`«Manor» already exists`).
  *
- * `exceptId` es lo que permite renombrar sin chocar consigo mismo.
+ * `exceptId` is what allows renaming without clashing with itself.
  */
 export function findClientByName(
   name: string,
@@ -81,34 +80,34 @@ export function isNameTaken(
 }
 
 /**
- * Orden alfabético con acentos (`localeCompare` en español), que es el único orden de la lista:
- * no hay columna `order` ni reordenación a mano, así que renombrar reordena — que es justo lo que
- * el usuario espera al renombrar.
+ * Alphabetical order with accents (`localeCompare` in Spanish), which is the list's only order: there
+ * is no `order` column and no manual reordering, so renaming reorders — which is exactly what the user
+ * expects on renaming.
  */
 export function sortClients<T extends { name: string }>(clients: readonly T[]): T[] {
   return sortByName(clients);
 }
 
 /**
- * El nombre que el diálogo de choque PROPONE para el cliente nuevo, a partir de la razón social
- * del archivo: recorta la forma jurídica y, si viene toda en mayúsculas, la pasa a capitular —
- * `ALPHA MUEBLES S.A.S.` → `Alpha Muebles`.
+ * The name the clash dialog PROPOSES for the new client, from the file's razón social: it trims the
+ * legal form and, if it comes all in capitals, converts it to title case — `ALPHA MUEBLES S.A.S.` →
+ * `Alpha Muebles`.
  *
- * Es una propuesta, no una regla: el diálogo la deja editar antes de crear, porque si no volvería
- * por la puerta de atrás el nombre-derivado-del-archivo que este diseño descartó a propósito. Por
- * eso también desempata contra los nombres que ya existen en vez de fallar.
+ * It is a proposal, not a rule: the dialog allows editing it before creating, because otherwise the
+ * name-derived-from-the-file this design deliberately discarded would come back through the back door.
+ * That is also why it tie-breaks against the names that already exist instead of failing.
  */
 export function proposeClientName(companyName: string, existing: readonly PygClient[]): string {
   return proposeEntityName(companyName, existing, "Cliente");
 }
 
 /**
- * El cliente cuya identidad ADOPTADA coincide exactamente con la entrante, o `null`. Es lo que
- * alimenta la salida «Cargar en \<cliente\>» del diálogo de choque: si el archivo pertenece a otro
- * cliente que ya existe, destruir el abierto nunca es lo correcto.
+ * The client whose ADOPTED identity matches the incoming one exactly, or `null`. It is what feeds the
+ * «Cargar en \<cliente\>» exit of the clash dialog: if the file belongs to another client that already
+ * exists, destroying the open one is never the right thing.
  *
- * Un cliente vacío (identidad `null`) no puede coincidir: no tiene identidad todavía, la adopta en
- * su primera carga.
+ * An empty client (identity `null`) cannot match: it has no identity yet, it adopts one on its first
+ * upload.
  */
 export function findClientForIdentity(
   clients: readonly PygClient[],

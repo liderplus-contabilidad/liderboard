@@ -1,33 +1,33 @@
 /**
- * Los SEIS empleados del rol de MARZO 2026 de HOTEL BOUTIQUE CULTURA MANOR, con lo que el
- * archivo del contador declara como entrada y lo que sus propias fórmulas calculan.
+ * The SIX employees of the MARCH 2026 rol of HOTEL BOUTIQUE CULTURA MANOR, with what the
+ * accountant's file declares as input and what its own formulas compute.
  *
- * Es el fixture de oro del motor: `golden.test.ts` exige que `computeEmployeePayroll` reproduzca
- * las 20 columnas derivadas de los seis **exactas al bit**, ruido de coma flotante incluido
- * (`569.5500000000001`, `457.69000000000005`, `81.00999999999999`). Ese ruido no es un defecto
- * del fixture: los totales del libro no se redondean (§9), y reproducirlo es lo que hace que la
- * app y el Excel digan la misma cifra.
+ * It is the engine's golden fixture: `golden.test.ts` requires `computeEmployeePayroll` to reproduce
+ * the 20 derived columns of all six **exact to the bit**, floating-point noise included
+ * (`569.5500000000001`, `457.69000000000005`, `81.00999999999999`). That noise is not a defect of the
+ * fixture: the book's totals are not rounded (§9), and reproducing it is what makes the app and the
+ * Excel say the same figure.
  *
- * Extraído leyendo el `.xls` real, pero copiado aquí como dato ESTÁTICO: el archivo vive en
- * `.context/` y está fuera de git, así que ningún test puede depender de él —la misma regla que
- * `upload/rol-general.fixtures.ts` ya sigue.
+ * Extracted by reading the real `.xls`, but copied here as STATIC data: the file lives in `.context/`
+ * and is outside git, so no test can depend on it —the same rule `upload/rol-general.fixtures.ts`
+ * already follows.
  *
- * El `approvedOvertime` de cada fila no está transcrito a mano: se DEDUCE de los propios valores
- * del archivo —si `M` ≠ `J+K+L`, `M` es el importe que se reconoció; si coinciden, no hubo
- * recorte y va `null`—, que es también como lo recuperará el importador sin leer fórmulas.
+ * Each row's `approvedOvertime` is not transcribed by hand: it is DEDUCED from the file's own values
+ * —if `M` ≠ `J+K+L`, `M` is the amount that was recognised; if they match, there was no trim and it
+ * goes `null`—, which is also how the importer will recover it without reading formulas.
  */
 import type { ExtraIncomeTotals, PayrollEmployeeComputation, PayrollEmployeeInput } from "./types";
 
 /**
- * El libro de Cultura Manor no declara ningún concepto de ingreso extra: sus trece ingresos son los
- * del catálogo. Va explícito en las seis filas —y no como un default del tipo— porque es
- * justamente lo que este fixture certifica: **con los dos agregados en cero, las veinte columnas
- * son las del archivo, al bit.**
+ * Cultura Manor's book declares no extra income concept: its thirteen income items are the
+ * catalogue's. It goes explicit in all six rows —and not as a default of the type— because it is
+ * precisely what this fixture certifies: **with both aggregates at zero, the twenty columns are the
+ * file's, to the bit.**
  */
 const NO_EXTRAS: ExtraIncomeTotals = { contributory: 0, nonContributory: 0 };
 
 export interface GoldenEmployee {
-  /** Fila de la hoja `GENERAL`, para poder volver al archivo. */
+  /** Row of the `GENERAL` sheet, so it is possible to go back to the file. */
   row: number;
   name: string;
   input: PayrollEmployeeInput;
@@ -36,7 +36,7 @@ export interface GoldenEmployee {
 
 export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
   {
-    // `M15` trae `*0`: sus 5,5 horas al 50 % valen 16,75 y no se reconoció ninguna.
+    // `M15` carries `*0`: their 5.5 hours at 50 % are worth 16.75 and none was recognised.
     row: 15,
     name: "MORALES MENA SILVIA JIMENA",
     input: {
@@ -97,9 +97,9 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
     },
   },
   {
-    // `L16` trae `*0` y usa 0,15 en vez de 0,25 (errata §11.2), así que su entrada EFECTIVA de
-    // horas de la tercera clase es CERO aunque la celda `I16` diga 140. Su `M` sí suma, pero
-    // no hay nada que sumar. Es la única con diferencia contra lo pagado: −41,71.
+    // `L16` carries `*0` and uses 0.15 instead of 0.25 (typo §11.2), so their EFFECTIVE input of
+    // third-class hours is ZERO even though cell `I16` says 140. Their `M` does add up, but there is
+    // nothing to add. It is the only one with a difference against what was paid: −41.71.
     row: 16,
     name: "VEGA GARCIA MARIANA DE JESUS",
     input: {
@@ -160,7 +160,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
     },
   },
   {
-    // `M28` trae `*0`: 26 horas al 50 % por 79,41 que no se reconocieron.
+    // `M28` carries `*0`: 26 hours at 50 % worth 79.41 that were not recognised.
     row: 28,
     name: "SANDOVAL COLIMBA PEDRO MANUEL",
     input: {
@@ -221,7 +221,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
     },
   },
   {
-    // `M29` trae `*0`: 13 horas al 50 % por 39,51 que no se reconocieron.
+    // `M29` carries `*0`: 13 hours at 50 % worth 39.51 that were not recognised.
     row: 29,
     name: "ACOSTA MARIA PASTORA",
     input: {
@@ -282,7 +282,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
     },
   },
   {
-    // Sin horas extras, y por eso su fórmula de `M` sigue sana.
+    // No overtime, and that is why their `M` formula is still healthy.
     row: 35,
     name: "SANDOVAL ACOSTA LUIS FERNANDO",
     input: {
@@ -343,7 +343,7 @@ export const GOLDEN_MARCH_2026: readonly GoldenEmployee[] = [
     },
   },
   {
-    // Sin horas extras. Tiene 200 de anticipo de sueldo (`AA36`), que es lo que baja su líquido.
+    // No overtime. They have 200 of a salary advance (`AA36`), which is what lowers their net pay.
     row: 36,
     name: "SORIA CHALA MISHELL FERNANDA",
     input: {

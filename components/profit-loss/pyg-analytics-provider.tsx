@@ -68,9 +68,9 @@ export function PygAnalyticsProvider({
   );
   const year = dataset?.year ?? 0;
 
-  // Los establecimientos reales, que es lo que la vista de líneas de negocio dibuja por defecto:
-  // sin el Consolidado —la suma de todos, no un centro— y sin «Sin centro de costo», que no es un
-  // establecimiento sino lo que el sistema contable no supo asignar.
+  // The real establishments, which is what the business-lines view draws by default: without the
+  // Consolidado —the sum of all of them, not a center— and without «Sin centro de costo», which is
+  // not an establishment but what the accounting system could not assign.
   const centers = useMemo(
     () =>
       views

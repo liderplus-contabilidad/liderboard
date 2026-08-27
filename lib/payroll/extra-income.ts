@@ -1,17 +1,17 @@
 /**
- * LAS FILAS DE BONO QUE UN EMPLEADO DECLARA EN SU MES, además de los trece ingresos del libro.
+ * THE BONUS ROWS AN EMPLOYEE DECLARES IN THEIR MONTH, on top of the book's thirteen income items.
  *
- * El rol de cada empresa nombra los suyos: el libro de DELICMAR trae `MOVILIZACION NO APORTABLE`,
- * `ALIMENTACION NO APORTABLE` y `BONO NO APORTABLE` donde el de Cultura Manor trae viáticos,
- * comisión fija y bono cumplimiento. No son conceptos que añadir al catálogo —el siguiente cliente
- * traerá otros tres— sino el MISMO concepto declarado con nombres distintos, y lo único que el
- * cálculo mira de ellos es la CLASE.
+ * Each company's rol names its own: DELICMAR's book brings `MOVILIZACION NO APORTABLE`, `ALIMENTACION
+ * NO APORTABLE` and `BONO NO APORTABLE` where Cultura Manor's brings viáticos, comisión fija and bono
+ * cumplimiento. They are not concepts to add to the catalogue —the next client will bring another
+ * three— but the SAME concept declared with different names, and the only thing the computation looks
+ * at about them is the CLASS.
  *
- * Este archivo es la capa pura de esa idea: sumar por clase, comprobar los dos topes y las cuatro
- * operaciones sobre la lista de filas. No sabe de Dexie ni de React, y ninguna de sus funciones
- * toca el motor: lo que el motor recibe son los dos agregados que `sumExtraIncome` devuelve. Cómo
- * se VALIDA un rótulo no está aquí sino en `row-labels.ts`, que es donde se resuelve el de toda
- * fila del rol — el de un bono no se juzga contra otra regla que el de `E-11 Otros`.
+ * This file is the pure layer of that idea: summing by class, checking the two caps and the four
+ * operations over the list of rows. It knows nothing of Dexie or React, and none of its functions
+ * touches the engine: what the engine receives are the two aggregates `sumExtraIncome` returns. How a
+ * label is VALIDATED is not here but in `row-labels.ts`, which is where the label of every row of the
+ * rol is resolved — a bonus's is not judged by any rule other than `E-11 Otros`'s.
  */
 import { MAX_ENTITY_NAME_LENGTH } from "@/lib/workspaces";
 import { sameToTheCentavo } from "./amounts";
@@ -23,33 +23,33 @@ export type { ExtraIncomeTotals };
 export { MAX_ENTITY_NAME_LENGTH as MAX_EXTRA_CONCEPT_LABEL_LENGTH };
 
 /**
- * El tope de los NO aportables: el 20 % del sueldo unificado.
+ * The cap on the NON-contributory ones: 20 % of the unified salary.
  *
- * No sale de una fórmula del libro sino de dos celdas que el contador escribe A MANO al pie de la
- * columna del sueldo —`48.20 / 20%` sobre `241.00`, `100.00 / 20%` sobre `500.00`—, y por eso se
- * anota de dónde viene: si la firma lo mueve, se mueve aquí y en ningún otro sitio.
+ * It does not come from a formula of the book but from two cells the accountant writes BY HAND at the
+ * foot of the salary column —`48.20 / 20%` over `241.00`, `100.00 / 20%` over `500.00`—, and that is
+ * why where it comes from is noted: if the firm moves it, it moves here and nowhere else.
  */
 export const NON_CONTRIBUTORY_CAP_RATE = 0.2;
 
-/** El tope de los APORTABLES: el sueldo unificado entero. */
+/** The cap on the CONTRIBUTORY ones: the whole unified salary. */
 export const CONTRIBUTORY_CAP_RATE = 1;
 
 /**
- * Un período que no declara ningún concepto extra.
+ * A período that declares no extra concept.
  *
- * `ExtraIncomeTotals` se declara en `engine/types.ts` —el vocabulario del motor— y este archivo es
- * quien lo PRODUCE: ni la lista ni los rótulos llegan al cálculo, porque para las seis bases tres
- * bonos aportables de 50 y uno de 150 son indistinguibles.
+ * `ExtraIncomeTotals` is declared in `engine/types.ts` —the engine's vocabulary— and this file is what
+ * PRODUCES it: neither the list nor the labels reach the computation, because to the six bases three
+ * contributory bonuses of 50 and one of 150 are indistinguishable.
  */
 export const NO_EXTRA_INCOME: ExtraIncomeTotals = { contributory: 0, nonContributory: 0 };
 
 /**
- * Suma los importes de las filas de bono de un empleado por su clase.
+ * Sums the amounts of an employee's bonus rows by class.
  *
- * Recorre las filas, que llevan su importe dentro, y por eso ya no existe la figura del importe
- * huérfano que la versión anterior tenía que defender: cuando la declaración vivía en el período y
- * el importe en la ficha, borrar una podía dejar el otro. Aquí quitar la fila se lleva las dos
- * cosas porque son la misma cosa.
+ * It walks the rows, which carry their amount inside, and that is why the orphan-amount figure the
+ * previous version had to defend against no longer exists: when the declaration lived on the período
+ * and the amount on the record, deleting one could leave the other. Here removing the row takes both
+ * things because they are the same thing.
  */
 export function sumExtraIncome(rows: readonly PayrollExtraRow[] | undefined): ExtraIncomeTotals {
   if (!rows || rows.length === 0) {
@@ -68,7 +68,8 @@ export function sumExtraIncome(rows: readonly PayrollExtraRow[] | undefined): Ex
   return { contributory, nonContributory };
 }
 
-/** Un tope superado: qué clase, cuánto suma, hasta dónde llegaba y por cuánto se pasó. */
+/** A cap that was exceeded: which class, how much it adds up to, how far it reached and by how much
+ *  it went over. */
 export interface ExtraCapBreach {
   kind: PayrollExtraConceptKind;
   total: number;
@@ -77,22 +78,22 @@ export interface ExtraCapBreach {
 }
 
 /**
- * Los topes que la firma fija sobre el SUELDO UNIFICADO (`F`).
+ * The caps the firm sets over the UNIFIED SALARY (`F`).
  *
- * Se mide contra `F` y no contra `D · SUELDO BASE` porque es la columna bajo la que el contador
- * escribió su propio 20 %. Con 30 días pagados las dos cifras coinciden, así que ningún test las
- * distingue; el día que la firma diga otra cosa, es una línea.
+ * It is measured against `F` and not against `D · SUELDO BASE` because it is the column under which
+ * the accountant wrote their own 20 %. With 30 days paid the two figures coincide, so no test tells
+ * them apart; the day the firm says otherwise, it is one line.
  *
- * Se juzga la SUMA de cada clase y no concepto a concepto: es lo que el 20 % del libro mide, y tres
- * bonos de 20 sobre un sueldo de 200 se pasan aunque ninguno lo haga por su cuenta.
+ * The SUM of each class is judged and not concept by concept: it is what the book's 20 % measures, and
+ * three bonuses of 20 over a salary of 200 go over even though none does on its own.
  *
- * El exceso se juzga al CENTAVO (`sameToTheCentavo`, la única definición de «mismo importe» del
- * módulo): el sueldo unificado es una división redondeada y su 20 % cae en medio de un bit, así que
- * la comparación exacta avisaría de excesos de `1e-13` que nadie puede corregir.
+ * The excess is judged to the CENT (`sameToTheCentavo`, the module's only definition of «same
+ * amount»): the unified salary is a rounded division and its 20 % falls in the middle of a bit, so an
+ * exact comparison would warn about excesses of `1e-13` nobody can correct.
  *
- * Devuelve una LISTA y no un booleano porque las dos clases pueden pasarse a la vez y el aviso tiene
- * que poder nombrarlas por separado. El aportable va primero, que es el orden en que la tabla los
- * enseña.
+ * It returns a LIST and not a boolean because both classes can go over at once and the notice has to
+ * be able to name them separately. The contributory one goes first, which is the order the table
+ * shows them in.
  */
 export function extraCapBreaches(
   totals: ExtraIncomeTotals,
@@ -111,27 +112,27 @@ export function extraCapBreaches(
   return breaches;
 }
 
-/** Cómo se nombra cada clase en pantalla. Aquí y no en el componente, por la misma razón que los
- *  rótulos del catálogo viven en `concepts.ts`: dos pantallas no pueden llamarlo distinto. */
+/** How each class is named on screen. Here and not in the component, for the same reason the
+ *  catalogue's labels live in `concepts.ts`: two screens cannot call it differently. */
 export const EXTRA_CONCEPT_KIND_LABEL: Record<PayrollExtraConceptKind, string> = {
   aportable: "Bono aportable",
   noAportable: "Bono no aportable",
 };
 
-/** La versión corta, la que va junto al nombre en la tabla — a la derecha del campo, donde compite
- *  con él por el ancho. */
+/** The short version, the one that goes next to the name in the table — to the right of the field,
+ *  where it competes with it for width. */
 export const EXTRA_CONCEPT_KIND_SHORT: Record<PayrollExtraConceptKind, string> = {
   aportable: "Aportable",
   noAportable: "No aportable",
 };
 
 /**
- * El aviso en castellano llano, con las tres cifras que hacen falta para corregirlo: cuánto suma,
- * hasta dónde llegaba y por cuánto se pasó.
+ * The notice in plain Spanish, with the three figures needed to correct it: how much it adds up to,
+ * how far it reached and by how much it went over.
  *
- * Vive en la capa pura y no en el componente por lo mismo que `describeShares` de PyG: el texto de
- * un aviso es una afirmación sobre las cifras y se prueba con ellas. El formato del importe lo pone
- * quien lo dibuje — aquí se devuelven los números, no `$`.
+ * It lives in the pure layer and not in the component for the same reason as PyG's `describeShares`:
+ * a notice's text is a claim about the figures and is tested with them. The amount's formatting is
+ * set by whoever draws it — here the numbers are returned, not `$`.
  */
 export function describeCapBreach(breach: ExtraCapBreach): {
   subject: string;
@@ -146,15 +147,16 @@ export function describeCapBreach(breach: ExtraCapBreach): {
 }
 
 /**
- * Una fila de bono recién declarada, con su rótulo por defecto.
+ * A freshly declared bonus row, with its default label.
  *
- * El `id` se deriva de las que ya hay en vez de un aleatorio: esta capa es pura y testeable, y un
- * `crypto.randomUUID()` aquí obligaría a inyectarlo o a mockearlo. Basta con que sea único DENTRO
- * de esa captura, que es el único sitio donde se referencia.
+ * The `id` is derived from the ones already there instead of a random one: this layer is pure and
+ * testable, and a `crypto.randomUUID()` here would force injecting or mocking it. It is enough for it
+ * to be unique WITHIN that capture, which is the only place it is referenced.
  *
- * Nace CON nombre en vez de vacío porque el rótulo es único entre las filas del empleado y dos
- * filas sin nombre chocarían entre sí antes de que nadie escriba nada. El sufijo se busca contra
- * los rótulos ya tomados, no contra un contador, para que borrar el 2 y volver a crear no dé un 3.
+ * It is born WITH a name instead of empty because the label is unique among the employee's rows and
+ * two rows with no name would clash with each other before anyone writes anything. The suffix is
+ * looked for against the labels already taken, not against a counter, so deleting the 2 and creating
+ * again does not give a 3.
  */
 export function newExtraRow(
   kind: PayrollExtraConceptKind,
@@ -182,16 +184,17 @@ export function newExtraRow(
 }
 
 /**
- * Quita una fila de bono. Es un filtro y nada más: el importe se va con ella porque vive dentro.
+ * Removes a bonus row. It is a filter and nothing more: the amount goes with it because it lives
+ * inside.
  *
- * La versión anterior devolvía además un `pruneAmounts` para limpiar las capturas del período, que
- * era la mitad cara de tener la declaración y el importe en estructuras distintas.
+ * The previous version also returned a `pruneAmounts` to clean the período's captures, which was the
+ * expensive half of having the declaration and the amount in different structures.
  */
 export function removeExtraRow(rows: readonly PayrollExtraRow[], rowId: string): PayrollExtraRow[] {
   return rows.filter((row) => row.id !== rowId);
 }
 
-/** Cambia el rótulo de una fila, sin tocar su importe ni su clase. */
+/** Changes a row's label, without touching its amount or its class. */
 export function renameExtraRow(
   rows: readonly PayrollExtraRow[],
   rowId: string,
@@ -200,7 +203,7 @@ export function renameExtraRow(
   return rows.map((row) => (row.id === rowId ? { ...row, label } : row));
 }
 
-/** Cambia el importe de una fila, sin tocar su rótulo ni su clase. */
+/** Changes a row's amount, without touching its label or its class. */
 export function setExtraRowAmount(
   rows: readonly PayrollExtraRow[],
   rowId: string,

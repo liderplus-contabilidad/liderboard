@@ -53,12 +53,12 @@ describe("la poda del estado de resultados", () => {
   });
 
   it("conserva al padre en cero cuyo descendiente sí se movió", () => {
-    // Pasa de verdad: un padre cuyo rollup se cancela entre un cargo y un abono.
+    // It really happens: a parent whose rollup cancels out between a debit and a credit.
     const pruned = pruneEmptyRows(
       grid([row("5", [0, 0, 0], [row("5.1", [0, 0, 0], [row("5.1.1", [500, -500, 0])])])]),
     );
 
-    // Sin el padre, el descendiente que sí importa quedaría colgando de nada.
+    // Without the parent, the descendant that does matter would be left hanging off nothing.
     expect(codes(pruned.rows)).toEqual(["5", "5.1", "5.1.1"]);
   });
 
@@ -81,7 +81,7 @@ describe("la poda del estado de resultados", () => {
     };
     const pruned = pruneEmptyRows(grid([row("4.1", [0, 0, 0]), utilidad]));
 
-    // Un resultado de cero sigue siendo el resultado; un estado sin su cierre no es un estado.
+    // A result of zero is still the result; a statement with no close is not a statement.
     expect(pruned.rows).toHaveLength(1);
     expect(pruned.rows[0].isResult).toBe(true);
   });
@@ -90,8 +90,8 @@ describe("la poda del estado de resultados", () => {
     const pruned = pruneEmptyRows(grid([row("4.1", [1200, null, 1200])]));
 
     expect(codes(pruned.rows)).toEqual(["4.1"]);
-    // La distinción null/0 se conserva en las filas que sí se imprimen: febrero no cargado sigue
-    // siendo vacío, no un cero.
+    // The null/0 distinction is kept in the rows that do get printed: an unloaded February is still
+    // empty, not a zero.
     expect(pruned.rows[0].cells.map((cell) => cell.value)).toEqual([1200, null, 1200]);
   });
 
@@ -151,7 +151,7 @@ describe("la poda del análisis vertical", () => {
   });
 
   it("nunca quita la cuenta base: todo lo demás se lee contra ella", () => {
-    // La base sobre sí misma es 100 %, pero si el periodo no tiene cobertura sale nula.
+    // The base over itself is 100 %, but if the period has no coverage it comes out null.
     const pruned = pruneVerticalRows(
       vertical([
         { code: "4", values: [null, null], total: null },

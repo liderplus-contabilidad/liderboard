@@ -1,24 +1,26 @@
 /**
- * De dónde sale cada importe del asiento: la costura entre el motor y el catálogo de cuentas.
+ * Where each amount of the entry comes from: the seam between the engine and the account catalogue.
  *
- * `journal.ts` declara, por cuenta, las columnas del rol que la componen (`sourceColumns`). Este
- * archivo declara, por columna, DE DÓNDE se saca su valor — del cómputo del motor o de lo capturado
- * del mes— y suma la nómina entera recorriendo ambas declaraciones.
+ * `journal.ts` declares, per account, the rol columns that make it up (`sourceColumns`). This file
+ * declares, per column, WHERE its value is taken from —from the engine's computation or from what was
+ * captured of the month— and sums the whole nómina by walking both declarations.
  *
- * **Se recorre `sourceColumns` en vez de escribir 25 sumas a mano**, y eso es la decisión de
- * diseño de este archivo. Escribirlas a mano funciona, pero crea una segunda definición de «de
- * dónde sale este importe» que puede separarse de la anotación del catálogo; entonces
- * `sourceColumns` diría una cosa mientras el asiento hace otra, y el contador —que revisa la
- * anotación contra su hoja— estaría revisando algo que no manda. Recorriéndola, la única forma de
- * equivocarse es equivocarse en la anotación.
+ * **`sourceColumns` is walked instead of writing 25 sums by hand**, and that is this file's design
+ * decision. Writing them by hand works, but it creates a second definition of «where this amount
+ * comes from» that can drift from the catalogue's annotation; then `sourceColumns` would say one
+ * thing while the entry does another, and the accountant —who reviews the annotation against their
+ * sheet— would be reviewing something that is not in charge. By walking it, the only way to get it
+ * wrong is to get the annotation wrong.
  *
- * **Una columna sin destino no compila.** `RolColumn` se deriva del propio catálogo, así que
- * `COLUMN_SOURCES` está obligado a cubrirlas todas. Importa porque el modo de fallo contrario es
- * invisible: una columna sin mapear devolvería `0`, su cuenta saldría sin movimiento, el
- * interruptor de ocultar ceros la escondería, y el asiento descuadraría sin causa visible.
+ * **A column with no destination does not compile.** `RolColumn` is derived from the catalogue
+ * itself, so `COLUMN_SOURCES` is obliged to cover them all. It matters because the opposite failure
+ * mode is invisible: an unmapped column would return `0`, its account would come out with no
+ * movement, the hide-zeros switch would hide it, and the entry would go out of balance with no
+ * visible cause.
  *
- * No se redondea por el camino. El redondeo es del motor y de `formatCurrency`; meter otro aquí
- * crearía diferencias de céntimo contra los cuatro totales del período, que suman lo mismo.
+ * Nothing is rounded along the way. Rounding belongs to the engine and to `formatCurrency`; putting
+ * another one here would create differences of a cent against the período's four totals, which add up
+ * to the same thing.
  */
 import { computeEmployeePayroll } from "./engine/compute";
 import type { PayrollParameters } from "./engine/parameters";
@@ -28,22 +30,22 @@ import { JOURNAL_ACCOUNTS, type JournalAccountId, type JournalAmounts } from "./
 import type { ParsedPayrollEmployeeLine } from "./types";
 
 /**
- * Las columnas del rol que alguna cuenta nombra, derivadas del catálogo — nunca una lista aparte,
- * que se desincronizaría en cuanto alguien añadiera una cuenta.
+ * The rol columns some account names, derived from the catalogue — never a separate list, which would
+ * fall out of sync as soon as someone added an account.
  */
 export type RolColumn = (typeof JOURNAL_ACCOUNTS)[number]["sourceColumns"][number];
 
 /**
- * Qué vale cada columna para UN empleado. Los rótulos son los del libro (§1 del documento de
- * fórmulas), y el reparto entre las dos fuentes no es casual: lo que el motor DERIVA sale de
- * `computation`, y lo que se TECLEA sale de `input`.
+ * What each column is worth for ONE employee. The labels are the book's (§1 of the formulas
+ * document), and the split between the two sources is not casual: what the engine DERIVES comes from
+ * `computation`, and what is TYPED comes from `input`.
  *
- * El segundo argumento es `PayrollEmployeeInput` —la entrada del MOTOR— y no la
- * `PayrollMonthlyCapture` que la base guarda, aunque compartan campos. Es deliberado: así el mapa
- * habla el vocabulario del motor de punta a punta (su entrada y su salida) en vez del de la forma
- * en que se almacena, y por eso el fixture de oro de marzo 2026 —que son entradas de motor
- * transcritas del `.xls`— se puede pasar por aquí tal cual y cotejar el asiento contra la hoja del
- * contador. Con la forma de almacenamiento habría que inventar una ficha alrededor de cada entrada.
+ * The second argument is `PayrollEmployeeInput` —the ENGINE's input— and not the
+ * `PayrollMonthlyCapture` the database stores, even though they share fields. It is deliberate: that
+ * way the map speaks the engine's vocabulary end to end (its input and its output) instead of the
+ * shape it is stored in, and that is why the March 2026 golden fixture —which is engine inputs
+ * transcribed from the `.xls`— can be passed through here as it is and the entry checked against the
+ * accountant's sheet. With the storage shape a record would have to be invented around each input.
  */
 const COLUMN_SOURCES: Record<
   RolColumn,
@@ -51,7 +53,7 @@ const COLUMN_SOURCES: Record<
 > = {
   /** `F` · SUELDO UNIFICADO */
   F: (c) => c.unifiedSalary,
-  /** `M` · TOTAL HORAS EXTRAS reconocido — nunca `J+K+L`, que es lo trabajado sin recortar. */
+  /** `M` · TOTAL HORAS EXTRAS recognised — never `J+K+L`, which is what was worked before trimming. */
   M: (c) => c.overtimeTotal,
   /** `N` · DECIMO IV MENSUAL */
   N: (c) => c.fourteenthMonthly,
@@ -59,29 +61,29 @@ const COLUMN_SOURCES: Record<
   O: (c) => c.thirteenthMonthly,
   /** `P` · VACACIONES - MENSUAL */
   P: (_c, k) => k.vacationPay,
-  /** `Q` · SEGURO PRIVADO — la columna que obligó a añadir la cuenta 25. */
+  /** `Q` · SEGURO PRIVADO — the column that forced adding account 25. */
   Q: (_c, k) => k.privateInsurance,
-  /** `R` · VIATICOS/VIVIENDA. Es la columna de `Viaticos`; `ASIENTOS` leía `V` por error. */
+  /** `R` · VIATICOS/VIVIENDA. It is `Viaticos`' column; `ASIENTOS` read `V` by mistake. */
   R: (_c, k) => k.allowances,
   /** `S` · COMISION FIJA POR VTAS. */
   S: (_c, k) => k.fixedCommission,
   /** `T` · COMISION VARIABLE */
   T: (_c, k) => k.variableCommission,
-  /** `U` · FONDO DE RESERVA pagado en el mes */
+  /** `U` · FONDO DE RESERVA paid within the month */
   U: (c) => c.reserveFundPaid,
   /** `V` · BONO CUMPLIMIENTO */
   V: (_c, k) => k.bonus,
   /**
-   * `EXTRA_AP` y `EXTRA_NA` no son columnas del libro sino los dos agregados de las filas de bono
-   * que cada empleado declara — el motor ya los recibe reducidos, así que aquí se leen de la
-   * entrada.
+   * `EXTRA_AP` and `EXTRA_NA` are not columns of the book but the two aggregates of the bonus rows
+   * each employee declares — the engine already receives them reduced, so here they are read off the
+   * input.
    *
-   * Salen de `input.extras` y no de `capture.extras`: `toEngineInput` es el único sitio donde esa
-   * reducción por clase ocurre, y repetirla aquí abriría la puerta a que las dos discrepen.
+   * They come from `input.extras` and not from `capture.extras`: `toEngineInput` is the only place
+   * that reduction by class happens, and repeating it here would open the door to the two disagreeing.
    */
   EXTRA_AP: (_c, k) => k.extras.contributory,
   EXTRA_NA: (_c, k) => k.extras.nonContributory,
-  /** `X` · APORTE IESS del empleado */
+  /** `X` · the employee's APORTE IESS */
   X: (c) => c.iessEmployee,
   /** `Y` · PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS */
   Y: (_c, k) => k.deductions.iessLoans,
@@ -109,30 +111,31 @@ const COLUMN_SOURCES: Record<
   AN: (_c, k) => k.deductions.medicalLeaveDeduction,
   /** `AP` · LIQUIDO A RECIBIR */
   AP: (c) => c.netPay,
-  /** `AS` · provisión del décimo tercero */
+  /** `AS` · décimo tercero provision */
   AS: (c) => c.thirteenthProvision,
-  /** `AT` · provisión del décimo cuarto */
+  /** `AT` · décimo cuarto provision */
   AT: (c) => c.fourteenthProvision,
   /** `AU` · APORTE PATRONAL IESS */
   AU: (c) => c.iessEmployer,
-  /** `AV` · provisión de vacaciones */
+  /** `AV` · vacation provision */
   AV: (c) => c.vacationProvision,
-  /** `AW` · FONDO DE RESERVA acumulado en el IESS */
+  /** `AW` · FONDO DE RESERVA accrued at the IESS */
   AW: (c) => c.reserveFundAccrued,
 };
 
 /**
- * Los importes del asiento a partir de entradas de MOTOR ya emparejadas con su cómputo.
+ * The entry's amounts from ENGINE inputs already paired with their computation.
  *
- * Es el núcleo, y existe aparte para que el contraste contra el archivo real (`GOLDEN_MARCH_2026`,
- * seis entradas transcritas del `.xls`) pueda pasar por la MISMA suma que la pantalla, sin fabricar
- * una ficha de almacenamiento alrededor de cada una.
+ * It is the core, and it exists separately so the contrast against the real file (`GOLDEN_MARCH_2026`,
+ * six inputs transcribed from the `.xls`) can go through the SAME sum as the screen, without
+ * fabricating a storage record around each one.
  */
 export function journalAmountsForInputs(
   inputs: readonly PayrollEmployeeInput[],
   parameters: PayrollParameters,
 ): JournalAmounts {
-  // Se computa cada entrada UNA vez: el motor es lo caro y varias cuentas leen de la misma columna.
+  // Each input is computed ONCE: the engine is the expensive part and several accounts read from the
+  // same column.
   const rows = inputs.map((input) => ({
     computation: computeEmployeePayroll(input, parameters),
     input,
@@ -153,24 +156,24 @@ export function journalAmountsForInputs(
 }
 
 /**
- * Los importes del asiento de un período: cada cuenta, la suma de sus columnas sobre TODA la
+ * The amounts of a período's journal entry: each account, the sum of its columns over the WHOLE
  * nómina.
  *
- * Devuelve siempre las claves del catálogo completas, con `0` explícito donde no hubo movimiento.
- * `buildJournalEntry` distingue `0` («esa columna no se movió») de ausente («no se sabe»), y
- * alimentado del período lo segundo ya no puede ocurrir: la nómina se conoce entera. Una nómina
- * VACÍA da las 25 cuentas en cero, que es lo que es — no hay nada que asentar.
+ * It always returns the complete catalogue keys, with an explicit `0` where there was no movement.
+ * `buildJournalEntry` tells `0` («that column did not move») from absent («it is not known»), and fed
+ * from the período the latter can no longer happen: the nómina is known in full. An EMPTY nómina
+ * gives the 25 accounts at zero, which is what it is — there is nothing to post.
  *
- * Toma `ParsedPayrollEmployeeLine` y no `PayrollEmployeeLine` por la misma razón que
- * `computeLinePayroll`: el asiento no depende del `id` ni del `periodId` de nadie, y pedir la forma
- * sin dueño deja que una PREVIA de carga se aseme antes de existir en la base.
+ * It takes `ParsedPayrollEmployeeLine` and not `PayrollEmployeeLine` for the same reason as
+ * `computeLinePayroll`: the entry does not depend on anybody's `id` or `periodId`, and asking for the
+ * ownerless shape lets an upload PREVIEW post itself before existing in the database.
  */
 export function journalAmountsFor(
   lines: readonly ParsedPayrollEmployeeLine[],
   parameters: PayrollParameters,
 ): JournalAmounts {
-  // `toEngineInput` es la única traducción de ficha + captura a entrada de motor, y se reusa en vez
-  // de leer `line.capture` aquí: una segunda lectura podría discrepar de la suya.
+  // `toEngineInput` is the only translation from record + capture into an engine input, and it is
+  // reused instead of reading `line.capture` here: a second read could disagree with its own.
   return journalAmountsForInputs(
     lines.map((line) => toEngineInput(line)),
     parameters,

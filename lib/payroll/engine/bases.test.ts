@@ -37,16 +37,16 @@ const BASES = {
 type BaseName = keyof typeof BASES;
 
 /**
- * §2 del documento, como tabla de verdad: para cada componente de ingreso, en QUÉ bases entra.
+ * §2 of the document, as a truth table: for each income component, WHICH bases it enters.
  *
- * Es el test de más valor del motor. Las seis bases se parecen tanto entre sí que un error de
- * una sola columna es invisible leyendo el código, no rompe ningún total obvio, y sale a la luz
- * como una diferencia de céntimos frente al Excel del contador meses después. Es exactamente el
- * error que tenía el prototipo del diseño: calculaba las seis sobre el sueldo unificado a secas,
- * y coincidía solo porque en el archivo de marzo 2026 `P`…`T` están todas en cero.
+ * It is the engine's most valuable test. The six bases are so alike that an error in a single column
+ * is invisible reading the code, breaks no obvious total, and comes to light as a difference of cents
+ * against the accountant's Excel months later. It is exactly the error the design prototype had: it
+ * computed all six over the bare unified salary, and it matched only because in the March 2026 file
+ * `P`…`T` are all at zero.
  */
 const MEMBERSHIP: Record<keyof IncomeComponents, readonly BaseName[]> = {
-  // `F` y `M` son el núcleo: entran en todas.
+  // `F` and `M` are the core: they enter all of them.
   unifiedSalary: [
     "contributory",
     "thirteenth",
@@ -63,10 +63,11 @@ const MEMBERSHIP: Record<keyof IncomeComponents, readonly BaseName[]> = {
     "thirteenthProvision",
     "gross",
   ],
-  // Los décimos mensualizados no se aportan ni se re-decimalizan; el IV sí provisiona vacaciones.
+  // The monthly décimos are neither contributed on nor re-decimalized; the fourteenth does provision
+  // vacations.
   fourteenthMonthly: ["vacation", "thirteenthProvision", "gross"],
   thirteenthMonthly: ["thirteenthProvision", "gross"],
-  // `P` sale del décimo III; `Q` sale del fondo de reserva acumulado y de vacaciones.
+  // `P` comes out of décimo III; `Q` comes out of the accrued reserve fund and of vacations.
   vacationPay: ["contributory", "reserveFundAccrual", "vacation", "thirteenthProvision", "gross"],
   privateInsurance: ["contributory", "thirteenth", "thirteenthProvision", "gross"],
   allowances: [
@@ -93,13 +94,13 @@ const MEMBERSHIP: Record<keyof IncomeComponents, readonly BaseName[]> = {
     "thirteenthProvision",
     "gross",
   ],
-  // `U` y `V` no son base de NADA: solo llegan al total.
+  // `U` and `V` are the base of NOTHING: they only reach the total.
   reserveFundPaid: ["gross"],
   bonus: ["gross"],
-  // Los conceptos extra, que no tienen columna: el aportable se comporta EXACTAMENTE como `R`,
-  // `S` y `T` —las seis— y el no aportable exactamente como `U` y `V` —solo el total—. Esta fila
-  // es la definición ejecutable de qué significan las dos clases, y el `Record` sobre
-  // `keyof IncomeComponents` es lo que impide añadir un componente sin declararla.
+  // The extra concepts, which have no column: the contributory one behaves EXACTLY like `R`, `S` and
+  // `T` —all six— and the non-contributory one exactly like `U` and `V` —only the total—. This row is
+  // the executable definition of what the two classes mean, and the `Record` over
+  // `keyof IncomeComponents` is what stops a component being added without declaring it.
   contributoryExtras: [
     "contributory",
     "thirteenth",
@@ -139,7 +140,7 @@ describe("las seis bases de cálculo (§2)", () => {
       contributoryExtras: 2048,
       nonContributoryExtras: 4096,
     };
-    // Potencias de dos: cada total identifica sin ambigüedad qué sumandos entraron.
+    // Powers of two: each total identifies unambiguously which addends went in.
     expect(contributoryBase(all)).toBe(1 + 2 + 16 + 32 + 64 + 128 + 256 + 2048);
     expect(thirteenthBase(all)).toBe(1 + 2 + 32 + 64 + 128 + 256 + 2048);
     expect(reserveFundAccrualBase(all)).toBe(1 + 2 + 16 + 64 + 128 + 256 + 2048);
@@ -157,8 +158,8 @@ describe("las seis bases de cálculo (§2)", () => {
   });
 
   it("ninguna base redondea — el redondeo lo pone quien las consume", () => {
-    // `contributoryBase` alimenta a `X` (IESS), que sí redondea. Si la base redondeara antes,
-    // el aporte saldría de un número distinto del que usa el libro.
+    // `contributoryBase` feeds `X` (IESS), which does round. If the base rounded first, the
+    // contribution would come out of a different number from the one the book uses.
     expect(contributoryBase({ ...ZERO, unifiedSalary: 0.005, allowances: 0.005 })).toBe(0.01);
     expect(
       grossIncome({
@@ -172,13 +173,13 @@ describe("las seis bases de cálculo (§2)", () => {
 });
 
 describe("las bases contra las cifras reales del rol", () => {
-  // MORALES MENA SILVIA JIMENA, marzo 2026. Con `P`…`T` en cero las seis bases colapsan a `F`,
-  // que es justamente por qué el archivo real no distingue entre ellas y por qué hacen falta
-  // los tests sintéticos de arriba.
+  // MORALES MENA SILVIA JIMENA, March 2026. With `P`…`T` at zero the six bases collapse into `F`,
+  // which is precisely why the real file does not tell them apart and why the synthetic tests above
+  // are needed.
   const morales: IncomeComponents = {
     ...ZERO,
     unifiedSalary: 487.21,
-    overtimeTotal: 0, // apagada por el `*0` de `M15`
+    overtimeTotal: 0, // switched off by `M15`'s `*0`
     fourteenthMonthly: 40.17,
     thirteenthMonthly: 40.6,
   };
@@ -193,9 +194,9 @@ describe("las bases contra las cifras reales del rol", () => {
 
   it("con viáticos y comisiones las bases YA no coinciden entre sí", () => {
     const conExtras: IncomeComponents = { ...morales, vacationPay: 50, privateInsurance: 30 };
-    expect(contributoryBase(conExtras)).toBe(567.21); // suma P y Q
-    expect(thirteenthBase(conExtras)).toBe(517.21); // suma Q, no P
-    expect(reserveFundAccrualBase(conExtras)).toBe(537.21); // suma P, no Q
-    expect(vacationBase(conExtras)).toBe(577.38); // suma P y N, no Q
+    expect(contributoryBase(conExtras)).toBe(567.21); // adds P and Q
+    expect(thirteenthBase(conExtras)).toBe(517.21); // adds Q, not P
+    expect(reserveFundAccrualBase(conExtras)).toBe(537.21); // adds P, not Q
+    expect(vacationBase(conExtras)).toBe(577.38); // adds P and N, not Q
   });
 });

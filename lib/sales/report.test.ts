@@ -52,14 +52,14 @@ describe("buildSalesReport", () => {
   it("imprime EXACTAMENTE las tarjetas de la pantalla, no una segunda derivación", () => {
     const report = buildSalesReport(input());
     const onScreen = buildSalesCards(input());
-    // Se comparan por su contenido SERIALIZABLE: los formateadores de una `option` son closures y
-    // dos construcciones nunca comparten instancia, pero lo que el papel y la pantalla no pueden
-    // discrepar es en las cifras y los rótulos.
+    // They are compared by their SERIALIZABLE content: an `option`'s formatters are closures and two
+    // constructions never share an instance, but what the paper and the screen cannot disagree on is
+    // the figures and the labels.
     expect(JSON.stringify(report.sections[0].card)).toBe(JSON.stringify(onScreen.services));
     expect(JSON.stringify(report.sections[2].card)).toBe(JSON.stringify(onScreen.evolution));
     expect(report.sections[0].card.table).toEqual(onScreen.services.table);
-    // Y la GRÁFICA de pagadores también es la misma: lo único que el papel cambia es hasta dónde
-    // llega su tabla.
+    // And the payer CHART is the same too: the only thing the paper changes is how far its table
+    // reaches.
     expect(JSON.stringify(report.sections[1].card.option)).toBe(
       JSON.stringify(onScreen.payers.option),
     );
@@ -98,7 +98,7 @@ describe("buildSalesReport", () => {
 });
 
 describe("la cola de pagadores en el papel", () => {
-  /** Más pagadores que el tope de impresión, para que haya cola que plegar. */
+  /** More payers than the print cap, so there is a tail to fold. */
   function manyPayers(): SalesLine[] {
     return Array.from({ length: PAYER_TABLE_PRINT_LIMIT + 12 }, (_unused, index) => ({
       serviceCode: "\\01",
@@ -116,14 +116,14 @@ describe("la cola de pagadores en el papel", () => {
 
   it("la tabla impresa lista los mayores y pliega el resto en UNA fila", () => {
     const table = reportOf(manyPayers()).sections[1].card.table;
-    // Los del tope, más la fila plegada, más el TOTAL.
+    // The ones within the cap, plus the folded row, plus the TOTAL.
     expect(table.rows).toHaveLength(PAYER_TABLE_PRINT_LIMIT + 2);
     expect(table.rows.at(-2)?.label).toBe("Otros pagadores");
     expect(table.rows.at(-2)?.sublabel).toContain("12 pagadores");
   });
 
   it("la fila plegada dice cuánto era el MAYOR de los que agrupa", () => {
-    // Es la pregunta que una fila plegada levanta: qué me estoy perdiendo.
+    // It is the question a folded row raises: what am I missing.
     expect(reportOf(manyPayers()).sections[1].card.table.rows.at(-2)?.sublabel).toContain(
       "ninguno supera $970.00",
     );

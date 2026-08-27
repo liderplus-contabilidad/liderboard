@@ -127,7 +127,7 @@ describe("el periodo activo", () => {
   const bundle = buildSeries([MANOR], presetQuery(["4", "5"], CONTEXT));
 
   it("son los periodos cubiertos, no los doce del año", () => {
-    // El archivo llega hasta julio: siete columnas de las doce del eje.
+    // The file runs to July: seven columns out of the axis' twelve.
     expect(coveredPeriods(bundle).map((period) => period.index)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
@@ -145,10 +145,10 @@ describe("el periodo activo", () => {
   });
 
   /**
-   * Un mes CARGADO cuyas cuentas valen todas cero: la cobertura la declara el workspace
-   * (`loadedMonthsByYear`), así que existe como columna aunque no se moviera nada. Es el caso que
-   * el botón «Ocultar meses en 0» quita del eje, y el único donde `movingPeriods` y
-   * `coveredPeriods` difieren — con la cobertura inferida de los valores no puede haber uno.
+   * A LOADED month whose accounts are all worth zero: the coverage is declared by the workspace
+   * (`loadedMonthsByYear`), so it exists as a column even though nothing moved. It is the case the
+   * «Ocultar meses en 0» button removes from the axis, and the only one where `movingPeriods` and
+   * `coveredPeriods` differ — with coverage inferred from the values there cannot be one.
    */
   const declarado = buildSeries(
     [
@@ -161,7 +161,7 @@ describe("el periodo activo", () => {
   );
 
   it("los meses en 0 siguen CUBIERTOS: la cobertura la declara el workspace, no el valor", () => {
-    // Ago y Sep se declararon cargados y el archivo los trae en cero.
+    // Aug and Sep were declared loaded and the file brings them at zero.
     expect(coveredPeriods(declarado).map((period) => period.index)).toEqual([
       0, 1, 2, 3, 4, 5, 6, 7, 8,
     ]);
@@ -176,7 +176,7 @@ describe("el periodo activo", () => {
   });
 
   it("juzga el ESTADO y no una cuenta: un mes con solo gasto se queda", () => {
-    // Febrero sin ingreso ninguno pero con su gasto: el negocio se movió, la columna es real.
+    // February with no revenue at all but with its expense: the business moved, the column is real.
     const soloGasto = buildSeries(
       [
         {
@@ -201,7 +201,7 @@ describe("el periodo activo", () => {
   });
 
   it("suma cada cuenta sobre el eje entero, no una de sus columnas", () => {
-    // Julio vale 25.229 de ingreso; los siete meses cubiertos valen bastante más.
+    // July is worth 25,229 of revenue; the seven covered months are worth considerably more.
     expect(sumOver(bundle, "4")).toBe(
       bundle.series
         .find((series) => series.key.code === "4")
@@ -212,7 +212,7 @@ describe("el periodo activo", () => {
   });
 
   it("un periodo cubierto en cero no es lo mismo que uno sin cargar", () => {
-    // La cuenta existe y su único mes cubierto vale 0: el total es 0, no `null`.
+    // The account exists and its only covered month is worth 0: the total is 0, not `null`.
     const enCero: AnalyticsSource = {
       ...MANOR,
       coverage: new Set([0]),
@@ -282,10 +282,10 @@ describe("ranking", () => {
   });
 
   /**
-   * El corte del «Ranking de gastos» son los pasos de su escala, no un número suelto: si la rampa
-   * y el corte se separan, la barra sobrante cae en el neutro y nadie lo ve hasta que un cliente
-   * tiene ese gasto número dieciséis. Las demás siguen en ocho porque se pintan con las ranuras
-   * de identidad, que son ocho.
+   * The «Ranking de gastos» cut is its scale's steps, not a loose number: if the ramp and the cut
+   * drift apart, the leftover bar falls back to the neutral and nobody sees it until a client has that
+   * sixteenth expense. The others stay at eight because they are painted with the identity slots,
+   * which are eight.
    */
   it("el ranking de gastos corta donde acaba su rampa, y las demás siguen en ocho", () => {
     expect(EXPENSE_RANKING_SIZE).toBe(CHART_RANKING_MAX);
@@ -301,7 +301,7 @@ describe("ranking", () => {
 
     expect(ranked.entries).toHaveLength(15);
     expect(ranked.hidden).toBe(5);
-    // Y sigue ordenando antes de cortar: el mayor es el primero, no el primero del archivo.
+    // And it still sorts before cutting: the largest is the first, not the file's first.
     expect(ranked.entries[0].value).toBe(2000);
   });
 

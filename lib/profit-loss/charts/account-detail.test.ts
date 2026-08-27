@@ -194,7 +194,7 @@ describe("buildAccountDetail · frecuencias", () => {
   });
 });
 
-/* --------------------------------------------- los dos pesos sobre el estado */
+/* --------------------------------------------- the two weights over the statement */
 
 describe("el peso de la cuenta sobre el ESTADO, no sobre su padre", () => {
   const totals = { expenses: 1_000, revenue: 4_000 };
@@ -207,8 +207,8 @@ describe("el peso de la cuenta sobre el ESTADO, no sobre su padre", () => {
     });
 
   it("divide por las RAÍCES y no por el padre inmediato", () => {
-    // 200 sobre 1.000 de gasto y sobre 4.000 de ingreso. Son dos preguntas distintas de la del
-    // padre, y por eso conviven en la ficha en vez de sustituirla.
+    // 200 over 1,000 of expense and over 4,000 of revenue. They are two different questions from the
+    // parent's, and that is why they coexist in the ficha instead of replacing it.
     const detail = conTotales(covered([200]));
 
     expect(detail.total).toBe(200);
@@ -217,7 +217,8 @@ describe("el peso de la cuenta sobre el ESTADO, no sobre su padre", () => {
   });
 
   it("sin totales no inventa las cifras: quedan en null y el panel no las escribe", () => {
-    // Es lo que deja intacta a toda llamada que no las pide, la ficha de un ingreso incluida.
+    // It is what leaves every call that does not ask for them untouched, an income account's ficha
+    // included.
     const detail = detailOf(covered([200]));
 
     expect(detail.shareOfExpenses).toBeNull();
@@ -237,8 +238,8 @@ describe("el peso de la cuenta sobre el ESTADO, no sobre su padre", () => {
   });
 
   it("suma sobre lo CUBIERTO, así que un mes sin cargar no diluye el peso", () => {
-    // La regla del motor llega hasta aquí: cinco meses cargados de 100 pesan 500 sobre el total
-    // del mismo tramo, no 500 sobre un año que nadie reportó.
+    // The engine's rule reaches here: five loaded months of 100 weigh 500 over the total of the same
+    // span, not 500 over a year nobody reported.
     const detail = conTotales(covered([100, 100, 100, 100, 100]));
 
     expect(detail.coveredPeriods).toBe(5);

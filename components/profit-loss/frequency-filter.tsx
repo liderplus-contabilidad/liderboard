@@ -13,28 +13,28 @@ import type { Frequency } from "@/lib/profit-loss/types";
 
 export interface FrequencyFilterProps {
   value: Frequency;
-  /** Las que el estado abierto admite. `allowedFrequencies` las devuelve DE LA BASE HACIA ARRIBA:
-   * los periodos se agregan, nunca se parten, así que la primera ES la base. */
+  /** The ones the open statement admits. `allowedFrequencies` returns them FROM THE BASE UPWARDS:
+   * periods aggregate, they never split, so the first one IS the base. */
   allowed: readonly Frequency[];
   onChange: (frequency: Frequency) => void;
 }
 
 /**
- * «Ver por»: con qué grano se lee el eje del tiempo.
+ * «Ver por»: with what grain the time axis is read.
  *
- * Vive en la BARRA y no en la cabecera de una tarjeta porque lo leen las tres pestañas —Datos lo
- * usa para sus columnas, Gráficos para su eje y Análisis para sus periodos—, que es la misma regla
- * por la que «Ocultar meses en 0» vive fuera de ella.
+ * It lives in the BAR and not in a card's header because all three tabs read it —Datos uses it for
+ * its columns, Gráficos for its axis and Análisis for its periods—, which is the same rule by which
+ * «Ocultar meses en 0» lives outside it.
  *
- * Es un desplegable y no el track de píldoras que fue, por dos motivos. Uno es que la barra sea de
- * un solo material: era el único control con otra forma, y encima colgado al otro extremo de la
- * fila, lejos de «Año» y «Periodo», que gobiernan ese mismo eje. El otro es que una píldora apagada
- * no tiene dónde decir POR QUÉ lo está — un estado trimestral no puede enseñar meses, y eso antes
- * había que adivinarlo—, mientras que aquí la opción se queda en su sitio, deshabilitada, con el
- * motivo escrito debajo.
+ * It is a dropdown and not the pill track it used to be, for two reasons. One is that the bar should
+ * be of a single material: it was the only control with another shape, and hung at the far end of the
+ * row besides, away from «Año» and «Periodo», which govern that same axis. The other is that a
+ * switched-off pill has nowhere to say WHY it is off —a quarterly statement cannot show months, and
+ * that used to have to be guessed—, whereas here the option stays in place, disabled, with the reason
+ * written underneath.
  *
- * No se pinta nunca en estado `brand`: no es una marca, no produce chip y siempre vale algo. Lo que
- * el rótulo dice es su valor.
+ * It is never painted in the `brand` state: it is not a mark, it produces no chip and it always holds
+ * a value. What the label says is its value.
  */
 export function FrequencyFilter({ value, allowed, onChange }: FrequencyFilterProps) {
   const base = allowed[0];

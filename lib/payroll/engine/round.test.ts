@@ -14,8 +14,8 @@ describe("roundToCents", () => {
     expect(roundToCents(0)).toBe(0);
   });
 
-  // Es la razón de existir de esta función: `Math.round` redondea el medio hacia +∞, así que
-  // un descuento mal tecleado en negativo se iría al alza y dejaría de cuadrar con el archivo.
+  // It is this function's reason for being: `Math.round` rounds halves towards +∞, so a deduction
+  // mistyped as a negative would go up and stop squaring with the file.
   it("el medio se va hacia AFUERA del cero, como el ROUND de Excel — no hacia +∞", () => {
     expect(roundToCents(0.005)).toBe(0.01);
     expect(roundToCents(-0.005)).toBe(-0.01);
@@ -24,8 +24,8 @@ describe("roundToCents", () => {
   });
 
   it("absorbe el error de representación binaria que arrastran las bases", () => {
-    // 1.005 no es exactamente 1.005 en binario (es 1.00499999999999989…), así que un
-    // `Math.round(x * 100) / 100` a secas devuelve 1.00 y el centavo se pierde.
+    // 1.005 is not exactly 1.005 in binary (it is 1.00499999999999989…), so a bare
+    // `Math.round(x * 100) / 100` returns 1.00 and the cent is lost.
     expect(roundToCents(1.005)).toBe(1.01);
     expect(roundToCents(8.475)).toBe(8.48);
   });

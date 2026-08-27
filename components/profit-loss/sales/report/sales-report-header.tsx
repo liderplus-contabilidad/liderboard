@@ -2,19 +2,19 @@ import { ReportBand } from "@/components/ui/report-layer";
 import type { SalesReportHeader as SalesReportHeaderSpec } from "@/lib/sales/report";
 
 /**
- * La cabecera del informe: un bloque, no una portada propia. Tres secciones no justifican dejar
- * dos tercios de hoja en blanco antes del primer dato, que es lo que sí se gana el informe de PyG
- * con sus tablas por centro y por año.
+ * The report's header: a block, not a cover page of its own. Three sections do not justify leaving
+ * two thirds of a page blank before the first datum, which PyG's report does earn with its tables per
+ * center and per year.
  *
- * Escribe lo que en pantalla dice la barra de filtros, que en papel ya no está: el periodo que
- * cubre, de qué empresa es la facturación y cuándo se generó.
+ * It writes what the filter bar says on screen, which is no longer there on paper: the period it
+ * covers, whose billing it is and when it was generated.
  */
 export function SalesReportHeader({ header }: { header: SalesReportHeaderSpec }) {
   return (
     <header className="print-section flex flex-col gap-5 border-b border-border pb-6">
-      {/* Logo del cliente a la izquierda, título centrado y logo del centro a la derecha: el mismo
-          reparto con el que se encabezan el comprobante en PDF, los Excel y los otros dos
-          informes, para que un logo en el borde izquierdo signifique lo mismo en todos. */}
+      {/* The client's logo on the left, the title centred and the center's logo on the right: the
+          same layout that heads the payslip in PDF, the Excel files and the other two reports, so a
+          logo at the left edge means the same thing in all of them. */}
       <ReportBand
         {...(header.logo ? { leftLogo: header.logo } : {})}
         {...(header.rightLogo ? { rightLogo: header.rightLogo } : {})}
@@ -35,8 +35,9 @@ export function SalesReportHeader({ header }: { header: SalesReportHeaderSpec })
         <Field label="Generado el" value={header.generatedAt} />
       </dl>
 
-      {/* La misma declaración que la pantalla, y aquí pesa más: un PDF viaja sin la app al lado,
-          así que quien lo reciba no tiene dónde descubrir que esto no es el estado de resultados. */}
+      {/* The same declaration as the screen, and here it weighs more: a PDF travels without the app
+          beside it, so whoever receives it has nowhere to find out this is not the estado de
+          resultados. */}
       <p className="text-center text-[11px] leading-snug text-faint">
         Cifras de facturación. Lo facturado no es lo contabilizado: no coinciden con el estado de
         resultados del mismo periodo por tiempos de reconocimiento, notas de crédito e IVA.

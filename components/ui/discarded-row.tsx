@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 /**
- * Una línea del panel «Se descarta de este …» que un borrado irreversible muestra antes de
- * confirmar. Existe como primitiva porque la forma —icono, qué se pierde en negrita, y en qué
- * cantidad— es lo que convierte «sus datos» en algo que uno lee en vez de confirmar de corrido, y
- * eso vale igual para un cliente de PyG que para un hotel de Ocupaciones.
+ * One line of the «Se descarta de este …» panel an irreversible deletion shows before confirming. It
+ * exists as a primitive because the shape —an icon, what is lost in bold, and in what quantity— is
+ * what turns «sus datos» into something one reads rather than confirms without stopping, and that
+ * holds just as much for a PyG client as for an Ocupaciones hotel.
  *
- * Lo que NO vive aquí son las filas concretas: cuáles son y qué cuentan es de cada módulo, porque
- * hablan de estados de resultados o de sucursales.
+ * What does NOT live here are the concrete rows: which they are and what they count belongs to each
+ * module, because they speak of estados de resultados or of sucursales.
  */
 export function DiscardedRow({
   icon,

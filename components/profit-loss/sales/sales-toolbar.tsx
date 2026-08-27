@@ -15,13 +15,14 @@ import { activeMarkCount } from "@/lib/sales/filters";
 import { useSalesData } from "./sales-data-provider";
 
 /**
- * Superficie de selección de «Ventas por servicio»: **Año · Mes** y marcas activas. Usa las mismas
- * primitivas que otras barras de la app para consistencia. No incluye «Cuenta contable» ni «Centro
- * de costo» porque no aplican a facturas, evitando que sea una pestaña más de PyG.
+ * «Ventas por servicio»' selection surface: **Año · Mes** and the active marks. It uses the same
+ * primitives as the app's other bars for consistency. It does not include «Cuenta contable» or
+ * «Centro de costo» because they do not apply to invoices, which keeps it from being one more tab of
+ * PyG.
  *
- * Ambos admiten varias marcas. El año permite comparar series por meses, y sin marcas selecciona
- * el más reciente. «Todos los años» marca todos en lugar de vaciar, a diferencia de los meses, que
- * siguen la regla de «ninguna marca es todas».
+ * Both admit several marks. The year allows comparing series by month, and with no marks it selects
+ * the most recent one. «Todos los años» marks them all instead of emptying, unlike the months, which
+ * follow the «no mark is all of them» rule.
  */
 export function SalesToolbar() {
   const { universe, filters, toggleYear, selectAllYears, toggleMonth, clearMonths } =
@@ -47,8 +48,8 @@ export function SalesToolbar() {
           <DropdownPanel width={230}>
             {universe.years.length > 1 && (
               <div className="-mx-1 mb-1">
-                {/* PUEBLA la lista, no la vacía: aquí «ninguna marca» significa «el más reciente»,
-                    así que el atajo tiene que marcarlos todos de verdad. */}
+                {/* It POPULATES the list, it does not empty it: here «no mark» means «the most
+                    recent», so the shortcut has to mark them all for real. */}
                 <DropdownChoice
                   selected={markedYears.size === universe.years.length}
                   onSelect={selectAllYears}
@@ -70,7 +71,8 @@ export function SalesToolbar() {
                   </DropdownOption>
                 ))}
             </div>
-            {/* Lo que hace marcar varios no es obvio y se dice aquí, que es donde se decide. */}
+            {/* What marking several does is not obvious and is said here, which is where it is
+                decided. */}
             <DropdownNote>
               Marca varios para comparar: cada año se dibuja como una serie sobre los mismos meses.
             </DropdownNote>
@@ -101,8 +103,8 @@ export function SalesToolbar() {
                   </DropdownOption>
                 ))}
               </div>
-              {/* Solo se listan los meses que llegaron: una marca que no dibuja nada al ponerla
-                  enseña a no pulsar las de al lado. */}
+              {/* Only the months that arrived are listed: a mark that draws nothing when set teaches
+                  you not to press the ones next to it. */}
               <DropdownNote>Solo los meses con archivo cargado.</DropdownNote>
             </DropdownPanel>
           </Dropdown>

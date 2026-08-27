@@ -68,8 +68,8 @@ const DOCE_GASTOS = sourceOf([
 ]);
 
 /**
- * Un plan de cuentas como el real: la raíz abre en dos ramas y una se lleva el 80% del gasto,
- * con el alquiler escondido dentro.
+ * A chart of accounts like the real one: the root opens into two branches and one takes 80% of the
+ * expense, with the rent hidden inside it.
  */
 const RAMA_PESADA = sourceOf([
   { code: "4", name: "Ingresos" },
@@ -81,7 +81,7 @@ const RAMA_PESADA = sourceOf([
   { code: "5.2", name: "Gastos", amount: 19_000 },
 ]);
 
-/** Tres grupos parejos colgando de una cadena de un solo hijo: no hay nada que abrir. */
+/** Three even groups hanging off a single-child chain: there is nothing to open. */
 const RAMAS_PAREJAS = sourceOf([
   { code: "4", name: "Ingresos" },
   { code: "4.1", name: "Ventas", amount: 200_000 },
@@ -152,7 +152,7 @@ describe("el último escalón cierra en el resultado", () => {
     const { steps, grouped } = buildWaterfall(DOCE_GASTOS, MENSUAL);
 
     expect(grouped).toBe(4);
-    // 100.000 de ingreso menos 78.000 de gasto, agrupados o no.
+    // 100,000 of revenue minus 78,000 of expense, grouped or not.
     expect(steps.at(-1)?.end).toBe(22_000);
     expect(steps[0].value + deltas(steps).reduce((sum, step) => sum + step.value, 0)).toBe(22_000);
   });
@@ -162,7 +162,7 @@ describe("el último escalón cierra en el resultado", () => {
     const last = steps.at(-1);
 
     expect(last).toMatchObject({ kind: "total", value: -15_000, start: 0, end: -15_000 });
-    // El escalón que cruza el cero conserva su aritmética: 10.000 − 20.000.
+    // The step that crosses zero keeps its arithmetic: 10,000 − 20,000.
     expect(deltas(steps)[0]).toMatchObject({ value: -20_000, start: 10_000, end: -10_000 });
   });
 });
@@ -177,7 +177,7 @@ describe("el signo sale de signFor", () => {
 
   it("no invierte dos veces un descuento sobre ventas", () => {
     const { steps } = buildWaterfall(CULTURA_MANOR_SOURCE, MENSUAL);
-    // `4.1.4` vale −507 al mes: 179.852 de venta bruta menos 3.549 de descuentos.
+    // `4.1.4` is worth −507 a month: 179,852 of gross sales minus 3,549 of discounts.
     const bruto = 179_852;
     const descuentos = 3_549;
 
@@ -190,16 +190,16 @@ describe("agrupación legible", () => {
   it("salta la cadena redundante de un solo hijo", () => {
     const { steps } = buildWaterfall(RAMAS_PAREJAS, MENSUAL);
 
-    // El árbol es 5 → 5.1 → {5.1.1, 5.1.2, 5.1.3}: los escalones son los hermanos, no el hijo
-    // único que los cuelga.
+    // The tree is 5 → 5.1 → {5.1.1, 5.1.2, 5.1.3}: the steps are the siblings, not the single child
+    // that hangs them.
     expect(deltas(steps).map((step) => step.code)).toEqual(["5.1.1", "5.1.2", "5.1.3"]);
   });
 
   it("abre el grupo que se lleva la mayor parte del gasto", () => {
     const { steps } = buildWaterfall(RAMA_PESADA, MENSUAL);
 
-    // «Costos de Venta y Producción» se lleva el 80%: una sola barra no explica nada, así que
-    // se dibuja lo que hay dentro y el alquiler aparece por su nombre.
+    // «Costos de Venta y Producción» takes 80%: a single bar explains nothing, so what is inside is
+    // drawn and the rent appears by its name.
     expect(deltas(steps).map((step) => step.code)).toEqual(["5.1.2", "5.1.1", "5.2"]);
     expect(steps.at(-1)?.end).toBe(200_000 - 99_000);
   });
@@ -207,14 +207,14 @@ describe("agrupación legible", () => {
   it("no abre un grupo que ya se explica solo", () => {
     const { steps } = buildWaterfall(RAMAS_PAREJAS, MENSUAL);
 
-    // El mayor pesa un tercio del gasto: abrirlo sería un peine sin motivo.
+    // The largest weighs a third of the expense: opening it would be a comb for no reason.
     expect(deltas(steps)).toHaveLength(3);
   });
 
   it("deja de abrir cuando el grupo pesado es una cuenta de movimiento", () => {
     const { steps } = buildWaterfall(TRES_GASTOS, MENSUAL);
 
-    // Arrendamiento se lleva el 72% pero no tiene hijos: no hay nada que abrir.
+    // Arrendamiento takes 72% but has no children: there is nothing to open.
     expect(deltas(steps).map((step) => step.code)).toEqual(["5.1.1", "5.1.2", "5.1.3"]);
   });
 
@@ -229,7 +229,7 @@ describe("agrupación legible", () => {
     const tail = deltas(steps).at(-1);
 
     expect(deltas(steps)).toHaveLength(9);
-    // 4.000 + 3.000 + 2.000 + 1.000, los cuatro que quedaron fuera del tope de ocho.
+    // 4,000 + 3,000 + 2,000 + 1,000, the four that fell outside the cap of eight.
     expect(tail).toMatchObject({ label: "Otros gastos", value: -10_000 });
   });
 
@@ -254,14 +254,15 @@ describe("la cascada resume los periodos cubiertos", () => {
     const { steps, periods } = buildWaterfall(CULTURA_MANOR_SOURCE, MENSUAL);
 
     expect(periods).toHaveLength(7);
-    // Doce meses de ingreso valdrían 302.448; la cascada no cuenta los que no tienen cobertura.
+    // Twelve months of revenue would be worth 302,448; the cascade does not count the ones with no
+    // coverage.
     expect(steps[0].value).toBe(INCOME);
   });
 
   it("declara el rango que sumó, no el año del archivo", () => {
     const { periods } = buildWaterfall(CULTURA_MANOR_SOURCE, MENSUAL);
 
-    // El dataset se llama «Ene–Dic 2026»; la cobertura dice otra cosa y es la que manda.
+    // The dataset is called «Ene–Dic 2026»; the coverage says otherwise and it is the one that leads.
     expect(periodRangeLabel(periods)).toBe("Ene–Jul");
   });
 
@@ -272,7 +273,7 @@ describe("la cascada resume los periodos cubiertos", () => {
     });
 
     expect(periods).toHaveLength(2);
-    // Enero completo más febrero sin Ventas Eventos.
+    // A complete January plus a February with no Ventas Eventos.
     expect(steps[0].value).toBe(25_229 + 24_929);
   });
 

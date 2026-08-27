@@ -1,30 +1,29 @@
 /**
- * De las líneas de factura a las tres agregaciones que la pantalla lee: por SERVICIO, por PAGADOR
- * y por MES.
+ * From the invoice lines to the three aggregations the screen reads: by SERVICE, by PAYER and by
+ * MONTH.
  *
- * **Ninguna vista recorre líneas sueltas.** Un mes trae ~2.800 y un año ~33.000, así que todo lo
- * que se dibuja pasa antes por aquí; una tarjeta que filtrara la lista cruda sería una segunda
- * definición de «cuánto vendió este servicio», capaz de separarse de esta sin que ninguna cifra lo
- * delate.
+ * **No view walks loose lines.** A month brings ~2,800 and a year ~33,000, so everything that is
+ * drawn goes through here first; a card that filtered the raw list would be a second definition of
+ * «how much this service sold», capable of drifting from this one with no figure giving it away.
  *
- * Puro y testeado, como el resto de `lib/`: estas son las reglas que pueden estar mal —qué se suma,
- * qué se ordena y qué es un hueco frente a un cero—, y ninguna necesita un navegador.
+ * Pure and tested, like the rest of `lib/`: these are the rules that can be wrong —what is summed,
+ * what is ordered and what is a gap as against a zero—, and none of them needs a browser.
  */
 import { classifyPayer, payerLabel, type PayerKind } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
-/** El cierre de un periodo: las cuatro cifras que encabezan la pantalla. */
+/** A period's close: the four figures that head the screen. */
 export interface SalesTotals {
   amount: number;
-  /** Cuántas LÍNEAS de factura, no cuántas facturas: el reporte no trae el número de factura. */
+  /** How many invoice LINES, not how many invoices: the report does not bring the invoice number. */
   lineCount: number;
   payerCount: number;
-  /** Venta ÷ líneas. `null` sin ninguna línea, nunca `0`: dividir por cero no da cero. */
+  /** Sales ÷ lines. `null` with no line at all, never `0`: dividing by zero does not give zero. */
   averageTicket: number | null;
 }
 
 export interface ServiceTotal {
-  /** El código verbatim del reporte (`\01`) — la identidad estable de la serie. */
+  /** The report's verbatim code (`\01`) — the series' stable identity. */
   code: string;
   name: string;
   amount: number;
@@ -32,22 +31,22 @@ export interface ServiceTotal {
 }
 
 export interface PayerTotal {
-  /** El nombre crudo, normalizado solo en espacios: la clave con la que se agrupó. */
+  /** The raw name, normalized only in whitespace: the key it was grouped by. */
   id: string;
-  /** Lo que se ESCRIBE. Una persona nunca llega aquí con su nombre. */
+  /** What is WRITTEN. A person never reaches here with their name. */
   label: string;
   kind: PayerKind;
   amount: number;
   lineCount: number;
 }
 
-/** Un mes del eje del año. `amount: null` es un mes que NUNCA se cargó. */
+/** A month of the year's axis. `amount: null` is a month that was NEVER loaded. */
 export interface MonthPoint {
   monthIndex: number;
   amount: number | null;
 }
 
-/** La venta de un periodo, ya agregada por sus tres ejes. */
+/** A period's sales, already aggregated by its three axes. */
 export interface SalesReading {
   totals: SalesTotals;
   services: ServiceTotal[];
@@ -58,8 +57,8 @@ function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-/** Espacios internos colapsados y extremos recortados: es lo único que se toca de un nombre que
- *  después hay que poder cotejar contra el archivo. */
+/** Inner whitespace collapsed and the ends trimmed: it is the only thing touched of a name that
+ *  afterwards has to be checkable against the file. */
 function payerKey(name: string): string {
   return name.replace(/\s+/g, " ").trim();
 }
@@ -76,9 +75,9 @@ export function salesTotals(lines: readonly SalesLine[]): SalesTotals {
 }
 
 /**
- * Por servicio, de mayor a menor. El nombre lo pone la PRIMERA línea que declara ese código: el
- * reporte lo repite en cada fila, y si dos filas discreparan lo que manda es el código, que es lo
- * que el sistema contable indexa.
+ * By service, largest to smallest. The name is set by the FIRST line that declares that code: the
+ * report repeats it on every row, and if two rows disagreed what leads is the code, which is what the
+ * accounting system indexes.
  */
 export function byService(lines: readonly SalesLine[]): ServiceTotal[] {
   const totals = new Map<string, ServiceTotal>();
@@ -100,10 +99,10 @@ export function byService(lines: readonly SalesLine[]): ServiceTotal[] {
 }
 
 /**
- * Por pagador, de mayor a menor — y con el ORDINAL de los particulares asignado sobre ESE orden,
- * que es lo que hace que «Particular · 1» sea siempre el mayor de ellos y no el primero que el
- * archivo escribió. El ordinal cuenta solo entre particulares: con las empresas dentro, la
- * numeración saltaría huecos y parecería que faltan filas.
+ * By payer, largest to smallest — and with the individuals' ORDINAL assigned over THAT order, which is
+ * what makes «Particular · 1» always the largest of them and not the first the file wrote. The ordinal
+ * counts only among individuals: with the companies inside, the numbering would skip gaps and would
+ * look as though rows were missing.
  */
 export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
   const totals = new Map<
@@ -137,11 +136,11 @@ export function readSales(lines: readonly SalesLine[]): SalesReading {
 }
 
 /**
- * Los DOCE meses del año, siempre — un eje del ejercicio y no de lo que llegó.
+ * The TWELVE months of the year, always — an axis of the exercise and not of what arrived.
  *
- * Un mes que nunca se cargó vale `null` y NO `0`, que es la distinción sobre la que descansa todo
- * el módulo: un cero afirma que no se vendió nada, y eso solo lo puede decir un archivo que llegó.
- * Un mes cargado cuyas líneas suman cero sí es un cero, y así se dibuja.
+ * A month that was never loaded is worth `null` and NOT `0`, which is the distinction the whole module
+ * rests on: a zero claims nothing was sold, and only a file that arrived can say that. A loaded month
+ * whose lines add up to zero is a zero, and it is drawn as such.
  */
 export function monthlySeries(months: readonly SalesMonth[], year: number): MonthPoint[] {
   const loaded = new Map<number, number>();
@@ -156,12 +155,12 @@ export function monthlySeries(months: readonly SalesMonth[], year: number): Mont
   }));
 }
 
-/** Los años que el cliente tiene cargados, ascendentes. */
+/** The years the client has loaded, ascending. */
 export function loadedYears(months: readonly SalesMonth[]): number[] {
   return [...new Set(months.map((month) => month.year))].sort((a, b) => a - b);
 }
 
-/** Los meses cargados de un año, ascendentes — la cobertura declarada. */
+/** A year's loaded months, ascending — the declared coverage. */
 export function loadedMonths(months: readonly SalesMonth[], year: number): number[] {
   return months
     .filter((month) => month.year === year)
@@ -170,12 +169,12 @@ export function loadedMonths(months: readonly SalesMonth[], year: number): numbe
 }
 
 /**
- * «Qué parte del total es esto», y la ÚNICA definición del módulo: la comparten el reparto por
- * servicio, la concentración por pagador y las notas que las cuadran, así que una barra y su fila
- * no pueden decir porcentajes distintos.
+ * «What part of the total this is», and the module's ONLY definition: the breakdown by service, the
+ * concentration by payer and the notes that square them share it, so a bar and its row cannot say
+ * different percentages.
  *
- * Un total en `0` da `null` y JAMÁS `0 %`: no vender nada no significa que un servicio sea el 0 %
- * de lo vendido, significa que la pregunta no tiene respuesta.
+ * A total at `0` gives `null` and NEVER `0 %`: selling nothing does not mean a service is 0 % of what
+ * was sold, it means the question has no answer.
  */
 export function shareOf(amount: number, total: number): number | null {
   return total === 0 ? null : (amount / total) * 100;

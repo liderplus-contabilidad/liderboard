@@ -1,69 +1,69 @@
 /**
- * DE QUÉ SE COMPONE UNA CUENTA: el reparto de un rubro entre sus hijas DIRECTAS.
+ * WHAT AN ACCOUNT IS MADE OF: the breakdown of a line among its DIRECT children.
  *
- * Nace de la pregunta que sigue a una barra del anexo — «tengo tanto en honorarios médicos, ¿pero
- * qué lo compone?» — y por eso reparte el nivel siguiente y no las hojas del fondo: `5.5.01.02`
- * cuelga veintisiete secciones que a su vez cuelgan noventa cuentas, y enseñar las noventa de
- * golpe no es un desglose sino otra lista ilegible. Al siguiente nivel se llega BAJANDO, que es un
- * gesto y no un parámetro.
+ * It is born of the question that follows a bar of the annex — «I have this much in medical fees, but
+ * what makes it up?» — and that is why it breaks down the next level and not the leaves at the
+ * bottom: `5.5.01.02` hangs twenty-seven sections that in turn hang ninety accounts, and showing all
+ * ninety at once is not a breakdown but another illegible list. The next level is reached by GOING
+ * DOWN, which is a gesture and not a parameter.
  *
- * Lo que este archivo NO decide es dónde se dibuja: la ventana que lo muestra es de la vista. Aquí
- * solo está lo que puede estar mal — qué filas entran, en qué orden, qué parte del padre es cada
- * una y si la suma cuadra.
+ * What this file does NOT decide is where it is drawn: the window that shows it belongs to the view.
+ * Here there is only what can be wrong — which rows go in, in what order, what part of the parent
+ * each one is and whether the sum squares.
  */
 import type { AmountEntry } from "../analytics/structure";
 import { shareOf } from "./expense-distribution";
 
 /**
- * Cuántas filas dibuja el desglose antes de callar la cola. Doce caben en la ventana con la misma
- * densidad de ~34 px por fila del ranking; el resto sigue en la tabla gemela, que no corta, y la
- * nota dice cuántas son. No se pliegan en un «Otros» a propósito: aquí la pregunta es de qué se
- * compone la cuenta, y una fila sintética con la suma de la cola no responde eso — la responde la
- * tabla, nombrándolas.
+ * How many rows the breakdown draws before falling silent about the tail. Twelve fit in the window
+ * with the ranking's same density of ~34 px per row; the rest is still in the table twin, which does
+ * not cut, and the note says how many they are. They are deliberately not folded into an «Otros»:
+ * here the question is what the account is made of, and a synthetic row with the tail's sum does not
+ * answer that — the table does, by naming them.
  */
 export const BREAKDOWN_MAX_ROWS = 12;
 
 export interface BreakdownRow extends AmountEntry {
-  /** Qué parte del padre es. `null` cuando el padre no da base (sin cobertura o en cero). */
+  /** What part of the parent it is. `null` when the parent gives no base (no coverage or zero). */
   share: number | null;
-  /** Si la fila tiene a su vez desglose — lo que decide si se puede bajar otro nivel. */
+  /** Whether the row in turn has a breakdown — what decides whether another level can be gone into. */
   hasChildren: boolean;
 }
 
 export interface AccountBreakdown {
-  /** Las que se dibujan, de mayor a menor. */
+  /** The ones that are drawn, largest to smallest. */
   rows: BreakdownRow[];
-  /** Todas las que se movieron, sin cortar: es lo que imprime la tabla gemela. */
+  /** Every one that moved, uncut: it is what the table twin prints. */
   all: BreakdownRow[];
-  /** Hijas que el plan declara y no se movieron en el tramo. Se cuentan, no se nombran. */
+  /** Children the plan declares and that did not move in the span. They are counted, not named. */
   idle: number;
-  /** Cuántas quedaron fuera del dibujo por el corte. */
+  /** How many were left out of the drawing by the cut. */
   hidden: number;
-  /** El monto del padre, que es el 100 % del reparto. */
+  /** The parent's amount, which is the breakdown's 100 %. */
   total: number | null;
   /**
-   * Si las hijas suman el padre. Debería ser SIEMPRE cierto —el motor recalcula todo padre desde
-   * sus hijas (`computeRollups`)—, y justamente por eso se comprueba: si algún día deja de serlo,
-   * el desglose estaría contradiciendo a la barra que lo abrió, y eso tiene que decirse en vez de
-   * quedar en una diferencia que nadie suma a mano.
+   * Whether the children add up to the parent. It should ALWAYS be true —the engine recomputes every
+   * parent from its children (`computeRollups`)—, and precisely for that reason it is checked: if it
+   * ever stopped being so, the breakdown would be contradicting the bar that opened it, and that has
+   * to be said instead of being left as a difference nobody sums by hand.
    */
   balances: boolean;
 }
 
-/** Medio centavo: por debajo de eso la diferencia es ruido de coma flotante, no un descuadre. */
+/** Half a cent: below that the difference is floating-point noise, not an imbalance. */
 const CENT = 0.005;
 
 /**
- * El desglose, a partir de los montos que el motor ya sumó sobre el tramo para las hijas.
+ * The breakdown, from the amounts the engine already summed over the span for the children.
  *
- * Las paradas se van y se cuentan, la regla del anexo y del ranking: un plan declara cada cuenta
- * tenga o no movimiento, y `5.5.01.02` trae varias en cero todo el año. Las NEGATIVAS se quedan —
- * una nota de crédito dentro de un gasto es un hallazgo—, y por eso el orden es por valor con
- * signo y no por magnitud: lo que se lee es un reparto, y ahí una devolución va al final.
+ * The idle ones go and are counted, the annex's and the ranking's rule: a plan declares every account
+ * whether or not it has movement, and `5.5.01.02` brings several at zero all year. The NEGATIVE ones
+ * stay — a credit note inside an expense is a finding—, and that is why the order is by signed value
+ * and not by magnitude: what is being read is a breakdown, and there a refund goes at the end.
  *
- * El porcentaje pasa por `shareOf`, la única definición de «porcentaje sobre un total» de esta
- * cara del módulo —la que ya comparten las dos columnas del anexo y la ficha—, así que hereda que
- * un total `null` o `0` dé `null` y jamás `0 %`.
+ * The percentage goes through `shareOf`, this side of the module's only definition of «percentage
+ * over a total» —the one the annex's two columns and the ficha already share—, so it inherits that a
+ * `null` or `0` total gives `null` and never `0 %`.
  */
 export function buildAccountBreakdown(
   entries: readonly AmountEntry[],
@@ -91,16 +91,18 @@ export function buildAccountBreakdown(
 }
 
 /**
- * La nota al pie del desglose, en castellano llano.
+ * The breakdown's footnote, in plain Spanish.
  *
- * Abre SIEMPRE diciendo contra qué se mide el porcentaje, con la cifra: un «51.5 %» que no dice de
- * qué es el 51.5 % obliga a deducir el denominador del título de la ventana, y esa es la clase de
- * cuenta que nadie hace y todos dan por hecha. Es la misma regla por la que la nota del anexo abre
- * con su cuadre y por la que `describeShares` nombra la base de cada porcentaje anotado.
+ * It ALWAYS opens by saying what the percentage is measured against, with the figure: a «51.5 %» that
+ * does not say what it is 51.5 % of forces deducing the denominator from the window's title, and that
+ * is the kind of computation nobody does and everybody assumes. It is the same rule by which the
+ * annex's note opens with its balance and by which `describeShares` names the base of every annotated
+ * percentage.
  *
- * Lo demás va después y solo cuando toca: lo que se quedó fuera del dibujo —porque explica que la
- * tabla tenga más filas que barras—, lo parado, y el CUADRE solo cuando NO cuadra, ya que afirmar
- * «suman el total» cada vez sería ruido en el caso normal, que es todos.
+ * The rest comes afterwards and only when it applies: what was left out of the drawing —because it
+ * explains why the table has more rows than bars—, what is idle, and the BALANCE only when it does
+ * NOT square, since claiming «they add up to the total» every time would be noise in the normal case,
+ * which is all of them.
  */
 export function describeAccountBreakdown(
   breakdown: AccountBreakdown,

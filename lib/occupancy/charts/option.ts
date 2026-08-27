@@ -69,10 +69,10 @@ const CENTS_FIT_BELOW = 1000;
  * The one formatter every label, tooltip and table cell goes through. A ratio arrives as a
  * fraction and `formatPercent` speaks in points, so the ×100 lives here.
  *
- * Los importes llevan SIEMPRE sus centavos, como la tabla de Datos de PyG y como
- * `formatMonthlyFigure` aquí mismo: la cifra de un gráfico se coteja contra la hoja del contador,
- * y un ADR redondeado a `$83` pierde justo la precisión por la que ese indicador existe. El eje es
- * la única excepción y la escribe `formatAxisMetric`.
+ * Amounts ALWAYS carry their cents, like PyG's Datos table and like `formatMonthlyFigure` right here:
+ * a chart's figure is checked against the accountant's sheet, and an ADR rounded to `$83` loses
+ * exactly the precision that indicator exists for. The axis is the only exception and
+ * `formatAxisMetric` writes it.
  */
 export function formatMetric(value: number | null, unit: MetricUnit): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -89,9 +89,9 @@ export function formatMetric(value: number | null, unit: MetricUnit): string | n
 }
 
 /**
- * Lo mismo para las marcas del EJE, que es donde un importe grande suelta los centavos: no es una
- * cifra que nadie coteje sino la escala contra la que se estima el alto de una barra, y seis
- * rótulos de «$115,302.40» se comen el ancho que le queda al dibujo.
+ * The same for the AXIS' ticks, which is where a large amount drops the cents: it is not a figure
+ * anyone checks but the scale against which a bar's height is estimated, and six «$115,302.40» labels
+ * eat the width the drawing has left.
  */
 export function formatAxisMetric(value: number | null, unit: MetricUnit): string | null {
   if (value === null || !Number.isFinite(value) || unit !== "currency") {
@@ -164,7 +164,7 @@ const TOOLTIP_CHROME: Omit<ChartTooltip, "trigger" | "formatter"> = {
   borderWidth: 1,
   padding: [8, 10],
   textStyle: { color: CHART_INK.strong, fontSize: 12 },
-  // Espejo del de PyG: las tarjetas son las mismas y el recorte contra su borde también.
+  // A mirror of PyG's: the cards are the same and so is the clipping against their edge.
   confine: true,
 };
 
@@ -211,8 +211,8 @@ export const MONTHLY_COLUMNS: readonly MonthlyColumn[] = [
 
 /**
  * One rule for every figure of the reporte: money and indicators with two fixed decimals, and an em
- * dash where there is no data. Sigue existiendo aparte de `formatMetric` por los decimales del
- * PORCENTAJE —dos aquí, uno allí— y por la raya: los importes de los dos ya coinciden.
+ * dash where there is no data. It still exists apart from `formatMetric` because of the PERCENTAGE's
+ * decimals —two here, one there— and because of the dash: the amounts of the two already agree.
  */
 export function formatMonthlyFigure(value: number | null, unit: MetricUnit): string {
   if (value === null || !Number.isFinite(value)) {

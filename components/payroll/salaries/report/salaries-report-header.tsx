@@ -3,20 +3,19 @@ import { pluralize } from "@/lib/format";
 import type { SalariesReportHeader as SalariesReportHeaderSpec } from "@/lib/payroll/salaries/report";
 
 /**
- * La cabecera del informe: un bloque, no una portada propia. El informe de Sueldos tiene el
- * consolidado más un puñado de áreas — una portada aparte, como la de PyG, dejaría dos tercios de
- * hoja en blanco antes del primer dato.
+ * The report's header: a block, not a cover page of its own. The Sueldos report has the consolidado
+ * plus a handful of areas — a separate cover, like PyG's, would leave two thirds of a page blank
+ * before the first datum.
  *
- * Escribe lo que en pantalla dice la barra de filtros, que en papel ya no está: el rango que
- * cubre el informe (Año y Mes, honrados) y cuántas áreas trae, para que un informe acotado no se
- * confunda con uno completo.
+ * It writes what the filter bar says on screen, which is no longer there on paper: the range the
+ * report covers (Año and Mes, honoured) and how many areas it carries, so a narrowed report is not
+ * mistaken for a complete one.
  */
 export function SalariesReportHeader({ header }: { header: SalariesReportHeaderSpec }) {
   return (
     <header className="print-section flex flex-col gap-5 border-b border-border pb-6">
-      {/* El logo del cliente a la izquierda, el título centrado y el del centro de costo a la
-          derecha: el mismo reparto con el que se encabezan el comprobante en PDF, el Excel del
-          período y el informe de PyG. */}
+      {/* The client's logo on the left, the title centred and the cost center's on the right: the
+          same layout that heads the payslip in PDF, the período's Excel and PyG's report. */}
       <ReportBand
         {...(header.logo ? { leftLogo: header.logo } : {})}
         {...(header.rightLogo ? { rightLogo: header.rightLogo } : {})}

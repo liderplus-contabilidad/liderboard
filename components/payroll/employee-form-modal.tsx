@@ -22,44 +22,45 @@ import { RESERVE_FUND_OPTIONS } from "@/lib/payroll/reserve-fund";
 import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 
 /**
- * El alta y la EDICIÓN de un empleado: el mismo formulario en dos modos.
+ * Creating and EDITING an employee: the same form in two modes.
  *
- * Es un solo componente y no dos porque un campo de ficha que exista en uno y falte en el otro es
- * exactamente el fallo que nadie ve — el alta lo pide, la edición no lo deja corregir, y la
- * pantalla no dice nada. Lo que cambia entre modos es de dónde salen los valores, adónde se
- * escriben y dos campos que la edición NO pinta.
+ * It is one component and not two because a record field that exists in one and is missing in the
+ * other is exactly the failure nobody sees — the creation asks for it, the edit does not let it be
+ * corrected, and the screen says nothing. What changes between modes is where the values come from,
+ * where they are written and two fields the edit does NOT draw.
  *
- * **La edición no ofrece sueldo base ni días.** Los dos se editan en línea en la pantalla del mes,
- * donde se ve moverse el líquido al corregirlos, y una segunda puerta a los mismos campos sería un
- * sitio más donde decir otra cosa. En el ALTA sí se piden: ahí no hay ficha previa de la que salir.
+ * **The edit offers neither base salary nor days.** Both are edited inline on the month's screen,
+ * where the net pay can be watched moving as they are corrected, and a second door to the same fields
+ * would be one more place to say something different. In the CREATION they are asked for: there is no
+ * previous record to start from.
  *
- * **Una edición alcanza solo al período abierto.** Cada período guarda su propia copia de la
- * nómina, igual que el contador tiene una hoja `GENERAL` por mes, así que corregir marzo no
- * reescribe febrero — y la corrección viaja hacia adelante sola cuando se copia la nómina a abril.
- * El subtítulo lo DICE, porque es lo único de esta pantalla que alguien podría suponer al revés.
+ * **An edit reaches only the open período.** Each período stores its own copy of the nómina, just as
+ * the accountant has a `GENERAL` sheet per month, so correcting March does not rewrite February — and
+ * the correction travels forward on its own when the nómina is copied to April. The subtitle SAYS so,
+ * because it is the only thing on this screen anyone could assume the other way round.
  *
- * Mismo armazón que `RolUploadModal` y `DeletePeriodDialog` —capa `fixed inset-0` sobre `bg-ink/40`,
- * tarjeta de `surface`— porque es la convención de diálogo de este módulo.
+ * Same shell as `RolUploadModal` and `DeletePeriodDialog` —a `fixed inset-0` layer over `bg-ink/40`,
+ * a `surface` card— because it is this module's dialog convention.
  *
- * Toda la lógica que puede estar MAL vive en `lib/payroll/employee-form.ts` (qué es obligatorio,
- * qué forma tiene una cédula, qué rango admiten los días, cómo se vuelca el formulario en una
- * ficha) y está testeada allí. Aquí solo queda lo que es de la pantalla: pintar los controles y
- * decidir CUÁNDO se enseñan los errores.
+ * All the logic that can be WRONG lives in `lib/payroll/employee-form.ts` (what is required, what
+ * shape a cédula has, what range the days admit, how the form is poured into a record) and is tested
+ * there. What is left here is only what belongs to the screen: drawing the controls and deciding WHEN
+ * errors are shown.
  *
- * Los errores no aparecen mientras alguien teclea —eso sería regañar por un campo que todavía no
- * se ha llenado— sino desde el primer intento de guardar; a partir de ahí sí se refrescan solos,
- * para que corregir uno lo apague sin tener que reintentar.
+ * Errors do not appear while someone types —that would be scolding over a field not yet filled— but
+ * from the first attempt to save; from then on they do refresh on their own, so correcting one
+ * switches it off without having to retry.
  *
- * **Tres campos que el diseño no traía y que hay que capturar igual**, porque sin ellos el alta
- * queda coja y nada lo delata: el TIPO DE CONTRATO (parte a la mitad el décimo cuarto, §4), la
- * FECHA DE INGRESO (la ficha del empleado la enseña) y el modo del FONDO DE RESERVA como un
- * control de tres opciones en vez de la única casilla «Acumula» del diseño (las dos banderas del
- * libro se cruzan y dan tres casos, §7 — ver `lib/payroll/reserve-fund.ts`).
+ * **Three fields the design did not carry and that have to be captured anyway**, because without them
+ * the creation is lame and nothing gives it away: the CONTRACT TYPE (it halves the décimo cuarto,
+ * §4), the HIRE DATE (the employee record shows it) and the RESERVE FUND mode as a three-option
+ * control instead of the design's single «Acumula» checkbox (the book's two flags cross and give three
+ * cases, §7 — see `lib/payroll/reserve-fund.ts`).
  */
 
-/** El código LITERAL del libro delante, y qué significa detrás: la ficha del empleado enseña
- *  «CT»/«TP» a secas porque es lo que el rol imprime, pero elegirlo por primera vez con dos letras
- *  y sin su consecuencia es adivinar. */
+/** The book's LITERAL code in front, and what it means behind: the employee record shows a bare
+ *  «CT»/«TP» because it is what the rol prints, but picking it for the first time with two letters and
+ *  without its consequence is guessing. */
 const CONTRACT_OPTIONS = [
   { value: "CT", label: "CT · Tiempo completo" },
   { value: "TP", label: "TP · Tiempo parcial" },
@@ -67,12 +68,12 @@ const CONTRACT_OPTIONS = [
 
 interface EmployeeFormModalProps {
   period: PayrollPeriod;
-  /** La nómina que el período ya tiene: de ahí salen las áreas que este cliente usa de verdad y el
-   *  rechazo de una cédula repetida. */
+  /** The nómina the período already has: from it come the areas this client actually uses and the
+   *  rejection of a duplicate cédula. */
   lines: readonly PayrollEmployeeLine[];
-  /** La ficha que se está editando. AUSENTE es un alta — no hay un `mode` aparte porque el modo ES
-   *  tener o no una ficha de la que partir, y dos campos que pudieran contradecirse serían un
-   *  estado imposible más que representar. */
+  /** The record being edited. ABSENT is a creation — there is no separate `mode` because the mode IS
+   *  having or not having a record to start from, and two fields that could contradict each other
+   *  would be one more impossible state to represent. */
   employee?: PayrollEmployeeLine;
   onClose: () => void;
 }
@@ -115,8 +116,8 @@ export function EmployeeFormModal({ period, lines, employee, onClose }: Employee
       }
       onClose();
     } catch {
-      // La tabla la refresca `useLiveQuery`, así que si la escritura falla nadie lo notaría: el
-      // modal se cerraría y el cambio no estaría. Mejor quedarse abierto y decirlo.
+      // The table is refreshed by `useLiveQuery`, so if the write fails nobody would notice: the
+      // modal would close and the change would not be there. Better to stay open and say so.
       setFailure(
         employee
           ? "No se pudo guardar la ficha. Inténtalo otra vez."
@@ -185,10 +186,10 @@ export function EmployeeFormModal({ period, lines, employee, onClose }: Employee
               onChange={(event) => set("area", event.target.value)}
               options={areas.map((area) => ({ value: area, label: area }))}
             />
-            {/* Los dos campos del MES. La edición no los pinta: se corrigen en línea en la
-                pantalla del empleado, donde se ve moverse el líquido. Sus valores siguen en el
-                formulario —sembrados de la ficha— para que una sola validación sirva a los dos
-                modos, y `toEmployeePatch` es quien decide no escribirlos. */}
+            {/* The two fields of the MONTH. The edit does not draw them: they are corrected inline on
+                the employee's screen, where the net pay can be watched moving. Their values stay in
+                the form —seeded from the record— so a single validation serves both modes, and
+                `toEmployeePatch` is what decides not to write them. */}
             {!editing && (
               <>
                 <FormField label="Sueldo base" error={shown.baseSalary}>
@@ -264,10 +265,10 @@ export function EmployeeFormModal({ period, lines, employee, onClose }: Employee
             </p>
           )}
 
-          {/* Los DÉCIMOS son de la ficha y no del mes: cobrarlos mensualizados o acumularlos es una
-              elección del empleado, la misma clase de decisión que el fondo de reserva de arriba.
-              Por eso están aquí y no en la pantalla del mes, y por eso la copia de nómina se los
-              lleva a abril sin que nadie los vuelva a marcar. */}
+          {/* The DÉCIMOS belong to the record and not to the month: taking them monthly or accruing
+              them is a choice of the employee, the same class of decision as the reserve fund above.
+              That is why they are here and not on the month's screen, and why the nómina copy carries
+              them into April without anyone marking them again. */}
           <div className="mt-4 overflow-hidden rounded-[9px] border border-border">
             <div className="flex items-baseline gap-2 border-b border-border bg-surface-muted px-3.5 py-2.5">
               <span className="text-[12px] font-semibold text-ink">Décimos</span>
@@ -316,7 +317,7 @@ export function EmployeeFormModal({ period, lines, employee, onClose }: Employee
   );
 }
 
-/** Una bandera de provisión: la casilla y su rótulo, en una fila que se puede pulsar entera. */
+/** A provision flag: the checkbox and its label, in a row that can be clicked whole. */
 function ProvisionToggle({
   label,
   checked,

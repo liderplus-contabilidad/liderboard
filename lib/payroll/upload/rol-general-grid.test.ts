@@ -26,27 +26,27 @@ describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
   });
 
   it("ningún rótulo colisiona con otro: dos columnas nunca caen en el mismo índice", () => {
-    // El test que caza una atribución cruzada de raíz. Dos rótulos que `compactLabel` normalice
-    // igual (o uno que sea, literalmente, el texto de otra celda anterior) devolverían el MISMO
-    // índice para dos conceptos distintos, y todas las cifras seguirían sumando igual.
+    // The test that catches a crossed attribution at the root. Two labels `compactLabel` normalizes
+    // alike (or one that is, literally, the text of another earlier cell) would return the SAME index
+    // for two different concepts, and every figure would keep adding up the same.
     const { headerRow: _headerRow, sumanRow: _sumanRow, ...cols } = locateColumns(ROL_GENERAL_AOA);
     const found = Object.values(cols).filter((col): col is number => col !== null);
     expect(new Set(found).size).toBe(found.length);
   });
 
   it('el agrupador " No. HORAS EXTRAS" de la fila 2 no le roba la columna al "No." de la fila 3', () => {
-    // El agrupador va por ENCIMA del rótulo del ordinal y empieza con las mismas dos letras: si
-    // la comparación no fuera por la etiqueta ENTERA, el ordinal saldría de la columna de horas
-    // y ninguna fila de empleado se distinguiría de un encabezado de área.
+    // The grouper is ABOVE the ordinal's label and starts with the same two letters: if the
+    // comparison were not by the WHOLE label, the ordinal would come out of the hours column and no
+    // employee row could be told apart from an area header.
     const columns = locateColumns(ROL_GENERAL_AOA);
     expect(columns.ordinalCol).not.toBe(columns.overtimeHours50Col);
     expect(columns.ordinalCol).toBeLessThan(columns.overtimeHours50Col ?? Infinity);
   });
 
   it("los rótulos que el bloque de asientos repite más abajo no desplazan a los de la cabecera", () => {
-    // PRESTAMOS EMPRESARIALES, ALMUERZOS y CONTRIBUCION SOLIDARIA vuelven a aparecer como
-    // descripciones de asiento, igual que LIQUIDO A RECIBIR y PAGADO: la primera coincidencia
-    // (la cabecera, que va arriba) es la que vale.
+    // PRESTAMOS EMPRESARIALES, ALMUERZOS and CONTRIBUCION SOLIDARIA appear again as journal entry
+    // descriptions, just like LIQUIDO A RECIBIR and PAGADO: the first match (the header, which is
+    // above) is the one that counts.
     const columns = locateColumns(ROL_GENERAL_AOA);
     const headerRow = columns.headerRow ?? 0;
     for (const col of [
@@ -56,7 +56,7 @@ describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
     ]) {
       expect(col).not.toBeNull();
     }
-    // Y siguen siendo columnas del cuerpo, no de la columna B donde los ecos viven.
+    // And they are still body columns, not of column B where the echoes live.
     expect(columns.companyLoansCol).not.toBe(columns.employeeCol);
     expect(columns.mealsCol).not.toBe(columns.employeeCol);
     expect(columns.solidarityContributionCol).not.toBe(columns.employeeCol);
@@ -79,8 +79,8 @@ describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
   });
 
   it("no lee la fila 1 (índices de VLOOKUP desincronizados) como si fuera un rótulo", () => {
-    // La fila de basura trae números en las mismas columnas que TOTAL/PAGADO ocupan de verdad;
-    // si `locateColumns` los tomara como rótulos, headerRow/columns saldrían de la fila 0.
+    // The junk row brings numbers in the same columns TOTAL/PAGADO really occupy; if `locateColumns`
+    // took them for labels, headerRow/columns would come out of row 0.
     const columns = locateColumns(ROL_GENERAL_AOA);
     expect(columns.headerRow).toBeGreaterThan(0);
   });
@@ -92,8 +92,8 @@ describe("locateColumns — localiza por rótulo, nunca por coordenada", () => {
   });
 
   it("un rótulo repetido más abajo no desplaza al primero", () => {
-    // Simula lo que el archivo real hace con PAGADO, que aparece en BZ y otra vez en CC: la
-    // etiqueta real va primero, una copia repetida más abajo no debe ganar.
+    // It simulates what the real file does with PAGADO, which appears in BZ and again in CC: the real
+    // label comes first, a repeated copy further down must not win.
     const grid: Cell[][] = ROL_GENERAL_AOA.map((row) => [...row]);
     const withDuplicate = [...grid, ["", "PAGADO"] as Cell[]];
     const columns = locateColumns(withDuplicate);
@@ -158,12 +158,12 @@ describe("readEmployeeRows — clasifica cada fila por lo que trae A (ordinal) y
       overtimeHours50: 5.5,
       overtimeHours100: 2.5,
       overtimeHours25: 1.5,
-      // J, K, L — su valor, y M el total reconocido
+      // J, K, L — their value, and M the recognised total
       overtimePay50: 16.75,
       overtimePay100: 9.5,
       overtimePay25: 0.75,
       overtimeTotal: 0,
-      // P…T, V — ingresos capturados
+      // P…T, V — the captured income items
       vacationPay: 11,
       privateInsurance: 12,
       allowances: 13,
@@ -183,18 +183,18 @@ describe("readEmployeeRows — clasifica cada fila por lo que trae A (ordinal) y
       otherDeductions: 51,
       partTimeDeduction: 52,
       medicalLeaveDeduction: 53,
-      // AS, AT — las provisiones de décimos, crudas
+      // AS, AT — the décimo provisions, raw
       thirteenthProvisionRaw: 0,
       fourteenthProvisionRaw: 0,
-      // BA, AZ — las dos banderas del fondo de reserva, sin interpretar todavía
+      // BA, AZ — the two reserve-fund flags, not yet interpreted
       hasReserveFundRaw: "N",
       accumulatesReserveFundRaw: "S",
     });
   });
 
   it("M ausente en el libro se traduce en null, no en cero — igual que PAGADO", () => {
-    // Cero significaría «no se reconoció ninguna hora extra», que es una afirmación que un libro
-    // sin esa columna no hace.
+    // Zero would mean «no overtime hour was recognised», which is a claim a book without that column
+    // does not make.
     const columns = locateColumns(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA);
     const { rows } = readEmployeeRows(ROL_GENERAL_NO_TOTAL_HORAS_EXTRAS_AOA, columns);
     expect(rows.every((r) => r.overtimeTotal === null)).toBe(true);
@@ -258,8 +258,8 @@ describe("findPeriod — por su forma, no por su celda", () => {
   });
 
   it("lo sigue leyendo cuando un membrete lo empuja hacia abajo", () => {
-    // Es el archivo que esta app genera: `writeLogoHeader` abre unas filas por encima del
-    // preámbulo, así que `B2` deja de ser `B2` y una coordenada fija no lo encontraría.
+    // It is the file this app generates: `writeLogoHeader` opens a few rows above the preamble, so
+    // `B2` stops being `B2` and a fixed coordinate would not find it.
     const withBand: Cell[][] = [[], [], [], ...ROL_GENERAL_AOA];
     const columns = locateColumns(withBand);
     expect(findPeriod(withBand, columns.headerRow)).toEqual({ year: 2026, monthIndex: 2 });
@@ -274,8 +274,8 @@ describe("findPeriod — por su forma, no por su celda", () => {
   });
 
   it("ignora los rótulos del preámbulo, que no tienen su forma", () => {
-    // «TOTAL HORAS EXTRAS», «DECIMO IV MENSUAL» y la razón social conviven con el período en esas
-    // mismas filas: solo casa la celda que es, entera, un mes y un año.
+    // «TOTAL HORAS EXTRAS», «DECIMO IV MENSUAL» and the razón social live alongside the period on
+    // those same rows: only the cell that is, in its entirety, a month and a year matches.
     const columns = locateColumns(ROL_GENERAL_AOA);
     expect(findPeriod(ROL_GENERAL_AOA, columns.headerRow)).not.toBeNull();
     expect(parsePeriodText("TOTAL HORAS EXTRAS")).toBeNull();
@@ -288,7 +288,7 @@ describe("PAGADO en blanco no es cero", () => {
   const paidCol = columns.paidCol ?? -1;
   const ordinalCol = columns.ordinalCol ?? -1;
 
-  /** El mismo libro, con la celda de `PAGADO` vacía en todas las filas de empleado. */
+  /** The same workbook, with the `PAGADO` cell empty on every employee row. */
   const blanked: Cell[][] = ROL_GENERAL_AOA.map((row) => {
     const cells = [...row] as Cell[];
     if (cells[ordinalCol] !== null && cells[ordinalCol] !== undefined && cells[ordinalCol] !== "") {
@@ -298,8 +298,9 @@ describe("PAGADO en blanco no es cero", () => {
   });
 
   it("una celda vacía se lee null: nadie declaró lo pagado", () => {
-    // Con la regla vieja volvía como `0`, y el empleado salía «con diferencia» por todo su líquido
-    // — que es exactamente lo que el rol descargado por la app diría de quien aún no ha cobrado.
+    // With the old rule it came back as `0`, and the employee came out «with a difference» by their
+    // whole net pay — which is exactly what the rol downloaded by the app would say about someone who
+    // has not been paid yet.
     const { rows } = readEmployeeRows(blanked, locateColumns(blanked));
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((row) => row.paid === null)).toBe(true);

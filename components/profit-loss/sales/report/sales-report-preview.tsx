@@ -9,35 +9,35 @@ import { useSalesData } from "../sales-data-provider";
 import { SalesReportHeader } from "./sales-report-header";
 import { SalesReportSection } from "./sales-report-section";
 
-/** Más columnas que esto y la tabla se lleva su propia hoja apaisada. Es el mismo umbral con el
- *  que `statementFit` deja de encajar una tabla en el cuerpo vertical. */
+/** Any more columns than this and the table takes its own landscape sheet. It is the same threshold
+ *  at which `statementFit` stops fitting a table into the vertical body. */
 const WIDE = 6;
 
 /**
- * El informe de ventas, sobre el MISMO armazón que los otros dos (`ReportLayer`/`ReportSheet`).
- * No estrena nada: la capa `.report-layer` que `@media print` aísla va atada a la CLASE y no a un
- * id, y eso es exactamente lo que permite un tercer informe sin que uno imprima a los otros
- * detrás.
+ * The sales report, over the SAME shell as the other two (`ReportLayer`/`ReportSheet`). It
+ * introduces nothing new: the `.report-layer` layer `@media print` isolates is tied to the CLASS and
+ * not to an id, and that is exactly what allows a third report without one printing the others
+ * behind it.
  *
- * Recibe del proveedor la MISMA entrada con la que se construyeron las tarjetas de la pantalla
- * (`cardsInput`) en vez de recomponerla: es lo que hace imposible que el papel diga una cifra que
- * la pantalla no diga.
+ * It receives from the provider the SAME input the screen's cards were built with (`cardsInput`)
+ * instead of recomposing it: that is what makes it impossible for the paper to say a figure the
+ * screen does not say.
  *
- * Dos hojas y no una: las dos primeras secciones son tablas de TRES columnas y caben de sobra en
- * vertical, mientras que la evolución son DOCE meses, que en vertical se aprietan hasta dejar de
- * leerse. La ancha se lleva **su propia hoja apaisada**, que es la figura que PyG ya usa y por el
- * mismo motivo: una hoja apaisada dentro del cuerpo vertical tendría que desbordarlo con un margen
- * negativo, y en pantalla eso se lee como una tabla escapándose del papel.
+ * Two sheets and not one: the first two sections are THREE-column tables and fit comfortably in
+ * portrait, whereas the evolution is TWELVE months, which in portrait squeeze until they stop being
+ * readable. The wide one takes **its own landscape sheet**, which is the figure PyG already uses and
+ * for the same reason: a landscape sheet inside the vertical body would have to overflow it with a
+ * negative margin, and on screen that reads as a table escaping the paper.
  */
 export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   const { activeClient } = usePygData();
   const { clientName, months, periodName, cardsInput } = useSalesData();
-  // Sellada UNA vez, al abrir la vista previa, para que no avance mientras el lector la mira.
+  // Stamped ONCE, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 
-  // Solo el logo del CLIENTE, a la izquierda. El de la derecha es el del centro de costo, y aquí
-  // no hay ninguno: las ventas no se reparten por centro —el reporte no lo declara—, así que la
-  // banda queda con un solo logo en vez de inventar un segundo que no significaría nada.
+  // Only the CLIENT's logo, on the left. The right-hand one is the cost center's, and there is none
+  // here: sales are not broken down by center —the report does not declare one—, so the band is left
+  // with a single logo instead of inventing a second one that would mean nothing.
   const logo = activeClient?.logo;
   const identity = useMemo(() => deriveSalesIdentity(months), [months]);
 
@@ -53,9 +53,9 @@ export function SalesReportPreview({ onClose }: { onClose: () => void }) {
     [cardsInput, clientName, identity, logo, generatedAt],
   );
 
-  // Qué sección va a qué hoja lo decide el NÚMERO DE COLUMNAS de su propia tabla, no una lista
-  // escrita a mano: la evolución crece a doce y las otras dos se quedan en tres, así que la regla
-  // se sostiene sola si mañana una cambia de forma.
+  // Which section goes on which sheet is decided by the NUMBER OF COLUMNS of its own table, not by a
+  // list written by hand: the evolution grows to twelve and the other two stay at three, so the rule
+  // holds on its own if one of them changes shape tomorrow.
   const portrait = report.sections.filter((section) => section.card.table.columns.length <= WIDE);
   const landscape = report.sections.filter((section) => section.card.table.columns.length > WIDE);
 

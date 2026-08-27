@@ -1,29 +1,28 @@
 /**
- * Los tres rubros del set de datos de prueba: tres empresas distintas, cada una con su PROPIO
- * plan de cuentas — distinta profundidad (5, 3 y 6 niveles), distintos nombres y distintos
- * centros de costo — todas colgando de las mismas dos raíces que la app entiende, `4` (ingresos)
- * y `5` (costos y gastos).
+ * The three lines of business of the test data set: three different companies, each with its OWN
+ * chart of accounts — different depth (5, 3 and 6 levels), different names and different cost
+ * centers — all hanging off the same two roots the app understands, `4` (revenue) and `5` (costs and
+ * expenses).
  *
- * El árbol se declara por ANIDAMIENTO, sin códigos: el generador los numera por posición y luego
- * los formatea según la convención de cada sistema contable (`4.1.1.1` en los formatos propios,
- * `4.1.01.01` en MicroPlus, `4.01.01.02` en Dingoo). Escribir el código a mano aquí sería
- * declararlo tres veces y dejar que las tres versiones se contradigan.
+ * The tree is declared by NESTING, with no codes: the generator numbers them by position and then
+ * formats them according to each accounting system's convention (`4.1.1.1` in the app's own formats,
+ * `4.1.01.01` in MicroPlus, `4.01.01.02` in Dingoo). Writing the code by hand here would be declaring
+ * it three times and letting the three versions contradict each other.
  *
- * `weight` es el peso relativo de una hoja dentro de su raíz — la única cifra que se declara.
- * Un peso NEGATIVO es una cuenta de contrapartida (descuentos sobre ventas, retenciones
- * asumidas); un peso `0` es una cuenta que existe en el plan pero nunca se mueve, que es lo que
- * traen los archivos reales.
+ * `weight` is a leaf's relative weight within its root — the only figure that is declared. A NEGATIVE
+ * weight is a counter-account (sales discounts, absorbed withholdings); a `0` weight is an account
+ * that exists in the plan and never moves, which is what the real files bring.
  */
 
 export interface AccountSpec {
   name: string;
-  /** Solo hojas. Peso relativo dentro de su raíz; negativo = contrapartida, 0 = siempre en cero. */
+  /** Leaves only. Relative weight within its root; negative = counter-account, 0 = always at zero. */
   weight?: number;
   /**
-   * El número que el plan le da a esta cuenta, cuando NO es su posición entre las hermanas — un
-   * plan real salta códigos (`5.3` cuelga `5.3.02` y `5.3.03`, sin `5.3.01`, porque esa rama no
-   * existe en esta empresa). Una LISTA son varios segmentos de golpe, que es cómo se escribe un
-   * nivel que el informe se salta: `4.1.01.01` cuelga directamente de `4.1`.
+   * The number the plan gives this account, when it is NOT its position among the siblings — a real
+   * plan skips codes (`5.3` hangs `5.3.02` and `5.3.03`, with no `5.3.01`, because that branch does
+   * not exist in this company). A LIST is several segments at once, which is how a level the report
+   * skips is written: `4.1.01.01` hangs directly off `4.1`.
    */
   segment?: number | number[];
   children?: AccountSpec[];
@@ -32,28 +31,29 @@ export interface AccountSpec {
 export interface Rubro {
   slug: string;
   company: string;
-  /** Dirección y RUC: solo MicroPlus y Dingoo los imprimen en su preámbulo. */
+  /** Address and RUC: only MicroPlus and Dingoo print them in their preamble. */
   address: string;
   ruc: string;
-  /** Centros de costo del modo «centros», SIN incluir `SIN CENTRO DE COSTO` (lo añade el generador). */
+  /** Cost centers of the «centers» mode, NOT including `SIN CENTRO DE COSTO` (the generator adds
+   *  it). */
   centers: string[];
-  /** Ingreso del mes promedio del primer año, antes de estacionalidad. */
+  /** The first year's average monthly revenue, before seasonality. */
   baseIncome: number;
-  /** Multiplicador por mes (enero…diciembre) sobre `baseIncome`. */
+  /** Multiplier per month (January…December) over `baseIncome`. */
   season: number[];
-  /** Crecimiento anual compuesto entre los años generados. */
+  /** Compound annual growth between the generated years. */
   growth: number;
-  /** Gasto fijo mensual como fracción de `baseIncome` — lo que no depende de la venta. */
+  /** Monthly fixed expense as a fraction of `baseIncome` — what does not depend on sales. */
   fixedRatio: number;
-  /** Gasto variable como fracción del ingreso del propio mes. */
+  /** Variable expense as a fraction of the month's own revenue. */
   variableRatio: number;
   income: AccountSpec;
   expense: AccountSpec;
 }
 
 /**
- * Hotelería: 5 niveles, con una cadena redundante (`4.1.1.1` → `4.1.1.1.1`, un solo hijo con el
- * mismo nombre) y hojas a distinta profundidad — las dos cosas que traen los exports reales.
+ * Hospitality: 5 levels, with a redundant chain (`4.1.1.1` → `4.1.1.1.1`, a single child with the
+ * same name) and leaves at different depths — the two things the real exports bring.
  */
 const HOTELERIA: Rubro = {
   slug: "rubro-a-hoteleria",
@@ -205,7 +205,7 @@ const HOTELERIA: Rubro = {
   },
 };
 
-/** Restaurante: plan PLANO, 3 niveles, muchas hojas en el nivel 2 y 3 — el extremo opuesto. */
+/** Restaurant: a FLAT plan, 3 levels, many leaves at level 2 and 3 — the opposite extreme. */
 const RESTAURANTE: Rubro = {
   slug: "rubro-b-restaurante",
   company: "SABOR COSTEÑO ALIMENTOS CIA. LTDA.",
@@ -283,31 +283,31 @@ const RESTAURANTE: Rubro = {
 };
 
 /**
- * Clínica: el PLAN REAL DE MICROPLUS, transcrito de un export de la firma — 7 niveles, ~230
- * cuentas y el volumen más alto del set.
+ * Clinic: MICROPLUS' REAL PLAN, transcribed from an export of the firm — 7 levels, ~230 accounts and
+ * the set's highest volume.
  *
- * Es el único rubro cuyo árbol no se inventó, y por dos motivos. Uno, que ningún plan sintético
- * reproduce lo que este trae: códigos SALTADOS (`5.3` cuelga `5.3.02` y `5.3.03`, sin `5.3.01`;
- * `5.3.03` salta del `.12` al `.14`), un nivel que el informe se salta entero (`4.1.01.01` cuelga
- * directamente de `4.1`), cadenas de un solo hijo con el mismo nombre, ramas enteras declaradas y
- * nunca movidas, y cuentas de relleno rotuladas `xxxxx`. Dos, que el predeterminado «Costos y
- * gastos» reparte por los diecisiete rubros que la hoja de este cliente declara
- * (`DECLARED_ANNEX_ROWS`), y sin un archivo con ESTOS códigos esa vista no se puede abrir ni ver.
+ * It is the only line of business whose tree was not invented, and for two reasons. One, that no
+ * synthetic plan reproduces what this one brings: SKIPPED codes (`5.3` hangs `5.3.02` and `5.3.03`,
+ * with no `5.3.01`; `5.3.03` jumps from `.12` to `.14`), a level the report skips entirely
+ * (`4.1.01.01` hangs directly off `4.1`), single-child chains with the same name, whole branches
+ * declared and never moved, and filler accounts labelled `xxxxx`. Two, that the «Costos y gastos»
+ * preset breaks down by the seventeen lines this client's sheet declares (`DECLARED_ANNEX_ROWS`), and
+ * without a file with THESE codes that view cannot be opened or seen.
  *
- * Los NOMBRES y los CÓDIGOS son los del plan; las CIFRAS y la empresa siguen siendo sintéticas —un
- * plan de cuentas es una plantilla del sistema contable, no el dato de un cliente—. Los pesos
- * reparten el gasto con las proporciones del anexo real (27 % honorarios médicos, 15 % medicinas,
- * 14 % nómina administrativa…), así que la lectura que sale se parece a la que la firma revisa.
+ * The NAMES and the CODES are the plan's; the FIGURES and the company are still synthetic —a chart of
+ * accounts is a template of the accounting system, not a client's datum—. The weights split the
+ * expense with the real annex's proportions (27 % medical fees, 15 % medicines, 14 % administrative
+ * payroll…), so the reading that comes out resembles the one the firm reviews.
  *
- * **Las doce ramas en cero son deliberadas**: `5.2.03`, `5.2.04`, `5.2.05`, `5.3.03.02`, `.03`,
- * `.05`, `.08`, `.10`, `.15`, `.16`, `.18` y `.20` existen en el plan y no se mueven, que es
- * exactamente lo que hace que los diecisiete rubros del anexo sumen el gasto entero y su «Otros»
- * salga en cero.
+ * **The twelve branches at zero are deliberate**: `5.2.03`, `5.2.04`, `5.2.05`, `5.3.03.02`, `.03`,
+ * `.05`, `.08`, `.10`, `.15`, `.16`, `.18` and `.20` exist in the plan and do not move, which is
+ * exactly what makes the annex's seventeen lines add up to the whole expense and its «Otros» come out
+ * at zero.
  *
- * Lo único que NO se reproduce es el punto final de tres cuentas SIN hijas (`5.3.03.10.01`,
- * `5.5.01.02.13`, `5.5.01.02.20`, que el archivo marca como padre sin serlo): el generador se
- * compromete a no emitir avisos al cargar, y ese marcador contradictorio produce uno —el que
- * `microplus.fixtures.ts` ya cubre aparte—.
+ * The only thing NOT reproduced is the trailing dot of three accounts WITHOUT children (`5.3.03.10.01`,
+ * `5.5.01.02.13`, `5.5.01.02.20`, which the file marks as a parent without being one): the generator
+ * commits to emitting no notices on upload, and that contradictory marker produces one —the one
+ * `microplus.fixtures.ts` already covers separately—.
  */
 const CLINICA: Rubro = {
   slug: "rubro-c-clinica",
@@ -325,7 +325,7 @@ const CLINICA: Rubro = {
   baseIncome: 240_000,
   season: [1.05, 1.1, 1.15, 1.1, 1.0, 0.95, 0.9, 0.9, 0.95, 1.05, 1.1, 1.0],
   growth: 1.06,
-  // El anexo real mide 77,7 % de gasto sobre ingreso; esta mezcla lo deja en ese entorno.
+  // The real annex measures 77.7 % of expense over revenue; this mix leaves it around there.
   fixedRatio: 0.32,
   variableRatio: 0.45,
   income: {
@@ -335,8 +335,8 @@ const CLINICA: Rubro = {
         name: "INGRESOS DE ACTIVIDADES ORDINARIAS",
         children: [
           {
-            // El informe no imprime el nivel `4.1.01`: esta cuenta cuelga de `4.1` con dos
-            // segmentos de golpe, que es lo que `segment` en lista escribe.
+            // The report does not print the `4.1.01` level: this account hangs off `4.1` with two
+            // segments at once, which is what `segment` as a list writes.
             name: "VENTA DE BIENES 0% Y 12%",
             segment: [1, 1],
             children: [
@@ -393,7 +393,7 @@ const CLINICA: Rubro = {
             children: [
               {
                 name: "OTROS INGRESOS FINANCIEROS",
-                // El plan no declara `4.3.01.01.01`: su única hija es la `.02`.
+                // The plan does not declare `4.3.01.01.01`: its only child is `.02`.
                 children: [{ name: "Intereses Financieros", segment: 2, weight: 0.2 }],
               },
             ],
@@ -413,7 +413,7 @@ const CLINICA: Rubro = {
             name: "COSTOS DE VENTAS MEDICINAS E INSUMOS",
             children: [
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "COSTOS DE VENTAS MEDICINAS E INSUMOS",
                 children: [
                   { name: "Costo de ventas medicamentos 0%", weight: 9.5 },
@@ -422,7 +422,7 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "COSTO ALIMENTACION",
                 children: [
                   { name: "Costo Alimentacion, Viveres, Pacientes , Empleados", weight: 0.5 },
@@ -432,7 +432,7 @@ const CLINICA: Rubro = {
             ],
           },
           {
-            // Rubro del anexo, y de los que tienen NIETOS.
+            // An annex line, and one of the ones with GRANDCHILDREN.
             name: "MANO DE OBRA DIRECTA / FARMACIA/ LABORATORIO/MANO DE OBRA DIRECTA",
             children: [
               {
@@ -480,7 +480,7 @@ const CLINICA: Rubro = {
             ],
           },
           {
-            // Fuera del anexo: existe y no se mueve.
+            // Outside the annex: it exists and does not move.
             name: "(-) DESCUENTO EN COMPRAS",
             children: [
               {
@@ -522,7 +522,7 @@ const CLINICA: Rubro = {
         segment: 3,
         children: [
           {
-            // Rubro del anexo, y el más hondo: sus cuentas están tres niveles por debajo.
+            // An annex line, and the deepest: its accounts are three levels below.
             name: "MANO DE OBRA INDIRECTA /ADMISIONES / CAJA / INFORMACION/MANO DE OBRA INDIRECTA",
             segment: 2,
             children: [
@@ -576,7 +576,7 @@ const CLINICA: Rubro = {
             segment: 3,
             children: [
               {
-                // Rubro del anexo: el 27 % del gasto.
+                // An annex line: 27 % of the expense.
                 name: "HONORARIOS MEDICOS",
                 children: [
                   { name: "Honorarios Medicos-Externos", weight: 14 },
@@ -603,7 +603,7 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo. El plan salta el `.06`.
+                // An annex line. The plan skips `.06`.
                 name: "MANTENIMIENTO Y REPARACIONES",
                 children: [
                   { name: "Mantenimiento y Reparaciones de Edificio e Instala", weight: 1.1 },
@@ -634,7 +634,7 @@ const CLINICA: Rubro = {
                 children: [{ name: "Comisiones a terceros", weight: 0 }],
               },
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "PROMOCION Y PUBLICIDAD",
                 children: [
                   { name: "Promoción y Publicidad", weight: 1.5 },
@@ -647,7 +647,7 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "COMBUSTIBLES",
                 children: [
                   { name: "Combustibles - Gasolina- Diesel", weight: 0.08 },
@@ -659,7 +659,7 @@ const CLINICA: Rubro = {
                 children: [{ name: "Lubricantes", weight: 0 }],
               },
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "SEGUROS Y REASEGUROS (Primas y Cesiones)",
                 children: [
                   { name: "Seguros Contratados Instalaciones", weight: 0.4 },
@@ -674,7 +674,7 @@ const CLINICA: Rubro = {
                 children: [{ name: "GASTOS DE GESTION", weight: 0 }],
               },
               {
-                // Rubro del anexo. El plan salta del `.10` al `.12`, y dentro cuelga solo la `.02`.
+                // An annex line. The plan jumps from `.10` to `.12`, and inside it hangs only `.02`.
                 name: "GASTOS DE VIAJE NACIONALES",
                 segment: 12,
                 children: [
@@ -695,8 +695,8 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo, y el caso que obliga a forzar el rótulo: la hoja lo llama
-                // «SERVICIOS BASICOS» y el plan «AGUA, ENERGIA, LUZ Y TELECOMUNICACIONES».
+                // An annex line, and the case that forces overriding the label: the sheet calls it
+                // «SERVICIOS BASICOS» and the plan «AGUA, ENERGIA, LUZ Y TELECOMUNICACIONES».
                 name: "AGUA, ENERGIA, LUZ Y TELECOMUNICACIONES",
                 segment: 14,
                 children: [
@@ -724,7 +724,7 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo: veintiséis cuentas.
+                // An annex line: twenty-six accounts.
                 name: "OTROS GASTOS",
                 segment: 17,
                 children: [
@@ -762,7 +762,7 @@ const CLINICA: Rubro = {
                 children: [{ name: "Gasto 15% Utilidades", weight: 0 }],
               },
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "DEPRECIACIONES",
                 segment: 19,
                 children: [
@@ -795,7 +795,7 @@ const CLINICA: Rubro = {
             name: "GASTOS ADMINISTRATIVOS",
             children: [
               {
-                // Rubro del anexo, con nietos: el 14 % del gasto.
+                // An annex line, with grandchildren: 14 % of the expense.
                 name: "GASTOS NOMINA /ADMINISTRACION",
                 children: [
                   {
@@ -839,7 +839,7 @@ const CLINICA: Rubro = {
                 ],
               },
               {
-                // Rubro del anexo: veintisiete secciones, la rama más ancha del plan.
+                // An annex line: twenty-seven sections, the plan's widest branch.
                 name: "OTROS GASTOS OPERACIONALES",
                 children: [
                   {
@@ -971,7 +971,7 @@ const CLINICA: Rubro = {
                   },
                   { name: "XX", segment: 20, weight: 0 },
                   {
-                    // El plan salta el `.21`, y esta cuelga otro nivel antes de sus cuentas.
+                    // The plan skips `.21`, and this one hangs another level before its accounts.
                     name: "OTROS GASTOS",
                     segment: 22,
                     children: [
@@ -1038,7 +1038,7 @@ const CLINICA: Rubro = {
             name: "GASTOS NO OPERACIONALES",
             children: [
               {
-                // Rubro del anexo.
+                // An annex line.
                 name: "GASTOS FINANCIEROS",
                 children: [
                   {
@@ -1067,7 +1067,7 @@ const CLINICA: Rubro = {
             name: "OTROS GASTOS NO OPERACIONALES",
             children: [
               {
-                // Rubro del anexo, el más pequeño.
+                // An annex line, the smallest one.
                 name: "GASTOS NO DEDUCIBLES",
                 children: [
                   { name: "Intereses y Multas (SRI-IESS-ATS-ATM)", weight: 0.02 },

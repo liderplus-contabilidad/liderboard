@@ -91,14 +91,14 @@ describe("round-trip — Excel completo multi-año", () => {
     const staged = resolveUpload(fileName, await toBuffer(workbook));
     const { datasets, meta } = staged as Extract<StagedUpload, { kind: "workspace" }>;
 
-    // Cuatro centro-año, cada uno con su propio año y sus propios valores.
+    // Four center-years, each with its own year and its own values.
     expect(datasets).toHaveLength(4);
     expect(datasets.map((d) => d.year).sort()).toEqual([2025, 2025, 2026, 2026]);
     const norte25 = datasets.find((d) => d.year === 2025 && d.costCenterName === "SUCURSAL NORTE");
     const norte26 = datasets.find((d) => d.year === 2026 && d.costCenterName === "SUCURSAL NORTE");
     expect(norte25?.accounts.find((a) => a.code === "4")?.values[0]).toBe(100);
     expect(norte26?.accounts.find((a) => a.code === "4")?.values[0]).toBe(700);
-    // La cobertura es de cada año, no compartida.
+    // The coverage belongs to each year, it is not shared.
     expect(meta.loadedMonthsByYear).toEqual({ 2025: [0, 1], 2026: [0, 2] });
   });
 
@@ -107,7 +107,7 @@ describe("round-trip — Excel completo multi-año", () => {
       companyName: "HOTELERA ANDES S.A.",
       loadedMonthsByYear: { 2025: [0], 2026: [0] },
       centers: [
-        // 2025 lista NORTE primero; 2026 lo lista segundo — el caso de los archivos reales.
+        // 2025 lists NORTE first; 2026 lists it second — the real files' case.
         { dataset: center("norte-25", "SUCURSAL NORTE", 0, 100, 2025), edits: [] },
         { dataset: center("sur-25", "SUCURSAL SUR", 1, 40, 2025), edits: [] },
         { dataset: center("sur-26", "SUCURSAL SUR", 0, 80, 2026), edits: [] },
@@ -279,9 +279,9 @@ describe("round-trip — el sistema de origen sobrevive al Excel de la app", () 
     const buffer = await toBuffer(workbook);
 
     const staged = resolveUpload("PyG HOSPITAL.xlsx", buffer);
-    // Lo atiende la estrategia del libro de la app…
+    // It is handled by the app workbook's strategy…
     expect(staged.kind).toBe("workspace");
-    // …y el workspace reconstruido conserva `microplus` como sistema de origen.
+    // …and the rebuilt workspace keeps `microplus` as its source system.
     const { meta } = staged as Extract<StagedUpload, { kind: "workspace" }>;
     expect(meta.sourceSystemId).toBe("microplus");
   });
@@ -440,7 +440,7 @@ describe("round-trip — un mes en crudo (estado único)", () => {
 });
 
 describe("round-trip — «Ocultar cuentas en cero»", () => {
-  /** Un centro con dos cuentas: «4» se mueve, «5» no la usó nadie. */
+  /** A center with two accounts: «4» moves, «5» was used by nobody. */
   function withUnused(id: string, name: string, order: number, generalValue: number): PygDataset {
     const base = center(id, name, order, generalValue);
     return {
@@ -473,8 +473,8 @@ describe("round-trip — «Ocultar cuentas en cero»", () => {
   });
 
   it("una cuenta en cero con comentario sobrevive al viaje y recupera su nota", async () => {
-    // Es la razón por la que «anotada ≠ en cero»: sin la excepción, el comentario de la hoja de
-    // metadatos apuntaría a una fila que el archivo ya no lleva.
+    // It is the reason for «annotated ≠ at zero»: without the exception, the metadata sheet's comment
+    // would point at a row the file no longer carries.
     const comment: CellEdit[] = [
       { datasetId: "norte", code: "5", monthIndex: 0, comment: "Cerrada este año", updatedAt: 1 },
     ];
@@ -518,8 +518,8 @@ describe("round-trip — «Ocultar cuentas en cero»", () => {
 
 describe("round-trip — meses ocultos", () => {
   it("un libro sin los meses vacíos devuelve los valores en su mes correcto", async () => {
-    // `app-workbook.ts` mapea los meses POR RÓTULO de cabecera, no por posición, así que quitar
-    // columnas no descoloca nada: enero sigue siendo enero aunque febrero no esté.
+    // `app-workbook.ts` maps the months BY header LABEL, not by position, so removing columns
+    // dislodges nothing: January is still January even though February is not there.
     const workbook = buildMultiCenterWorkbook({
       companyName: "HOTELERA ANDES S.A.",
       loadedMonthsByYear: { 2026: [0, 2] },
@@ -536,17 +536,17 @@ describe("round-trip — meses ocultos", () => {
     const values = norte?.accounts.find((a) => a.code === "4")?.values;
     expect(values?.[0]).toBe(100); // Enero, escrito
     expect(values?.[2]).toBe(150); // Marzo, escrito
-    expect(values?.[1]).toBe(0); // Febrero, ausente del archivo → cero
+    expect(values?.[1]).toBe(0); // February, absent from the file → zero
     expect(values).toHaveLength(12);
-    // Y la cobertura sigue viniendo de la hoja de metadatos, no de qué columnas se escribieron:
-    // un mes cargado que no vendió nada vuelve como CARGADO y en cero, no como nunca cargado.
+    // And the coverage still comes from the metadata sheet, not from which columns were written: a
+    // loaded month that sold nothing comes back as LOADED and at zero, not as never loaded.
     expect(meta.loadedMonthsByYear).toEqual({ 2026: [0, 2] });
   });
 });
 
 describe("round-trip — con el membrete del cliente", () => {
-  /** Un PNG de 1×1 real: exceljs lo mete en el zip de verdad, así que el libro que se relee es
-   *  exactamente el que se descarga. */
+  /** A real 1×1 PNG: exceljs really puts it in the zip, so the workbook that is re-read is exactly
+   *  the one that is downloaded. */
   const LOGO = {
     dataUrl:
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
@@ -566,9 +566,9 @@ describe("round-trip — con el membrete del cliente", () => {
   });
 
   /**
-   * El riesgo entero del membrete en una prueba: el libro se vuelve a leer con SheetJS, que ignora
-   * las imágenes flotantes, y la razón social se busca en la primera celda no vacía de la COLUMNA
-   * A. Si el logo desplazara una fila o aterrizara en esa columna, esto se cae.
+   * The letterhead's whole risk in one test: the workbook is re-read with SheetJS, which ignores
+   * floating images, and the razón social is looked for in the first non-empty cell of COLUMN A. If
+   * the logo shifted a row or landed in that column, this falls over.
    */
   it("un libro con logo vuelve a entrar EXACTAMENTE igual que uno sin logo", async () => {
     const sinLogo = buildMultiCenterWorkbook(workspace());
@@ -584,7 +584,7 @@ describe("round-trip — con el membrete del cliente", () => {
       { kind: "workspace" }
     >;
 
-    // Las mismas cuentas, los mismos valores, la misma cobertura y la misma razón social.
+    // The same accounts, the same values, the same coverage and the same razón social.
     expect(b.meta).toEqual(a.meta);
     expect(b.datasets.map((d) => ({ ...d, id: "", uploadedAt: 0 }))).toEqual(
       a.datasets.map((d) => ({ ...d, id: "", uploadedAt: 0 })),
@@ -593,8 +593,9 @@ describe("round-trip — con el membrete del cliente", () => {
   });
 
   it("las notas de celda sobreviven al desplazamiento de filas", async () => {
-    // `spliceRows` mueve filas ya escritas, y en ellas viajan los comentarios y el «Valor original»
-    // de cada ajuste. Si se perdieran, el libro descargado dejaría de explicar sus propias cifras.
+    // `spliceRows` moves rows that are already written, and the comments and each adjustment's «Valor
+    // original» travel in them. If they were lost, the downloaded workbook would stop explaining its
+    // own figures.
     const conNota = buildMultiCenterWorkbook({
       ...workspace(LOGO),
       centers: [
@@ -634,14 +635,14 @@ describe("round-trip — con el membrete del cliente", () => {
   it("embebe la imagen UNA vez y la ancla en cada hoja visible", async () => {
     const wb = buildMultiCenterWorkbook(workspace(LOGO));
 
-    // Un solo medio para las tres hojas visibles (Consolidado + dos centros).
+    // A single medium for the three visible sheets (Consolidado + two centers).
     expect(wb.model.media).toHaveLength(1);
     const visible = wb.worksheets.filter((ws) => ws.state !== "veryHidden");
     expect(visible.length).toBeGreaterThan(1);
     for (const ws of visible) {
       expect(ws.getImages()).toHaveLength(1);
     }
-    // La hoja de metadatos va oculta y no la lee nadie: no lleva membrete.
+    // The metadata sheet is hidden and nobody reads it: it carries no letterhead.
     for (const ws of wb.worksheets.filter((w) => w.state === "veryHidden")) {
       expect(ws.getImages()).toHaveLength(0);
     }

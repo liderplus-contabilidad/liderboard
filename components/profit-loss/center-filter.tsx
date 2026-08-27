@@ -97,9 +97,9 @@ export function CenterFilter({
                       className="h-2 w-2 shrink-0 rounded-[2px]"
                       style={{ backgroundColor: view.color ?? "var(--color-faintest)" }}
                     />
-                    {/* La miniatura solo aparece donde hay logo: reservarle hueco a todas las filas
-                        sangraría la lista entera por un espacio que casi nunca se llena, y lo que
-                        se lee en vertical aquí es el nombre. */}
+                    {/* The thumbnail appears only where there is a logo: reserving room for every row
+                        would indent the whole list for a space that almost never gets filled, and
+                        what is read vertically here is the name. */}
                     {view.logo && (
                       // oxlint-disable-next-line next/no-img-element
                       <img
@@ -110,7 +110,7 @@ export function CenterFilter({
                         className="size-4 shrink-0 rounded-[3px] object-contain"
                       />
                     )}
-                    {/* Bajo el encabezado de su cliente, repetirlo en cada fila sería ruido. */}
+                    {/* Under its client's heading, repeating it on every row would be noise. */}
                     {group.label === null ? view.name : (view.shortName ?? view.name)}
                   </span>
                 </DropdownOption>
