@@ -18,7 +18,7 @@ const VARIANTS: Record<BadgeVariant, string> = {
 
 interface BadgeProps {
   /** `mono` = source pill; `soft` = filled tag; `outline` = "Próximamente"-style; `warning`/
-   * `positive` = status pill (ámbar/verde). */
+   * `positive` = status pill (amber/green). */
   variant?: BadgeVariant;
   className?: string;
   children: ReactNode;

@@ -19,7 +19,7 @@ function form(overrides: Partial<EmployeeFormValues> = {}): EmployeeFormValues {
   };
 }
 
-/** Una ficha guardada, la de MORALES tal como el rol real de marzo 2026 la trae. */
+/** A stored record, MORALES' as the real March 2026 rol brings it. */
 function storedLine(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
   return {
     id: "e1",
@@ -99,8 +99,8 @@ describe("validateEmployeeForm · la ficha", () => {
     expect(validateEmployeeForm(form({ idCard: " 1002030405 " })).idCard).toBeUndefined();
   });
 
-  // Registrar dos veces a la misma persona duplica su sueldo en los totales del período sin que
-  // nada en pantalla lo delate: dos filas con nombres tecleados distinto se leen como dos personas.
+  // Registering the same person twice duplicates their salary in the período's totals with nothing on
+  // screen giving it away: two rows with names typed differently read as two people.
   it("rechaza una cédula que el período ya tiene, nombrando a quien la tiene", () => {
     const error = validateEmployeeForm(form({ idCard: "1002030405" }), {
       existing: [{ name: "MORALES MENA SILVIA JIMENA", idCard: "1002030405" }],
@@ -122,8 +122,9 @@ describe("validateEmployeeForm · el sueldo base", () => {
     expect(validateEmployeeForm(form({ baseSalary: null })).baseSalary).toBeTruthy();
   });
 
-  // Con sueldo base en cero todo el rol del empleado cae a cero —unificado, décimo tercero, aporte
-  // al IESS— y la fila queda en la nómina sumando nada. Es un error de captura, no un caso.
+  // With a base salary of zero the employee's whole rol falls to zero —unified, décimo tercero, IESS
+  // contribution— and the row is left in the nómina adding up nothing. It is a capture error, not a
+  // case.
   it("no admite cero ni negativos", () => {
     expect(validateEmployeeForm(form({ baseSalary: 0 })).baseSalary).toBeTruthy();
     expect(validateEmployeeForm(form({ baseSalary: -487.21 })).baseSalary).toBeTruthy();
@@ -170,7 +171,7 @@ describe("validateEmployeeForm · la fecha de ingreso", () => {
 });
 
 describe("validateEmployeeForm · varios errores a la vez", () => {
-  // La pantalla tiene que poder señalar CADA campo que falla, no rendirse en el primero.
+  // The screen has to be able to point at EVERY field that fails, not give up at the first.
   it("señala todos los campos que fallan", () => {
     const errors = validateEmployeeForm(form({ name: "", idCard: "abc", baseSalary: 0, days: 99 }));
     expect(Object.keys(errors).sort()).toEqual(["baseSalary", "days", "idCard", "name"]);
@@ -224,16 +225,16 @@ describe("toEmployeeLine", () => {
     });
   });
 
-  // Misma regla que `copyRoster`: sin captura, `capture` queda AUSENTE en vez de en ceros. Es lo
-  // que distingue «este mes no trae nada» de «este mes trae ceros», y lo que hace que un empleado
-  // recién dado de alta se lea igual que uno copiado del mes anterior.
+  // Same rule as `copyRoster`: with no capture, `capture` is left ABSENT instead of at zeros. It is
+  // what tells «this month brings nothing» from «this month brings zeros», and what makes a freshly
+  // added employee read the same as one copied from the previous month.
   it("no adjunta captura cuando nadie tocó la sección del mes", () => {
     expect(toEmployeeLine(form()).capture).toBeUndefined();
   });
 
-  // El alta ya NO tiene nada del mes que guardar: el importe aprobado se teclea en la pantalla del
-  // empleado, junto a las horas que recorta. Así que la captura queda ausente SIEMPRE, encienda lo
-  // que encienda el formulario.
+  // The creation form no longer has anything of the month to store: the approved amount is typed on
+  // the employee's screen, next to the hours it trims. So the capture is ALWAYS absent, whatever the
+  // form switches on.
   it("tampoco adjunta captura al encender una provisión: las provisiones son de la ficha", () => {
     const line = toEmployeeLine(form({ provisionsThirteenth: true, provisionsFourteenth: true }));
     expect(line.capture).toBeUndefined();
@@ -241,8 +242,8 @@ describe("toEmployeeLine", () => {
     expect(line.provisionsFourteenth).toBe(true);
   });
 
-  // Sin captura no hay `PAGADO`, y eso es lo que hace que un alta nazca «sin conciliar» en vez de
-  // cuadrada contra un cero que nadie transfirió.
+  // With no capture there is no `PAGADO`, and that is what makes a new employee born «unreconciled»
+  // instead of squared against a zero nobody transferred.
   it("no declara un PAGADO que nadie tecleó: el alta nace sin conciliar", () => {
     expect(toEmployeeLine(form()).capture).toBeUndefined();
   });
@@ -273,15 +274,15 @@ describe("employeeFormFrom · la ficha guardada, de vuelta al formulario", () =>
     });
   });
 
-  // El formulario habla en texto y la ficha en `null`: sembrar `null` pondría la palabra en el
-  // campo de fecha.
+  // The form speaks in text and the record in `null`: seeding `null` would put the word in the date
+  // field.
   it("una fecha de ingreso ausente se siembra vacía, no como `null`", () => {
     expect(employeeFormFrom(storedLine({ hireDate: null })).hireDate).toBe("");
   });
 
   it("siembra `days` y `baseSalary` aunque la edición no los pinte", () => {
-    // Es lo que permite UNA sola validación para los dos modos: sin ellos, editar señalaría dos
-    // campos obligatorios que el diálogo ni siquiera enseña.
+    // It is what allows ONE single validation for both modes: without them, editing would point at
+    // two required fields the dialog does not even show.
     const values = employeeFormFrom(storedLine({ days: 15, baseSalary: 600 }));
     expect(validateEmployeeForm(values)).toEqual({});
   });
@@ -318,10 +319,10 @@ describe("toEmployeePatch · lo que una edición escribe", () => {
   });
 
   /**
-   * La asimetría de `reserve-fund.ts` con un caso real: MORALES trae `(FR=N, AC FR=S)`, que se lee
-   * «sin derecho» y volvería como `(N, N)`. Guardar cualquier otro campo no puede corregir un
-   * archivo que nadie pidió corregir — las cifras no se moverían, pero el Excel descargado dejaría
-   * de coincidir con el que entró.
+   * `reserve-fund.ts`'s asymmetry with a real case: MORALES brings `(FR=N, AC FR=S)`, which reads as
+   * «not entitled» and would come back as `(N, N)`. Saving any other field cannot correct a file
+   * nobody asked to have corrected — the figures would not move, but the downloaded Excel would stop
+   * matching the one that came in.
    */
   it("NO reescribe las banderas del fondo de reserva si el modo no cambió", () => {
     const line = storedLine({ hasReserveFund: false, accumulatesReserveFund: true });
@@ -360,8 +361,8 @@ describe("validateEmployeeForm · la cédula al EDITAR", () => {
     expect(errors.idCard).toContain("VEGA GARCIA MARIANA DE JESUS");
   });
 
-  // Sin `selfId` —un ALTA— la comparación no puede saltarse ningún duplicado, ni siquiera cuando
-  // la nómina llega sin `id`, que es como la escriben varios llamadores.
+  // Without `selfId` —a CREATION— the comparison cannot skip any duplicate, not even when the nómina
+  // arrives with no `id`, which is how several callers write it.
   it("sin `selfId` sigue atrapando el duplicado aunque la nómina no traiga `id`", () => {
     const errors = validateEmployeeForm(form({ idCard: "1002030405" }), {
       existing: [{ name: "MORALES MENA SILVIA JIMENA", idCard: "1002030405" }],

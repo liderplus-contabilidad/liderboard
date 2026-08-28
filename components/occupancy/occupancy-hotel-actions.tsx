@@ -17,7 +17,7 @@ import { centerLogoOf } from "@/lib/logos";
 import { DEFAULT_CENTER_ID } from "@/lib/occupancy/types";
 import { useOccupancyData } from "./occupancy-data-provider";
 
-/** Las palabras de este módulo: el sujeto es el HOTEL, no el cliente. */
+/** This module's words: the subject is the HOTEL, not the client. */
 export const HOTEL_LABELS: EntityLabels = {
   subject: "hotel",
   plural: "hoteles",
@@ -26,7 +26,7 @@ export const HOTEL_LABELS: EntityLabels = {
   centerPlural: "sucursales",
 };
 
-/** Los años de un hotel en una frase: «2025» o «2024–2026». */
+/** A hotel's years in one phrase: «2025» or «2024–2026». */
 function yearSpan(years: readonly number[]): string | null {
   if (years.length === 0) {
     return null;
@@ -34,7 +34,7 @@ function yearSpan(years: readonly number[]): string | null {
   return years.length === 1 ? `${years[0]}` : `${years[0]}–${years[years.length - 1]}`;
 }
 
-/** «2 sucursales · 2025–2026» — lo que un hotel ES, en una línea. */
+/** «2 sucursales · 2025–2026» — what a hotel IS, in one line. */
 function describeHotel(hotel: HotelSummary): string | undefined {
   if (!hotel.identity) {
     return undefined;
@@ -48,8 +48,8 @@ function describeHotel(hotel: HotelSummary): string | undefined {
 }
 
 /**
- * El diálogo de nombre conectado al provider de Ocupaciones. Las reglas y el estado son de
- * `useEntityNaming`; lo único de aquí son las palabras, que hablan de hoteles y no de clientes.
+ * The name dialog wired to Ocupaciones' provider. The rules and the state belong to
+ * `useEntityNaming`; the only thing from here is the words, which speak of hotels and not clients.
  */
 function useHotelNaming() {
   const { hotels, createHotel, updateHotel } = useOccupancyData();
@@ -62,8 +62,8 @@ function useHotelNaming() {
 }
 
 /**
- * «Agregar hotel» fuera del selector — la única salida del vacío. Mismo diálogo, mismas reglas;
- * solo cambia el disparador.
+ * «Agregar hotel» outside the selector — the only exit from the empty state. Same dialog, same
+ * rules; only the trigger changes.
  */
 export function CreateHotelButton() {
   const { openCreate, dialog } = useHotelNaming();
@@ -78,10 +78,10 @@ export function CreateHotelButton() {
 }
 
 /**
- * El selector de hoteles de Ocupaciones: el `ActiveClient` prop-driven conectado al provider, más
- * los tres diálogos que crean, renombran y borran. Viven aquí y no en `ActiveClient` porque su copia
- * habla de Ocupaciones —«sucursales», «meses con datos»— y PyG, que comparte el bloque, no debe
- * heredar nada de eso.
+ * Ocupaciones' hotel selector: the prop-driven `ActiveClient` wired to the provider, plus the three
+ * dialogs that create, rename and delete. They live here and not in `ActiveClient` because their
+ * copy speaks of Ocupaciones —«sucursales», «meses con datos»— and PyG, which shares the block, must
+ * inherit none of that.
  */
 export function OccupancyHotelActions() {
   const {
@@ -136,7 +136,7 @@ export function OccupancyHotelActions() {
       : activeCenterName;
   const period = [activeYear, centerLabel].filter(Boolean).join(" · ") || undefined;
 
-  // El consolidado suma varias sucursales, así que ninguna es «la suya».
+  // The consolidado sums several sucursales, so none of them is «its own».
   const activeCenterLogo = isConsolidated
     ? undefined
     : centerLogoOf(activeHotel?.centerLogos, activeCenterId);
@@ -150,7 +150,7 @@ export function OccupancyHotelActions() {
                 name: activeHotel.name,
                 ...(period ? { period } : {}),
                 ...(activeHotel.logo ? { logo: activeHotel.logo } : {}),
-                // Solo con UNA sucursal abierta: el consolidado es un cálculo y no tiene logo.
+                // Only with ONE sucursal open: the consolidado is a computation and has no logo.
                 ...(activeCenterLogo ? { centerLogo: activeCenterLogo } : {}),
               },
             }
@@ -182,8 +182,8 @@ export function OccupancyHotelActions() {
 }
 
 /**
- * Borrar un hotel es irreversible, así que la confirmación CUENTA lo que descarta en vez de
- * nombrarlo en abstracto — «sus datos» es justo la frase que uno confirma sin leer.
+ * Deleting a hotel is irreversible, so the confirmation COUNTS what it discards instead of naming it
+ * in the abstract — «sus datos» is exactly the phrase one confirms without reading.
  */
 function DeleteHotelDialog({
   hotel,

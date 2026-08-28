@@ -50,9 +50,9 @@ describe("el catálogo cubre el libro entero", () => {
 
 describe("qué conceptos se ven", () => {
   it("sin nada capturado se ven los que SIEMPRE traen cifra y NADA más", () => {
-    // Es la pantalla de un empleado recién copiado: su sueldo, sus dos décimos, su fondo de
-    // reserva y su aporte al IESS. Listar los 26 conceptos con dieciocho rayas convertiría la
-    // tabla en un formulario en blanco.
+    // It is the screen of a freshly copied employee: their salary, their two décimos, their reserve
+    // fund and their IESS contribution. Listing the 26 concepts with eighteen dashes would turn the
+    // table into a blank form.
     expect(codes(visibleIncomeConcepts(emptyCapture(), new Set()))).toEqual([
       "I-01",
       "I-05",
@@ -62,9 +62,9 @@ describe("qué conceptos se ven", () => {
     expect(codes(visibleDeductionConcepts(emptyCapture(), new Set()))).toEqual(["E-01"]);
   });
 
-  // Las tres clases de hora extra son los únicos conceptos que derivan su VALOR y a la vez
-  // capturan su CANTIDAD. Se juzgan por las horas, que es lo que alguien teclea: sin horas, su
-  // valor es cero por construcción y la fila solo puede estar en raya.
+  // The three overtime classes are the only concepts that derive their VALUE and at the same time
+  // capture their QUANTITY. They are judged by the hours, which is what someone types: with no hours,
+  // their value is zero by construction and the row can only be a dash.
   it("una hora extra sin horas NO se ve, aunque su valor lo derive el motor", () => {
     const visible = codes(visibleIncomeConcepts(emptyCapture(), new Set()));
     expect(visible).not.toContain("I-02");
@@ -83,8 +83,8 @@ describe("qué conceptos se ven", () => {
     ]);
   });
 
-  // El recorte de Gerencia (`approvedOvertime: 0`, el `*0` del libro) deja el valor en cero pero
-  // las horas trabajadas siguen ahí, y el comprobante del contador SÍ las imprime (§10).
+  // Gerencia's trim (`approvedOvertime: 0`, the book's `*0`) leaves the value at zero but the hours
+  // worked are still there, and the accountant's payslip DOES print them (§10).
   it("unas horas recortadas a cero por Gerencia siguen viéndose", () => {
     const capture = { ...emptyCapture(), overtimeHours50: 5.5, approvedOvertime: 0 };
     expect(codes(visibleIncomeConcepts(capture, new Set()))).toContain("I-02");
@@ -95,8 +95,8 @@ describe("qué conceptos se ven", () => {
   });
 
   it("un capturado con valor aparece solo, sin que nadie lo añada", () => {
-    // Es lo que hace que un rol cargado desde Excel se vea completo: los conceptos que el
-    // archivo trae con importe se muestran porque lo traen.
+    // It is what makes a rol loaded from Excel look complete: the concepts the file brings with an
+    // amount are shown because they bring one.
     const capture = { ...emptyCapture(), allowances: 120 };
     expect(codes(visibleIncomeConcepts(capture, new Set()))).toContain("I-10");
   });
@@ -112,10 +112,10 @@ describe("qué conceptos se ven", () => {
     expect(codes(visible)).toContain("I-11");
   });
 
-  // Lo que se ve por su propia cifra guarda el orden del LIBRO —es lo que deja leer dos empleados
-  // del mismo mes en paralelo—; lo que alguien acaba de añadir va AL FINAL y en el orden en que lo
-  // añadió, que es donde está el botón que lo creó. Colarlo en su sitio del catálogo hace aparecer
-  // la fila nueva lejos de donde se pulsó, a veces fuera de la vista.
+  // What is visible by its own figure keeps the BOOK's order —it is what allows reading two employees
+  // of the same month in parallel—; what someone has just added goes AT THE END and in the order it
+  // was added, which is where the button that created it is. Slipping it into its catalogue place
+  // makes the new row appear far from where it was clicked, sometimes out of sight.
   it("lo que trae cifra va en orden del libro; lo añadido, al final y en orden de adición", () => {
     const visible = visibleIncomeConcepts(emptyCapture(), new Set(["I-13", "I-08", "I-02"]));
     expect(codes(visible)).toEqual(["I-01", "I-05", "I-06", "I-07", "I-13", "I-08", "I-02"]);
@@ -133,8 +133,8 @@ describe("qué conceptos se ven", () => {
     ]);
   });
 
-  // `added` solo vive mientras la pantalla está abierta, así que esto no reordena nada guardado:
-  // al recargar, una fila con cifra vuelve a su sitio del libro por sí sola.
+  // `added` only lives while the screen is open, so this reorders nothing that is stored: on reload, a
+  // row with a figure goes back to its place in the book on its own.
   it("una fila añadida Y con cifra se queda donde se añadió mientras dure la sesión", () => {
     const capture = { ...emptyCapture(), bonus: 50 };
     expect(codes(visibleIncomeConcepts(capture, new Set(["I-13"])))).toEqual([
@@ -159,8 +159,8 @@ describe("qué conceptos se ven", () => {
   });
 
   it("un importe negativo también cuenta como valor", () => {
-    // Un descuento mal tecleado en negativo tiene que VERSE para poder corregirse; esconderlo
-    // dejaría una cifra moviendo el líquido sin fila que la explique.
+    // A deduction mistyped as a negative has to be VISIBLE so it can be corrected; hiding it would
+    // leave a figure moving the net pay with no row to explain it.
     const capture = { ...emptyCapture(), deductions: { ...emptyCapture().deductions, fines: -10 } };
     expect(codes(visibleDeductionConcepts(capture, new Set()))).toContain("E-08");
   });
@@ -168,8 +168,9 @@ describe("qué conceptos se ven", () => {
 
 describe("qué conceptos se pueden añadir", () => {
   it("todo lo que se teclea y todavía no se ve, en el orden del libro", () => {
-    // Las horas extras encabezan la lista porque son las primeras del catálogo — y de paso son lo
-    // que más se añade, que es lo que hace útil que «Agregar ingreso» empiece por ellas.
+    // The overtime rows head the list because they are the first of the catalogue — and they also
+    // happen to be what gets added most, which is what makes it useful for «Agregar ingreso» to start
+    // with them.
     expect(codes(addableIncomeConcepts(emptyCapture(), new Set()))).toEqual([
       "I-02",
       "I-03",
@@ -195,8 +196,8 @@ describe("qué conceptos se pueden añadir", () => {
     expect(codes(addableIncomeConcepts(capture, new Set()))).not.toContain("I-03");
   });
 
-  // Ocultarlas sin poder traerlas de vuelta dejaría las horas extras inalcanzables: sin fila no
-  // hay dónde teclear las horas, y sin horas la fila no aparece.
+  // Hiding them without being able to bring them back would leave the overtime unreachable: with no
+  // row there is nowhere to type the hours, and with no hours the row does not appear.
   it("las horas extras SÍ se ofrecen, aunque su valor lo derive el motor", () => {
     expect(codes(addableIncomeConcepts(emptyCapture(), new Set()))).toContain("I-02");
   });
@@ -217,8 +218,8 @@ describe("qué conceptos se pueden añadir", () => {
 
 describe("opciones del desplegable de una fila capturada", () => {
   it("se ofrece a sí mismo primero y luego los libres", () => {
-    // El propio concepto encabeza la lista porque es el valor seleccionado: sin él, el
-    // desplegable arrancaría mostrando otro y parecería que la fila ya cambió.
+    // The concept itself heads the list because it is the selected value: without it, the dropdown
+    // would start showing another one and it would look as though the row had already changed.
     const capture = { ...emptyCapture(), allowances: 120 };
     const options = swapOptionsFor("I-10", INCOME_CONCEPTS, capture, new Set());
     expect(options[0].code).toBe("I-10");
@@ -235,7 +236,7 @@ describe("opciones del desplegable de una fila capturada", () => {
     ]);
   });
 
-  // Es lo que hace alcanzables las horas extras: se añade una fila y se elige ahí qué es.
+  // It is what makes the overtime reachable: a row is added and what it is gets picked there.
   it("una fila puede cambiarse a una hora extra", () => {
     const options = swapOptionsFor("I-08", INCOME_CONCEPTS, emptyCapture(), new Set(["I-08"]));
     expect(codes(options)).toContain("I-02");
@@ -282,8 +283,8 @@ describe("qué escribe un cambio de concepto", () => {
   const concept = (code: string) => INCOME_CONCEPTS.find((c) => c.code === code)!;
 
   it("entre dos filas capturadas se lleva el importe y vacía el origen", () => {
-    // Quien teclea 120 y luego se da cuenta de que era «Comisión fija» y no «Viáticos» espera
-    // corregir la fila, no perder lo escrito. Y el origen vuelve a cero, o contaría dos veces.
+    // Whoever types 120 and then realises it was «Comisión fija» and not «Viáticos» expects to correct
+    // the row, not to lose what they wrote. And the source goes back to zero, or it would count twice.
     const capture = { ...emptyCapture(), allowances: 120 };
     expect(incomeSwapPatch(concept("I-10"), concept("I-11"), capture)).toEqual({
       allowances: 0,
@@ -292,8 +293,8 @@ describe("qué escribe un cambio de concepto", () => {
   });
 
   it("entre dos filas de horas extras se lleva las HORAS, no el importe", () => {
-    // Es lo que hace honesto el cambio en esta familia: 5,5 horas mal clasificadas al 50 % son
-    // 5,5 horas al 100 %, no 5,5 dólares.
+    // It is what makes the change honest within this family: 5.5 hours misclassified at 50 % are 5.5
+    // hours at 100 %, not 5.5 dollars.
     const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
     expect(incomeSwapPatch(concept("I-02"), concept("I-03"), capture)).toEqual({
       overtimeHours50: 0,
@@ -301,9 +302,9 @@ describe("qué escribe un cambio de concepto", () => {
     });
   });
 
-  // Un importe y unas horas no son la misma unidad, así que cruzar de familia NO puede arrastrar
-  // la cifra: 200 dólares de anticipo no son 200 horas. En la práctica no se pierde nada, porque
-  // el desplegable solo ofrece conceptos LIBRES y una fila con cifra ya está puesta.
+  // An amount and a number of hours are not the same unit, so crossing families CANNOT drag the
+  // figure along: 200 dollars of an advance are not 200 hours. In practice nothing is lost, because
+  // the dropdown only offers FREE concepts and a row with a figure is already taken.
   it("cruzando de familia solo vacía el origen, sin inventar una conversión", () => {
     const capture = { ...emptyCapture(), overtimeHours50: 5.5 };
     expect(incomeSwapPatch(concept("I-02"), concept("I-10"), capture)).toEqual({
@@ -343,8 +344,8 @@ describe("los rótulos del comprobante", () => {
   it("los 26 conceptos declaran uno, y ninguno lleva salto de línea", () => {
     for (const concept of [...INCOME_CONCEPTS, ...DEDUCTION_CONCEPTS]) {
       expect(concept.payslipLabel.trim(), concept.code).not.toBe("");
-      // Una fila de dos líneas rompería el paso fijo de las otras veinticinco; `AG2` trae el
-      // salto dentro de la celda y aquí se normaliza.
+      // A two-line row would break the fixed rhythm of the other twenty-five; `AG2` brings the line
+      // break inside the cell and it is normalized here.
       expect(concept.payslipLabel, concept.code).not.toContain("\n");
     }
   });
@@ -361,24 +362,26 @@ describe("los rótulos del comprobante", () => {
   });
 
   it("la columna Q se imprime SEGURO PRIVADO, no GERENCIA DE TURNO", () => {
-    // El libro se contradice: su copia izquierda lee la cabecera de `Q` y la derecha lleva
-    // `GERENCIA DE TURNO` escrito a mano. Manda la cabecera, que es de donde sale el dato.
+    // The book contradicts itself: its left-hand copy reads `Q`'s header and the right-hand one
+    // carries `GERENCIA DE TURNO` written by hand. The header wins, which is where the datum comes
+    // from.
     const concept = INCOME_CONCEPTS.find((c) => c.column === "Q");
     expect(concept?.payslipLabel).toBe("SEGURO PRIVADO");
   });
 });
 
 /**
- * EL `(*)` DEL COMPROBANTE, ATADO AL MOTOR.
+ * THE PAYSLIP'S `(*)`, TIED TO THE ENGINE.
  *
- * La nota al pie dice «No aporta IESS ni es Ingreso Gravado», y `bases.ts` lo dice en código: el
- * fondo de reserva pagado y el bono «no son base de nada, solo llegan al total». Esta afirmación
- * lo vuelve ejecutable — sumar 1 al componente de un concepto marcado no puede mover NINGUNA de
- * las cinco bases parciales, y uno sin marcar tiene que mover al menos una.
+ * The footnote says «No aporta IESS ni es Ingreso Gravado», and `bases.ts` says it in code: the paid
+ * reserve fund and the bonus «are the base of nothing, they only reach the total». This assertion
+ * makes that executable — adding 1 to the component of a marked concept cannot move ANY of the five
+ * partial bases, and an unmarked one has to move at least one.
  *
- * Se prueban las cinco y no solo la aportable, que sería lo intuitivo: los dos décimos tampoco
- * mueven la aportable (`F+M+P+Q+R+S+T` no los incluye) y sin embargo NO llevan asterisco, porque
- * sí entran en la provisión. Con una sola base el test pasaría marcándolos por error.
+ * All five are tested and not only the contributory one, which would be the intuitive choice: the two
+ * décimos do not move the contributory one either (`F+M+P+Q+R+S+T` does not include them) and yet
+ * they carry NO asterisk, because they do enter the provision. With a single base the test would pass
+ * while marking them by mistake.
  */
 describe("el asterisco del comprobante", () => {
   const ZERO: IncomeComponents = {
@@ -405,7 +408,7 @@ describe("el asterisco del comprobante", () => {
     thirteenthProvisionBase,
   ];
 
-  /** Las tres clases de hora extra llegan a las bases por `M`, nunca por `J`/`K`/`L`. */
+  /** The three overtime classes reach the bases through `M`, never through `J`/`K`/`L`. */
   const componentOf = (concept: IncomeConcept): keyof IncomeComponents =>
     concept.kind === "calculado" && concept.hoursField
       ? "overtimeTotal"

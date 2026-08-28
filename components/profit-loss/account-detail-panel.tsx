@@ -49,10 +49,10 @@ export function AccountDetailPanel({ code, onClose }: { code: string; onClose: (
 
   const source = sources.find((candidate) => candidate.centerId === context.activeCenterId);
 
-  // Los dos totales del estado sobre el MISMO tramo que la serie de arriba, para el peso de la
-  // cuenta sobre el gasto y sobre el ingreso. Van en su propia consulta porque son raíces y no la
-  // cuenta abierta, y por el mismo camino que todo lo demás — el rollup del motor y nunca la suma
-  // de lo que haya en pantalla, que es la regla que ya sigue el peso sobre el padre.
+  // The statement's two totals over the SAME span as the series above, for the account's weight over
+  // expenses and over revenue. They travel in their own query because they are roots and not the open
+  // account, and by the same path as everything else — the engine's rollup and never the sum of
+  // what happens to be on screen, which is the rule the weight over the parent already follows.
   const totals = useMemo(() => {
     if (!source) {
       return undefined;
@@ -62,8 +62,8 @@ export function AccountDetailPanel({ code, onClose }: { code: string; onClose: (
     const parts = roots.map((root) => sumOver(bundle, root));
     return {
       revenue: sumOver(bundle, REVENUE_ROOT),
-      // Un estado segmentado tiene DOS raíces de gasto; sin cobertura en ninguna sigue siendo
-      // `null`, que es distinto de un gasto de cero.
+      // A segmented statement has TWO expense roots; with no coverage in either it is still `null`,
+      // which is different from an expense of zero.
       expenses: parts.every((value) => value === null)
         ? null
         : parts.reduce((sum: number, value) => sum + (value ?? 0), 0),
@@ -157,10 +157,10 @@ export function AccountDetailPanel({ code, onClose }: { code: string; onClose: (
               </Metric>
             )}
 
-            {/* Los dos pesos sobre el ESTADO, no sobre el padre. Van después del peso en el padre
-                porque se leen en ese orden —dentro de su rama, luego dentro del negocio— y solo
-                aparecen cuando su denominador da base: un `–` aquí no distinguiría «no pesa» de
-                «no hay contra qué medirlo». */}
+            {/* The two weights over the STATEMENT, not over the parent. They come after the weight in
+                the parent because they read in that order —within its branch, then within the
+                business— and they only appear when their denominator gives a base: a `–` here would
+                not tell «it does not weigh» from «there is nothing to measure it against». */}
             {detail.shareOfExpenses !== null && (
               <Metric label="% del total de costos y gastos">
                 {formatPercent(detail.shareOfExpenses)}

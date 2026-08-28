@@ -65,10 +65,10 @@ export function PygExcelActions() {
   const canWriteRawMonth = Boolean(sourceSystemId && writableSystems?.includes(sourceSystemId));
 
   /**
-   * Los logos que encabezan cada hoja del consolidado: el del CLIENTE a la izquierda y el de su
-   * CENTRO a la derecha. Los centros se indexan por el id COMPUESTO `<clientId>::<centerId>`, que
-   * es el que llevan las piezas — el mismo centro existe en varias empresas, así que el suelto
-   * emparejaría con la primera que lo declarara.
+   * The logos that head each sheet of the consolidado: the CLIENT's on the left and its CENTER's on
+   * the right. The centers are indexed by the COMPOSED id `<clientId>::<centerId>`, which is the one
+   * the pieces carry — the same center exists in several companies, so the plain one would pair with
+   * the first company that declared it.
    */
   const consolidatedLogos = useMemo(() => {
     const clientLogos: Record<string, EntityLogo> = {};
@@ -119,8 +119,8 @@ export function PygExcelActions() {
             ]);
             const workbook = exportMod.buildConsolidatedWorkbook({
               datasets,
-              // Las piezas que la suma tomó, tal como las devolvió `consolidate.ts`: así el archivo
-              // no puede traer hojas que no cuadren con su propio total.
+              // The pieces the sum took, exactly as `consolidate.ts` returned them: that way the file
+              // cannot carry sheets that do not square with its own total.
               details: consolidatedDetails,
               loadedMonthsByYear,
               hideEmpty: hideZeroRows,
@@ -169,7 +169,8 @@ export function PygExcelActions() {
               hideEmpty: hideZeroRows,
               centers: withEdits,
               ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
-              // Cada hoja de centro se lleva el suyo; la del Consolidado no, porque no es un centro.
+              // Each center sheet takes its own; the Consolidado's does not, because it is not a
+              // center.
               ...(activeClient?.centerLogos ? { centerLogos: activeClient.centerLogos } : {}),
             });
             const blob = await exportMod.workbookToBlob(workbook);

@@ -36,8 +36,8 @@ describe("el catálogo de columnas", () => {
   });
 
   it("no reproduce el bloque de trabajo del contador, que repite PAGADO tras CA", () => {
-    // Si volviera, `findLabel` seguiría quedándose con el primero — pero el archivo diría dos veces
-    // la misma cifra y la segunda no significaría nada.
+    // If it came back, `findLabel` would still keep the first one — but the file would say the same
+    // figure twice and the second would mean nothing.
     expect(ROL_EXPORT_COLUMNS.some((column) => column.letter === "CC")).toBe(false);
   });
 
@@ -68,9 +68,9 @@ describe("el catálogo de columnas", () => {
 });
 
 describe("el cruce con el catálogo de conceptos", () => {
-  // Un concepto declara de qué columna del libro sale; si esa letra no existe aquí, el importe se
-  // escribiría en otra columna —o en ninguna— y ninguna suma lo delataría, porque el total sigue
-  // cuadrando sin él.
+  // A concept declares which column of the book it comes from; if that letter does not exist here,
+  // the amount would be written in another column —or in none— and no sum would give it away,
+  // because the total keeps squaring without it.
   const letters = new Set(ROL_EXPORT_COLUMNS.map((column) => column.letter));
 
   it("toda columna de un ingreso existe en la hoja", () => {

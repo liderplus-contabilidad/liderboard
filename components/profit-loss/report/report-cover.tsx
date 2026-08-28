@@ -10,9 +10,9 @@ import type { ReportCover as ReportCoverSpec, ReportField } from "@/lib/profit-l
 export function ReportCover({ cover }: { cover: ReportCoverSpec }) {
   return (
     <section className="print-section flex flex-col gap-7">
-      {/* El membrete, con el logo a la izquierda y el título centrado — el mismo reparto que
-          encabeza los Excel de este cliente, para que el papel y el archivo se reconozcan. Sin
-          logo del centro: la portada cubre TODOS los centros del informe, no uno. */}
+      {/* The letterhead, with the logo on the left and the title centred — the same layout that heads
+          this client's Excel files, so the paper and the file recognise each other. No center logo:
+          the cover covers ALL the report's centers, not one. */}
       <ReportBand
         {...(cover.logo ? { leftLogo: cover.logo } : {})}
         logoHeight={64}
@@ -29,8 +29,8 @@ export function ReportCover({ cover }: { cover: ReportCoverSpec }) {
         </p>
       </ReportBand>
 
-      {/* Apilados y no en dos columnas: en A4 vertical, una frase como «Ninguna marcada — el
-          árbol completo» a media página se parte en tres líneas y deja de leerse como frase. */}
+      {/* Stacked and not in two columns: on A4 portrait, a sentence like «Ninguna marcada — el árbol
+          completo» at half a page breaks onto three lines and stops reading as a sentence. */}
       <div className="flex flex-col gap-7">
         <FieldBlock title="Qué está mirando" fields={cover.scope} />
         <FieldBlock title="Filtros aplicados" fields={cover.filters} />

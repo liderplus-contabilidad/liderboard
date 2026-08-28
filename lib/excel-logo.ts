@@ -1,114 +1,113 @@
 /**
- * EL MEMBRETE DE UN LIBRO — una banda del ANCHO DE LA TABLA al principio de cada hoja: el logo del
- * cliente pegado al borde izquierdo, el bloque de título CENTRADO sobre las columnas, y el logo del
- * centro pegado al borde derecho.
+ * A WORKBOOK'S LETTERHEAD — a band the WIDTH OF THE TABLE at the start of each sheet: the client's
+ * logo stuck to the left edge, the title block CENTRED over the columns, and the center's logo stuck
+ * to the right edge.
  *
- * **Quién ocupa cada lado lo decide el llamador, no este archivo.** Los tres módulos reparten
- * igual —el del workspace abre por la izquierda, el del centro de esa hoja cierra por la derecha—,
- * pero de dónde sale cada uno no: en PyG y en Ocupaciones el centro es una fila que sale de los
- * datos, y en Rol de Pagos lo declara el cliente (`letterheadLogos`, en `lib/cost-center.ts`). Los
- * parámetros se llaman por su SITIO porque es lo único que este archivo sabe de ellos.
+ * **Who occupies each side is decided by the caller, not by this file.** The three modules lay it out
+ * alike —the workspace's opens on the left, that sheet's center closes on the right—, but where each
+ * one comes from is not: in PyG and in Ocupaciones the center is a row that comes out of the data,
+ * and in Rol de Pagos the client declares it (`letterheadLogos`, in `lib/cost-center.ts`). The
+ * parameters are named by their PLACE because that is the only thing this file knows about them.
  *
- * Vive aparte y no dentro de cada `export.ts` porque los tres módulos que descargan Excel quieren
- * exactamente lo mismo, y dos versiones de «dónde va el membrete» acabarían poniéndolo en sitios
- * distintos.
+ * It lives apart and not inside each `export.ts` because the three modules that download Excel want
+ * exactly the same thing, and two versions of «where the letterhead goes» would end up putting it in
+ * different places.
  *
- * **El hueco se reserva ESCRIBIENDO, no desplazando.** Se intentó estampar el logo sobre el libro
- * ya terminado, abriendo sitio con `spliceRows`; se descartó porque exceljs pierde las NOTAS de
- * celda al mover filas (medido: `spliceRows` e `insertRows` las borran las dos), y en esas notas
- * viajan los comentarios del contador y el «Valor original» de cada ajuste — o sea, justo lo que
- * hace que el libro descargado explique sus propias cifras. Por eso `writeLetterhead` se llama al
- * principio de cada hoja, cuando todavía está vacía y no hay ninguna nota que perder.
+ * **The gap is reserved by WRITING, not by shifting.** Stamping the logo onto the finished workbook,
+ * making room with `spliceRows`, was tried; it was dropped because exceljs loses cell NOTES when
+ * moving rows (measured: `spliceRows` and `insertRows` both erase them), and those notes carry the
+ * accountant's comments and each adjustment's «Valor original» — that is, exactly what makes the
+ * downloaded workbook explain its own figures. That is why `writeLetterhead` is called at the start
+ * of each sheet, while it is still empty and there is no note to lose.
  *
- * **La banda llega hasta el final de la TABLA.** Acabó antes en el bloque de rótulos —el código y
- * el nombre de la cuenta—, y era defendible: así el logo derecho se veía sin desplazarse. Pero un
- * membrete es la cabeza de la tabla, y uno que para a 390 px no se lee como su esquina sino como
- * algo flotando entre las cifras. El precio está aceptado y es real: en Ocupaciones (unas 35
- * columnas de días) y en Rol de Pagos (ochenta) tanto el logo derecho como el centro del título
- * caen fuera de la primera pantalla y hay que desplazarse hasta ellos. En PyG con trece meses la
- * banda mide ~1.640 px, que sí entra en un monitor normal. Y como sale de los ANCHOS REALES de las
- * columnas, cambiar el ancho de una mueve el membrete con ella.
+ * **The band reaches the end of the TABLE.** It used to end at the label block —the account's code
+ * and name—, and that was defensible: the right-hand logo could be seen without scrolling. But a
+ * letterhead is the head of the table, and one that stops at 390 px does not read as its corner but
+ * as something floating among the figures. The price is accepted and is real: in Ocupaciones (some 35
+ * day columns) and in Rol de Pagos (eighty) both the right-hand logo and the centre of the title fall
+ * outside the first screenful and have to be scrolled to. In PyG with thirteen months the band
+ * measures ~1,640 px, which does fit on a normal monitor. And since it comes from the columns' REAL
+ * widths, changing one column's width moves the letterhead with it.
  *
- * **El bloque de título se combina desde la columna del PROPIO MÓDULO, no siempre desde la A**, y
- * eso es lo único que sostiene el viaje de vuelta: el valor de una celda combinada vive en su
- * esquina superior izquierda, y cada lector busca el suyo en una columna concreta —`findCompany`
- * lee la B en Rol de Pagos, `readNames` y `readCompanyName` leen la A—. Combinando desde la columna
- * que ese lector ya mira, los tres archivos re-entran sin tocar ni un parser.
+ * **The title block is merged from the module's OWN column, not always from A**, and that is the only
+ * thing that holds up the round trip: a merged cell's value lives in its top-left corner, and each
+ * reader looks for its own in a particular column —`findCompany` reads B in Rol de Pagos, `readNames`
+ * and `readCompanyName` read A—. Merging from the column that reader already looks at, the three
+ * files come back in without touching a single parser.
  *
- * **Desplazar el preámbulo es seguro, y no por casualidad.** Ningún lector de esta app lo busca en
- * una fila fija: `findFirstDataRow` localiza la primera fila con código de cuenta, `findHeaderRow`
- * retrocede desde ella, `readNames` cuenta líneas no vacías y `findCompany`/`findPeriod` localizan
- * lo suyo por su forma. Unas filas de membrete delante no cambian ninguna de esas respuestas. La
- * imagen tampoco estorba: el libro se relee con SheetJS, que ignora las imágenes flotantes.
+ * **Shifting the preamble is safe, and not by accident.** No reader in this app looks for it on a
+ * fixed row: `findFirstDataRow` locates the first row with an account code, `findHeaderRow` walks
+ * back from it, `readNames` counts non-empty lines and `findCompany`/`findPeriod` locate their own by
+ * shape. A few letterhead rows in front change none of those answers. The image does not get in the
+ * way either: the workbook is re-read with SheetJS, which ignores floating images.
  */
 import type ExcelJS from "exceljs";
 import { fitLogoBox, logoBase64, logoExtension, type EntityLogo } from "@/lib/logos";
 
 /**
- * El hueco de CADA logo, en píxeles. Ancho generoso —cubre la columna del código y la del nombre,
- * que juntas pasan de 300 px— y alto de unas tres filas: lo que un membrete pide sin empujar el
- * estado de resultados fuera de la primera pantalla.
+ * EACH logo's gap, in pixels. A generous width —it covers the code column and the name column, which
+ * together run past 300 px— and a height of some three rows: what a letterhead asks for without
+ * pushing the estado de resultados off the first screenful.
  */
 const LOGO_SLOT = { width: 240, height: 56 };
 
-/** Aire mínimo entre los dos logos cuando la tabla es más estrecha que ellos dos. */
+/** Minimum breathing room between the two logos when the table is narrower than both of them. */
 const LOGO_GAP = 16;
 
-/** Alto por defecto de una fila de Excel, en píxeles. Es lo que convierte el alto del logo en filas. */
+/** Default height of an Excel row, in pixels. It is what turns the logo's height into rows. */
 const ROW_HEIGHT = 20;
 
 /**
- * El ancho de una columna que nadie declaró, en CARACTERES. Son los 64 px de una columna recién
- * creada, que es lo que mide una hoja en blanco de Excel.
+ * The width of a column nobody declared, in CHARACTERS. It is the 64 px of a freshly created column,
+ * which is what a blank Excel sheet measures.
  */
 const DEFAULT_COLUMN_WIDTH = 8.43;
 
-/** El relleno de la banda y la raya que la cierra — los grises con los que las tres descargas ya
- *  pintan sus cabeceras, para que el membrete no estrene un dialecto propio. */
+/** The band's fill and the rule that closes it — the greys the three downloads already paint their
+ *  headers with, so the letterhead does not introduce a dialect of its own. */
 const BAND_FILL = "FFF1F5F9";
 const BAND_RULE = "FF94A3B8";
 
 /**
- * Un ancho de columna en píxeles. Una hoja mide en caracteres de su fuente por defecto, y la
- * conversión de Excel es 7 px por carácter más 5 de relleno.
+ * A column width in pixels. A sheet measures in characters of its default font, and Excel's
+ * conversion is 7 px per character plus 5 of padding.
  */
 export function columnWidthPx(width: number | undefined): number {
   return Math.round((width ?? DEFAULT_COLUMN_WIDTH) * 7) + 5;
 }
 
 /**
- * Tope de columnas que se recorren buscando un desplazamiento. `XFD` es la última de Excel, pero
- * mucho antes de eso un ancla se ha vuelto absurda: esto solo está para que un `px` disparatado no
- * gire para siempre.
+ * Cap on the columns walked while looking for an offset. `XFD` is Excel's last one, but long before
+ * that an anchor has become absurd: this is only here so an outlandish `px` does not loop forever.
  */
 const MAX_ANCHOR_COLUMN = 256;
 
-/** EMU por píxel — la unidad en la que el formato xlsx guarda el desplazamiento de una imagen. */
+/** EMU per pixel — the unit in which the xlsx format stores an image's offset. */
 const EMU_PER_PIXEL = 9525;
 
 /**
- * El ancla de una imagen: la columna ENTERA y cuántos EMU dentro de ella empieza.
+ * An image's anchor: the WHOLE column and how many EMU into it it starts.
  *
- * **No se usa la forma fraccionaria de exceljs (`col: 3.5`) a propósito, y no es preferencia.** Su
- * `Anchor` convierte esa fracción con `ancho_en_caracteres × 10000` EMU por columna, cuando un
- * carácter mide unos 66.700 EMU: toda fracción sale encogida más de seis veces, así que un logo
- * pedido al 80% de una columna ancha se dibuja al 13% de ella. Se vio en el archivo — el logo del
- * centro aparecía nada más empezar la columna del nombre en vez de al final. `nativeCol` +
- * `nativeColOff` es la representación del propio formato y exceljs la escribe tal cual.
+ * **exceljs' fractional form (`col: 3.5`) is deliberately not used, and it is not a preference.** Its
+ * `Anchor` converts that fraction with `width_in_characters × 10000` EMU per column, when a character
+ * measures some 66,700 EMU: every fraction comes out shrunk more than sixfold, so a logo asked for at
+ * 80% of a wide column is drawn at 13% of it. It was seen in the file — the center's logo appeared
+ * right at the start of the name column instead of at its end. `nativeCol` + `nativeColOff` is the
+ * format's own representation and exceljs writes it as it is.
  */
 export interface ColumnAnchor {
   nativeCol: number;
-  /** Desplazamiento dentro de esa columna, en EMU. */
+  /** Offset within that column, in EMU. */
   nativeColOff: number;
 }
 
 /**
- * Dónde cae un desplazamiento en píxeles, en el vocabulario del formato. `widths` son los anchos
- * declarados, en el orden de la hoja; las columnas que no llegan a la lista valen lo que vale una
- * columna en blanco, que es exactamente lo que pasa en la hoja de verdad.
+ * Where an offset in pixels falls, in the format's vocabulary. `widths` are the declared widths, in
+ * sheet order; the columns that do not reach the list are worth what a blank column is worth, which
+ * is exactly what happens in the real sheet.
  *
- * Es puro y por eso se puede probar: es la única aritmética de este archivo que puede estar mal, y
- * un logo mal anclado se descubre abriendo el .xlsx, no leyendo el código.
+ * It is pure and that is why it can be tested: it is the only arithmetic in this file that can be
+ * wrong, and a badly anchored logo is discovered by opening the .xlsx, not by reading the code.
  */
 export function columnAnchorAt(widths: readonly (number | undefined)[], px: number): ColumnAnchor {
   let remaining = Math.max(0, px);
@@ -123,19 +122,19 @@ export function columnAnchorAt(widths: readonly (number | undefined)[], px: numb
 }
 
 /**
- * Dónde acaba la banda del membrete, en píxeles: el borde derecho de la TABLA, salvo que los dos
- * logos no quepan en ella, en cuyo caso la banda se ensancha lo justo para que no se pisen.
+ * Where the letterhead's band ends, in pixels: the TABLE's right edge, unless the two logos do not
+ * fit in it, in which case the band widens just enough for them not to overlap.
  *
- * Esa segunda mitad no es defensiva de más: un estado de modo único son tres columnas y un logo
- * apaisado puede pedir 240, así que sin ella dos logos anchos se solaparían — y un logo encima de
- * otro no es un membrete, es un borrón.
+ * That second half is not over-defensive: a single-mode statement is three columns and a landscape
+ * logo can ask for 240, so without it two wide logos would overlap — and a logo on top of another is
+ * not a letterhead, it is a smudge.
  *
- * Puro, porque es la aritmética que decide dónde acaba el logo y esa es exactamente la que no se
- * puede comprobar leyendo el código: se comprueba abriendo el .xlsx.
+ * Pure, because it is the arithmetic that decides where the logo ends and that is exactly what cannot
+ * be checked by reading the code: it is checked by opening the .xlsx.
  */
 export function bandWidthFor(
   widths: readonly (number | undefined)[],
-  /** Cuántas columnas mide la TABLA que se encabeza. */
+  /** How many columns the TABLE being headed measures. */
   tableColumns: number,
   leftWidth: number,
   rightWidth: number,
@@ -148,10 +147,10 @@ export function bandWidthFor(
 }
 
 /**
- * Los ids de imagen que ya tiene cada libro, por data URL. `wb.addImage` no deduplica, así que sin
- * esto un «Excel completo» de doce centros embebería doce copias del mismo PNG del cliente. La clave
- * es el data URL y no el objeto, porque el mismo logo puede llegar en dos objetos distintos —uno del
- * cliente y otro leído de su registro de centros— y seguir siendo un solo PNG.
+ * The image ids each workbook already has, by data URL. `wb.addImage` does not deduplicate, so
+ * without this a twelve-center «Excel completo» would embed twelve copies of the same client PNG. The
+ * key is the data URL and not the object, because the same logo can arrive in two different objects
+ * —one from the client and one read from its center registry— and still be one single PNG.
  */
 const imageIds = new WeakMap<ExcelJS.Workbook, Map<string, number>>();
 
@@ -170,37 +169,36 @@ function imageIdFor(wb: ExcelJS.Workbook, logo: EntityLogo): number {
   return id;
 }
 
-/** Una línea del bloque de título, con la tinta que le toque. */
+/** One line of the title block, in whatever ink it takes. */
 export interface LetterheadLine {
   text: string;
   font?: Partial<ExcelJS.Font>;
 }
 
 export interface Letterhead {
-  /** El que encabeza a la izquierda, pegado al borde. */
+  /** The one that heads on the left, stuck to the edge. */
   leftLogo?: EntityLogo | null;
-  /** El de la derecha. El Consolidado, el mes en crudo y un cliente sin centro no tienen. */
+  /** The right-hand one. The Consolidado, the raw month and a client with no center have none. */
   rightLogo?: EntityLogo | null;
-  /** Cuántas columnas mide la TABLA. Es lo que fija el borde derecho de la banda. */
+  /** How many columns the TABLE measures. It is what fixes the band's right edge. */
   columns: number;
   /**
-   * Desde qué columna (1-based) se combina el bloque de título. La A salvo en Rol de Pagos, cuyo
-   * lector busca la empresa en la B — ver la cabecera del archivo.
+   * From which column (1-based) the title block is merged. Column A except in Rol de Pagos, whose
+   * reader looks for the company in B — see this file's header.
    */
   firstColumn?: number;
-  /** Las líneas del título, ya compuestas por el módulo. */
+  /** The title's lines, already composed by the module. */
   lines?: readonly LetterheadLine[];
 }
 
 /**
- * Escribe la banda del membrete al principio de una hoja RECIÉN CREADA: las filas del bloque de
- * título centradas sobre la tabla, el relleno que las hace parecer una cabecera y no texto suelto
- * en A1, la raya que las separa de lo que viene debajo, y los dos logos anclados a los bordes.
- * Sin logos y sin líneas no hace nada, que es lo que permite llamarla incondicionalmente.
+ * Writes the letterhead's band at the start of a FRESHLY CREATED sheet: the title block's rows centred
+ * over the table, the fill that makes them look like a header and not loose text in A1, the rule that
+ * separates them from what comes below, and the two logos anchored to the edges. With no logos and no
+ * lines it does nothing, which is what allows calling it unconditionally.
  *
- * Los ANCHOS DE COLUMNA de la hoja tienen que estar ya puestos cuando se llama, porque de ellos
- * sale el ancla del logo derecho. Ponerlos no escribe ninguna fila, así que adelantarlos no cambia
- * nada más.
+ * The sheet's COLUMN WIDTHS have to be set already when it is called, because the right-hand logo's
+ * anchor comes from them. Setting them writes no row, so bringing them forward changes nothing else.
  */
 export function writeLetterhead(
   wb: ExcelJS.Workbook,
@@ -214,15 +212,15 @@ export function writeLetterhead(
     return;
   }
 
-  // El alto lo pide el más alto de los dos lados: el bloque de título y el logo. Con filas para uno
-  // solo, el otro se derramaría sobre lo que viene debajo.
+  // The height is asked for by the taller of the two sides: the title block and the logo. With rows
+  // for only one, the other would spill over what comes below.
   const logoHeight = Math.max(left?.height ?? 0, right?.height ?? 0);
   const rows = Math.max(lines.length, Math.ceil(logoHeight / ROW_HEIGHT), 1);
   const lastColumn = Math.max(columns, firstColumn);
 
-  // Las filas se pintan ANTES de combinarlas: exceljs propaga a todo el rango el estilo de la
-  // celda maestra, así que combinar al final es lo que reparte el relleno y la raya sin que haya
-  // que volver a escribirlos celda a celda dentro del rango.
+  // The rows are painted BEFORE being merged: exceljs propagates the master cell's style to the whole
+  // range, so merging at the end is what spreads the fill and the rule without having to write them
+  // again cell by cell inside the range.
   const written: ExcelJS.Row[] = [];
   for (let index = 0; index < rows; index++) {
     const row = ws.addRow([]);
@@ -252,9 +250,9 @@ export function writeLetterhead(
     }
   });
 
-  // Centrados contra la banda ENTERA y no colgados de su primera fila: un logo alineado por arriba
-  // sobre un membrete de cuatro líneas deja un hueco bajo él que se lee como un error de
-  // composición. Es la misma regla que el encabezado del comprobante en PDF.
+  // Centred against the WHOLE band and not hung from its first row: a logo aligned to the top over a
+  // four-line letterhead leaves a gap under it that reads as a composition error. It is the same rule
+  // as the payslip PDF's header.
   const bandHeight = rows * ROW_HEIGHT;
   if (band.leftLogo && left) {
     ws.addImage(imageIdFor(wb, band.leftLogo), {
@@ -278,12 +276,12 @@ export function writeLetterhead(
 }
 
 /**
- * El ancla en la primera fila, `offsetPx` dentro de ella, en la forma que `addImage` acepta.
+ * The anchor on the first row, `offsetPx` into it, in the form `addImage` accepts.
  *
- * El cast es a los TIPOS de exceljs, no a su comportamiento: su `Anchor` lee `nativeCol`/
- * `nativeColOff` desde siempre —y son los que escribe tal cual en `<xdr:col>`/`<xdr:colOff>`—, pero
- * sus `.d.ts` solo declaran la pareja `{col, row}`, que es justo la que convierte mal. Se aísla en
- * una función para que el cast esté escrito UNA vez y con su motivo al lado.
+ * The cast is to exceljs' TYPES, not to its behaviour: its `Anchor` has always read
+ * `nativeCol`/`nativeColOff` —and they are what it writes as they are into `<xdr:col>`/`<xdr:colOff>`—,
+ * but its `.d.ts` only declares the `{col, row}` pair, which is precisely the one it converts badly.
+ * It is isolated in a function so the cast is written ONCE and with its reason next to it.
  */
 function topLeftAt(anchor: ColumnAnchor, offsetPx = 0): { col: number; row: number } {
   return {

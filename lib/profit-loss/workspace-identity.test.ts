@@ -28,7 +28,7 @@ function context(overrides: Partial<IdentityChangeContext> = {}): IdentityChange
   };
 }
 
-/** Todo el texto que el diálogo llega a imprimir — lo que un id de estrategia no puede tocar. */
+/** All the text the dialog ever prints — what a strategy id must not be able to touch. */
 function everyString(confirmation: IdentityChangeConfirmation): string {
   return [
     confirmation.title,
@@ -69,8 +69,8 @@ describe("compareIdentity", () => {
   });
 
   it("el año ya NO es parte de la identidad: un archivo de otro año no contradice nada", () => {
-    // Antes esto devolvía ["year"] y disparaba un reemplazo destructivo. Ahora un dataset es un
-    // centro-AÑO, así que 2025 junto a 2026 es más del mismo workspace, no otro workspace.
+    // This used to return ["year"] and trigger a destructive replacement. Now a dataset is a
+    // center-YEAR, so 2025 next to 2026 is more of the same workspace, not another workspace.
     expect(compareIdentity(identity(), identity())).toEqual([]);
   });
 
@@ -183,8 +183,8 @@ describe("describeIdentityChange — los motivos se siguen nombrando", () => {
   });
 
   it("el año ya no es un motivo: ningún texto habla de años", () => {
-    // La confirmación «Cambiar de año» se retiró junto con el año de la identidad: no hay
-    // combinación de motivos que pueda producirla.
+    // The «Cambiar de año» confirmation was withdrawn along with the year in the identity: there is
+    // no combination of reasons that can produce it.
     const confirmation = describeIdentityChange(
       identity(),
       identity({ mode: "centers" }),

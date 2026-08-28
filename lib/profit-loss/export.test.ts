@@ -163,7 +163,7 @@ describe("buildPygWorkbook — cell notes", () => {
 });
 
 describe("colores de sección", () => {
-  /** El ARGB del relleno de la fila cuyo código es `code`, o `undefined` si no lleva relleno. */
+  /** The ARGB of the fill of the row whose code is `code`, or `undefined` if it carries no fill. */
   function fillOf(ws: ExcelJS.Worksheet, code: string): string | undefined {
     let argb: string | undefined;
     ws.eachRow((row) => {
@@ -180,7 +180,7 @@ describe("colores de sección", () => {
     expect(fillOf(ws, "4.1")).toBe(sectionTone("4.1", 2)?.argb);
     expect(fillOf(ws, "5")).toBe(sectionTone("5", 1)?.argb);
     expect(fillOf(ws, "5.1")).toBe(sectionTone("5.1", 2)?.argb);
-    // Y los dos bloques no se confunden entre sí en el archivo.
+    // And the two blocks are not confused with each other in the file.
     expect(fillOf(ws, "4")).not.toBe(fillOf(ws, "5"));
   });
 
@@ -197,7 +197,7 @@ describe("colores de sección", () => {
       if (String(row.getCell(2).value ?? "").startsWith("Utilidad")) resultado = row;
     });
     expect(resultado).toBeDefined();
-    // Su raya superior le deja un `fill` vacío al releer; lo que importa es que no tiene color.
+    // Its top rule leaves it an empty `fill` on re-reading; what matters is that it has no colour.
     const fill = resultado?.getCell(1).fill;
     expect(fill?.type === "pattern" ? fill.fgColor?.argb : undefined).toBeUndefined();
   });
@@ -208,7 +208,7 @@ describe("colores de sección", () => {
     ws.eachRow((row) => {
       if (String(row.getCell(1).value ?? "") === "4") raiz = row;
     });
-    // 2 columnas de identificación + 12 meses + Total.
+    // 2 identification columns + 12 months + Total.
     for (let col = 1; col <= 15; col++) {
       const fill = raiz?.getCell(col).fill;
       expect(fill?.type === "pattern" ? fill.fgColor?.argb : undefined).toBe(
@@ -389,8 +389,8 @@ describe("buildConsolidatedWorkbook", () => {
       loadedMonthsByYear: { 2026: ALL_MONTHS },
     });
 
-    // Un centro dice de quién es —el mismo rótulo que el chip y la leyenda—; un cliente de estado
-    // único no tiene centro que nombrar, así que la hoja es él.
+    // A center says whose it is —the same label as the chip and the legend—; a single-statement
+    // client has no center to name, so the sheet is it.
     expect(wb.worksheets.map((w) => w.name)).toEqual([
       "Consolidado",
       "Restaurante · Dingoo",
@@ -436,8 +436,8 @@ describe("buildConsolidatedWorkbook", () => {
   });
 
   it("«ocultar ceros» se juzga por LIBRO, así que las hojas comparten plan de cuentas", async () => {
-    // "4.1.2" solo se mueve en una pieza; sobrevive en todas para que se lean en paralelo, y "4.9",
-    // que no se mueve en ninguna, se va de todas.
+    // "4.1.2" only moves in one piece; it survives in all of them so they can be read in parallel,
+    // and "4.9", which moves in none, goes from all of them.
     const sheets = await codesBySheet(
       buildConsolidatedWorkbook({
         datasets: [buildDataset("c", plan({ "4.1.2": months(0, 55) }))],
@@ -600,8 +600,8 @@ describe("buildPygWorkbook — ocultar cuentas en cero", () => {
   });
 
   it("keeps an account whose zero was PRODUCED by an adjustment", async () => {
-    // 70 en enero, ajustado a 0: la cuenta queda en cero de punta a punta. Omitirla perdería el
-    // ajuste y su valor original, que es justo lo que el archivo tiene que poder devolver.
+    // 70 in January, adjusted to 0: the account is left at zero end to end. Omitting it would lose the
+    // adjustment and its original value, which is exactly what the file has to be able to give back.
     const withOtros = buildDataset("h-single-adj", [
       ...plan(),
       { code: "5.9", name: "Multas", values: months(70) },
@@ -666,7 +666,7 @@ async function headersBySheet(wb: ExcelJS.Workbook): Promise<Map<string, string[
 }
 
 describe("buildMultiCenterWorkbook — ocultar meses en cero", () => {
-  // «4.1.1» mueve enero en NORTE y marzo en SUR; ningún otro mes se toca en ninguna hoja.
+  // «4.1.1» moves January in NORTE and March in SUR; no other month is touched in any sheet.
   const eneroNorte = buildDataset("m-norte", plan({ "4.1.1": months(100) }), {
     role: "center",
     centerId: "norte",
@@ -690,13 +690,13 @@ describe("buildMultiCenterWorkbook — ocultar meses en cero", () => {
 
   it("writes the twelve months when the switch is off", async () => {
     for (const labels of (await headersBySheet(book(false))).values()) {
-      expect(labels).toHaveLength(13); // doce meses + Total
+      expect(labels).toHaveLength(13); // twelve months + Total
     }
   });
 
   it("keeps a month that ANY sheet moved, and drops the rest", async () => {
-    // Enero lo mueve NORTE y marzo lo mueve SUR: los dos sobreviven en LAS DOS hojas, así siguen
-    // alineadas. Los otros diez no los movió nadie.
+    // January is moved by NORTE and March by SUR: both survive in BOTH sheets, so they stay aligned.
+    // The other ten were moved by nobody.
     for (const labels of (await headersBySheet(book(true))).values()) {
       expect(labels).toEqual(["Enero", "Marzo", "Total"]);
     }
@@ -729,7 +729,7 @@ describe("buildMultiCenterWorkbook — el membrete de cada hoja", () => {
     width: 640,
     height: 160,
   };
-  // Otro data URL, para que la deduplicación por URL no funda los dos en una sola imagen.
+  // Another data URL, so deduplication by URL does not fuse the two into a single image.
   const NORTE_LOGO = {
     dataUrl:
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
@@ -777,25 +777,25 @@ describe("buildMultiCenterWorkbook — el membrete de cada hoja", () => {
   });
 
   /**
-   * Lo que pidió la firma: la esquina de la TABLA. Acabó antes en la columna del nombre, y era
-   * defendible —así se veía sin desplazarse—, pero un membrete que para a 390 px no se lee como el
-   * borde de nada sino como algo flotando entre las cifras.
+   * What the firm asked for: the corner of the TABLE. It used to end at the name column, and that was
+   * defensible —it could be seen without scrolling—, but a letterhead that stops at 390 px does not
+   * read as the edge of anything but as something floating among the figures.
    *
-   * Se afirma sobre `nativeCol` + `nativeColOff`, que es lo que se escribe en el `.xlsx`, y NO
-   * sobre el `col` fraccionario de exceljs: ese getter reconvierte los EMU con `caracteres ×
-   * 10000` y devuelve una cifra que no es la que Excel dibuja — es el mismo error que dejaba el
-   * logo al principio de la columna, y un test escrito contra él lo habría dado por bueno.
+   * It is asserted over `nativeCol` + `nativeColOff`, which is what is written into the `.xlsx`, and
+   * NOT over exceljs' fractional `col`: that getter reconverts the EMU with `characters × 10000` and
+   * returns a figure that is not the one Excel draws — it is the same error that left the logo at the
+   * start of the column, and a test written against it would have passed it.
    */
   it("el del centro se pega a la esquina derecha de la tabla, no al bloque de rótulos", () => {
     const [, center] = imagesOf(workbook({ norte: NORTE_LOGO }), "SUCURSAL NORTE");
-    // Código (89) + nombre (299) + doce meses y el Total a 96 = 1.636 px de tabla; el logo mide 56
-    // de ancho, así que empieza en 1.580 — dentro de la última columna, que arranca en 1.540.
+    // Code (89) + name (299) + twelve months and the Total at 96 = 1,636 px of table; the logo is 56
+    // wide, so it starts at 1,580 — inside the last column, which starts at 1,540.
     expect(center.range.tl.nativeCol).toBe(14);
     expect(center.range.tl.nativeColOff).toBe(40 * 9525);
   });
 
-  // El Consolidado no es un centro: no hay logo que le corresponda, y `centerLogoOf` lo responde
-  // sin que esta hoja tenga que preguntarse por sí misma.
+  // The Consolidado is not a center: there is no logo that corresponds to it, and `centerLogoOf`
+  // answers that without this sheet having to ask itself about it.
   it("la hoja Consolidado se queda solo con el del cliente", () => {
     expect(imagesOf(workbook({ norte: NORTE_LOGO }), "Consolidado")).toHaveLength(1);
   });
@@ -807,8 +807,8 @@ describe("buildMultiCenterWorkbook — el membrete de cada hoja", () => {
   it("sin ningún logo de centro, el libro es el de siempre", () => {
     const wb = workbook();
     expect(imagesOf(wb, "SUCURSAL NORTE")).toHaveLength(1);
-    // Un solo PNG embebido para las tres hojas: `addImage` no deduplica, y sin la caché el libro
-    // llevaría una copia por hoja.
+    // A single embedded PNG for the three sheets: `addImage` does not deduplicate, and without the
+    // cache the workbook would carry one copy per sheet.
     expect(wb.model.media ?? []).toHaveLength(1);
   });
 

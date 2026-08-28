@@ -139,8 +139,8 @@ export function OccupancyDatosView() {
     return null;
   }
 
-  // Dos huecos distintos: sin hotel no falta un Excel, falta crear el hotel — y hasta que exista,
-  // no hay dónde cargar nada.
+  // Two different gaps: with no hotel it is not an Excel that is missing, it is creating the hotel —
+  // and until one exists, there is nowhere to load anything.
   if (activeHotelId === null) {
     return (
       <div className="px-7 py-5">

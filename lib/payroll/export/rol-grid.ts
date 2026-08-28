@@ -1,17 +1,18 @@
 /**
- * LA REJILLA DE LA HOJA `GENERAL` — puro, y por eso la única capa donde esto se puede probar.
+ * THE `GENERAL` SHEET'S GRID — pure, and that is why it is the only layer where this can be tested.
  *
- * Toma el período, su nómina y el catálogo de `columns.ts`, y devuelve la hoja como filas de celdas:
- * el preámbulo (empresa y período), las dos filas de rótulos, y luego el cuerpo, que es la forma que
- * el libro del contador tiene desde siempre — una cabecera por área, sus empleados, un `SUBTOTAL`, y
- * un `SUMAN` al final.
+ * It takes the período, its nómina and `columns.ts`'s catalogue, and returns the sheet as rows of
+ * cells: the preamble (company and period), the two label rows, and then the body, which is the shape
+ * the accountant's book has always had — one header per area, its employees, a `SUBTOTAL`, and a
+ * `SUMAN` at the end.
  *
- * Ninguna cifra se calcula aquí. Todas pasan por `computeLinePayroll`, que es la ÚNICA composición
- * ficha + captura → motor de la app: una segunda aquí podría separarse de la que pinta la pantalla,
- * y entonces el Excel descargado y la tabla dirían cifras distintas sin que nada lo delatara.
+ * No figure is computed here. They all go through `computeLinePayroll`, which is the app's ONLY
+ * composition record + capture → engine: a second one here could drift from the one that paints the
+ * screen, and then the downloaded Excel and the table would say different figures with nothing giving
+ * it away.
  *
- * `workbook.ts` recorre esta rejilla y la dibuja sin decidir nada — la misma separación que el
- * comprobante en PDF (`document.ts` → `layout.ts` → `render.ts`).
+ * `workbook.ts` walks this grid and draws it without deciding anything — the same separation as the
+ * payslip in PDF (`document.ts` → `layout.ts` → `render.ts`).
  */
 import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
 import { costCenterHeading, type CostCenter } from "@/lib/cost-center";
@@ -32,7 +33,7 @@ import {
   type RolExportColumn,
 } from "./columns";
 
-/** Qué ES cada fila, para que `workbook.ts` sepa cómo pintarla sin volver a deducirlo. */
+/** What each row IS, so `workbook.ts` knows how to paint it without deducing it again. */
 export type RolRowKind =
   | "company"
   | "letterhead"
@@ -48,28 +49,28 @@ export interface RolExportRow {
 }
 
 export interface RolExportGrid {
-  /** Las de `columns.ts`, más la de conceptos extra cuando el período declara alguno. */
+  /** Those of `columns.ts`, plus the extra-concepts one when the período declares any. */
   columns: readonly RolExportColumn[];
   rows: readonly RolExportRow[];
 }
 
 export interface RolExportInput {
-  /** El nombre que el usuario le dio al cliente. Va donde el libro pone su razón social. */
+  /** The name the user gave the client. It goes where the book puts its razón social. */
   clientName: string;
-  /** Los datos de la empresa, si el cliente los declaró: son las filas del membrete, bajo el
-   *  nombre. Sin ellos el preámbulo queda como estaba. */
+  /** The company data, if the client declared it: they are the letterhead's rows, under the name.
+   *  Without them the preamble stays as it was. */
   company?: CompanyProfile;
-  /** El centro de costo declarado, si lo hay. Compone la segunda mitad del rótulo de `B` —la misma
-   *  cadena que encabeza el comprobante en PDF— y aporta el logo de la derecha del membrete. */
+  /** The declared cost center, if there is one. It composes the second half of `B`'s label —the same
+   *  string that heads the payslip in PDF— and contributes the letterhead's right-hand logo. */
   costCenter?: CostCenter;
   year: number;
   monthIndex: number;
-  /** En el orden en que la nómina se lee en pantalla. */
+  /** In the order the nómina is read on screen. */
   lines: readonly ParsedPayrollEmployeeLine[];
   parameters: PayrollParameters;
 }
 
-/** `MARZO 2026` — la forma que el lector reconoce. */
+/** `MARZO 2026` — the shape the reader recognises. */
 export function periodText(year: number, monthIndex: number): string {
   return `${(MONTHS_FULL_ES[monthIndex] ?? "").toUpperCase()} ${year}`;
 }
@@ -83,12 +84,12 @@ function put(cells: RolExportCell[], letter: string, value: RolExportCell): void
 }
 
 /**
- * Los empleados agrupados por área, en el orden en que la nómina las declara.
+ * The employees grouped by area, in the order the nómina declares them.
  *
- * Los que no tienen área van PRIMEROS y sin cabecera, no bajo una cabecera vacía: al releer el
- * archivo, una fila de área en blanco no se reconocería como tal y esos empleados heredarían el área
- * del bloque anterior — quedarían archivados bajo un área que no es la suya, que es peor que quedar
- * sin ninguna.
+ * Those with no area go FIRST and with no header, not under an empty header: on re-reading the file,
+ * a blank area row would not be recognised as such and those employees would inherit the previous
+ * block's area — they would end up filed under an area that is not theirs, which is worse than being
+ * left with none.
  */
 function groupByArea(
   lines: readonly ParsedPayrollEmployeeLine[],
@@ -107,7 +108,7 @@ function groupByArea(
     if (group) {
       group.lines.push(line);
     } else {
-      // La primera grafía que aparece es la que encabeza el bloque, igual que en `areaOptions`.
+      // The first spelling that appears is the one that heads the block, just as in `areaOptions`.
       groups.set(key, { area, lines: [line] });
     }
   }
@@ -122,13 +123,12 @@ function groupByArea(
 }
 
 /**
- * La fila de cierre de un bloque: la suma, columna a columna, de las filas de empleado que lo
- * componen.
+ * A block's closing row: the sum, column by column, of the employee rows that make it up.
  *
- * Suma las CELDAS ya escritas y no vuelve al motor, que es lo que garantiza que el `SUBTOTAL` cuadre
- * con lo que hay encima aunque una columna cambie de origen. Una columna en la que ninguna fila puso
- * un número queda VACÍA en vez de en cero: es el caso de `PAGADO` cuando nadie declaró nada, y un
- * cero ahí afirmaría que se pagó cero.
+ * It sums the CELLS already written and does not go back to the engine, which is what guarantees the
+ * `SUBTOTAL` squares with what is above it even if a column changes source. A column in which no row
+ * put a number is left EMPTY instead of at zero: that is `PAGADO`'s case when nobody declared
+ * anything, and a zero there would claim zero was paid.
  */
 function totalRow(
   kind: "subtotal" | "suman",
@@ -138,8 +138,8 @@ function totalRow(
   width: number,
 ): RolExportRow {
   const cells = blankRow(width);
-  // El rótulo va en `CARGO`, que es donde el libro lo pone: la columna del nombre queda vacía, y eso
-  // es lo que impide que el lector confunda un subtotal con un empleado.
+  // The label goes in `CARGO`, which is where the book puts it: the name's column is left empty, and
+  // that is what stops the reader confusing a subtotal with an employee.
   put(cells, "C", label);
 
   for (const column of columns) {
@@ -162,32 +162,32 @@ function totalRow(
 }
 
 export function buildRolGrid(input: RolExportInput): RolExportGrid {
-  // La columna agregada solo existe si ALGUIEN declara filas de bono. Se juzga sobre las capturas
-  // y no sobre una declaración de período, que ya no hay: son las filas las que traen los dólares
-  // que `W TOTAL INGRESO` tendría si no que explicar.
+  // The aggregated column only exists if SOMEBODY declares bonus rows. It is judged over the captures
+  // and not over a período declaration, which no longer exists: it is the rows that bring the dollars
+  // `W TOTAL INGRESO` would otherwise have to explain.
   const hasExtras = input.lines.some((line) => (line.capture?.extras?.length ?? 0) > 0);
   const columns = hasExtras ? [...ROL_EXPORT_COLUMNS, EXTRA_INCOME_COLUMN] : ROL_EXPORT_COLUMNS;
   const width = sheetWidth(columns);
   const rows: RolExportRow[] = [];
 
-  // ── Preámbulo ───────────────────────────────────────────────────────────────────────────────
-  // El período comparte fila con la PRIMERA hilera de rótulos, exactamente como en el libro: `B` lo
-  // declara y los rótulos empiezan en `G`. Que compartan fila es lo que hace que el lector, que
-  // busca el período por su forma entre las filas de arriba, lo encuentre antes de la cabecera.
+  // ── Preamble ────────────────────────────────────────────────────────────────────────────────
+  // The period shares a row with the FIRST row of labels, exactly as in the book: `B` declares it and
+  // the labels start at `G`. That they share a row is what makes the reader, who looks for the period
+  // by its shape among the rows above, find it before the header.
   const company = blankRow(width);
-  // El rótulo lo compone `costCenterHeading`, la misma función que escribe el comprobante en PDF:
-  // «Delicmar · Planta Ambato» tiene que decirse igual en los dos papeles. Sin centro es el nombre
-  // pelado, así que el viaje de vuelta de todo cliente que no declare ninguno no cambia.
+  // The label is composed by `costCenterHeading`, the same function that writes the payslip in PDF:
+  // «Delicmar · Planta Ambato» has to be said the same on both papers. With no center it is the bare
+  // name, so the round trip of every client that declares none does not change.
   put(company, "B", costCenterHeading(input.clientName, input.costCenter));
   rows.push({ kind: "company", cells: company });
 
-  // El membrete va DEBAJO del nombre y encima de los rótulos, en la misma columna `B`. Las líneas
-  // llegan compuestas por `letterheadLines`, la misma función que escriben la pantalla y el
-  // comprobante en PDF: aquí no se junta ninguna dirección.
+  // The letterhead goes BELOW the name and above the labels, in the same column `B`. The lines arrive
+  // composed by `letterheadLines`, the same function the screen and the payslip in PDF write with:
+  // no address is joined together here.
   //
-  // Añadir filas al preámbulo es seguro para el viaje de vuelta y no por casualidad: el lector
-  // localiza el período por su FORMA entre las filas anteriores a la cabecera, y la empresa por ser
-  // la primera con texto de esta columna. Ninguna línea del membrete puede casar con un período.
+  // Adding rows to the preamble is safe for the round trip and not by accident: the reader locates
+  // the period by its SHAPE among the rows before the header, and the company by being this column's
+  // first one with text. No line of the letterhead can match a period.
   for (const line of letterheadLines(input.company)) {
     const row = blankRow(width);
     put(row, "B", line);
@@ -229,8 +229,8 @@ export function buildRolGrid(input: RolExportInput): RolExportGrid {
         line,
         capture,
         computed: computeLinePayroll(line, input.parameters),
-        // Las dos clases van juntas en la columna agregada: lo que las separa es en qué bases
-        // entran, y eso ya lo resolvió el motor antes de llegar aquí.
+        // Both classes go together in the aggregated column: what separates them is which bases they
+        // enter, and the engine already resolved that before getting here.
         extras: extras.contributory + extras.nonContributory,
         ordinal,
       };

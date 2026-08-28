@@ -39,13 +39,13 @@ interface PayrollDataValue {
     company?: CompanyProfile,
     costCenter?: CostCenter,
   ) => Promise<string>;
-  /** Cambia la ETIQUETA — nombre, logo, datos de la empresa y centro de costo — y nada más. */
+  /** Changes the LABEL — name, logo, company data and cost center — and nothing else. */
   updateClient: (
     clientId: string,
     name: string,
     logo: EntityLogo | null,
     company?: CompanyProfile,
-    /** `null` borra el centro guardado; `undefined` lo deja como está. */
+    /** `null` erases the stored center; `undefined` leaves it as it is. */
     costCenter?: CostCenter | null,
   ) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
@@ -53,11 +53,11 @@ interface PayrollDataValue {
   /** Every período of the active cliente, unfiltered — the count `PayrollEmptyState` reads to
    * decide between "sin períodos" and the table. */
   periods: PayrollPeriod[];
-  /** Empleados y áreas de CADA período del cliente activo, derivado de su nómina guardada —
-   * nunca un total persistido junto a ella. Keyed by `period.id`. */
+  /** Employees and areas of EACH período of the active cliente, derived from its stored nómina —
+   * never a total persisted alongside it. Keyed by `period.id`. */
   rosterByPeriod: Map<string, PayrollRosterSummary>;
-  /** Los cuatro totales de CADA período del cliente activo, derivados de su nómina guardada —
-   * misma regla que `rosterByPeriod`. Sin entrada para un período que aún no recibió `figures`.
+  /** The four totals of EACH período of the active cliente, derived from its stored nómina — same
+   * rule as `rosterByPeriod`. No entry for a período that has not received its `figures` yet.
    * Keyed by `period.id`. */
   financialsByPeriod: Map<string, PayrollPeriodFinancials>;
   /** Years the active cliente holds, newest first — the "Año" filter's universe. */
@@ -77,11 +77,11 @@ interface PayrollDataValue {
   /** `copyFrom` is a período id: with it, the new período's nómina is copied from that período's
    * (see `db.createPeriod`); without it, the período is born blank. */
   createPeriod: (year: number, monthIndex: number, copyFrom?: string) => Promise<void>;
-  /** Escribe la nómina que trajo un archivo, REEMPLAZANDO la que el período tuviera — ver
-   * `db.importRoster` para por qué reemplaza en vez de fusionar. */
+  /** Writes the nómina a file brought in, REPLACING whatever the período held — see
+   * `db.importRoster` for why it replaces instead of merging. */
   importRoster: (periodId: string, lines: readonly ParsedPayrollEmployeeLine[]) => Promise<void>;
-  /** Borra un período y su nómina en una transacción; quien llama decide a dónde navegar
-   *  después (la pantalla de detalle vuelve a `/payroll`). */
+  /** Deletes a período and its nómina in one transaction; the caller decides where to navigate
+   *  afterwards (the detail screen goes back to `/payroll`). */
   deletePeriod: (periodId: string) => Promise<void>;
   /** False only on the very first Dexie read, so the empty state doesn't flash. */
   ready: boolean;
@@ -93,9 +93,8 @@ const PayrollDataContext = createContext<PayrollDataValue | null>(null);
  * Mounted in the dashboard layout so the header can name the cliente while Historial de nómina
  * renders the table.
  *
- * Todo lo que lee está acotado al CLIENTE abierto, y siempre a través de `db.ts`: con varios
- * clientes compartiendo una tabla, una consulta sin acotar mezcla dos empresas en silencio y nada
- * de lo que hay debajo puede notarlo.
+ * Everything it reads is bounded to the OPEN client, and always through `db.ts`: with several clients
+ * sharing one table, an unbounded query mixes two companies in silence and nothing below it can tell.
  */
 export function PayrollDataProvider({ children }: { children: ReactNode }) {
   const clientRows = useLiveQuery(() => payrollDb.listClientSummaries(), []);
@@ -114,8 +113,8 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     () => payrollDb.rosterCounts((stored ?? EMPTY_PERIODS).map((period) => period.id)),
     [stored],
   );
-  // Mismo precedente batcheado que `rosterRows`: una consulta para TODOS los períodos visibles,
-  // en vez de una por fila.
+  // Same batched precedent as `rosterRows`: one query for ALL visible períodos, instead of one per
+  // row.
   const financialsRows = useLiveQuery(
     () => payrollDb.periodFinancials((stored ?? EMPTY_PERIODS).map((period) => period.id)),
     [stored],
@@ -143,9 +142,9 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
   const filters = useMemo(() => sanitizeFilters(rawFilters, years), [rawFilters, years]);
 
   const visiblePeriods = useMemo(() => selectPeriods(periods, filters), [periods, filters]);
-  // Las tarjetas leen el conjunto FILTRADO — no `periods` crudo — para que sus cifras siempre
-  // cuadren con lo que la tabla de abajo está mostrando: un "Períodos registrados: 5" sobre una
-  // tabla que la búsqueda dejó en 2 sería una tarjeta mintiendo por omisión.
+  // The cards read the FILTERED set — not raw `periods` — so their figures always square with what
+  // the table below is showing: a "Períodos registrados: 5" over a table the search box left at 2
+  // would be a card lying by omission.
   const summary = useMemo(
     () => buildPayrollSummary(visiblePeriods, rosterByPeriod, financialsByPeriod),
     [visiblePeriods, rosterByPeriod, financialsByPeriod],

@@ -8,9 +8,9 @@ import { periodLongLabel } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
 
 /**
- * Confirma borrar un período CONTANDO lo que descarta — la misma forma que
- * `DeletePayrollClientDialog` usa para un cliente: «su nómina» es justo la frase que uno confirma
- * sin leer, y una acción irreversible merece la cifra en vez de la abstracción.
+ * Confirms deleting a período by COUNTING what it discards — the same shape
+ * `DeletePayrollClientDialog` uses for a client: «su nómina» is exactly the phrase one confirms
+ * without reading, and an irreversible action deserves the figure instead of the abstraction.
  */
 export function DeletePeriodDialog({
   period,

@@ -56,9 +56,9 @@ export function AnalisisView() {
   const centerName =
     views.find((view) => view.id === context.activeCenterId)?.name ?? "Consolidado";
 
-  // Igual que en Gráficos: qué tarjetas están plegadas es estado local de la pantalla. El análisis
-  // vertical no entra — es una tabla con sus propios chevrons de árbol, y un segundo chevron en su
-  // cabecera dejaría sin decir cuál pliega qué.
+  // Just as in Gráficos: which cards are collapsed is local state of the screen. The vertical analysis
+  // is not one of them — it is a table with tree chevrons of its own, and a second chevron in its
+  // header would leave it unsaid which one collapses what.
   const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
@@ -79,9 +79,9 @@ export function AnalisisView() {
         onToggleCollapse={toggleCollapsed}
       />
 
-      {/* Un solo botón con dos sentidos, el mismo de Gráficos y en el mismo sitio —a la izquierda,
-          sobre la esquina donde están las flechas que mueve—: mientras quede una abierta cierra, y
-          con todas cerradas abre. */}
+      {/* One single button with two meanings, the same as in Gráficos and in the same place —on the
+          left, over the corner where the arrows it moves are—: while one is still open it closes, and
+          with all of them closed it opens. */}
       <div className="flex justify-start">
         <Button
           size="sm"
@@ -94,7 +94,7 @@ export function AnalisisView() {
         </Button>
       </div>
 
-      {/* Igual que en Gráficos: el orden lo declara `buildAnalisisCards`. */}
+      {/* Just as in Gráficos: the order is declared by `buildAnalisisCards`. */}
       <SpecCard
         spec={cards[0]}
         collapsed={isCollapsed(cards[0].id)}

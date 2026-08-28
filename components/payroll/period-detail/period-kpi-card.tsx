@@ -7,13 +7,14 @@ import type {
 interface PeriodKpiCardProps {
   employeeCount: number;
   reconciliation: PayrollReconciliationCounts;
-  /** `undefined` mientras el período no reciba su archivo — cada tile lee la raya en vez de $0. */
+  /** `undefined` while the período has not received its file — each tile reads the dash instead of
+   *  $0. */
   financials: PayrollPeriodFinancials | undefined;
 }
 
 /**
- * Los cinco KPIs del período en UNA sola tarjeta (a diferencia del historial, donde cada tile es
- * su propia caja) — divididos por hairlines en vez de repetir el borde de cada uno.
+ * The período's five KPIs in ONE single card (unlike the history, where each tile is its own box) —
+ * divided by hairlines instead of repeating each one's border.
  */
 export function PeriodKpiCard({ employeeCount, reconciliation, financials }: PeriodKpiCardProps) {
   return (
@@ -76,10 +77,10 @@ const DONUT_SIZE = 46;
 const DONUT_STROKE = 6;
 
 /**
- * El donut de «Empleados»: SVG inline sobre los tokens `@theme` (nada de ECharts para un par de
- * arcos, nada de hex). Un anillo base `--color-border` bajo dos arcos — conciliados en
- * `--color-positive`, con diferencia en `--color-warning` — dejando el resto (sin conciliar) leído
- * en el anillo base: la nómina puede tener empleados que no son ninguna de las dos cosas todavía.
+ * The «Empleados» donut: inline SVG over the `@theme` tokens (no ECharts for a couple of arcs, no
+ * hex). A base ring in `--color-border` under two arcs — reconciled in `--color-positive`, in
+ * difference in `--color-warning` — leaving the rest (unreconciled) read off the base ring: the
+ * nómina can hold employees that are neither of the two things yet.
  */
 function EmployeeDonut({
   total,

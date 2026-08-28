@@ -14,8 +14,9 @@ export interface YearFilterProps {
   onToggle: (year: number) => void;
   /** "Todos los años": clears the selection rather than marking every year. */
   onSelectAll: () => void;
-  /** Deletes a year and resolves with how many adjustments went with it. Sin él, los años se
-   * marcan pero no se borran — el caso del consolidado entre clientes, cuyos años son de otros. */
+  /** Deletes a year and resolves with how many adjustments went with it. Without it, years are
+   * marked but not deleted — the case of the cross-client consolidado, whose years belong to
+   * others. */
   onDelete?: (year: number) => Promise<number>;
 }
 

@@ -49,10 +49,10 @@ export function hasPeriod(
 }
 
 /**
- * La fuente de «Copiar nómina de X»: el período MÁS RECIENTE estrictamente ANTERIOR al destino
- * — nunca el más reciente que existe. Sin esa distinción, rellenar un mes hacia atrás (el
- * cliente ya tiene junio y se registra abril) copiaría del futuro. `null` sin ningún período
- * anterior al destino.
+ * The source for «Copiar nómina de X»: the MOST RECENT período strictly BEFORE the destination —
+ * never the most recent one that exists. Without that distinction, backfilling a month (the client
+ * already has June and April is registered) would copy from the future. `null` with no período
+ * before the destination.
  */
 export function sourceForCopy<T extends { year: number; monthIndex: number }>(
   existing: readonly T[],
@@ -86,17 +86,17 @@ export function proposeNextPeriod(
 }
 
 /**
- * El período INMEDIATAMENTE anterior o siguiente a `currentId`, en el orden real de los períodos
- * guardados — lo que el navegador `‹ JULIO 2026 ›` de la pantalla de detalle usa para decidir si
- * una flecha se apaga. `null` sin vecino de ese lado, o si `currentId` no aparece en `periods`.
+ * The período IMMEDIATELY before or after `currentId`, in the real order of the stored períodos —
+ * what the detail screen's `‹ JULIO 2026 ›` navigator uses to decide whether an arrow switches off.
+ * `null` with no neighbour on that side, or if `currentId` does not appear in `periods`.
  */
 export function adjacentPeriod<T extends { id: string; year: number; monthIndex: number }>(
   periods: readonly T[],
   currentId: string,
   direction: "prev" | "next",
 ): T | null {
-  // Most-recent-first: "siguiente" (más nuevo) queda ANTES del actual en este orden; "anterior"
-  // (más viejo) queda DESPUÉS.
+  // Most-recent-first: "siguiente" (newer) comes BEFORE the current one in this order; "anterior"
+  // (older) comes AFTER.
   const ordered = sortPeriodsDesc(periods);
   const index = ordered.findIndex((period) => period.id === currentId);
   if (index === -1) {

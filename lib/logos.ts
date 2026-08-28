@@ -1,41 +1,41 @@
 /**
- * EL LOGO DE UN WORKSPACE — las reglas que pueden estar mal, separadas de las que no.
+ * A WORKSPACE'S LOGO — the rules that can be wrong, separated from the ones that cannot.
  *
- * Un logo viaja a tres consumidores que no se parecen en nada: un `<img>` en pantalla, `addImage`
- * de exceljs y `embedPng`/`embedJpg` de pdf-lib. Lo que los reconcilia es guardar el logo como
- * **data URL**, que es lo único que los tres saben leer sin conversión previa — el `<img>` y
- * exceljs lo toman tal cual, y pdf-lib solo necesita los bytes, que `decodeLogoBytes` saca sin
- * tocar el DOM.
+ * A logo travels to three consumers that are nothing alike: an `<img>` on screen, exceljs'
+ * `addImage` and pdf-lib's `embedPng`/`embedJpg`. What reconciles them is storing the logo as a
+ * **data URL**, which is the only thing all three can read without prior conversion — the `<img>` and
+ * exceljs take it as it is, and pdf-lib only needs the bytes, which `decodeLogoBytes` extracts
+ * without touching the DOM.
  *
- * **Las dimensiones se guardan porque `layout.ts` del comprobante es puro.** Colocar el logo en la
- * hoja exige saber su proporción, y decodificar la imagen para averiguarla obligaría a un canvas —
- * con lo que la promesa de esa capa (afirmar en un test que ninguna caja se sale de la página, sin
- * generar un PDF) se caería. Se miden UNA vez, al subir, y viajan con el logo.
+ * **The dimensions are stored because the payslip's `layout.ts` is pure.** Placing the logo on the
+ * page requires knowing its proportion, and decoding the image to find out would require a canvas —
+ * with which that layer's promise (asserting in a test that no box falls off the page, without
+ * generating a PDF) would collapse. They are measured ONCE, on upload, and travel with the logo.
  *
- * Lo que NO vive aquí es leer el archivo y redimensionarlo: eso toca DOM y está en `logo-file.ts`.
- * La partición no es de estilo — Vitest solo corre la capa pura, así que todo lo que pueda estar
- * mal (qué se rechaza, cuánto mide la caja) tiene que estar de este lado para poder probarse.
+ * What does NOT live here is reading the file and resizing it: that touches the DOM and is in
+ * `logo-file.ts`. The split is not stylistic — Vitest only runs the pure layer, so everything that
+ * can be wrong (what is rejected, how big the box is) has to be on this side to be testable.
  */
 
-/** Los dos formatos que pdf-lib sabe embeber. Un SVG llega hasta aquí ya rasterizado a PNG. */
+/** The two formats pdf-lib can embed. An SVG reaches here already rasterized to PNG. */
 export type LogoMime = "image/png" | "image/jpeg";
 
 /**
- * Los logos de los CENTROS de un workspace, por `centerId`. Cuelgan del cliente —y no del centro—
- * porque un centro no es una fila guardada en ninguno de los dos módulos que los tienen: en PyG es
- * un slug que sale de los datasets, y en Ocupaciones es la mitad de la clave `[hotelId+centerId+
- * year]`. No hay dónde ponerle un campo propio.
+ * A workspace's CENTER logos, by `centerId`. They hang off the client —and not off the center—
+ * because a center is not a stored row in either of the two modules that have them: in PyG it is a
+ * slug that comes out of the datasets, and in Ocupaciones it is half of the `[hotelId+centerId+year]`
+ * key. There is nowhere to put a field of its own.
  *
- * Colgar del cliente además regala las dos cosas que importan: se borra en cascada con él, y
- * SOBREVIVE a recargar los datos, porque el `centerId` es el mismo slug antes y después.
+ * Hanging off the client also gives away the two things that matter: it is deleted in cascade with
+ * it, and it SURVIVES reloading the data, because the `centerId` is the same slug before and after.
  */
 export type CenterLogos = Record<string, EntityLogo>;
 
 /**
- * El logo del centro, o nada. **Que un `centerId` ausente devuelva `undefined` ES la regla**: el
- * Consolidado, el mes en crudo y la portada del informe no son un centro, así que se quedan sin
- * segundo logo sin que ninguna superficie tenga que escribir su propio caso — preguntar «¿y si es
- * el consolidado?» en cuatro sitios es exactamente cómo tres de ellos acaban respondiendo distinto.
+ * The center's logo, or nothing. **That a missing `centerId` returns `undefined` IS the rule**: the
+ * Consolidado, the raw month and the report's cover are not a center, so they are left with no second
+ * logo without any surface having to write its own case — asking «and what if it is the consolidado?»
+ * in four places is exactly how three of them end up answering differently.
  */
 export function centerLogoOf(
   logos: CenterLogos | undefined,
@@ -48,9 +48,9 @@ export function centerLogoOf(
 }
 
 /**
- * El logo de `centerId` puesto o quitado, y el registro entero descartado cuando se queda vacío:
- * un `{}` guardado y un campo ausente dicen lo mismo, y dejar los dos convierte «este cliente no
- * tiene logos de centro» en dos preguntas distintas.
+ * `centerId`'s logo set or removed, and the whole registry discarded when it is left empty: a stored
+ * `{}` and an absent field say the same thing, and keeping both turns «this client has no center
+ * logos» into two different questions.
  */
 export function withCenterLogo(
   logos: CenterLogos | undefined,
@@ -67,38 +67,39 @@ export function withCenterLogo(
 }
 
 export interface EntityLogo {
-  /** `data:image/png;base64,…`. Sirve tal cual a un `<img>` y a `wb.addImage` de exceljs. */
+  /** `data:image/png;base64,…`. It serves an `<img>` and exceljs' `wb.addImage` as it is. */
   dataUrl: string;
-  /** Lo que decide entre `embedPng` y `embedJpg`; la extensión que exceljs pide sale de aquí. */
+  /** What decides between `embedPng` and `embedJpg`; the extension exceljs asks for comes from
+   *  here. */
   mime: LogoMime;
-  /** Dimensiones YA redimensionadas, en píxeles. */
+  /** ALREADY resized dimensions, in pixels. */
   width: number;
   height: number;
 }
 
-/** El tope que pidió la firma, sobre el archivo ORIGINAL: se comprueba antes de decodificar nada. */
+/** The cap the firm asked for, over the ORIGINAL file: it is checked before decoding anything. */
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
- * El lado mayor al que se reduce el logo guardado. 800 px cubre de sobra el mayor de sus tres usos
- * —unos 120 pt en el comprobante, que a 300 dpi son 500 px— y deja un PNG de logo en el orden de
- * los 100 KB, así que el desplegable puede listar treinta clientes sin cargar treinta originales.
+ * The longer side the stored logo is reduced to. 800 px covers more than enough for the largest of
+ * its three uses —some 120 pt on the payslip, which at 300 dpi is 500 px— and leaves a logo PNG in
+ * the order of 100 KB, so the dropdown can list thirty clients without loading thirty originals.
  */
 export const LOGO_MAX_SIDE = 800;
 
 /**
- * Lo que el `<input type="file">` ofrece y `checkLogoFile` admite. El SVG entra aunque ni exceljs ni
- * pdf-lib lo embeban: se rasteriza al subirlo, que es lo que evita que el usuario tenga que saber
- * en qué formato acaba su logo.
+ * What the `<input type="file">` offers and `checkLogoFile` admits. SVG goes in even though neither
+ * exceljs nor pdf-lib embeds it: it is rasterized on upload, which is what saves the user from having
+ * to know what format their logo ends up in.
  */
 export const LOGO_ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/svg+xml"] as const;
 
-/** El `accept` del input, en la forma que espera el atributo. */
+/** The input's `accept`, in the form the attribute expects. */
 export const LOGO_ACCEPT_ATTRIBUTE = LOGO_ACCEPTED_TYPES.join(",");
 
 export type LogoFileCheck = { ok: true } | { ok: false; message: string };
 
-/** Un tamaño en las palabras del rechazo: «3,4 MB». Un logo nunca baja de los KB. */
+/** A size in the rejection's words: «3.4 MB». A logo never drops below KB. */
 export function formatBytes(bytes: number): string {
   const megabytes = bytes / (1024 * 1024);
   if (megabytes >= 1) {
@@ -108,12 +109,12 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * Si el archivo se puede intentar. Mira el TIPO y el PESO y nada más, porque es lo único que se
- * puede saber sin decodificar — y decodificar un archivo de 40 MB para descubrir que sobra es
- * justamente lo que este tope evita.
+ * Whether the file can be attempted. It looks at the TYPE and the SIZE and nothing else, because that
+ * is all that can be known without decoding — and decoding a 40 MB file to discover it is too big is
+ * exactly what this cap avoids.
  *
- * El mensaje dice el peso REAL: «pesa demasiado» obliga a abrir el explorador de archivos para
- * averiguar cuánto hay que recortar.
+ * The message states the REAL size: «it is too heavy» forces opening the file browser to find out how
+ * much has to be trimmed.
  */
 export function checkLogoFile(file: { type: string; size: number }): LogoFileCheck {
   if (!(LOGO_ACCEPTED_TYPES as readonly string[]).includes(file.type)) {
@@ -134,43 +135,43 @@ export interface LogoBox {
 }
 
 /**
- * La caja en la que se dibuja el logo dentro de un hueco: **la única regla de proporción del app**,
- * y la usan las tres superficies. Es un `contain` — entra entero y nunca se recorta, porque un logo
- * recortado deja de ser el logo.
+ * The box the logo is drawn in inside a gap: **the app's only proportion rule**, and all three
+ * surfaces use it. It is a `contain` — it goes in whole and is never cropped, because a cropped logo
+ * stops being the logo.
  *
- * NO agranda: un logo más pequeño que su hueco se dibuja a su tamaño, ya que estirarlo solo lo
- * emborrona. Las unidades son las que le pasen (píxeles en el Excel, puntos en el PDF): la razón no
- * tiene unidades, y una segunda versión de esta función por unidad podría divergir de la primera.
+ * It does NOT enlarge: a logo smaller than its gap is drawn at its own size, since stretching it only
+ * blurs it. The units are whatever is passed in (pixels in the Excel, points in the PDF): a ratio has
+ * no units, and a second version of this function per unit could diverge from the first.
  */
 export function fitLogoBox(logo: { width: number; height: number }, max: LogoBox): LogoBox {
   if (logo.width <= 0 || logo.height <= 0) {
     return { width: 0, height: 0 };
   }
   const scale = Math.min(max.width / logo.width, max.height / logo.height, 1);
-  // Recortado contra el hueco además de escalado: `400 * (28/400)` da `28.000000000000004`, y un
-  // logo que se sale de su caja por un epsilon rompe justo el invariante del que depende el layout
-  // del comprobante. La proporción se desvía en ese mismo epsilon, que no existe en pantalla.
+  // Clamped against the gap as well as scaled: `400 * (28/400)` gives `28.000000000000004`, and a
+  // logo that overflows its box by an epsilon breaks exactly the invariant the payslip's layout
+  // depends on. The proportion deviates by that same epsilon, which does not exist on screen.
   return {
     width: Math.min(logo.width * scale, max.width),
     height: Math.min(logo.height * scale, max.height),
   };
 }
 
-/** La extensión con que exceljs nombra el formato — su vocabulario, no el de los MIME. */
+/** The extension exceljs names the format with — its vocabulary, not the MIME one. */
 export function logoExtension(logo: EntityLogo): "png" | "jpeg" {
   return logo.mime === "image/jpeg" ? "jpeg" : "png";
 }
 
-/** El base64 pelado de un data URL, que es lo que `wb.addImage` de exceljs recibe. */
+/** The bare base64 of a data URL, which is what exceljs' `wb.addImage` receives. */
 export function logoBase64(logo: EntityLogo): string {
   const comma = logo.dataUrl.indexOf(",");
   return comma === -1 ? "" : logo.dataUrl.slice(comma + 1);
 }
 
 /**
- * Los bytes del logo, para `embedPng`/`embedJpg`. Se decodifica aquí y no en `render.ts` para que
- * la capa que dibuja el PDF siga sin decidir nada — y porque decodificar base64 es exactamente la
- * clase de cosa que se escribe mal una vez y se copia tres.
+ * The logo's bytes, for `embedPng`/`embedJpg`. It is decoded here and not in `render.ts` so the layer
+ * that draws the PDF keeps deciding nothing — and because decoding base64 is exactly the kind of
+ * thing that gets written wrong once and copied three times.
  */
 export function decodeLogoBytes(logo: EntityLogo): Uint8Array {
   const binary = atob(logoBase64(logo));

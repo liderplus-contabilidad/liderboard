@@ -23,8 +23,8 @@ export interface ReportField {
 export interface ReportCover {
   /** The label the user gave this client — never the razón social of the file. */
   clientName: string;
-  /** El logo del cliente, si subió uno. Como el nombre, tampoco sale de ningún archivo. El
-   *  consolidado entre clientes no tiene: no es un cliente. */
+  /** The client's logo, if it uploaded one. Like the name, it does not come from any file either. The
+   *  cross-client consolidado has none: it is not a client. */
   logo?: EntityLogo;
   /** The razón social the file declares. Different thing, deliberately never compared. */
   companyName: string;

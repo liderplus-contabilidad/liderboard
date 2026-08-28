@@ -33,25 +33,25 @@ import { SalariesToolbar } from "./salaries-toolbar";
 const EMPTY_LINES: Map<string, PayrollEmployeeLine[]> = new Map();
 
 /**
- * Sueldos por Áreas: la evolución del COSTO TOTAL por área —o por empleado dentro de un área— a lo
- * largo de los meses y años que el cliente tenga registrados.
+ * Sueldos por Áreas: the evolution of the TOTAL COST by area —or by employee within an area— across
+ * the months and years the client has registered.
  *
- * Todo lo que enseña es DERIVADO y nada se guarda: la cifra de cada empleado sale del motor en cada
- * render (`buildSalariesGrid`), igual que los totales del período y el asiento contable. Una copia
- * guardada aparte quedaría desactualizada al siguiente ajuste y la pantalla diría una cosa y los
- * datos otra.
+ * Everything it shows is DERIVED and nothing is stored: each employee's figure comes out of the
+ * engine on every render (`buildSalariesGrid`), just like the período totals and the journal entry. A
+ * copy stored on the side would go stale on the next adjustment and the screen would say one thing
+ * and the data another.
  *
- * Las marcas viven AQUÍ y no en `PayrollDataProvider`: la regla de la casa es que un provider está
- * en el layout porque la cabecera lee del mismo estado que el panel, y lo único que la cabecera lee
- * de este módulo es el cliente, que el provider ya da. Subir estas marcas sería poner en el layout
- * algo que ninguna otra pantalla lee.
+ * The marks live HERE and not in `PayrollDataProvider`: the house rule is that a provider is in the
+ * layout because the header reads from the same state as the panel, and the only thing the header
+ * reads from this module is the client, which the provider already gives. Lifting these marks would
+ * put something in the layout that no other screen reads.
  */
 export function SalariesView() {
   const { activeClient, activeClientId, periods, ready } = usePayrollData();
   const [rawFilters, setRawFilters] = useState<SalariesFilters>(emptyFilters);
 
-  // Una sola consulta para TODOS los períodos del cliente, acotada por sus ids — nunca una lectura
-  // sin acotar, que es lo que mezclaría la nómina de dos empresas.
+  // One single query for ALL the client's períodos, bounded by their ids — never an unbounded read,
+  // which is what would mix the nómina of two companies.
   const linesByPeriod = useLiveQuery(
     () => employeesForPeriods(periods.map((period) => period.id)),
     [periods],
@@ -63,10 +63,10 @@ export function SalariesView() {
   );
 
   const universe = useMemo(() => salariesUniverse(source), [source]);
-  // El reparto izquierda/derecha del membrete, resuelto donde se resuelve en los otros dos papeles.
+  // The letterhead's left/right split, resolved where it is resolved on the other two papers.
   const reportLogos = letterheadLogos(activeClient?.logo, activeClient?.costCenter);
-  // Podado en la LECTURA, nunca en un efecto: cambiar de cliente no deja un render con marcas de
-  // años que este cliente no tiene.
+  // Pruned on READ, never in an effect: switching client does not leave a render with marks for years
+  // this client does not have.
   const filters = useMemo(() => sanitizeFilters(rawFilters, universe), [rawFilters, universe]);
 
   const grid = useMemo(
@@ -93,13 +93,13 @@ export function SalariesView() {
   const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
   const clearAll = useCallback(() => setRawFilters(emptyFilters()), []);
 
-  // Antes de la primera lectura de Dexie no se sabe si hay clientes: esperar evita el parpadeo del
-  // vacío sobre un espacio que en realidad ya tiene uno.
+  // Before the first read from Dexie it is not known whether there are clients: waiting avoids the
+  // empty state flickering over a space that actually already has one.
   if (!ready) {
     return null;
   }
 
-  // Sin cliente y sin períodos el vacío nombra el paso que falta, no esta pantalla.
+  // With no client and no períodos the empty state names the missing step, not this screen.
   if (activeClientId === null || periods.length === 0) {
     return <PayrollEmptyState />;
   }
@@ -156,7 +156,7 @@ export function SalariesView() {
   );
 }
 
-/** Qué periodo está mostrando, en español llano — lo que el subtítulo de la tarjeta dice. */
+/** What period it is showing, in plain Spanish — what the card's subtitle says. */
 function describeSelection(grid: ReturnType<typeof buildSalariesGrid>): string | undefined {
   const { columns } = grid;
   if (columns.length === 0) {
@@ -170,7 +170,7 @@ function describeSelection(grid: ReturnType<typeof buildSalariesGrid>): string |
     : `Costo total por área · ${range}`;
 }
 
-/** El vacío nombra la marca que lo produjo, para que se sepa cuál quitar. */
+/** The empty state names the mark that produced it, so it is clear which one to remove. */
 function emptyReason(noColumns: boolean): string {
   return noColumns
     ? "Ningún período coincide con el año y el mes marcados."

@@ -47,7 +47,7 @@ export function ButtonsSection() {
         <Button size="md" icon={<Plus size={15} />}>
           Grande
         </Button>
-        {/* 34px: la escala de los controles que viven en una barra (filtros, acciones de tab). */}
+        {/* 34px: the scale of the controls that live in a bar (filters, tab actions). */}
         <Button size="toolbar" icon={<Plus size={14} />}>
           Barra
         </Button>

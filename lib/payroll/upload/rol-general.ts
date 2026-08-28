@@ -10,16 +10,16 @@
  *   monthly-by-centers format, which has no such line and leans on the name;
  * - what counts as a valid `contractType` (`"CT" | "TP"`) and what a bad one defaults to;
  * - what an unparseable hire date becomes (`null`, not a guess);
- * - qué cuenta como un «sí» en `FR`/`AC FR`, y cómo se RECUPERAN los dos interruptores que el
- *   libro escribe como un `*0` al final de una fórmula (`M` y las provisiones `AS`/`AT`).
+ * - what counts as a «yes» in `FR`/`AC FR`, and how the two switches the book writes as a `*0` at
+ *   the end of a formula (`M` and the `AS`/`AT` provisions) are RECOVERED.
  *
- * NADA aquí se recalcula: `TOTAL INGRESO`, `TOTAL EGRESOS`, `LIQUIDO A RECIBIR`, `COSTO TOTAL` y
- * `PAGADO` se leen VERBATIM. El rol trae más de mil fórmulas propias — reproducir el aporte IESS o
- * el cálculo del décimo aquí crearía una segunda definición que puede separarse de la del
- * contador al centavo, y la pantalla y el Excel dirían cifras distintas sin que nada lo delate.
- * Por eso los interruptores se DEDUCEN de los valores en vez de leerse de las fórmulas: SheetJS
- * las trae, pero una app que interprete fórmulas de Excel es exactamente la segunda definición
- * que este módulo existe para no tener.
+ * NOTHING here is recomputed: `TOTAL INGRESO`, `TOTAL EGRESOS`, `LIQUIDO A RECIBIR`, `COSTO TOTAL`
+ * and `PAGADO` are read VERBATIM. The rol brings over a thousand formulas of its own — reproducing
+ * the IESS contribution or the décimo computation here would create a second definition that can
+ * drift from the accountant's by a cent, and the screen and the Excel would say different figures
+ * with nothing giving it away. That is why the switches are DEDUCED from the values instead of being
+ * read off the formulas: SheetJS brings them, but an app that interprets Excel formulas is exactly
+ * the second definition this module exists not to have.
  */
 import { sameToTheCentavo } from "@/lib/payroll/amounts";
 import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "@/lib/payroll/types";
@@ -39,33 +39,33 @@ import type { ParsedPayrollWorkbook } from "./types";
 const GENERAL_SHEET = "GENERAL";
 const CONTRACT_TYPES = new Set(["CT", "TP"]);
 const DEFAULT_CONTRACT_TYPE = "CT";
-/** Lo que `FR` y `AC FR` escriben cuando la respuesta es que sí. */
+/** What `FR` and `AC FR` write when the answer is yes. */
 const YES = "S";
 
 /**
- * `FR` y `AC FR` valen lo que el libro pregunta de ellas: `IF(FR="S", …, 0)`. Solo una `S` enciende
- * la bandera; el vacío, una `N` y cualquier basura caen todos en el `else` de esa misma fórmula, así
- * que ninguno de los tres merece un aviso — no son un dato ilegible sino la rama por defecto. Se
- * compara sin distinguir mayúsculas porque el `=` de Excel tampoco distingue, y un archivo con una
- * `s` minúscula cobra fondo de reserva en la hoja del contador.
+ * `FR` and `AC FR` are worth what the book asks of them: `IF(FR="S", …, 0)`. Only an `S` switches the
+ * flag on; a blank, an `N` and any junk all fall into that same formula's `else`, so none of the three
+ * deserves a warning — they are not an unreadable datum but the default branch. It is compared
+ * ignoring case because Excel's `=` does not distinguish it either, and a file with a lower-case `s`
+ * receives a reserve fund on the accountant's sheet.
  */
 function readsAsYes(raw: string): boolean {
   return raw.trim().toUpperCase() === YES;
 }
 
 /**
- * El importe de horas extras que se reconoció este mes (§6), recuperado SIN leer una sola fórmula:
- * si `M` no es la suma de `J+K+L`, la diferencia es el recorte que el contador aplicó a mano y `M`
- * ES el importe reconocido; si coinciden, no hubo recorte y la entrada del motor va `null`, que
- * significa «todo lo trabajado».
+ * The overtime amount that was recognised this month (§6), recovered WITHOUT reading a single
+ * formula: if `M` is not the sum of `J+K+L`, the difference is the trim the accountant applied by
+ * hand and `M` IS the recognised amount; if they match, there was no trim and the engine's input goes
+ * `null`, which means «everything worked».
  *
- * Se compara al CENTAVO, con la misma regla que la conciliación: el libro escribe `M = J+K+L` sin
- * redondear, y `J`, `K` y `L` sí vienen redondeados, así que la suma llega con el ruido de coma
- * flotante de §9 (`96.25999999999999` contra el `96.26` guardado). Con `!==` ese ruido inventaría
- * un recorte que nadie hizo, y las horas extras entrarían al motor recortadas a sí mismas.
+ * It is compared to the CENT, with the same rule as the reconciliation: the book writes `M = J+K+L`
+ * unrounded, and `J`, `K` and `L` do arrive rounded, so the sum comes with §9's floating-point noise
+ * (`96.25999999999999` against the stored `96.26`). With `!==` that noise would invent a trim nobody
+ * made, and the overtime would enter the engine trimmed to itself.
  *
- * Sin columna `M` no hay nada que deducir y devuelve `null`: un `0` afirmaría que no se reconoció
- * ninguna hora, que es justo lo que un libro sin esa columna no dice.
+ * With no `M` column there is nothing to deduce and it returns `null`: a `0` would claim no hour was
+ * recognised, which is exactly what a book without that column does not say.
  */
 function deduceApprovedOvertime(row: RolGeneralEmployeeRow): number | null {
   if (row.overtimeTotal === null) {
@@ -75,8 +75,8 @@ function deduceApprovedOvertime(row: RolGeneralEmployeeRow): number | null {
   return sameToTheCentavo(row.overtimeTotal, worked) ? null : row.overtimeTotal;
 }
 
-/** Lo capturado del mes de un empleado. Las dos provisiones de décimos NO están aquí: son de la
- *  ficha (ver `toProvisions`). */
+/** What is captured of an employee's month. The two décimo provisions are NOT here: they belong to
+ *  the record (see `toProvisions`). */
 function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
   return {
     overtimeHours50: row.overtimeHours50,
@@ -103,21 +103,20 @@ function toCapture(row: RolGeneralEmployeeRow): PayrollMonthlyCapture {
       partTimeDeduction: row.partTimeDeduction,
       medicalLeaveDeduction: row.medicalLeaveDeduction,
     },
-    // `BZ` entra como un capturado más: es un valor TECLEADO, y la pantalla lo deja corregir.
+    // `BZ` comes in as one more captured value: it is a TYPED value, and the screen lets it be
+    // corrected.
     paid: row.paid,
   };
 }
 
 /**
- * Las dos banderas de provisión de décimos, que van a la FICHA y no a la captura porque son una
- * elección del empleado (ver `PayrollEmployeeLine`). Que vivan en la ficha no impide leerlas de
- * cada archivo: un período guarda su propia ficha, así que el archivo de marzo declara las de
- * marzo.
+ * The two décimo provision flags, which go to the RECORD and not to the capture because they are a
+ * choice of the employee (see `PayrollEmployeeLine`). That they live on the record does not prevent
+ * reading them from each file: a período stores its own record, so March's file declares March's.
  *
- * Se deducen igual que `M` y por el mismo motivo: el libro las apaga con un `*0`, así que un
- * importe distinto de cero es la única huella que queda de que ese mes SÍ provisiona. En el
- * archivo real están en cero las seis veces, que es lo coherente con mensualizarlos ya en `N` y
- * `O`.
+ * They are deduced just like `M` and for the same reason: the book switches them off with a `*0`, so
+ * an amount other than zero is the only trace left that the month DOES provision. In the real file
+ * they are zero all six times, which is consistent with already taking them monthly in `N` and `O`.
  */
 function toProvisions(
   row: RolGeneralEmployeeRow,
@@ -142,11 +141,11 @@ export function parseRolGeneral(buffer: ArrayBuffer): ParsedPayrollWorkbook {
   }
 
   const columns = locateColumns(grid);
-  // Por su SITIO en el preámbulo, no por `B1`: el rol que esta app genera abre con la banda del logo
-  // y, bajo el nombre, con las líneas del membrete.
+  // By its PLACE in the preamble, not by `B1`: the rol this app generates opens with the logo's band
+  // and, under the name, with the letterhead's lines.
   const company = findCompany(grid, columns.headerRow);
-  // Por su FORMA, no por su celda: el rol que esta app genera lleva membrete, y unas filas de logo
-  // por encima del preámbulo movían el `B2` fijo que se leía antes.
+  // By its SHAPE, not by its cell: the rol this app generates carries a letterhead, and a few logo
+  // rows above the preamble moved the fixed `B2` that used to be read.
   const period = findPeriod(grid, columns.headerRow);
   if (!period) {
     throw new PayrollParseError("invalid-period");

@@ -178,7 +178,7 @@ describe("shapeFor", () => {
   });
 
   it("no le ofrece otra forma a la cascada", () => {
-    // Una cascada dibujada como pastel o como línea no dice nada: la única forma es la suya.
+    // A cascade drawn as a pie or as a line says nothing: the only shape is its own.
     expect(shapeFor("cascada", "pastel")).toBe("cascada");
     expect(shapeFor("cascada", "linea")).toBe("cascada");
   });
@@ -253,8 +253,8 @@ describe("resolución de color", () => {
   });
 
   it("comparar las RAÍCES pinta cada bloque con su color de Datos", () => {
-    // Ahí el color deja de ser identidad arbitraria y dice de qué bloque habla la serie — y tiene
-    // que querer decir lo mismo que en la tabla.
+    // There the colour stops being arbitrary identity and says which block the series talks about —
+    // and it has to mean the same as in the table.
     const color = codeColorResolver(["4", "5", "6"]);
 
     expect(color({ code: "4", centerId: "cultura-manor", year: 2026 })).toBe(CHART_SECTION.income);

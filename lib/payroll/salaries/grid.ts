@@ -1,23 +1,23 @@
 /**
- * El grid de Sueldos por Áreas: de los períodos del cliente, sus nóminas y las marcas de la barra,
- * a la tabla que se dibuja. Puro, y por eso testeable contra la hoja del contador.
+ * Sueldos por Áreas' grid: from the client's períodos, their nóminas and the bar's marks, to the table
+ * that is drawn. Pure, and therefore testable against the accountant's sheet.
  *
- * Las tres reglas que sostienen la lectura y que por eso viven aquí y no en un componente:
+ * The three rules that hold up the reading and that is why they live here and not in a component:
  *
- *   1. **Una columna existe solo si existe su PERÍODO.** Un mes que nadie registró no es un mes en
- *      cero: la app no puede afirmar nada de él, así que no produce columna.
- *   2. **Una celda vacía no es un cero.** `null` es «esta fila no estuvo en la nómina de ese mes»
- *      —quien no había ingresado, el área que ese mes no tuvo a nadie— y `0` es un cero de verdad,
- *      afirmado por una ficha que sí estuvo. Pintarlos igual haría indistinguible un hueco de una
- *      caída real, que es la misma distinción que PyG sostiene con su cobertura.
- *   3. **El total suma LAS FILAS PRESENTES**, no el universo. Con dos áreas marcadas es el de esas
- *      dos: una fila de cierre que no cuadra con lo que tiene encima no se puede comprobar a ojo, y
- *      comprobarla contra su propio Excel es justo para lo que existe esta pantalla.
+ *   1. **A column exists only if its PERÍODO exists.** A month nobody registered is not a month at
+ *      zero: the app can claim nothing about it, so it produces no column.
+ *   2. **An empty cell is not a zero.** `null` is «this row was not in that month's nómina» —whoever
+ *      had not joined yet, the area that had nobody that month— and `0` is a real zero, asserted by a
+ *      record that was there. Painting them alike would make a gap indistinguishable from a real fall,
+ *      which is the same distinction PyG holds up with its coverage.
+ *   3. **The total sums THE ROWS PRESENT**, not the universe. With two areas marked it is those two's:
+ *      a closing row that does not square with what is above it cannot be checked by eye, and checking
+ *      it against their own Excel is exactly what this screen exists for.
  *
- * El MODO no es un estado aparte sino una lectura de las marcas (`resolveAreaMode`): exactamente un
- * área marcada da el detalle por empleado, cualquier otra cosa da el consolidado por área. Un modo
- * guardado junto a las marcas podría contradecirlas —quedarse en «detalle» sin área—, y la barra
- * tendría dos controles para una decisión.
+ * The MODE is not a separate state but a reading of the marks (`resolveAreaMode`): exactly one area
+ * marked gives the per-employee detail, anything else gives the consolidado by area. A mode stored
+ * next to the marks could contradict them —being left in «detail» with no area—, and the bar would
+ * have two controls for one decision.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { areaKey, areaOptions } from "../areas";
@@ -27,60 +27,59 @@ import type { PayrollEmployeeLine } from "../types";
 import { passes, type SalariesFilters, type SalariesUniverse } from "./filters";
 import { employeeKey } from "./identity";
 
-/** Un período, reducido a lo que el grid necesita de él. */
+/** A período, reduced to what the grid needs from it. */
 export interface SalariesPeriodRef {
   id: string;
   year: number;
-  /** 0–11, como en el resto de la app. */
+  /** 0–11, as in the rest of the app. */
   monthIndex: number;
 }
 
 export interface SalariesColumn {
   year: number;
   monthIndex: number;
-  /** «Ene» con un solo año a la vista, «Ene 25» con varios — la regla de `DatosColumn` de PyG. */
+  /** «Ene» with a single year in sight, «Ene 25» with several — the rule of PyG's `DatosColumn`. */
   label: string;
 }
 
 export interface SalariesRow {
-  /** Estable entre renders: la clave del área o la del empleado, nunca su posición. */
+  /** Stable between renders: the area's key or the employee's, never their position. */
   id: string;
   label: string;
-  /** El cargo, en el detalle por empleado. Ausente en las filas de área. */
+  /** The job title, in the per-employee detail. Absent on the area rows. */
   sublabel?: string;
-  /** Un valor por columna. `null` = la fila no estuvo en la nómina de ese período. */
+  /** One value per column. `null` = the row was not in that período's nómina. */
   values: (number | null)[];
 }
 
-/** Consolidado por área, o el detalle de UN área por empleado. */
+/** Consolidado by area, or the detail of ONE area by employee. */
 export type SalariesMode = "consolidado" | "detalle";
 
 export interface SalariesGrid {
   mode: SalariesMode;
-  /** El área del detalle, con la grafía del universo; `null` en consolidado. */
+  /** The detail's area, with the universe's spelling; `null` in consolidado. */
   area: string | null;
   columns: SalariesColumn[];
   rows: SalariesRow[];
-  /** La fila de cierre. `null` cuando no hay ninguna fila que cerrar. */
+  /** The closing row. `null` when there is no row to close. */
   total: SalariesRow | null;
 }
 
-/** Lo que el grid lee: los períodos y la nómina de cada uno. */
+/** What the grid reads: the períodos and each one's nómina. */
 export interface SalariesSource {
   periods: readonly SalariesPeriodRef[];
-  /** Las fichas de cada período, indexadas por `periodId`. Un período ausente del mapa es un
-   *  período sin nómina, que es distinto de un período que no existe. */
+  /** Each período's records, indexed by `periodId`. A período absent from the map is a período with
+   *  no nómina, which is different from a período that does not exist. */
   linesByPeriod: ReadonlyMap<string, readonly PayrollEmployeeLine[]>;
 }
 
 /**
- * El universo contra el que se podan las marcas.
+ * The universe the marks are pruned against.
  *
- * Se calcula sobre TODOS los períodos del cliente y no sobre los que las marcas dejan pasar: si el
- * universo de áreas dependiera de las marcas de año, marcar un año podría borrar una marca de área
- * y la barra se reorganizaría sola bajo el puntero. Así, además, marcar un área que no tiene datos
- * en el rango visible es un estado legítimo —la pantalla lo dice— en vez de una marca que se
- * evapora.
+ * It is computed over ALL the client's períodos and not over the ones the marks let through: if the
+ * universe of areas depended on the year marks, marking a year could erase an area mark and the bar
+ * would reorganize itself under the pointer. That way, besides, marking an area with no data in the
+ * visible range is a legitimate state —the screen says so— instead of a mark that evaporates.
  */
 export function salariesUniverse(source: SalariesSource): SalariesUniverse {
   const lines = [...source.linesByPeriod.values()].flat();
@@ -93,11 +92,11 @@ export function salariesUniverse(source: SalariesSource): SalariesUniverse {
 }
 
 /**
- * El modo, leído de las marcas: **exactamente una** área marcada da el detalle de esa área;
- * ninguna o varias dan el consolidado.
+ * The mode, read off the marks: **exactly one** area marked gives that area's detail; none or several
+ * give the consolidado.
  *
- * Es la misma figura que PyG ya escribe para «Centro de costo» y «Año» (`resolveActiveCenterId`), y
- * lo que evita que la pantalla tenga un segundo sitio donde elegir el área.
+ * It is the same figure PyG already writes for «Centro de costo» and «Año» (`resolveActiveCenterId`),
+ * and what keeps the screen from having a second place to pick the area.
  */
 export function resolveAreaMode(filters: SalariesFilters): {
   mode: SalariesMode;
@@ -108,7 +107,7 @@ export function resolveAreaMode(filters: SalariesFilters): {
     : { mode: "consolidado", area: null };
 }
 
-/** Los períodos que sobreviven a las marcas de año y mes, en orden cronológico ascendente. */
+/** The períodos that survive the year and month marks, in ascending chronological order. */
 function visiblePeriods(
   periods: readonly SalariesPeriodRef[],
   filters: SalariesFilters,
@@ -131,25 +130,25 @@ function buildColumns(periods: readonly SalariesPeriodRef[]): SalariesColumn[] {
   }));
 }
 
-/** El costo patronal de una ficha: la columna `AY` del libro, siempre derivada por el motor. Las
- *  filas de bono viajan dentro de la captura, así que no hace falta traer nada del período. */
+/** A record's employer cost: the book's `AY` column, always derived by the engine. The bonus rows
+ *  travel inside the capture, so nothing needs to be brought from the período. */
 function costOf(line: PayrollEmployeeLine, parameters: PayrollParameters): number {
   return computeLinePayroll(line, parameters).employerCost;
 }
 
 /**
- * Una fila sobrevive si tiene al menos un valor en las columnas visibles. Una fila entera de huecos
- * no dice nada que la ausencia de la fila no diga igual, y en el consolidado llenaría la tabla de
- * áreas que este rango no vio.
+ * A row survives if it has at least one value in the visible columns. A whole row of gaps says nothing
+ * the absence of the row does not say just as well, and in the consolidado it would fill the table
+ * with areas this range never saw.
  */
 function hasAnyValue(values: readonly (number | null)[]): boolean {
   return values.some((value) => value !== null);
 }
 
 /**
- * El consolidado: una fila por área, con el costo de cada mes sumado bajo el área que declara la
- * ficha de ESE período. Un empleado que cambió de área a mitad de año suma en cada mes donde
- * estuvo, que es lo que hace que la suma de las áreas siga siendo la nómina entera.
+ * The consolidado: one row per area, with each month's cost summed under the area THAT período's
+ * record declares. An employee who changed area mid-year adds up in each month where they were, which
+ * is what keeps the sum of the areas being the whole nómina.
  */
 function buildAreaRows(
   source: SalariesSource,
@@ -157,8 +156,8 @@ function buildAreaRows(
   filters: SalariesFilters,
   parameters: PayrollParameters,
 ): SalariesRow[] {
-  // El orden es el del universo (las estándar primero), no el de aparición: tomarlo de la nómina
-  // reordenaría las filas al cargar otro mes.
+  // The order is the universe's (the standard ones first), not the order of appearance: taking it
+  // from the nómina would reorder the rows on loading another month.
   const order = salariesUniverse(source).areas.filter((area) => passes(filters.areas, area));
 
   return order
@@ -168,7 +167,7 @@ function buildAreaRows(
         const own = (source.linesByPeriod.get(period.id) ?? []).filter(
           (line) => areaKey(line.area) === key,
         );
-        // Ninguna ficha de esa área ese mes: hueco, no cero.
+        // No record of that area that month: a gap, not a zero.
         return own.length === 0
           ? null
           : own.reduce((sum, line) => sum + costOf(line, parameters), 0);
@@ -179,13 +178,14 @@ function buildAreaRows(
 }
 
 /**
- * El detalle de un área: una fila por empleado, alfabética.
+ * One area's detail: one row per employee, alphabetically.
  *
- * Un mes en el que la persona estuvo en OTRA área queda vacío, no en cero: bajo esta área no tuvo
- * costo ese mes, y escribir `$0.00` afirmaría que sí cobró cero aquí.
+ * A month in which the person was in ANOTHER area is left empty, not at zero: under this area they had
+ * no cost that month, and writing `$0.00` would claim they did receive zero here.
  *
- * El rótulo y el cargo son los de la ficha más reciente entre las visibles — si el contador
- * corrigió una grafía o el empleado cambió de cargo, lo vigente es lo que se quiere leer.
+ * The label and the job title are those of the most recent record among the visible ones — if the
+ * accountant corrected a spelling or the employee changed job title, what is current is what one wants
+ * to read.
  */
 function buildEmployeeRows(
   source: SalariesSource,
@@ -199,7 +199,7 @@ function buildEmployeeRows(
   periods.forEach((period, column) => {
     for (const line of source.linesByPeriod.get(period.id) ?? []) {
       const id = employeeKey(line);
-      // Una ficha sin cédula NI nombre no se puede rotular, así que no puede ser una fila.
+      // A record with neither cédula NOR name cannot be labelled, so it cannot be a row.
       if (id === null || areaKey(line.area) !== key) {
         continue;
       }
@@ -208,7 +208,7 @@ function buildEmployeeRows(
         sublabel: line.role,
         values: Array<number | null>(periods.length).fill(null),
       };
-      // Los períodos se recorren en orden ascendente, así que la última pasada es la más reciente.
+      // The períodos are walked in ascending order, so the last pass is the most recent one.
       row.label = line.name;
       row.sublabel = line.role;
       row.values[column] = (row.values[column] ?? 0) + costOf(line, parameters);
@@ -222,8 +222,8 @@ function buildEmployeeRows(
 }
 
 /**
- * La fila de cierre: la suma de las filas presentes, columna a columna. `null` en una columna donde
- * ninguna fila tiene valor —no hay nada que totalizar— y `null` entera cuando no hay filas.
+ * The closing row: the sum of the rows present, column by column. `null` in a column where no row has
+ * a value —there is nothing to total— and `null` entirely when there are no rows.
  */
 function buildTotalRow(rows: readonly SalariesRow[], mode: SalariesMode): SalariesRow | null {
   if (rows.length === 0) {
@@ -235,8 +235,8 @@ function buildTotalRow(rows: readonly SalariesRow[], mode: SalariesMode): Salari
   });
   return {
     id: "total",
-    // «SUBTOTAL» es lo que la hoja del contador rotula al cerrar un área; «SUMAN» cierra el libro
-    // entero y aquí no hay más de un área que cerrar, así que sobra.
+    // «SUBTOTAL» is what the accountant's sheet labels the close of an area with; «SUMAN» closes the
+    // whole book and here there is no more than one area to close, so it is superfluous.
     label: mode === "detalle" ? "SUBTOTAL" : "TOTAL",
     values,
   };

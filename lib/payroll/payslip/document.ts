@@ -1,31 +1,31 @@
 /**
- * DE LA FICHA DE UN EMPLEADO AL COMPROBANTE, sin tocar `pdf-lib`.
+ * FROM AN EMPLOYEE'S RECORD TO THE PAYSLIP, without touching `pdf-lib`.
  *
- * Reproduce la hoja `INDIVIDUAL` del libro del contador (`Print_Area = A1:P49`), que es el papel
- * que el empleado firma cada mes. Tres decisiones sostienen la fidelidad y conviene tenerlas
- * juntas, porque las tres son al revés de lo que hace la PANTALLA de detalle:
+ * It reproduces the accountant's book `INDIVIDUAL` sheet (`Print_Area = A1:P49`), which is the paper
+ * the employee signs each month. Three decisions hold up the fidelity and it is worth keeping them
+ * together, because all three are the opposite of what the detail SCREEN does:
  *
- * 1. **Solo se imprimen las filas CON importe.** El papel se imprimía entero, las 26 filas con `-`
- *    donde no había nada, porque un formulario de posición fija se revisa buscando cada concepto
- *    donde siempre está. La firma pidió lo contrario: que el comprobante liste lo que este mes se
- *    pagó y se descontó, y nada más. No es la regla de la PANTALLA, que es otra y sigue siendo
- *    otra: `visibleIncomeConcepts` esconde lo que se TECLEA en cero y conserva siempre lo que la
- *    app deriva —esa tabla es donde se captura, y una fila que se va se lleva consigo el sitio
- *    donde escribirla—; aquí no se captura nada, así que se juzga el IMPORTE, venga del motor o
- *    de la captura.
- * 2. **El orden es el de COLUMNAS del libro**, no el del catálogo. `concepts.ts` agrupa los
- *    calculados arriba (una decisión de la tabla, donde son las filas grises que no se editan) y
- *    por eso pone el fondo de reserva séptimo; el papel lo pone duodécimo, porque su columna `U`
- *    va detrás de la `T`. No hace falta declarar una segunda lista: se ordena por el campo
- *    `column` que el catálogo ya trae.
- * 3. **No se imprimen las cuatro filas de egreso SIN RÓTULO** del Excel (columnas `AJ`–`AM`).
- *    Siempre valen cero, `concepts.ts` las excluye a propósito (§11.4: sin nombre no entran al
- *    catálogo), e imprimirlas obligaría a este archivo a declarar filas que ninguna otra parte de
- *    la app conoce.
+ * 1. **Only the rows WITH an amount are printed.** The paper used to be printed whole, all 26 rows
+ *    with a `-` where there was nothing, because a fixed-position form is reviewed by looking for
+ *    each concept where it always is. The firm asked for the opposite: that the payslip lists what
+ *    was paid and deducted this month, and nothing more. It is not the SCREEN's rule, which is
+ *    another one and remains another one: `visibleIncomeConcepts` hides what is TYPED at zero and
+ *    always keeps what the app derives —that table is where capturing happens, and a row that goes
+ *    away takes with it the place to write it—; here nothing is captured, so the AMOUNT is judged,
+ *    whether it comes from the engine or from the capture.
+ * 2. **The order is the book's COLUMN order**, not the catalogue's. `concepts.ts` groups the
+ *    calculated ones at the top (a decision of the table, where they are the grey rows that are not
+ *    edited) and that is why it puts the reserve fund seventh; the paper puts it twelfth, because its
+ *    column `U` comes after `T`. No second list has to be declared: it is ordered by the `column`
+ *    field the catalogue already carries.
+ * 3. **The four UNLABELLED deduction rows of the Excel are not printed** (columns `AJ`–`AM`). They
+ *    are always zero, `concepts.ts` excludes them on purpose (§11.4: with no name they do not enter
+ *    the catalogue), and printing them would force this file to declare rows no other part of the app
+ *    knows about.
  *
- * Nada de esto se persiste: el comprobante se arma en el momento de la descarga desde la ficha, lo
- * capturado y lo que deriva el motor. Una copia guardada quedaría obsoleta en cuanto alguien
- * corrigiera los días trabajados, y el papel diría una cosa y la pantalla otra.
+ * None of this is persisted: the payslip is assembled at download time from the record, what was
+ * captured and what the engine derives. A stored copy would go stale as soon as someone corrected the
+ * days worked, and the paper would say one thing and the screen another.
  */
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { letterheadLines, type CompanyProfile } from "@/lib/company-profile";
@@ -46,32 +46,32 @@ import type { PayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
 import { formatPayslipAmount, formatQuantity } from "./format";
 import type { PayslipDocument, PayslipRow } from "./types";
 
-/** La marca de la columna `Cantidad` que la nota al pie explica. */
+/** The `Cantidad` column's mark that the footnote explains. */
 export const NOT_CONTRIBUTORY_MARK = "(*)";
 
 /**
- * Ordena dos columnas de Excel: primero por longitud, luego alfabéticamente. Sin la longitud, un
- * orden alfabético a secas pondría `AA` antes que `Z` y el bloque de egresos saldría al revés.
+ * Orders two Excel columns: first by length, then alphabetically. Without the length, a plain
+ * alphabetical order would put `AA` before `Z` and the deductions block would come out backwards.
  */
 export function compareExcelColumns(a: string, b: string): number {
   return a.length - b.length || a.localeCompare(b);
 }
 
-/** Los ingresos del catálogo en el orden del papel. */
+/** The catalogue's income items in the paper's order. */
 export function payslipIncomeConcepts(): IncomeConcept[] {
   return [...INCOME_CONCEPTS].sort((a, b) => compareExcelColumns(a.column, b.column));
 }
 
-/** Los egresos del catálogo en el orden del papel. */
+/** The catalogue's deductions in the paper's order. */
 export function payslipDeductionConcepts(): DeductionConcept[] {
   return [...DEDUCTION_CONCEPTS].sort((a, b) => compareExcelColumns(a.column, b.column));
 }
 
 /**
- * La columna `Cantidad` de una fila de ingreso. Solo cinco de las trece la usan:
- * - las tres de horas extras, con las horas TRABAJADAS — no las aprobadas. El recorte de Gerencia
- *   (`approvedOvertime`) mueve lo que SUMA, no lo que se muestra, igual que en pantalla;
- * - el fondo de reserva y el bono, con el literal `(*)` que la nota al pie explica.
+ * The `Cantidad` column of an income row. Only five of the thirteen use it:
+ * - the three overtime ones, with the hours WORKED — not the approved ones. Gerencia's trim
+ *   (`approvedOvertime`) moves what ADDS UP, not what is shown, just as on screen;
+ * - the reserve fund and the bonus, with the literal `(*)` the footnote explains.
  */
 function incomeQuantity(concept: IncomeConcept, capture: PayrollMonthlyCapture): string | null {
   if (concept.notContributory) {
@@ -83,19 +83,19 @@ function incomeQuantity(concept: IncomeConcept, capture: PayrollMonthlyCapture):
   return null;
 }
 
-/** Un número sin formato de celda, como lo escribe el `&` de Excel al concatenarlo: `0`, `45.67`.
- *  Se redondea a centavos para no arrastrar el ruido de coma flotante del motor. */
+/** A number with no cell format, as Excel's `&` writes it when concatenating: `0`, `45.67`. It is
+ *  rounded to cents so as not to drag the engine's floating-point noise. */
 function plainNumber(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
 /**
- * La fila de un concepto, o NINGUNA si no tiene importe — la regla 1 de la cabecera, escrita en un
- * solo sitio para los dos bloques.
+ * A concept's row, or NONE if it has no amount — rule 1 of the header, written in a single place for
+ * both blocks.
  *
- * El cero se juzga al CENTAVO y con `sameToTheCentavo`, que es la única definición de «el mismo
- * importe» del módulo: el motor no redondea sus totales y arrastra ruido de coma flotante, así que
- * un `1e-14` no es una cifra que declarar y su fila no tiene por qué ocupar un renglón.
+ * Zero is judged to the CENT and with `sameToTheCentavo`, which is the module's only definition of
+ * «the same amount»: the engine does not round its totals and drags floating-point noise, so a
+ * `1e-14` is not a figure to declare and its row has no reason to take up a line.
  */
 function rowFor(
   concept: IncomeConcept | DeductionConcept,
@@ -109,9 +109,9 @@ function rowFor(
   return [
     {
       code: concept.code,
-      // El rótulo del libro, salvo que este empleado le haya puesto uno propio a esta fila. Es el
-      // motivo de `row-labels.ts`: `E-11` es la columna `AH OTROS` y un comprobante que imprime el
-      // nombre de la columna no dice qué se descontó.
+      // The book's label, unless this employee gave this row one of their own. It is the reason for
+      // `row-labels.ts`: `E-11` is the `AH OTROS` column and a payslip that prints the column's name
+      // does not say what was deducted.
       label: payslipLabelFor(concept, capture),
       quantity,
       value: formatPayslipAmount(amount),
@@ -120,14 +120,14 @@ function rowFor(
 }
 
 /**
- * Las filas de BONO que la captura de este empleado declara, con el rótulo que él les puso.
+ * The BONUS rows this employee's capture declares, with the label they gave them.
  *
- * El `code` va vacío: los `I-01`…`I-13` del catálogo son posiciones del libro que el contador
- * reconoce, y numerar estos con la misma gramática afirmaría que también salen de su hoja. El
- * rótulo se imprime en MAYÚSCULAS, que es la convención de todos los `payslipLabel`.
+ * The `code` goes empty: the catalogue's `I-01`…`I-13` are positions of the book the accountant
+ * recognises, and numbering these with the same grammar would claim they come from their sheet too.
+ * The label is printed in CAPITALS, which is the convention of every `payslipLabel`.
  *
- * Los NO aportables llevan el `(*)`, la misma marca que `U` y `V`, porque su nota al pie —«No
- * aporta IESS ni es Ingreso Gravado»— es literalmente lo que su clase significa.
+ * The NON-contributory ones carry the `(*)`, the same mark as `U` and `V`, because its footnote —«No
+ * aporta IESS ni es Ingreso Gravado»— is literally what their class means.
  */
 function extraIncomeRows(capture: PayrollMonthlyCapture): PayslipRow[] {
   return (capture.extras ?? []).flatMap((row) => {
@@ -145,7 +145,7 @@ function extraIncomeRows(capture: PayrollMonthlyCapture): PayslipRow[] {
   });
 }
 
-/** El mes tal como lo escribe el comprobante: `MARZO 2026`. */
+/** The month as the payslip writes it: `MARZO 2026`. */
 export function payslipMonthLabel(year: number, monthIndex: number): string {
   return `${MONTHS_FULL_ES[monthIndex].toUpperCase()} ${year}`;
 }
@@ -167,19 +167,19 @@ export function buildPayslipDocument({
   capture: PayrollMonthlyCapture;
   year: number;
   monthIndex: number;
-  /** El nombre que el usuario le dio al cliente. La razón social que el contador imprime aquí va
-   *  DEBAJO, en `companyLines`: son dos cosas distintas —«Delicmar» y `DELICMAR S.A.S.`— y el papel
-   *  las escribe las dos. */
+  /** The name the user gave the client. The razón social the accountant prints here goes BELOW, in
+   *  `companyLines`: they are two different things —«Delicmar» and `DELICMAR S.A.S.`— and the paper
+   *  writes both. */
   clientName: string;
-  /** El logo del cliente, si subió uno. Encabeza el comprobante junto al nombre. */
+  /** The client's logo, if they uploaded one. It heads the payslip next to the name. */
   clientLogo?: EntityLogo;
-  /** Los datos de la empresa que el cliente declaró. Sin ellos el encabezado queda como estaba. */
+  /** The company data the client declared. Without it the header stays as it was. */
   clientCompany?: CompanyProfile;
-  /** El centro de costo declarado, si lo hay: aporta la segunda mitad del rótulo y el logo de la
-   *  derecha. Sin él el comprobante sale exactamente como salía. */
+  /** The declared cost center, if there is one: it contributes the second half of the label and the
+   *  right-hand logo. Without it the payslip comes out exactly as it used to. */
   clientCostCenter?: CostCenter;
-  /** La posición del empleado en la nómina, 1…N. Es lo que el libro llama `Codigo:` — su columna
-   *  `A` es un contador por orden que salta las cabeceras de área, no un identificador estable. */
+  /** The employee's position in the nómina, 1…N. It is what the book calls `Codigo:` — its column
+   *  `A` is a running counter that skips the area headers, not a stable identifier. */
   position: number;
 }): PayslipDocument {
   const incomes: PayslipRow[] = [
@@ -191,9 +191,9 @@ export function buildPayslipDocument({
         capture,
       ),
     ),
-    // Las filas de bono van DETRÁS del catálogo y no intercaladas: el orden del papel es el de
-    // COLUMNAS del libro, y estas no tienen ninguna — no hay sitio donde meterlas que signifique
-    // algo. Detrás, además, deja intacta la posición de las trece filas que el contador conoce.
+    // The bonus rows go AFTER the catalogue and not interleaved: the paper's order is the book's
+    // COLUMN order, and these have none — there is no place to put them that would mean anything.
+    // Behind, besides, leaves the position of the thirteen rows the accountant knows untouched.
     ...extraIncomeRows(capture),
   ];
 
@@ -212,18 +212,18 @@ export function buildPayslipDocument({
     period: `MES: ${payslipMonthLabel(year, monthIndex)}`,
     codeLine: `Codigo: ${position}`,
     daysLine: `Dias Trabajados: ${line.days}`,
-    // `G7` del libro es `"FR="&VLOOKUP(…,21,…)`, y la columna 21 de su rango es `U`: el IMPORTE
-    // del fondo de reserva pagado, no el flag `hasReserveFund` de la ficha. Va SIN el formato
-    // contable de las filas —un cero sale `FR=0`, no `FR=-`— porque el `&` de Excel convierte el
-    // número crudo y se salta el formato de la celda.
+    // The book's `G7` is `"FR="&VLOOKUP(…,21,…)`, and column 21 of its range is `U`: the AMOUNT of
+    // the reserve fund paid, not the record's `hasReserveFund` flag. It goes WITHOUT the rows'
+    // accounting format —a zero comes out `FR=0`, not `FR=-`— because Excel's `&` converts the raw
+    // number and skips the cell's format.
     reserveFundLine: `FR=${plainNumber(computed.reserveFundPaid)}`,
     employeeName: line.name,
     role: line.role,
     incomes,
     deductions,
-    // La nota solo sale si queda en la hoja alguna marca que explicar: las dos filas que la llevan
-    // son las que más veces valen cero, y un pie que aclara un `(*)` que no está en el papel manda
-    // a buscar algo que no existe.
+    // The note only comes out if some mark is left on the sheet to explain: the two rows that carry
+    // it are the ones that are zero most often, and a footnote clarifying a `(*)` that is not on the
+    // paper sends the reader looking for something that does not exist.
     footnote: incomes.some((row) => row.quantity === NOT_CONTRIBUTORY_MARK)
       ? PAYSLIP_FOOTNOTE
       : null,
@@ -234,10 +234,10 @@ export function buildPayslipDocument({
   };
 }
 
-/** La nota al pie que explica el `(*)`. Verbatim de `B43`. */
+/** The footnote that explains the `(*)`. Verbatim from `B43`. */
 export const PAYSLIP_FOOTNOTE = "(*) No aporta IESS ni es Ingreso Gravado";
 
-/** La declaración que el empleado acepta al firmar. Verbatim de `B44`. */
+/** The declaration the employee accepts on signing. Verbatim from `B44`. */
 export const PAYSLIP_DECLARATION =
   "Declaro y acepto que los valores de remuneraciones, horas extras y descuentos son correctos y " +
   "que recibo del valor que consta en LIQUIDO A RECIBIR a mi entera satisfacción.";

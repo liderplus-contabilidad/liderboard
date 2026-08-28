@@ -12,14 +12,14 @@ import { SalariesReportHeader } from "./salaries-report-header";
 import { SalariesReportSection } from "./salaries-report-section";
 
 /**
- * El informe de Sueldos por Áreas, sobre el mismo armazón que PyG (`ReportLayer`/`ReportSheet`).
+ * The Sueldos por Áreas report, over the same shell as PyG's (`ReportLayer`/`ReportSheet`).
  *
- * Recibe `source`/`filters` ya resueltos por `SalariesView` en vez de leerlos de un provider: las
- * marcas de esta pantalla viven en estado local del componente (no hay nada más en el layout que
- * las lea), así que aquí llegan como argumentos.
+ * It receives `source`/`filters` already resolved by `SalariesView` instead of reading them from a
+ * provider: this screen's marks live in the component's local state (nothing else in the layout reads
+ * them), so here they arrive as arguments.
  *
- * Una sola hoja para todo el informe — `statementFit` decide UNA orientación para todas las
- * tablas, porque comparten exactamente las mismas columnas (design decision #6).
+ * One single sheet for the whole report — `statementFit` decides ONE orientation for every table,
+ * because they share exactly the same columns (design decision #6).
  */
 export function SalariesReportPreview({
   clientName,
@@ -36,7 +36,7 @@ export function SalariesReportPreview({
   filters: SalariesFilters;
   onClose: () => void;
 }) {
-  // Sellada una vez, al abrir la vista previa, para que no avance mientras el lector la mira.
+  // Stamped once, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 
   const report = useMemo(

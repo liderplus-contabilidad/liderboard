@@ -3,7 +3,7 @@ import { makeSource } from "../analytics/fixtures";
 import { buildCentersAnnex, type CentersAnnexInput } from "./centers-annex";
 import type { CentersAnnex } from "./types";
 
-/** Cultura Manor bills 25.229 against 20.121 a month, Ene–Jul; el otro centro es 100× menor. */
+/** Cultura Manor bills 25,229 against 20,121 a month, Ene–Jul; the other center is 100× smaller. */
 const MANOR = makeSource();
 const PRINCIPAL = makeSource({
   centerId: "centro-de-costo-principal",
@@ -46,11 +46,11 @@ describe("las filas del anexo", () => {
   it("suma cada centro sobre todo lo que el informe cubre", () => {
     const [manor, principal] = rowValues(annex(), "ingresos");
 
-    // Siete meses cargados a 25.229 — menos los 300 de «Ventas Eventos», que el hotel no factura
-    // en febrero. Ese cero es REAL y entra en la suma como tal; lo que nunca entraría es un mes
-    // sin cargar.
+    // Seven months loaded at 25,229 — minus the 300 of «Ventas Eventos», which the hotel does not
+    // bill in February. That zero is REAL and goes into the sum as such; what would never go in is an
+    // unloaded month.
     expect(manor).toBeCloseTo(25229 * 7 - 300, 6);
-    // El otro centro es 1% del primero y además no reporta «Ventas Lavandería» (327).
+    // The other center is 1% of the first and also does not report «Ventas Lavandería» (327).
     expect(principal).toBeCloseTo((25229 - 327) * 7 * 0.01 - 300 * 0.01, 6);
   });
 
@@ -87,7 +87,7 @@ describe("las filas del anexo", () => {
     const gastos = rowValues(result, "gastos")[0] ?? 0;
     const noOperativos = rowValues(result, "no-operativos")[0] ?? 0;
 
-    // 900 al mes en la raíz 6: dejarla fuera daría una utilidad 6.300 más alta.
+    // 900 a month in root 6: leaving it out would give a profit 6,300 higher.
     expect(noOperativos).toBeCloseTo(900 * 7, 6);
     expect(rowValues(result, "utilidad")[0]).toBeCloseTo(ingresos - gastos - noOperativos, 6);
   });
@@ -111,8 +111,8 @@ describe("el margen", () => {
     const [manor, principal, consolidado] = margen;
     const promedio = ((manor ?? 0) + (principal ?? 0)) / 2;
 
-    // Con estos dos centros el promedio y la razón casi coinciden; lo que se fija es que el
-    // Consolidado se calcule de sus propias sumas y no promediando columnas.
+    // With these two centers the average and the ratio almost coincide; what is fixed is that the
+    // Consolidado is computed from its own sums and not by averaging columns.
     expect(consolidado).toBeCloseTo(
       ((rowValues(result, "utilidad")[2] ?? 0) / (rowValues(result, "ingresos")[2] ?? 1)) * 100,
       6,
@@ -138,7 +138,7 @@ describe("la cobertura", () => {
       periods: [{ year: 2026, frequency: "mensual", index: 0 }],
     });
 
-    // Un solo mes en vez de los siete.
+    // A single month instead of the seven.
     expect(rowValues(result, "ingresos")[0]).toBeCloseTo(25229, 6);
   });
 });

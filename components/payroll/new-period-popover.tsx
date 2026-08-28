@@ -11,9 +11,9 @@ import type { PayrollPeriod } from "@/lib/payroll/types";
 import { usePayrollData } from "./payroll-data-provider";
 
 /**
- * Años que ofrece el formulario: los que el cliente ya tiene, más un margen alrededor del
- * propuesto — así un backfill de un año anterior sigue estando a un clic, y no hay que escribir
- * un año a mano para volver atrás.
+ * Years the form offers: the ones the client already has, plus a margin around the proposed one — so
+ * backfilling an earlier year is still one click away, and no year has to be typed by hand to go
+ * back.
  */
 function yearOptions(existingYears: readonly number[], proposedYear: number): number[] {
   const margin = [proposedYear - 2, proposedYear - 1, proposedYear, proposedYear + 1];
@@ -22,34 +22,34 @@ function yearOptions(existingYears: readonly number[], proposedYear: number): nu
 
 export interface NewPeriodFormProps {
   /**
-   * Cuando llega, la fuente de «Copiar nómina» es ESTE período — no el resuelto contra el
-   * destino elegido. Es lo que separa el disparador del encabezado (resuelve la fuente contra el
-   * destino, con `sourceForCopy`) del menú «⋯» de una fila (la fija de antemano): comparten el
-   * formulario, no la fuente.
+   * When it arrives, the source of «Copiar nómina» is THIS período — not the one resolved against the
+   * chosen destination. It is what separates the header's trigger (which resolves the source against
+   * the destination, with `sourceForCopy`) from a row's «⋯» menu (which fixes it beforehand): they
+   * share the form, not the source.
    */
   fixedSource?: PayrollPeriod;
-  /** Llamado tras crear el período, para que quien lo aloja (el popover del encabezado o el de
-   *  una fila) se cierre. */
+  /** Called after creating the período, so whoever hosts it (the header's popover or a row's) can
+   *  close. */
   onDone: () => void;
 }
 
 /**
- * El formulario de «Nuevo período», compartido por sus dos puertas — el popover del encabezado y
- * el menú «⋯» de una fila —, igual que `useEntityNaming` lo hace para el nombre del cliente. Un
- * mecanismo por debajo, dos maneras de resolver la fuente.
+ * The «Nuevo período» form, shared by its two doors — the header's popover and a row's «⋯» menu —,
+ * just as `useEntityNaming` does for the client's name. One mechanism underneath, two ways of
+ * resolving the source.
  */
 export function NewPeriodForm({ fixedSource, onDone }: NewPeriodFormProps) {
   const { periods, years, rosterByPeriod, createPeriod, periodClash } = usePayrollData();
 
-  // `today` entra aquí, en el componente — nunca dentro de `lib/payroll/` — para que
-  // `proposeNextPeriod` siga siendo determinista y testeable.
+  // `today` enters here, in the component — never inside `lib/payroll/` — so `proposeNextPeriod` stays
+  // deterministic and testable.
   const proposed = useMemo(() => proposeNextPeriod(periods, new Date()), [periods]);
   const [year, setYear] = useState(proposed.year);
   const [monthIndex, setMonthIndex] = useState(proposed.monthIndex);
   const [busy, setBusy] = useState<"copy" | "blank" | null>(null);
 
-  // La fuente se recalcula en cada cambio de mes/año: sin esto, rellenar un mes hacia atrás (el
-  // cliente ya tiene junio y se registra abril) copiaría del período equivocado.
+  // The source is recomputed on every month/year change: without this, backfilling a month (the client
+  // already has June and April is registered) would copy from the wrong período.
   const resolvedSource = useMemo(
     () => fixedSource ?? sourceForCopy(periods, year, monthIndex),
     [fixedSource, periods, year, monthIndex],
@@ -57,14 +57,14 @@ export function NewPeriodForm({ fixedSource, onDone }: NewPeriodFormProps) {
   const sourceHasRoster = resolvedSource
     ? (rosterByPeriod.get(resolvedSource.id)?.employees ?? 0) > 0
     : false;
-  // El botón de copiar NO se renderiza (no aparece deshabilitado) cuando la fuente no existe o no
-  // tiene nómina — copiar cero empleados prometiendo «se traen empleados, cargos y sueldos base»
-  // sería mentir. Misma regla que «Segmentar gastos» en PyG, que desaparece en vez de apagarse.
+  // The copy button is NOT rendered (it does not appear disabled) when the source does not exist or has
+  // no nómina — copying zero employees while promising «se traen empleados, cargos y sueldos base»
+  // would be a lie. Same rule as «Segmentar gastos» in PyG, which disappears instead of switching off.
   const showCopyButton = resolvedSource !== null && sourceHasRoster;
 
   const clash = periodClash(year, monthIndex);
-  // Con el destino ocupado, las DOS salidas se apagan — no solo una — porque ninguna de las dos
-  // tiene a dónde escribir.
+  // With the destination taken, BOTH exits switch off — not just one — because neither has anywhere to
+  // write.
   const disabled = clash !== null || busy !== null;
 
   const availableYears = useMemo(() => yearOptions(years, year), [years, year]);
@@ -135,8 +135,8 @@ export function NewPeriodForm({ fixedSource, onDone }: NewPeriodFormProps) {
         </Button>
       </div>
 
-      {/* Solo se rinde cuando el botón de copiar está presente: sin él, explicaría una acción
-          que no está en pantalla. */}
+      {/* Rendered only when the copy button is present: without it, it would explain an action that is
+          not on screen. */}
       {showCopyButton && (
         <p className="mt-2.5 text-[11.5px] leading-relaxed text-faint">
           Al copiar se traen empleados, cargos y sueldos base del período anterior; los valores del
@@ -147,9 +147,9 @@ export function NewPeriodForm({ fixedSource, onDone }: NewPeriodFormProps) {
   );
 }
 
-/** El disparador «+ Nuevo período»: un `Button` normal que también hace de ancla del popover, vía
- *  `useDropdown()` — la ruta que `DropdownTrigger` no cubre porque su look es el de un filtro, no
- *  el de una acción primaria. */
+/** The «+ Nuevo período» trigger: an ordinary `Button` that also acts as the popover's anchor, via
+ *  `useDropdown()` — the route `DropdownTrigger` does not cover because its look is that of a filter,
+ *  not of a primary action. */
 function NewPeriodTrigger() {
   const { open, setOpen, triggerRef } = useDropdown();
   return (
@@ -166,17 +166,17 @@ function NewPeriodTrigger() {
   );
 }
 
-/** Cierra el popover del encabezado tras crear el período — vive dentro de `<Dropdown>` para
- *  poder llamar a `setOpen(false)`. */
+/** Closes the header's popover after creating the período — it lives inside `<Dropdown>` so it can
+ *  call `setOpen(false)`. */
 function NewPeriodPanelContent() {
   const { setOpen } = useDropdown();
   return <NewPeriodForm onDone={() => setOpen(false)} />;
 }
 
 /**
- * «+ Nuevo período»: el mismo disparador para el encabezado de la tarjeta y para el vacío. Un
- * popover anclado bajo el botón — sin scrim, el historial detrás sigue legible — en vez del
- * diálogo centrado de antes; se cierra con Escape o con un clic fuera (ambos ya resueltos por
+ * «+ Nuevo período»: the same trigger for the card's header and for the empty state. A popover
+ * anchored under the button — no scrim, the history behind stays readable — instead of the centred
+ * dialog it used to be; it closes with Escape or a click outside (both already handled by
  * `Dropdown`/`DropdownPanel`).
  */
 export function NewPeriodButton() {

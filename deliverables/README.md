@@ -3,12 +3,12 @@
 Documentos destinados al **cliente**, no al desarrollo interno. Cada archivo de esta carpeta se
 entrega tal cual: se abre en el navegador sin servidor, sin dependencias y sin conexión.
 
-| Documento                                            | Contenido                                                                                    |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [`manual-usuario.html`](./manual-usuario.html)       | Guía por tarea para quien usa el sistema, con capturas de cada pantalla.                     |
-| [`manual-tecnico.html`](./manual-tecnico.html)       | Arquitectura, tecnologías, diagramas ER de las tres bases IndexedDB y diccionario de datos.  |
-| [`manual-despliegue.html`](./manual-despliegue.html) | Instalación local, publicación en Vercel y la operativa de datos en el navegador.            |
-| [`documento-entrega.html`](./documento-entrega.html) | Cierre del proyecto: qué se entrega, cómo se verificó, qué queda fuera y quién lo construyó. |
+| Documento                                            | Contenido                                                                                     |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`manual-usuario.html`](./manual-usuario.html)       | Guía por tarea para quien usa el sistema, con capturas de cada pantalla.                      |
+| [`manual-tecnico.html`](./manual-tecnico.html)       | Arquitectura, tecnologías, diagramas ER de las cuatro bases IndexedDB y diccionario de datos. |
+| [`manual-despliegue.html`](./manual-despliegue.html) | Instalación local, publicación en Vercel y la operativa de datos en el navegador.             |
+| [`documento-entrega.html`](./documento-entrega.html) | Cierre del proyecto: qué se entrega, cómo se verificó, qué queda fuera y quién lo construyó.  |
 
 No aplica un manual de API: la aplicación no expone ni consume ninguna — sin backend, sin
 peticiones de red y sin variables de entorno. Se evaluó y se descartó, no se omitió.
@@ -20,6 +20,11 @@ en los tres manuales. También se evaluó y se descartó.
 
 Las capturas del manual de usuario se tomaron con **datos de demostración** generados
 (`pnpm gen:testdata`), no con información de clientes, así que el documento puede circular.
+
+Las de **Pérdidas y Ganancias** y **Ventas por servicio** están al día. Las de **Ocupaciones** y
+**Rol de Pagos** son de una sesión anterior: su contenido no ha cambiado, pero el menú lateral que
+sale al fondo todavía no muestra el subitem _Ventas por servicio_. Rehacerlas pide datos de
+demostración de esos dos módulos, que `gen:testdata` no produce.
 
 ## Cómo abrirlo
 

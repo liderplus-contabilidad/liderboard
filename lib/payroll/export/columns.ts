@@ -1,86 +1,89 @@
 /**
- * EL LAYOUT DE LA HOJA `GENERAL` — declarado una sola vez, y espejo exacto del lector.
+ * THE `GENERAL` SHEET'S LAYOUT — declared just once, and an exact mirror of the reader.
  *
- * `upload/rol-general-grid.ts` dice DÓNDE ESTÁ cada columna en el archivo del contador; este archivo
- * dice DÓNDE SE ESCRIBE y DE DÓNDE SALE su valor. Son las dos mitades de la misma frontera, y el
- * riesgo real de esta descarga no es equivocar una cifra —el motor ya está probado contra el libro—
- * sino que las dos mitades se SEPAREN: añadir una columna al parser y no aquí (o al revés) no lo
- * delata ninguna suma, porque las sumas siguen cuadrando sin ella. Por eso `columns.test.ts` las
- * cruza: todo rótulo que `LABEL_SPECS` busca existe aquí con la MISMA letra.
+ * `upload/rol-general-grid.ts` says WHERE each column IS in the accountant's file; this file says
+ * WHERE IT IS WRITTEN and WHERE its value COMES FROM. They are the two halves of the same boundary,
+ * and this download's real risk is not getting a figure wrong —the engine is already tested against
+ * the book— but the two halves DRIFTING APART: adding a column to the parser and not here (or the
+ * other way round) is given away by no sum, because the sums keep squaring without it. That is why
+ * `columns.test.ts` crosses them: every label `LABEL_SPECS` looks for exists here with the SAME
+ * letter.
  *
- * **La letra es el contrato.** El contador coteja pantalla contra hoja columna por columna, así que
- * una columna cuyo dato la app no guarda —`AJ`–`AM`, `AQ`, `BE`— se declara igual y sale vacía, en
- * vez de omitirse: omitirla correría a todas las de su derecha y su `AY` dejaría de ser `AY`.
+ * **The letter is the contract.** The accountant checks screen against sheet column by column, so a
+ * column whose datum the app does not store —`AJ`–`AM`, `AQ`, `BE`— is declared all the same and
+ * comes out empty, instead of being omitted: omitting it would shift everything to its right and its
+ * `AY` would stop being `AY`.
  *
- * **Los rótulos van en DOS filas**, como en el libro: la primera rotula `M`–`CA` (y lleva además los
- * dos agrupadores sobre las horas extras), la segunda rotula `A`–`L`. No es una floritura: el lector
- * localiza cada rótulo por su texto ENTERO, y el agrupador `" No. HORAS EXTRAS"` empieza igual que
- * el `"No. "` que nombra el ordinal — reproducir las dos filas es lo que mantiene ese archivo
- * leyéndose como se lee hoy.
+ * **The labels go in TWO rows**, as in the book: the first labels `M`–`CA` (and also carries the two
+ * groupers over the overtime), the second labels `A`–`L`. It is not a flourish: the reader locates
+ * each label by its WHOLE text, and the grouper `" No. HORAS EXTRAS"` starts the same as the `"No. "`
+ * that names the ordinal — reproducing the two rows is what keeps that file reading the way it reads
+ * today.
  *
- * La hoja termina en `CA`. El libro sigue con un bloque `CC`–`CF` que REPITE `PAGADO` y
- * `DIFERENCIA X PAGAR`: es el área de trabajo del contador —el propio parser lo esquiva con su regla
- * de «primera coincidencia»—, y copiarlo escribiría dos veces la misma cifra sin que la segunda
- * signifique nada. La fila de índices de búsqueda que el original lleva encima tampoco se reproduce:
- * allí está DESINCRONIZADA (falta `AR`, así que todo índice desde `AS` nombra la columna de al lado),
- * y copiar un índice roto es peor que no copiarlo.
+ * The sheet ends at `CA`. The book carries on with a `CC`–`CF` block that REPEATS `PAGADO` and
+ * `DIFERENCIA X PAGAR`: it is the accountant's work area —the parser itself dodges it with its
+ * «first match» rule—, and copying it would write the same figure twice without the second one
+ * meaning anything. The row of lookup indices the original carries above it is not reproduced either:
+ * there it is OUT OF SYNC (`AR` is missing, so every index from `AS` on names the column next to it),
+ * and copying a broken index is worse than not copying it.
  */
 import type { PayrollEmployeeComputation } from "../engine/types";
 import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "../types";
 
-/** Lo que una celda de esta hoja puede llevar. `Date` solo la fecha de ingreso; `null` es la celda
- *  en blanco, que NO es lo mismo que un cero (ver `PAGADO`). */
+/** What a cell of this sheet can carry. `Date` only for the hire date; `null` is the blank cell,
+ *  which is NOT the same as a zero (see `PAGADO`). */
 export type RolExportCell = string | number | Date | null;
 
 /**
- * Cómo se formatea la celda. `money` y `hours` se separan aunque hoy compartan máscara porque no son
- * la misma magnitud: 5,5 son horas y 487,21 son dólares, y el día que el formato del dinero cambie
- * (un símbolo, un color para el negativo) las horas no deben irse con él.
+ * How the cell is formatted. `money` and `hours` are kept apart even though they share a mask today
+ * because they are not the same magnitude: 5.5 are hours and 487.21 are dollars, and the day the
+ * money format changes (a symbol, a colour for the negative) the hours must not go with it.
  */
 export type RolCellFormat = "text" | "money" | "hours" | "integer" | "date";
 
-/** Todo lo que una fila de empleado necesita para llenarse. El `computed` viene de
- *  `computeLinePayroll`, que es la única composición ficha + captura → motor de la app. */
+/** Everything a row of an employee needs in order to be filled. The `computed` comes from
+ *  `computeLinePayroll`, which is the app's only composition record + capture → engine. */
 export interface RolRowContext {
   line: ParsedPayrollEmployeeLine;
   capture: PayrollMonthlyCapture;
   computed: PayrollEmployeeComputation;
-  /** La suma de los conceptos extra que el período declara, para este empleado. */
+  /** The sum of the extra concepts the período declares, for this employee. */
   extras: number;
-  /** Su número de orden en la hoja, corrido a lo largo de todas las áreas. */
+  /** Their order number on the sheet, running across all the areas. */
   ordinal: number;
 }
 
 export interface RolExportColumn {
-  /** Su letra en la hoja. ES el contrato con el libro del contador. */
+  /** Its letter on the sheet. It IS the contract with the accountant's book. */
   letter: string;
-  /** En cuál de las dos filas de rótulos va el suyo, o `null` cuando el libro no le da ninguno
-   *  (`AJ`–`AM`, las cuatro columnas de egreso que su `SUM(X:AN)` incluye y nadie nombró). */
+  /** Which of the two label rows theirs goes in, or `null` when the book gives it none (`AJ`–`AM`,
+   *  the four deduction columns its `SUM(X:AN)` includes and nobody named). */
   labelRow: 1 | 2 | null;
-  /** Verbatim del libro, erratas incluidas (`DESCUENTO TIEMPO PACIAL`, el espacio final de
-   *  `OTROS `): son los rótulos que el lector busca y contra los que el contador coteja. */
+  /** Verbatim from the book, typos included (`DESCUENTO TIEMPO PACIAL`, the trailing space of
+   *  `OTROS `): they are the labels the reader looks for and the ones the accountant checks
+   *  against. */
   label: string | null;
   format: RolCellFormat;
-  /** Si las filas `SUBTOTAL` y `SUMAN` la totalizan. Las de identidad no, y `DIAS` tampoco —el
-   *  libro no la suma, y sumar días de personas distintas no significa nada. */
+  /** Whether the `SUBTOTAL` and `SUMAN` rows total it. The identity ones do not, and neither does
+   *  `DIAS` —the book does not sum it, and summing the days of different people means nothing. */
   totalled: boolean;
-  /** Ancho de la columna, en caracteres de Excel. */
+  /** The column's width, in Excel characters. */
   width: number;
-  /** El valor de esta columna para un empleado. `null` = celda en blanco. */
+  /** This column's value for one employee. `null` = a blank cell. */
   read: (ctx: RolRowContext) => RolExportCell;
 }
 
-/** Lo que `FR`/`AC FR` escriben. El lector solo enciende la bandera con una `S`. */
+/** What `FR`/`AC FR` write. The reader only switches the flag on with an `S`. */
 const yesNo = (value: boolean): string => (value ? "S" : "N");
 
 /**
- * La fecha de ingreso como `Date` de MEDIANOCHE LOCAL, no UTC.
+ * The hire date as a LOCAL MIDNIGHT `Date`, not UTC.
  *
- * No es indiferente: exceljs convierte un `Date` a serial restándole el desfase horario local, así
- * que una medianoche UTC en Ecuador (UTC−5) aterriza a las 19:00 del día ANTERIOR y el serial baja
- * un día entero. Con medianoche local la resta cae clavada en el serial correcto, y
- * `excelSerialToISODate` —que lee en UTC— devuelve la misma fecha que entró. Lo prueba el test de
- * ida y vuelta, que es el único sitio donde esto se puede ver.
+ * It is not indifferent: exceljs converts a `Date` into a serial by subtracting the local time-zone
+ * offset, so a UTC midnight in Ecuador (UTC−5) lands at 19:00 on the PREVIOUS day and the serial
+ * drops a whole day. With local midnight the subtraction falls exactly on the right serial, and
+ * `excelSerialToISODate` —which reads in UTC— returns the same date that went in. The round-trip test
+ * proves it, which is the only place this can be seen.
  */
 function hireDateCell(iso: string | null): RolExportCell {
   if (!iso) {
@@ -93,19 +96,20 @@ function hireDateCell(iso: string | null): RolExportCell {
   return new Date(year, month - 1, day);
 }
 
-/** Atajo para las columnas que salen del motor. */
+/** Shortcut for the columns that come out of the engine. */
 const computed =
   (field: keyof PayrollEmployeeComputation) =>
   (ctx: RolRowContext): RolExportCell =>
     ctx.computed[field];
 
-/** Atajo para los egresos capturados, que viven en el objeto anidado `deductions`. */
+/** Shortcut for the captured deductions, which live in the nested `deductions` object. */
 const deduction =
   (field: keyof PayrollMonthlyCapture["deductions"]) =>
   (ctx: RolRowContext): RolExportCell =>
     ctx.capture.deductions[field];
 
-/** Una columna del libro cuyo dato la app no guarda: conserva su letra y su rótulo, y va vacía. */
+/** A column of the book whose datum the app does not store: it keeps its letter and its label, and
+ *  goes out empty. */
 function empty(
   letter: string,
   label: string | null,
@@ -119,11 +123,10 @@ const MONEY = { format: "money" as const, totalled: true, width: 12 };
 const HOURS = { format: "hours" as const, totalled: true, width: 10 };
 
 /**
- * Las columnas de la hoja, de `A` a `CA`, en el orden del libro.
+ * The sheet's columns, from `A` to `CA`, in the book's order.
  *
- * `labelRow: 2` son las que el libro rotula en su fila de abajo (`A`–`L`); `labelRow: 1`, las de
- * arriba (`M`–`CA`). Los dos agrupadores de horas extras no son columnas y viven aparte, en
- * `OVERTIME_GROUP_LABELS`.
+ * `labelRow: 2` are the ones the book labels in its bottom row (`A`–`L`); `labelRow: 1`, the top ones
+ * (`M`–`CA`). The two overtime groupers are not columns and live apart, in `OVERTIME_GROUP_LABELS`.
  */
 export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
   {
@@ -165,7 +168,7 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     labelRow: 2,
     label: "DIAS",
     format: "integer",
-    // El libro no la suma, y con razón: los días de seis personas no son un número de días.
+    // The book does not sum it, and rightly so: the days of six people are not a number of days.
     totalled: false,
     width: 7,
     read: (ctx) => ctx.line.days,
@@ -192,8 +195,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: (ctx) => ctx.capture.overtimeHours100,
   },
   {
-    // «15 %», sic: el libro rotula así la CANTIDAD y «25 %» su valor (`L`). Se escribe como está
-    // escrito, porque es el texto que el lector busca.
+    // «15 %», sic: that is how the book labels the QUANTITY and «25 %» its value (`L`). It is written
+    // as it is written, because it is the text the reader looks for.
     letter: "I",
     labelRow: 2,
     label: "HORAS EXTRAS 15%",
@@ -222,8 +225,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: computed("overtimePay25"),
   },
   {
-    // `M` es el importe RECONOCIDO, no la suma de `J+K+L`: de su diferencia con ellos es de donde el
-    // lector deduce el recorte que Gerencia aplicó, así que escribir la suma borraría ese dato.
+    // `M` is the RECOGNISED amount, not the sum of `J+K+L`: it is from its difference with them that
+    // the reader deduces the trim Gerencia applied, so writing the sum would erase that datum.
     letter: "M",
     labelRow: 1,
     label: "TOTAL HORAS EXTRAS",
@@ -352,8 +355,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: deduction("inHouseConsumption"),
   },
   {
-    // El libro parte este rótulo en dos líneas dentro de la celda; se escribe en una sola, que es
-    // como `compactLabel` lo lee de todas formas.
+    // The book splits this label into two lines inside the cell; it is written on a single one, which
+    // is how `compactLabel` reads it anyway.
     letter: "AG",
     labelRow: 1,
     label: "CONTRIBUCION SOLIDARIA",
@@ -361,8 +364,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: deduction("solidarityContribution"),
   },
   {
-    // El espacio final es del libro y se conserva: el lector normaliza, pero quien compare los dos
-    // archivos celda a celda vería una diferencia que no existe.
+    // The trailing space belongs to the book and is kept: the reader normalizes, but whoever compares
+    // the two files cell by cell would see a difference that does not exist.
     letter: "AH",
     labelRow: 1,
     label: "OTROS ",
@@ -377,8 +380,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     ...MONEY,
     read: deduction("partTimeDeduction"),
   },
-  // `AJ`–`AM`: cuatro columnas de egreso que el `SUM(X:AN)` del libro incluye y que nadie rotuló.
-  // Sin nombre no hay concepto que capturar, así que se reservan vacías para conservar las letras.
+  // `AJ`–`AM`: four deduction columns the book's `SUM(X:AN)` includes and that nobody labelled. With
+  // no name there is no concept to capture, so they are reserved empty to keep the letters.
   empty("AJ", null, 6),
   empty("AK", null, 6),
   empty("AL", null, 6),
@@ -405,8 +408,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: computed("netPay"),
   },
   empty("AQ", "CTAS. POR COBRAR", 14),
-  // `AR` está en blanco en el original —es el hueco que desincroniza su fila de índices— y se
-  // conserva para que `AS` siga siendo `AS`.
+  // `AR` is blank in the original —it is the gap that puts its row of indices out of sync— and it is
+  // kept so `AS` stays `AS`.
   empty("AR", null, 4),
   { letter: "AS", labelRow: 1, label: "XIII", ...MONEY, read: computed("thirteenthProvision") },
   { letter: "AT", labelRow: 1, label: "XIV", ...MONEY, read: computed("fourteenthProvision") },
@@ -458,8 +461,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: (ctx) => hireDateCell(ctx.line.hireDate),
   },
   {
-    // Como TEXTO, igual que el código sectorial: una cédula que empiece por cero deja de ser esa
-    // cédula en cuanto Excel la trata como número.
+    // As TEXT, like the sector code: a cédula starting with a zero stops being that cédula the moment
+    // Excel treats it as a number.
     letter: "BD",
     labelRow: 1,
     label: "CÉDULA",
@@ -479,9 +482,9 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: (ctx) => ctx.line.sectorCode,
   },
   {
-    // El bloque que el contador se lleva al banco: nombre y líquido. SÍ se llena, porque las dos
-    // cifras las tiene la app — la regla de dejar en blanco es para lo que no tenemos, no para lo
-    // que se repite.
+    // The block the accountant takes to the bank: name and net pay. It IS filled in, because the app
+    // has both figures — the rule of leaving blank is for what we do not have, not for what is
+    // repeated.
     letter: "BG",
     labelRow: 1,
     label: "NÓMINA",
@@ -491,8 +494,8 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: (ctx) => ctx.line.name,
   },
   {
-    // Segundo `LIQUIDO A RECIBIR` de la hoja. El lector se queda con el primero (`AP`) por su regla
-    // de «primera coincidencia», que es justo lo que hace que este repetido no estorbe.
+    // The sheet's second `LIQUIDO A RECIBIR`. The reader keeps the first (`AP`) by its «first match»
+    // rule, which is exactly what keeps this repeat out of the way.
     letter: "BH",
     labelRow: 1,
     label: "LIQUIDO A RECIBIR",
@@ -500,8 +503,9 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
     read: computed("netPay"),
   },
   {
-    // `null` cuando nadie declaró lo pagado, y eso NO es cero: sin él el empleado no está ni
-    // conciliado ni con diferencia. Por eso el lector tuvo que aprender a leer la celda vacía.
+    // `null` when nobody declared what was paid, and that is NOT zero: without it the employee is
+    // neither reconciled nor in difference. That is why the reader had to learn to read the empty
+    // cell.
     letter: "BZ",
     labelRow: 1,
     label: "PAGADO",
@@ -518,13 +522,14 @@ export const ROL_EXPORT_COLUMNS: readonly RolExportColumn[] = [
 ];
 
 /**
- * La columna que esta app AÑADE al libro: la suma de los conceptos de ingreso que el período declara
- * por su cuenta y que el libro de Cultura Manor no tiene.
+ * The column this app ADDS to the book: the sum of the income concepts the período declares on its
+ * own and that Cultura Manor's book does not have.
  *
- * Va al final y no en su sitio conceptual (tras `V BONO CUMPLIMIENTO`) porque insertarla ahí
- * desplazaría `W`, `X`, `AO`, `AP`… una letra por concepto, y la coincidencia de letras es lo que
- * hace cotejable el archivo. Agregada y no una columna por concepto por lo mismo: el ancho de la
- * hoja dejaría de ser fijo. Sin ella, `W TOTAL INGRESO` traería dólares que ninguna columna explica.
+ * It goes at the end and not in its conceptual place (after `V BONO CUMPLIMIENTO`) because inserting
+ * it there would shift `W`, `X`, `AO`, `AP`… one letter per concept, and matching letters is what
+ * makes the file checkable. Aggregated and not one column per concept for the same reason: the
+ * sheet's width would stop being fixed. Without it, `W TOTAL INGRESO` would bring dollars no column
+ * explains.
  */
 export const EXTRA_INCOME_COLUMN: RolExportColumn = {
   letter: "CB",
@@ -536,16 +541,16 @@ export const EXTRA_INCOME_COLUMN: RolExportColumn = {
 };
 
 /**
- * Los dos rótulos AGRUPADORES que el libro pone sobre las horas extras, en su fila de arriba. No son
- * columnas —no llevan valor— pero se reproducen porque son parte de la cabecera que el contador
- * reconoce, y porque el primero es la trampa que obliga al lector a comparar por el rótulo ENTERO.
+ * The two GROUPING labels the book puts over the overtime, in its top row. They are not columns —they
+ * carry no value— but they are reproduced because they are part of the header the accountant
+ * recognises, and because the first is the trap that forces the reader to compare by the WHOLE label.
  */
 export const OVERTIME_GROUP_LABELS: readonly { letter: string; label: string }[] = [
   { letter: "G", label: " No. HORAS EXTRAS" },
   { letter: "J", label: "VALOR DE HORAS EXTRAS" },
 ];
 
-/** `"A"` → 0, `"AA"` → 26. La aritmética de columnas de Excel, en un solo sitio. */
+/** `"A"` → 0, `"AA"` → 26. Excel's column arithmetic, in one single place. */
 export function columnIndexOf(letter: string): number {
   let index = 0;
   for (const char of letter.toUpperCase()) {
@@ -554,7 +559,7 @@ export function columnIndexOf(letter: string): number {
   return index - 1;
 }
 
-/** Cuántas columnas ocupa la hoja, contando los huecos. */
+/** How many columns the sheet occupies, gaps included. */
 export function sheetWidth(columns: readonly RolExportColumn[]): number {
   return columns.reduce((max, column) => Math.max(max, columnIndexOf(column.letter) + 1), 0);
 }

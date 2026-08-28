@@ -95,7 +95,7 @@ describe("sourceForCopy", () => {
       { year: 2026, monthIndex: 2 }, // marzo
       { year: 2026, monthIndex: 5 }, // junio
     ];
-    // Destino: julio → la fuente es junio, el más reciente antes de julio.
+    // Destination: July → the source is June, the most recent one before July.
     expect(sourceForCopy(existing, 2026, 6)).toEqual({ year: 2026, monthIndex: 5 });
   });
 
@@ -157,8 +157,8 @@ describe("proposeNextPeriod", () => {
   });
 
   it("nunca usa la fecha del sistema: `today` siempre llega por parámetro", () => {
-    // Dos llamadas con `today` distinto y el mismo `existing` dan resultados distintos — si esto
-    // leyera `Date.now()` por dentro, el test no podría distinguirlo.
+    // Two calls with different `today` and the same `existing` give different results — if this read
+    // `Date.now()` inside, the test could not tell them apart.
     const existing = [{ year: 2026, monthIndex: 2 }];
     expect(proposeNextPeriod(existing, new Date(2020, 0, 1))).toEqual({
       year: 2026,

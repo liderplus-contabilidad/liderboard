@@ -90,7 +90,7 @@ describe("computeResultDrift", () => {
       slice([edit("5.1", 0, 500)], 2025),
     ]);
     expect(drift?.periods.map((period) => period.label)).toEqual(["Ene 2025", "Feb 2026"]);
-    // 2025: −100 (gasto arriba) · 2026: +500 en el segundo periodo (500 − 200 = 300 → 800 − 200)
+    // 2025: −100 (expense up) · 2026: +500 in the second period (500 − 200 = 300 → 800 − 200)
     expect(drift?.periods.map((period) => period.difference)).toEqual([-100, 300]);
     expect(drift?.total).toBe(200);
   });

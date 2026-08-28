@@ -1,25 +1,26 @@
 import type { ChartGuide, ChartGuideAction } from "@/lib/charts/types";
 
 /**
- * La copy del ⓘ de cada tarjeta de PyG › Gráficos y › Análisis: para qué sirve, qué controles la
- * mueven y cómo se lee.
+ * The ⓘ copy of each card of PyG › Gráficos and › Análisis: what it is for, which controls move it
+ * and how it is read.
  *
- * Vive aparte de `cards.ts` porque allí es texto y no cálculo, pero se ENGANCHA en `cards.ts` y no
- * en un mapa indexado por `id` en la vista: la primera tarjeta de Gráficos es «Comparación»,
- * «Ventas por línea de negocio» o el anexo de gastos según lo marcado, y un mapa por `id` acabaría
- * describiendo una tarjeta distinta de la que se está viendo.
+ * It lives apart from `cards.ts` because there it is text and not computation, but it is HOOKED IN in
+ * `cards.ts` and not in a map indexed by `id` in the view: the first card of Gráficos is
+ * «Comparación», «Ventas por línea de negocio» or the expense annex depending on what is marked, and
+ * a map by `id` would end up describing a card other than the one being looked at.
  *
- * Tres reglas para escribir aquí:
+ * Three rules for writing here:
  *
- * 1. **En llano.** Quien lee esto es el contador, no quien programó la app: «lo que entra y lo que
- *    sale», no «raíces del estado»; «los meses que no cargaste», no «periodos sin cobertura».
- * 2. **Corto.** Una frase para el para qué, media línea por control. Una ayuda que hay que leer
- *    entera no se lee.
- * 3. **Solo lo que existe.** El rótulo del control, tal cual está en pantalla, y ningún gesto que
- *    esa tarjeta no tenga: prometer un clic que no hace nada enseña a no probar el de al lado.
+ * 1. **In plain language.** Whoever reads this is the accountant, not whoever programmed the app:
+ *    «what comes in and what goes out», not «roots of the statement»; «the months you did not load»,
+ *    not «periods with no coverage».
+ * 2. **Short.** One sentence for the what-for, half a line per control. A help text that has to be
+ *    read whole does not get read.
+ * 3. **Only what exists.** The control's label, exactly as it is on screen, and no gesture that card
+ *    does not have: promising a click that does nothing teaches you not to try the one next to it.
  */
 
-/** Los controles de la barra que casi todas las tarjetas repiten. */
+/** The bar controls almost every card repeats. */
 const ACCOUNTS: ChartGuideAction = {
   control: "Cuenta contable",
   effect: "elige qué cuentas ver.",
@@ -32,7 +33,7 @@ const CENTERS: ChartGuideAction = {
 const SPAN: ChartGuideAction = { control: "Año y Periodo", effect: "qué meses entran." };
 const AS_TABLE: ChartGuideAction = { control: "Ver como tabla", effect: "los números exactos." };
 
-/** Primera tarjeta, caso por defecto: «Ingresos contra Costos y Gastos» / «Comparación». */
+/** First card, default case: «Ingresos contra Costos y Gastos» / «Comparación». */
 export const GUIDE_EVOLUTION: ChartGuide = {
   purpose: "Compara mes a mes lo que entra con lo que sale. Si marcas cuentas, compara esas.",
   actions: [
@@ -46,7 +47,7 @@ export const GUIDE_EVOLUTION: ChartGuide = {
   reading: "Los meses que nunca cargaste salen vacíos, no en cero.",
 };
 
-/** Primera tarjeta con el predeterminado «Ventas» puesto. */
+/** First card with the «Ventas» preset in place. */
 export const GUIDE_BUSINESS_LINES: ChartGuide = {
   purpose:
     "Cuánto vende cada parte del negocio: hospedaje, restaurante, bar, lavandería y tours. Es algo que las cuentas por sí solas no dicen.",
@@ -59,7 +60,7 @@ export const GUIDE_BUSINESS_LINES: ChartGuide = {
   reading: "La nota de abajo suma las líneas y te dice si cuadran con el total del estado.",
 };
 
-/** Barras del anexo de gastos (predeterminado «Costos y gastos»). */
+/** Expense annex bars (the «Costos y gastos» preset). */
 export const GUIDE_EXPENSE_ANNEX_BARS: ChartGuide = {
   purpose: "En qué gastaste, de mayor a menor. Es tu anexo de gastos.",
   actions: [
@@ -71,7 +72,7 @@ export const GUIDE_EXPENSE_ANNEX_BARS: ChartGuide = {
   reading: "Se dibujan los 15 más grandes y el resto se junta en «Otros»; la tabla los trae todos.",
 };
 
-/** Dona del anexo de gastos. */
+/** Expense annex doughnut. */
 export const GUIDE_EXPENSE_ANNEX_PIE: ChartGuide = {
   purpose: "Qué parte del gasto total se lleva cada rubro.",
   actions: [
@@ -82,7 +83,7 @@ export const GUIDE_EXPENSE_ANNEX_PIE: ChartGuide = {
   reading: "Si sacas rubros ya no suma 100 %: estás mirando solo una parte del gasto.",
 };
 
-/** Apilado por periodo de las hijas de una cuenta. */
+/** An account's children stacked by period. */
 export const GUIDE_DISTRIBUTION: ChartGuide = {
   purpose: "Si una cuenta va ganando o perdiendo peso dentro de su grupo, mes a mes.",
   actions: [
@@ -97,28 +98,28 @@ export const GUIDE_DISTRIBUTION: ChartGuide = {
     "La línea es el total de verdad, no el borde de las barras: un descuento resta hacia abajo.",
 };
 
-/** Barras horizontales de la composición del ingreso. */
+/** Horizontal bars of the revenue composition. */
 export const GUIDE_COMPOSITION: ChartGuide = {
   purpose: "De dónde viene la venta: cuánto aporta cada cuenta, de mayor a menor.",
   actions: [ACCOUNTS, LEVEL, SPAN, AS_TABLE],
   reading: "Los descuentos y rebajas restan, así que quedan fuera del reparto y se avisan abajo.",
 };
 
-/** Ranking de gastos. */
+/** Expense ranking. */
 export const GUIDE_RANKING: ChartGuide = {
   purpose: "Las cuentas en las que más gastas, de mayor a menor.",
   actions: [ACCOUNTS, LEVEL, CENTERS, SPAN, AS_TABLE],
   reading: "Se dibujan las 15 más grandes; abajo dice cuántas quedaron fuera.",
 };
 
-/** Cascada del ingreso al resultado. */
+/** Cascade from revenue to result. */
 export const GUIDE_WATERFALL: ChartGuide = {
   purpose: "Cómo pasas de lo que vendiste a lo que te quedó, y qué te va restando en el camino.",
   actions: [SPAN, CENTERS, AS_TABLE],
   reading: "Cada escalón resta sobre el anterior; el último es la ganancia o la pérdida.",
 };
 
-/** Análisis: % de los gastos principales sobre los ingresos. */
+/** Análisis: % of the main expenses over revenue. */
 export const GUIDE_EXPENSE_SHARE: ChartGuide = {
   purpose: "Cuánto de cada dólar vendido se te va en cada gasto grande.",
   actions: [ACCOUNTS, LEVEL, SPAN, AS_TABLE],
@@ -126,7 +127,7 @@ export const GUIDE_EXPENSE_SHARE: ChartGuide = {
     "Divide el total del gasto entre el total vendido en esos meses, no el promedio de cada mes.",
 };
 
-/** Análisis: variación contra el periodo anterior. */
+/** Análisis: variation against the previous period. */
 export const GUIDE_VARIATION: ChartGuide = {
   purpose: "Qué cuentas subieron o bajaron más contra el mes anterior.",
   actions: [
@@ -138,14 +139,14 @@ export const GUIDE_VARIATION: ChartGuide = {
     "Compara solo dos meses, y el subtítulo dice cuáles. Cada barra lleva su flecha y su signo.",
 };
 
-/** Análisis: Pareto de la concentración del gasto. */
+/** Análisis: Pareto of the expense concentration. */
 export const GUIDE_PARETO: ChartGuide = {
   purpose: "Si el gasto se concentra en pocas cuentas o está repartido en muchas.",
   actions: [ACCOUNTS, LEVEL, SPAN, AS_TABLE],
   reading: "La línea va sumando: donde llega al 80 % están las cuentas que explican casi todo.",
 };
 
-/** Análisis: la tabla del análisis vertical, que no pasa por `ChartCard`. */
+/** Análisis: the vertical analysis table, which does not go through `ChartCard`. */
 export const GUIDE_VERTICAL: ChartGuide = {
   purpose: "Qué porcentaje representa cada cuenta sobre otra que tú eliges, casi siempre la venta.",
   actions: [

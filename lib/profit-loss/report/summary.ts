@@ -24,15 +24,15 @@ import type { ReportCover, ReportField } from "./types";
 export interface ReportSummaryInput {
   /** The name the user gave the client — never the razón social of the file. */
   clientName: string;
-  /** El logo del cliente, si subió uno. Encabeza la portada junto al nombre. */
+  /** The client's logo, if it uploaded one. It heads the cover next to the name. */
   logo?: EntityLogo;
   companyName: string;
   /** `null` in a workspace with nothing loaded; the cover then says so instead of guessing. */
   sourceSystemId: string | null;
   /**
-   * Cómo NOMBRAR el origen cuando no es un sistema contable — el consolidado entre clientes, que
-   * puede venir de varios a la vez y por tanto de ninguno. Sin él, la portada de una suma de
-   * Dingoo y MicroPlus diría «Sin sistema declarado», que es cierto y no significa nada.
+   * How to NAME the origin when it is not an accounting system — the cross-client consolidado, which
+   * may come from several at once and therefore from none. Without it, the cover of a sum of Dingoo
+   * and MicroPlus would say «Sin sistema declarado», which is true and means nothing.
    */
   systemLabelOverride?: string;
   mode: "single" | "multi";

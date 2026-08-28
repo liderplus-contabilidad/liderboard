@@ -48,7 +48,7 @@ describe("los comprobantes de un período", () => {
   });
 
   it("numera el `Codigo:` por la posición en la nómina, desde 1", () => {
-    // Es lo que el libro llama `Codigo:` — un contador por orden, no un identificador estable.
+    // It is what the book calls `Codigo:` — a running counter, not a stable identifier.
     const docs = build([employee("9", "ALFA"), employee("4", "BRAVO")]);
     expect(docs.map((d) => d.codeLine)).toEqual(["Codigo: 1", "Codigo: 2"]);
   });
@@ -80,7 +80,7 @@ describe("los comprobantes de un período", () => {
   });
 
   it("una nómina vacía no produce ningún comprobante", () => {
-    // Es lo que apaga el control de descarga: sin nómina no hay papel que bajar.
+    // It is what switches the download control off: with no nómina there is no paper to download.
     expect(build([])).toEqual([]);
   });
 

@@ -1,16 +1,16 @@
 /**
- * La regla de si un rol de pagos puede aterrizar en el período que está abierto — pura, porque es
- * lo único que separa cargar el mes correcto de sobrescribir otro mes en silencio.
+ * The rule of whether a rol de pagos can land in the período that is open — pure, because it is the
+ * only thing that separates loading the right month from silently overwriting another month.
  *
- * El archivo DECLARA su propio período (`GENERAL!B2`, ver `rol-general.ts`), así que aquí no se
- * adivina nada: o coincide con el período abierto o no, y si no, se RECHAZA nombrando LOS DOS
- * meses. Nombrar solo uno («este archivo no corresponde a este período») deja al contador
- * comparando a ciegas su carpeta contra la pantalla; nombrar los dos convierte el rechazo en la
- * instrucción de qué hacer a continuación.
+ * The file DECLARES its own period (`GENERAL!B2`, see `rol-general.ts`), so nothing is guessed here:
+ * either it matches the open período or it does not, and if it does not, it is REJECTED naming BOTH
+ * months. Naming only one («this file does not correspond to this período») leaves the accountant
+ * comparing their folder against the screen blind; naming both turns the rejection into the
+ * instruction of what to do next.
  *
- * NO se compara la razón social del archivo contra el nombre del cliente. Es la misma resolución
- * que PyG y Ocupaciones ya sostienen: el usuario llama «Manor Galápagos» a lo que el archivo llama
- * `HOTEL BOUTIQUE CULTURA MANOR`, y la etiqueta que eligió no es una identidad que contradecir.
+ * The file's razón social is NOT compared against the client's name. It is the same resolution PyG
+ * and Ocupaciones already hold: the user calls «Manor Galápagos» what the file calls `HOTEL BOUTIQUE
+ * CULTURA MANOR`, and the label they chose is not an identity to contradict.
  */
 import { periodLongLabel } from "../periods";
 
@@ -26,10 +26,10 @@ function samePeriod(a: PeriodRef, b: PeriodRef): boolean {
 }
 
 /**
- * `file` es el período que el archivo declara; `target`, el que está abierto; `existing`, los
- * períodos que el cliente ya tiene registrados — sirve para que el rechazo sepa si el destino
- * correcto ya existe («ábrelo ahí») o todavía no («regístralo»), en vez de dar la misma frase para
- * dos situaciones que se resuelven distinto.
+ * `file` is the period the file declares; `target`, the one that is open; `existing`, the períodos
+ * the client already has registered — it serves so the rejection knows whether the right destination
+ * already exists («open it there») or does not yet («register it»), instead of giving the same phrase
+ * for two situations that are resolved differently.
  */
 export function verifyRosterTarget(
   file: PeriodRef,

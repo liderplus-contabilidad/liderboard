@@ -6,13 +6,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CreateHotelButton } from "./occupancy-hotel-actions";
 
 /**
- * Los dos huecos de Ocupaciones, que son dos y no uno — y solo el segundo se llena con un archivo:
+ * Ocupaciones' two empty states, which are two and not one — and only the second is filled by a
+ * file:
  *
- * - **Sin hoteles** (`NoHotelsEmptyState`): no falta un Excel, falta el paso anterior. La única
- *   salida es crear el primero, y el texto dice qué se gana al hacerlo (cada hotel guarda LO SUYO),
- *   que es lo que convierte «otro formulario más» en «así llevo los cinco hoteles de la firma».
- * - **Con hotel y sin datos** (`NoOccupancyDataEmptyState`): ahí sí falta el archivo. La copia la
- *   pone cada pestaña, porque desde Datos se carga y desde Gráficos se vuelve a Datos.
+ * - **No hotels** (`NoHotelsEmptyState`): no Excel is missing, the previous step is. The only exit
+ *   is creating the first one, and the copy says what is gained by doing it (each hotel holds ITS
+ *   OWN), which is what turns «one more form» into «this is how I keep the firm's five hotels».
+ * - **A hotel with no data** (`NoOccupancyDataEmptyState`): there the file really is missing. The
+ *   copy is supplied by each tab, because Datos is where you load and Gráficos sends you to Datos.
  */
 export function NoHotelsEmptyState() {
   return (

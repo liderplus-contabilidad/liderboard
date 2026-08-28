@@ -20,7 +20,7 @@ const DELICMAR: CompanyProfile = {
   email: "nomina@delicmar.com",
 };
 
-/** El perfil de arriba sin los dos campos opcionales: lo mínimo que el diálogo deja guardar. */
+/** The profile above without the two optional fields: the minimum the dialog allows saving. */
 const REQUIRED_ONLY: CompanyProfile = {
   legalName: DELICMAR.legalName,
   province: DELICMAR.province,
@@ -52,8 +52,8 @@ describe("letterheadLines", () => {
     ]);
   });
 
-  // Un campo opcional ausente no puede dejar rastro: un separador colgando o una línea en blanco
-  // se leen como un dato que falta, cuando lo que pasa es que ese dato no existe.
+  // An absent optional field cannot leave a trace: a dangling separator or a blank line reads as a
+  // missing datum, when what is happening is that the datum does not exist.
   it("no deja separador colgando cuando solo falta el RUC", () => {
     expect(letterheadLines({ ...REQUIRED_ONLY, email: "nomina@delicmar.com" })[0]).toBe(
       "DELICMAR S.A.S.",
@@ -65,8 +65,9 @@ describe("letterheadLines", () => {
     expect(letterheadLines(null)).toEqual([]);
   });
 
-  // El nombre del cliente es lo que el usuario eligió llamarle y viaja aparte a las tres
-  // superficies: si entrara aquí, cada una tendría que saber que la primera línea se pinta distinto.
+  // The client's name is what the user chose to call it and travels separately to the three
+  // surfaces: were it to come in here, each one would have to know the first line is painted
+  // differently.
   it("no incluye el nombre del cliente", () => {
     expect(letterheadLines(DELICMAR).join("\n")).not.toContain("DELICMAR S.A.S\n");
   });
@@ -96,8 +97,8 @@ describe("checkCompanyProfile", () => {
     });
   });
 
-  // Un campo de solo espacios se ve lleno y no lo está: sin esto, «Crear cliente» se encendería
-  // sobre una parroquia en blanco y el membrete saldría con un hueco entre dos barras.
+  // A field of only spaces looks full and is not: without this, «Crear cliente» would light up over a
+  // blank parroquia and the letterhead would come out with a gap between two slashes.
   it("un campo de solo espacios cuenta como vacío", () => {
     expect(checkCompanyProfile(draft({ canton: "   " }))).toMatchObject({
       ok: false,
@@ -141,8 +142,8 @@ describe("companyDraftFrom", () => {
     });
   });
 
-  // El diálogo abre mostrando lo guardado; si un perfil ausente diera otra cosa que el borrador
-  // vacío, renombrar un cliente antiguo parecería estar borrándole datos que nunca tuvo.
+  // The dialog opens showing what is stored; if an absent profile gave anything other than the empty
+  // draft, renaming an old client would look like it was erasing data it never had.
   it("sin perfil da el borrador vacío", () => {
     expect(companyDraftFrom(undefined)).toEqual(emptyCompanyDraft());
   });

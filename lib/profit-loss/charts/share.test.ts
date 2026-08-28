@@ -7,7 +7,7 @@ import { describeShares, markedShares, type MarkedShare } from "./share";
 const MANOR = "cultura-manor";
 const PRINCIPAL = "centro-de-costo-principal";
 
-/** Los meses con movimiento de los ficheros de 2026: Ene–Jul. */
+/** The months with movement of the 2026 files: Ene–Jul. */
 const COVERED = 7;
 
 function sharesFor(
@@ -24,7 +24,7 @@ function sharesFor(
   return markedShares(buildSeries(sources, query).series, sources);
 }
 
-/** El porcentaje de enero, que es el mes que las cifras del fixture describen. */
+/** January's percentage, which is the month the fixture's figures describe. */
 function january(share: MarkedShare): number {
   return share.values[0] as number;
 }
@@ -42,7 +42,7 @@ describe("el porcentaje dentro de la cuenta marcada que la contiene", () => {
   });
 
   it("nombra la cuenta del PLAN como base, no la etiqueta de la serie", () => {
-    // Con dos centros la etiqueta de la serie lleva el centro pegado; la base no puede.
+    // With two centers the series' label carries the center stuck to it; the base cannot.
     const shares = sharesFor(["4", "4.1.1"], {
       sources: [CULTURA_MANOR_SOURCE, CENTRO_PRINCIPAL_SOURCE],
       centerIds: [MANOR, PRINCIPAL],
@@ -56,7 +56,7 @@ describe("el porcentaje dentro de la cuenta marcada que la contiene", () => {
 
     expect(shares).toHaveLength(1);
     expect(shares[0].baseLabel).toBe("Ingresos");
-    // 17.338 de 25.229: la nieta contra la raíz, aunque 4.1 y 4.1.1 no estén marcadas.
+    // 17,338 of 25,229: the grandchild against the root, even though 4.1 and 4.1.1 are not marked.
     expect(january(shares[0])).toBeCloseTo((17338 / 25229) * 100, 6);
   });
 
@@ -67,7 +67,7 @@ describe("el porcentaje dentro de la cuenta marcada que la contiene", () => {
       ["Ventas Alojamiento y Servicios", "Ingresos"],
       ["Habitaciones", "Ventas Alojamiento y Servicios"],
     ]);
-    // La nieta se lee dentro de su padre (17.338 de 24.465) y NO dentro de la raíz.
+    // The grandchild is read within its parent (17,338 of 24,465) and NOT within the root.
     expect(january(shares[1])).toBeCloseTo((17338 / 24465) * 100, 6);
   });
 
@@ -93,8 +93,8 @@ describe("el porcentaje dentro de la cuenta marcada que la contiene", () => {
       `4.1.1|${MANOR}|2026`,
       `4.1.1|${PRINCIPAL}|2026`,
     ]);
-    // El centro pequeño no reporta Ventas Lavandería, así que su proporción es OTRA — y es lo
-    // que delataría una base tomada del centro de al lado, donde además la escala es ~100×.
+    // The small center does not report Ventas Lavandería, so its proportion is ANOTHER one — and it
+    // is what would give away a base taken from the center next door, where the scale is also ~100×.
     expect(january(shares[0])).toBeCloseTo((24465 / 25229) * 100, 6);
     expect(january(shares[1])).toBeCloseTo((241.38 / 249.02) * 100, 6);
   });
@@ -107,7 +107,7 @@ describe("el porcentaje dentro de la cuenta marcada que la contiene", () => {
   });
 
   it("una base en cero vacía el porcentaje en vez de dividir", () => {
-    // Sin su única hoja, «Habitaciones» cuadra en cero y sigue siendo el padre de la rama.
+    // Without its only leaf, «Habitaciones» balances at zero and is still the branch's parent.
     const source = makeSource({ omit: ["4.1.1.1.1.1"] });
     const [share] = sharesFor(["4.1.1.1", "4.1.1.1.1"], { sources: [source] });
 

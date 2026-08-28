@@ -13,7 +13,7 @@ import {
 } from "./logos";
 
 const png = (width: number, height: number): EntityLogo => ({
-  // «Hi» en base64: no es un PNG real, pero `decodeLogoBytes` no lo interpreta.
+  // «Hi» in base64: it is not a real PNG, but `decodeLogoBytes` does not interpret it.
   dataUrl: "data:image/png;base64,SGk=",
   mime: "image/png",
   width,
@@ -67,7 +67,8 @@ describe("fitLogoBox", () => {
 
   it("un logo vertical toca el alto y sobra ancho", () => {
     const box = fitLogoBox(png(200, 800), { width: 180, height: 56 });
-    // El eje LIBRE se compara con tolerancia: solo el que topa está recortado a la cifra exacta.
+    // The FREE axis is compared with tolerance: only the one that hits the limit is clamped to the
+    // exact figure.
     expect(box.width).toBeCloseTo(14, 10);
     expect(box.height).toBe(56);
   });
@@ -130,8 +131,8 @@ describe("los logos por centro", () => {
     expect(centerLogoOf({ restaurante }, "hospedaje")).toBeUndefined();
   });
 
-  // Es la regla que deja al Consolidado, al mes en crudo y a la portada sin segundo logo sin que
-  // ninguna de las tres superficies tenga que escribir su propio caso.
+  // It is the rule that leaves the Consolidado, the raw month and the cover with no second logo
+  // without any of the three surfaces having to write its own case.
   it("sin centro no hay logo: es lo que responde por el Consolidado y la portada", () => {
     expect(centerLogoOf({ restaurante }, undefined)).toBeUndefined();
     expect(centerLogoOf({ restaurante }, null)).toBeUndefined();
@@ -169,8 +170,8 @@ describe("withCenterLogo", () => {
     });
   });
 
-  // Un `{}` guardado y un campo ausente dicen lo mismo; dejar los dos convertiría «este cliente no
-  // tiene logos de centro» en dos preguntas distintas.
+  // A stored `{}` and an absent field say the same thing; keeping both would turn «this client has no
+  // center logos» into two different questions.
   it("quitar el último descarta el registro entero en vez de guardar un objeto vacío", () => {
     expect(withCenterLogo({ restaurante: uno }, "restaurante", null)).toBeUndefined();
   });

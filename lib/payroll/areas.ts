@@ -1,23 +1,23 @@
 /**
- * El universo de ÁREAS que ofrece el formulario de un empleado.
+ * The universe of ÁREAS an employee's form offers.
  *
- * Es la unión de dos cosas, y las dos hacen falta:
+ * It is the union of two things, and both are needed:
  *
- *   - **Las estándar**, en el orden en que el rol de HOTEL BOUTIQUE CULTURA MANOR las lista. Sin
- *     ellas, el primer empleado de un cliente recién creado no tendría ninguna opción que elegir:
- *     un período vacío no tiene de dónde derivar un área.
- *   - **Las que el período ya trae.** El parser escribe el área VERBATIM del bloque de la hoja
- *     (`rol-general-grid.ts`), así que un cliente puede tener «MANTENIMIENTO» o «SPA» sin que esta
- *     lista lo sepa. Si el formulario solo ofreciera las cinco estándar, dar de alta a alguien de
- *     esa área obligaría a archivarlo bajo otra — y el área es el bloque en el que el rol lo
- *     agrupa y bajo el que el asiento lo suma, así que elegir mal no es cosmético.
+ *   - **The standard ones**, in the order HOTEL BOUTIQUE CULTURA MANOR's rol lists them. Without
+ *     them, the first employee of a freshly created client would have no option to pick: an empty
+ *     período has nothing to derive an area from.
+ *   - **The ones the período already brings.** The parser writes the area VERBATIM from the sheet's
+ *     block (`rol-general-grid.ts`), so a client can have «MANTENIMIENTO» or «SPA» without this list
+ *     knowing about it. If the form only offered the five standard ones, adding someone from that
+ *     area would force filing them under another — and the area is the block the rol groups them in
+ *     and the journal entry sums them under, so picking wrong is not cosmetic.
  *
- * Es por tanto una lista ABIERTA presentada como cerrada: el estándar es el suelo, la nómina
- * cargada es lo que la ensancha. Lo que NO hace es inventarse un área nueva desde el formulario;
- * para eso está la carga del archivo, que es de donde salen las de verdad.
+ * It is therefore an OPEN list presented as a closed one: the standard set is the floor, the loaded
+ * nómina is what widens it. What it does NOT do is invent a new area from the form; that is what
+ * loading the file is for, which is where the real ones come from.
  */
 
-/** Las cinco áreas del rol real, en el orden en que su hoja `GENERAL` las apila. */
+/** The five areas of the real rol, in the order its `GENERAL` sheet stacks them. */
 export const STANDARD_PAYROLL_AREAS: readonly string[] = [
   "ADMINISTRACION",
   "HOSPEDAJE",
@@ -26,21 +26,21 @@ export const STANDARD_PAYROLL_AREAS: readonly string[] = [
   "VENTAS",
 ];
 
-/** La clave con la que se decide si dos áreas son la misma: sin espacios de sobra y sin distinguir
- *  mayúsculas, para que « cocina » no abra un segundo bloque junto a «COCINA».
+/** The key that decides whether two areas are the same: with no spare whitespace and ignoring case,
+ *  so « cocina » does not open a second block next to «COCINA».
  *
- *  Se exporta porque hay un SEGUNDO consumidor —el grid de Sueldos por Áreas, que cruza el área
- *  marcada en la barra con la que declara cada ficha— y una segunda definición de «misma área»
- *  podría separarse de esta: bastaría con que una recortara los espacios y la otra no para que un
- *  área quedara fuera de su propia fila sin que nada lo delate. */
+ *  It is exported because there is a SECOND consumer —Sueldos por Áreas' grid, which crosses the area
+ *  marked in the bar with the one each record declares— and a second definition of «same area» could
+ *  drift from this one: it would be enough for one to trim spaces and the other not for an area to
+ *  fall outside its own row with nothing giving it away. */
 export function areaKey(area: string): string {
   return area.trim().toUpperCase();
 }
 
 /**
- * Las áreas elegibles: las estándar primero —en el orden del rol, que es como se leen— y detrás
- * las propias del período, alfabéticas. El orden alfabético es deliberado: tomarlas en el orden en
- * que aparecen en la nómina haría que la lista se reordenara sola al cargar otro mes.
+ * The eligible areas: the standard ones first —in the rol's order, which is how they are read— and
+ * behind them the período's own, alphabetically. The alphabetical order is deliberate: taking them in
+ * the order they appear in the nómina would make the list reorder itself on loading another month.
  */
 export function areaOptions(lines: readonly { area: string }[]): string[] {
   const seen = new Set(STANDARD_PAYROLL_AREAS.map(areaKey));
@@ -51,7 +51,7 @@ export function areaOptions(lines: readonly { area: string }[]): string[] {
     if (trimmed === "" || seen.has(areaKey(trimmed))) {
       continue;
     }
-    // La primera grafía que aparece es la que se ofrece; las siguientes son la misma área.
+    // The first spelling that appears is the one offered; the following ones are the same area.
     if (!extra.has(areaKey(trimmed))) {
       extra.set(areaKey(trimmed), trimmed);
     }

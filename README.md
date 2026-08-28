@@ -58,6 +58,9 @@ lib/profit-loss/charts/  traducción pura: selección → consulta → opción d
 lib/occupancy/           capa pura de Ocupaciones (parse, derive, consolidate, export) + Dexie
 lib/occupancy/analytics/ motor de Ocupaciones (series por métrica, KPIs, canales, semana)
 lib/occupancy/charts/    traducción pura: marcas → consulta → opción de ECharts
+lib/payroll/             capa pura de Rol de Pagos (motor, asiento, comprobante, export) + Dexie
+lib/sales/               capa pura de Ventas por servicio (upload, derive, cards, informe) + Dexie
+lib/report/              lo compartido por los informes imprimibles (qué orientación y qué cuerpo)
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
 
@@ -176,11 +179,24 @@ una variable CSS, así que los hexes de `palette.ts` **espejan** los del `@theme
 ese es el único punto de duplicación permitido, y ningún constructor de opción escribe un hex
 propio. (Ver "Gráficos y Análisis" para las reglas de cobertura y doble eje.)
 
+Las ocho ranuras son el set de **identidad**, y hay tres sets más que existen porque en su tarjeta
+el color **no distingue entidades**: `CHART_SECTION` (el bloque del estado — verde ingresos,
+celeste costos), `CHART_COMPOSITION_PALETTE` (el reparto de «Composición de los ingresos»),
+`CHART_DISTRIBUTION_RAMP` (una rampa de cinco pasos, porque los trozos de una pila son partes de
+una misma cifra) y `CHART_PERIOD_PALETTE` (doce tonos **decorativos**, apagados, para el mes al que
+pertenece una barra — nunca para series). El **«Ranking de gastos»** es la única tarjeta que dibuja
+**quince** barras, y las pinta con `CHART_RANKING_SEQUENCE`: las ocho de identidad seguidas de los
+doce del periodo, veinte ranuras sin repetir una sola. `CHART_RANKING_MAX` (15) es un corte de
+**legibilidad declarado**, no la longitud de la secuencia, y el test fija el invariante que importa
+— que el corte nunca supere a la secuencia, así que ninguna barra dibujada se queda sin tono.
+
 ## Estado actual
 
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
-**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Dos módulos
-tienen datos reales hoy: **PyG** (Datos, Gráficos y Análisis) y **Ocupaciones** (Datos y Gráficos).
+**Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Tienen datos reales
+hoy **PyG** (Datos, Gráficos y Análisis, más el subitem **Ventas por servicio**), **Ocupaciones**
+(Datos y Gráficos) y **Rol de Pagos** (períodos, comprobantes, asiento y el subitem **Sueldos por
+Áreas**).
 
 Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
 `ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
@@ -300,8 +316,13 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
 - **Vista por defecto, y filtros que acotan en vez de reemplazar.** Con un Excel cargado y
   nada marcado en la fila de filtros, _Gráficos_ trae los totales del periodo como **stat
   tiles** (Ingresos, Costos y Gastos, Utilidad o Pérdida — un total es un número, no una
-  gráfica de una barra), la evolución de Ingresos contra Costos y Gastos, la composición de
-  los ingresos y el ranking de gastos; _Análisis_ trae el **análisis vertical**, el % sobre
+  gráfica de una barra) y **cinco tarjetas en un orden que es la lectura de un estado**:
+  evolución de Ingresos contra Costos y Gastos → composición de los ingresos → ranking de gastos
+  → distribución de una cuenta → del ingreso a la utilidad (cascada). Composición y ranking van
+  juntas porque son el mismo reparto en la misma forma; «Distribución» es la **tercera** lectura de
+  ese reparto —la única que lo abre periodo a periodo—, así que se lee después de saber de qué está
+  hecho el tramo entero, y la cascada cierra. El informe imprimible hereda ese orden porque lee la
+  misma lista. _Análisis_ trae el **análisis vertical**, el % sobre
   ingresos de los gastos principales, la variación contra el periodo anterior y el Pareto. No hay una tarjeta de
   "Comparación" aparte: la tarjeta de evolución de Gráficos dibuja las cuentas (y centros)
   marcados cuando los hay, y las tarjetas de pregunta fija (composición, ranking, cascada, y
@@ -635,6 +656,57 @@ mano doce meses por cuenta no es un flujo real):
   regla de forma. «Excel con tus datos» sigue disponible y sigue volviendo a entrar, conservando
   `microplus` o `dingoo` como sistema de origen.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
+
+## Ventas por servicio (PyG › subitem)
+
+`/profit-loss/sales` lee el reporte de **facturación** que el sistema contable emite aparte del
+estado: una línea por factura, con su servicio, quién la paga, la cantidad y el importe. Ninguna
+marca ni ningún desglose de PyG puede producir esa lectura, porque el dato no está en el plan de
+cuentas — el estado parte el ingreso en dos cuentas y este reporte lo parte en cinco servicios con
+las aseguradoras y los particulares que los pagan.
+
+- **Es subitem de PyG, no un módulo hermano**, por la misma razón que Sueldos por Áreas cuelga de
+  Rol de Pagos: sus ventas necesitan un **cliente**, y el cliente lo guarda PyG. Se ve **siempre**
+  —un ítem del sidebar que aparece y desaparece no se puede descubrir—; lo que el archivo decide es
+  quién puede _subir_, no quién ve el menú. En el **Consolidado entre clientes** se rinde con su
+  propio vacío, porque escribir contra el centinela crearía una partición fantasma.
+- **Lo facturado no es lo contabilizado**, y por eso estas ventas **no entran en ninguna lectura de
+  PyG**: Datos, Gráficos y Análisis dibujan exactamente lo mismo con ventas cargadas y sin ellas
+  (hay tiempos de reconocimiento, notas de crédito e IVA de por medio). El silencio se **declara**
+  donde se produce: una línea al pie de la pantalla y la cabecera del informe.
+- **Carga.** `lib/sales/upload/` reconoce el archivo por **dos señas** —el título y la cabecera de
+  cuatro rótulos (`CODIGO` · `NOMBRE` · `CANTIDAD` · `VENTA TOTAL`)— y localiza todo por rótulo,
+  jamás por coordenada. El periodo lo declara el propio reporte (`Desde:` / `Hasta:`) y pasa por
+  `toCalendarMonth`, la misma regla del estado único; el nombre del archivo no participa. Un mes
+  recargado se **reemplaza por completo**, y la suma de las líneas se cuadra contra el total del
+  reporte: una diferencia se **avisa** nombrándola, sin rechazar la carga.
+- **Base Dexie propia** (`liderboard-sales`, una tabla `months`), **particionada por el `clientId`
+  de PyG**, y `db.ts` es la única puerta: con varios clientes en una tabla, una consulta sin
+  `clientId` mezcla la facturación de dos empresas en silencio. Borrar un cliente arrastra sus
+  ventas en cascada, y esa llamada vive en `PygDataProvider` para que la dependencia apunte del
+  módulo nuevo al que ya existía. Nada derivado se persiste.
+- **Barra: Año · Mes, y los dos admiten varias marcas.** Cada **año marcado es una serie** sobre el
+  mismo eje de doce meses, que es lo que responde «abril de 2026 contra abril de 2025»; el **mes es
+  independiente del año** y acota el eje de todos los años marcados. El año se aparta de «ninguna
+  marca es todas» —sin marcas resuelve al **más reciente**, y su atajo «Todos los años» _puebla_ la
+  lista en vez de vaciarla— y no deja chips, porque nunca está vacío.
+- **Tres tarjetas, y cada una tiene dos formas que elige el número de años marcados** (no un
+  control): con uno dibuja el reparto del periodo, con varios pone un año por serie. Composición
+  por servicio · Concentración por pagador (los diez mayores, con la cola contada y sumada al pie)
+  · Evolución (barras + línea; un hueco **parte** la línea y lleva marca de ausencia). Un servicio
+  o un pagador que un año no tocó vale `null`, jamás `0`.
+- **Los pagadores particulares se guardan enteros y no se nombran en pantalla.** `payer.ts` es la
+  única función que decide quién se rotula, y su heurística está **sesgada**: persona por defecto,
+  empresa solo con evidencia positiva, porque una aseguradora tomada por paciente sale sin nombre y
+  un paciente tomado por aseguradora sale con su nombre en la pantalla y en el papel.
+- **Lecturas de pantalla que no son marcas:** las tres tarjetas **pliegan** (con «Cerrar todos») y
+  la evolución lleva **«Ocultar meses en 0»** en su propia cabecera. Viajan en `SalesCardsOptions`,
+  aparte de `SalesCardsInput`, así que el informe construye las mismas tarjetas sin ellas y el papel
+  saca el eje entero — un interruptor impreso es un botón que nadie puede pulsar.
+- **Informe PDF** (`ReportLayer`, el tercero de la app) en dos hojas: las dos tablas de tres
+  columnas en vertical y la evolución en su propia hoja apaisada. Lo único en que el papel se separa
+  de la pantalla es la cola de pagadores, que se **pliega** en una fila con su suma
+  (`PAYER_TABLE_PRINT_LIMIT`). **No hay descarga de Excel**: aquí el Excel es la fuente.
 
 ## Ocupaciones (análisis hotelero)
 

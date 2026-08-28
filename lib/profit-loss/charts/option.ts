@@ -46,6 +46,7 @@ import {
   type PieResult,
 } from "../analytics/structure";
 import { seriesKeyId, type PeriodRef, type Series, type SeriesKey } from "../analytics/types";
+import type { BreakdownRow } from "./account-breakdown";
 import type { ChartType } from "./selection";
 import type { MarkedShare } from "./share";
 import { RESULT_CODE, type WaterfallStep } from "./waterfall";
@@ -76,11 +77,11 @@ function labelsFit(seriesCount: number, points: number, context: SeriesOptionCon
 }
 
 /**
- * El porcentaje sobre la cuenta que la contiene tiene PRESUPUESTO PROPIO, y se mide contra las
- * barras que lo llevan y no contra todas. Un padre y una hija sobre doce meses son 24 marcas —
- * ninguna etiqueta cabe—, pero solo la hija lleva porcentaje, así que son 12 y sí caben: en el
- * año completo se lee el % de cada barra hija y ningún monto, y al acotar «Periodo» reaparece el
- * monto encima. Nada de lo que se veía antes deja de verse; esto solo añade.
+ * The percentage over the containing account has its OWN BUDGET, and it is measured against the bars
+ * that carry it and not against all of them. A parent and a child over twelve months are 24 marks —
+ * no label fits—, but only the child carries a percentage, so there are 12 and they do fit: over the
+ * full year each child bar's % is read and no amount, and on narrowing «Periodo» the amount reappears
+ * above. Nothing that used to be visible stops being visible; this only adds.
  */
 function sharesFit(sharedCount: number, points: number, context: SeriesOptionContext): boolean {
   return (
@@ -92,16 +93,16 @@ function sharesFit(sharedCount: number, points: number, context: SeriesOptionCon
 }
 
 /**
- * Dentro de una PILA el porcentaje no se mide contra el presupuesto de `sharesFit`, y por eso no
- * pasa por él: un apilado dibuja UNA columna por periodo, así que sus etiquetas se reparten en
- * vertical —cada una dentro de su propio trozo— y no hay elenco que las apriete de lado. Lo que
- * limita aquí es la ALTURA del segmento, que es su propio porcentaje: por debajo de este umbral el
- * número es más alto que el trozo que lo contiene, así que se apaga en vez de desbordarlo. El
- * tooltip lo sigue diciendo, que es donde no falta nunca.
+ * Inside a STACK the percentage is not measured against `sharesFit`'s budget, and that is why it does
+ * not go through it: a stack draws ONE column per period, so its labels are spread out vertically
+ * —each inside its own piece— and there is no cast squeezing them sideways. What limits here is the
+ * segment's HEIGHT, which is its own percentage: below this threshold the number is taller than the
+ * piece containing it, so it switches off instead of overflowing it. The tooltip still says it, which
+ * is where it is never missing.
  */
 const MIN_STACK_LABEL_SHARE = 5;
 
-/** Los porcentajes que un segmento imprime dentro de sí, ya podados los que no caben. */
+/** The percentages a segment prints inside itself, with the ones that do not fit already pruned. */
 function stackShares(
   series: Series,
   context: SeriesOptionContext,
@@ -116,7 +117,7 @@ function stackShares(
   return legible.some((value) => value !== null) ? legible : undefined;
 }
 
-/** Cuántas de las series dibujadas caen dentro de otra marcada — el elenco del presupuesto. */
+/** How many of the drawn series fall inside another marked one — the budget's cast. */
 function sharedCountOf(series: readonly Series[], context: SeriesOptionContext): number {
   return context.shares ? series.filter((entry) => shareOf(entry, context)).length : 0;
 }
@@ -125,7 +126,7 @@ function shareOf(series: Series, context: SeriesOptionContext): MarkedShare | un
   return context.shares?.get(seriesKeyId(series.key));
 }
 
-/** El fragmento de `rich` que pinta el porcentaje: una anotación bajo la cifra, no la cifra. */
+/** The fragment of `rich` that paints the percentage: an annotation under the figure, not the figure. */
 const SHARE_RICH_KEY = "share";
 
 /** Below two series there is nothing to tell apart, so the title carries the name. */
@@ -146,9 +147,9 @@ export interface SeriesOptionContext {
    */
   labels?: boolean;
   /**
-   * Por `seriesKeyId`, el porcentaje que esa serie ocupa dentro de la cuenta marcada que la
-   * contiene (`markedShares`). Ausente — que es el caso de casi toda la app — la etiqueta y el
-   * tooltip salen exactamente como salían.
+   * By `seriesKeyId`, the percentage that series takes up within the marked account containing it
+   * (`markedShares`). Absent — which is the case for almost the whole app — the label and the tooltip
+   * come out exactly as they used to.
    */
   shares?: ReadonlyMap<string, MarkedShare>;
 }
@@ -162,10 +163,10 @@ export interface EntryOptionContext {
 /**
  * The single value formatter every label, tooltip and table twin goes through.
  *
- * Los importes llevan DOS DECIMALES, exactamente como la tabla de Datos —el mismo
- * `formatCurrency({ cents: true })`—, porque una cifra de un gráfico se coteja contra la hoja del
- * contador: `$204,045` frente a `204.045,51` obliga a preguntarse si lo que falta son centavos o
- * una carga incompleta, y esa duda cuesta más que el ancho que ocupa el `.51`.
+ * Amounts carry TWO DECIMALS, exactly like the Datos table —the same
+ * `formatCurrency({ cents: true })`—, because a chart's figure is checked against the accountant's
+ * sheet: `$204,045` against `204.045,51` forces them to wonder whether what is missing is cents or an
+ * incomplete upload, and that doubt costs more than the width the `.51` takes up.
  */
 export function formatChartValue(value: number, unit: ChartUnit = "moneda"): string {
   switch (unit) {
@@ -179,13 +180,13 @@ export function formatChartValue(value: number, unit: ChartUnit = "moneda"): str
 }
 
 /**
- * Lo mismo para las marcas del EJE, que es el único sitio donde el importe va SIN centavos.
+ * The same for the AXIS' ticks, which is the only place the amount goes WITHOUT cents.
  *
- * Un eje no es una cifra que nadie coteje: es la escala contra la que se estima el alto de una
- * barra, y seis rótulos de «$204,045.51» se comen el ancho que le queda al dibujo para decir algo
- * que el tooltip y la tabla ya dicen exacto. Es la regla que Ocupaciones ya tenía escrita en
- * `formatMetric` («right for an axis, wrong for a figure someone compares against their own
- * spreadsheet»), y la razón de que Datos no necesite este caso: una tabla no tiene eje.
+ * An axis is not a figure anybody checks: it is the scale against which a bar's height is estimated,
+ * and six labels of «$204,045.51» eat the width the drawing has left to say something the tooltip and
+ * the table already say exactly. It is the rule Ocupaciones already had written in `formatMetric`
+ * («right for an axis, wrong for a figure someone compares against their own spreadsheet»), and the
+ * reason Datos does not need this case: a table has no axis.
  */
 export function formatAxisValue(value: number, unit: ChartUnit = "moneda"): string {
   return unit === "moneda" ? formatCurrency(value) : formatChartValue(value, unit);
@@ -203,10 +204,10 @@ export function barOption(series: Series[], context: SeriesOptionContext): Chart
   };
 }
 
-/** El nombre de la pila. Uno solo: todas las series se acumulan en la misma columna. */
+/** The stack's name. Just one: every series accumulates in the same column. */
 const STACK_ID = "total";
 
-/** El id de la línea del total, que la opción y su tabla gemela tienen que nombrar igual. */
+/** The id of the total's line, which the option and its table twin have to name alike. */
 function totalLineId(total: Series): string {
   return `${seriesKeyId(total.key)}|total`;
 }
@@ -226,23 +227,24 @@ export function stackedOption(series: Series[], context: SeriesOptionContext): C
 }
 
 /**
- * El apilado de una cuenta con la LÍNEA de su total encima — de qué está hecha, periodo a
- * periodo. Un solo eje y una sola unidad, como el combo: la línea es una lectura de la misma
- * entidad, así que toma un tono de tinta y no una ranura de la paleta, que es identidad.
+ * The stack of an account with the LINE of its total above it — what it is made of, period by period.
+ * A single axis and a single unit, like the combo: the line is a reading of the same entity, so it
+ * takes a shade of ink and not a slot of the palette, which is identity.
  *
- * La línea no es decorativa ni redundante con el techo de la pila. Una hija de saldo negativo
- * —`4.1.4 Rebajas y/o Descuentos` lo es— se apila hacia ABAJO, así que el neto no está en ningún
- * borde; y con la cola plegada en «Otros» sigue siendo el total de verdad. Es además lo único que
- * imprime un MONTO por columna: dentro de un segmento no cabe más que una cifra corta.
+ * The line is neither decorative nor redundant with the stack's ceiling. A child with a negative
+ * balance —`4.1.4 Rebajas y/o Descuentos` is one— stacks DOWNWARDS, so the net is at no edge; and
+ * with the tail folded into «Otros» it is still the real total. It is also the only thing that prints
+ * an AMOUNT per column: inside a segment nothing but a short figure fits.
  *
- * Y por eso mismo apila SIN las costuras de 2 px que separan todo relleno contiguo en esta app:
- * una columna que ya declara su total es una sola cifra repartida, no varias puestas en fila.
+ * And for that very reason it stacks WITHOUT the 2 px seams that separate every contiguous fill in
+ * this app: a column that already declares its total is one single figure broken down, not several
+ * put in a row.
  *
- * Esa cifra repartida es también la razón de que cada segmento imprima su PORCENTAJE dentro del
- * total (`distributionShares`, colgado del contexto como cualquier otro `shares`): el monto lo
- * dice la línea, una vez por columna, y lo que la pila añade es qué parte de él es cada hija —
- * leerlo restando montos a ojo es justo el trabajo que la tarjeta existe para ahorrar—. El
- * tooltip lo repite segmento a segmento y nombrando la base, que es donde sí cabe la frase entera.
+ * That broken-down figure is also the reason each segment prints its PERCENTAGE within the total
+ * (`distributionShares`, hung off the context like any other `shares`): the amount is said by the
+ * line, once per column, and what the stack adds is what part of it each child is — reading it by
+ * subtracting amounts by eye is exactly the work the card exists to spare. The tooltip repeats it
+ * segment by segment and naming the base, which is where the whole phrase does fit.
  */
 export function stackedTotalOption(
   series: Series[],
@@ -279,8 +281,8 @@ export function stackedTotalOption(
         symbol: "circle",
         symbolSize: CHART_MARK.symbolSize,
         smooth: false,
-        // Se mide como UNA serie y no como la novena: es la única que lleva cifra, así que lo que
-        // decide si cabe es su propio recuento de marcas, no el de la pila que hay debajo.
+        // It is measured as ONE series and not as the ninth: it is the only one carrying a figure, so
+        // what decides whether it fits is its own mark count, not that of the stack below.
         label: directLabel(labelsFit(1, total.points.length, context), context.unit, "top"),
         labelLayout: { hideOverlap: true },
         z: 3,
@@ -290,8 +292,8 @@ export function stackedTotalOption(
 }
 
 /**
- * La tabla gemela del apilado: las hijas y, cerrando, el total en tinta y con peso. `emphasis` es
- * lo que separa un total de lo que totaliza cuando ambos son filas de la misma tabla.
+ * The stack's table twin: the children and, closing, the total in ink and with weight. `emphasis` is
+ * what separates a total from what it totals when both are rows of the same table.
  */
 export function stackedTotalTable(
   series: Series[],
@@ -323,9 +325,9 @@ export function stackedTotalTable(
  * parent's 8 children therefore draws three shares that correctly fall short of 100.
  */
 export function hundredPercentOption(series: Series[], context: SeriesOptionContext): ChartOption {
-  // Ningún `sharedCount` ni contexto en el tooltip a propósito: aquí los valores YA son el
-  // porcentaje sobre el contenedor, y anotar encima un segundo porcentaje del mismo contenedor
-  // sería escribir «28.4 % · 100 % de Ingresos» sobre cada barra.
+  // No `sharedCount` and no context in the tooltip on purpose: here the values ALREADY are the
+  // percentage over the container, and annotating a second percentage of the same container on top
+  // would be writing «28.4 % · 100 % de Ingresos» over every bar.
   const shares = hundredPercentSeries(series);
   return {
     ...chrome(shares.length),
@@ -340,9 +342,9 @@ export function hundredPercentOption(series: Series[], context: SeriesOptionCont
 }
 
 /**
- * Una serie de un gráfico cuyo eje X son las CATEGORÍAS y no los periodos: un valor por categoría,
- * en el orden del eje. Es la forma que necesita una lectura donde lo comparado dentro de cada barra
- * son los meses o los centros, y no al revés.
+ * A series of a chart whose X axis is the CATEGORIES and not the periods: one value per category, in
+ * the axis' order. It is the shape needed by a reading where what is compared within each bar are the
+ * months or the centers, and not the other way round.
  */
 export interface CategorySeries {
   id: string;
@@ -356,18 +358,18 @@ export interface CategoryOptionContext {
 }
 
 /**
- * Barras agrupadas con las CATEGORÍAS en el eje X — el eje girado.
+ * Grouped bars with the CATEGORIES on the X axis — the rotated axis.
  *
- * Existe porque una lectura de seis líneas de negocio sobre doce meses aplasta contra el eje a las
- * cinco que no son hospedaje: comparten grupo con una barra cien veces mayor y no tienen ni rótulo
- * propio ni sitio para su cifra. Girando el eje, cada categoría tiene su hueco y su nombre aunque su
- * barra mida dos píxeles, y lo que se compara dentro de ella —los meses, los centros— es lo que el
- * usuario haya marcado. Ninguna escala arregla la diferencia de tamaño; lo que la arregla es que la
- * pequeña deje de competir por el espacio de la grande.
+ * It exists because a reading of six business lines over twelve months crushes the five that are not
+ * hospedaje against the axis: they share a group with a bar a hundred times larger and they have
+ * neither a label of their own nor room for their figure. Rotating the axis, each category has its gap
+ * and its name even if its bar measures two pixels, and what is compared within it —the months, the
+ * centers— is whatever the user has marked. No scale fixes the difference in size; what fixes it is
+ * the small one no longer competing for the large one's space.
  *
- * Con una o dos series por categoría el monto va ENCIMA de cada barra (el mismo presupuesto de
- * marcas que el resto de la app), que es lo que hace legible una barra corta: se lee el número. Con
- * más, lo dicen el tooltip y la tabla gemela.
+ * With one or two series per category the amount goes ABOVE each bar (the same mark budget as the
+ * rest of the app), which is what makes a short bar legible: the number is read. With more, the
+ * tooltip and the table twin say it.
  */
 export function categoryBarOption(
   categories: string[],
@@ -398,8 +400,8 @@ export function categoryBarOption(
       type: "bar" as const,
       name: entry.label,
       data: [...entry.values],
-      // La franja va en la PRIMERA serie y una sola vez: es fondo del gráfico, no de una serie, y
-      // repetirla en cada una la oscurecería tantas veces como series haya.
+      // The band goes on the FIRST series and only once: it is background of the chart, not of a
+      // series, and repeating it on each one would darken it as many times as there are series.
       ...(index === 0 && groups.length > 1 ? { markArea: groupBands(groups) } : {}),
       itemStyle: {
         color: context.colorOf(entry.id),
@@ -418,18 +420,19 @@ export function categoryBarOption(
 }
 
 /**
- * Cuánto baja el eje real para dejar sitio al renglón de grupos, y cuánto se separa este de él.
+ * How far the real axis drops to make room for the group line, and how far the latter separates from
+ * it.
  */
 const GROUP_BAND_HEIGHT = 18;
 
 /**
- * El renglón que nombra el GRUPO bajo sus columnas: un segundo eje de categorías, sin línea, sin
- * marcas y sin ninguna serie atada — no es una escala, es un rótulo que abarca varias columnas.
+ * The line that names the GROUP under its columns: a second category axis, with no line, no ticks and
+ * no series tied to it — it is not a scale, it is a label spanning several columns.
  *
- * El nombre se escribe en el CENTRO de su tramo y el resto de sus posiciones van en blanco, que es
- * lo que lo hace parecer un encabezado y no un rótulo por columna. Con un tramo par no hay centro
- * exacto y cae en la columna de la izquierda del medio: desplazarlo medio ancho de columna exigiría
- * medir el gráfico, y esto se decide sin renderizar nada.
+ * The name is written in the CENTRE of its span and the rest of its positions go blank, which is what
+ * makes it look like a heading and not a per-column label. With an even span there is no exact centre
+ * and it falls on the left column of the middle: shifting it half a column width would require
+ * measuring the chart, and this is decided without rendering anything.
  */
 function groupBandAxis(
   columns: number,
@@ -461,13 +464,13 @@ function groupBandAxis(
 }
 
 /**
- * De dónde a dónde llega cada grupo, dicho con una franja de fondo en los IMPARES — la lectura de
- * una tabla con filas alternas, que es la que ya sabe leer cualquiera.
+ * From where to where each group reaches, said with a background band on the ODD ones — the reading
+ * of a table with alternating rows, which is the one anybody already knows how to read.
  *
- * Se alternan en vez de pintarse todas porque lo que hace ver el corte es el CAMBIO, y una línea
- * divisoria por grupo añadiría verticales a una retícula que ya tiene horizontales. Los extremos
- * son índices de columna y no rótulos: el mismo establecimiento aparece en varios grupos, así que
- * un rango por nombre engancharía la primera aparición y no la de este tramo.
+ * They alternate instead of all being painted because what makes the cut visible is the CHANGE, and a
+ * dividing line per group would add verticals to a grid that already has horizontals. The ends are
+ * column indices and not labels: the same establishment appears in several groups, so a range by name
+ * would hook the first appearance and not this span's.
  */
 function groupBands(groups: readonly { label: string; span: number }[]): ChartMarkArea {
   const data: [ChartMarkPoint, ChartMarkPoint][] = [];
@@ -481,7 +484,7 @@ function groupBands(groups: readonly { label: string; span: number }[]): ChartMa
   return { silent: true, itemStyle: { color: CHART_BAND }, data };
 }
 
-/** El grupo al que pertenece cada columna, expandido de los tramos. */
+/** The group each column belongs to, expanded from the spans. */
 function groupLabels(
   columns: number,
   groups: readonly { label: string; span: number }[],
@@ -498,9 +501,9 @@ function groupLabels(
 }
 
 /**
- * La gemela en tabla del eje girado: una fila por categoría y una columna por lo comparado, que es
- * la forma exacta de la hoja del contador —categoría × establecimiento— y la única lectura donde
- * una cifra pequeña se lee igual de bien que una grande.
+ * The rotated axis' table twin: one row per category and one column per thing compared, which is the
+ * exact shape of the accountant's sheet —category × establishment— and the only reading where a small
+ * figure reads just as well as a large one.
  */
 export function categoryTable(
   categories: string[],
@@ -514,8 +517,8 @@ export function categoryTable(
     rows: categories.map((label, index) => ({
       id: `${groupOf[index] ?? ""}|${label}`,
       label,
-      // El grupo va de SUBRÓTULO y no pegado al nombre: en la tabla hay sitio para los dos, y así
-      // la fila se lee igual que su columna en el gráfico.
+      // The group goes as a SUBLABEL and not stuck to the name: in the table there is room for both,
+      // and that way the row reads just like its column in the chart.
       ...(groupOf[index] === undefined ? {} : { sublabel: groupOf[index] }),
       values: series.map((entry) => {
         const value = entry.values[index];
@@ -586,20 +589,24 @@ export function comboOption(
  */
 export function horizontalBarOption(
   entries: AmountEntry[],
-  context: EntryOptionContext,
+  context: EntryOptionContext & { labelWidth?: number },
 ): ChartOption {
   const ranked = [...entries].sort((a, b) => b.value - a.value);
   const unit = context.unit;
+  // The label channel is fixed for the usual reason —measuring the real text would require a canvas—,
+  // but it is not the SAME everywhere: the ranking lives at full width and the breakdown in a window
+  // that can be made wider, so whoever draws declares how much room it has.
+  const labelWidth = context.labelWidth ?? ROW_LABEL_WIDTH;
 
   return {
     ...chrome(1),
-    grid: CATEGORY_ROW_GRID,
+    grid: { ...CATEGORY_ROW_GRID, left: labelWidth + 14 },
     xAxis: valueAxis(unit),
     yAxis: {
       ...categoryAxis(ranked.map((entry) => entry.label)),
       // Category axes run bottom-up; inverting puts the largest bar on the first row.
       inverse: true,
-      axisLabel: ROW_AXIS_LABEL,
+      axisLabel: { ...ROW_AXIS_LABEL, width: labelWidth },
     },
     tooltip: axisTooltip("shadow", unit, undefined, categoryCodes(ranked)),
     series: [
@@ -624,18 +631,18 @@ export function horizontalBarOption(
 }
 
 /**
- * Barras VERTICALES, una por entrada, con la cifra encima — el espejo de `horizontalBarOption`.
+ * VERTICAL bars, one per entry, with the figure above — the mirror of `horizontalBarOption`.
  *
- * Existe porque es la forma en la que la firma dibuja su anexo de gastos a mano, y esa forma no es
- * un capricho suyo: con las categorías abajo el ojo recorre la fila de cifras de un barrido, que es
- * lo que se hace al cotejar contra la hoja. El precio es el rótulo — «EMPLEADOS M.O.I. /
- * ADMISIONES / CAJA / INFORMACION» no cabe bajo una columna—, y se paga PARTIÉNDOLO en varias
- * líneas (`overflow: "break"`) en vez de girándolo: un eje de rótulos en diagonal obliga a inclinar
- * la cabeza para leer diecisiete nombres, y su propio Excel los parte igual.
+ * It exists because it is the shape the firm draws its expense annex in by hand, and that shape is
+ * not a whim of theirs: with the categories along the bottom the eye scans the row of figures in one
+ * sweep, which is what one does when checking against the sheet. The price is the label — «EMPLEADOS
+ * M.O.I. / ADMISIONES / CAJA / INFORMACION» does not fit under a column—, and it is paid by SPLITTING
+ * it into several lines (`overflow: "break"`) instead of rotating it: a diagonal label axis forces
+ * tilting one's head to read seventeen names, and their own Excel splits them the same way.
  *
- * `interval: 0` es lo que obliga a dibujarlos TODOS. Sin él, ECharts adelgaza el eje cuando no
- * caben y se salta uno de cada dos: quedarían diecisiete barras con nueve nombres, y las ocho sin
- * rotular no se podrían identificar por nada — que es peor que un rótulo apretado.
+ * `interval: 0` is what forces drawing them ALL. Without it, ECharts thins the axis when they do not
+ * fit and skips every other one: there would be seventeen bars with nine names, and the eight
+ * unlabelled ones could not be identified by anything — which is worse than a cramped label.
  */
 export function verticalBarOption(
   entries: AmountEntry[],
@@ -654,15 +661,15 @@ export function verticalBarOption(
         fontSize: 10,
         width: context.labelWidth ?? COLUMN_LABEL_WIDTH,
         overflow: "break",
-        // Todos, sin adelgazar: una barra sin nombre no se puede identificar por nada más.
+        // All of them, without thinning: a bar with no name cannot be identified by anything else.
         interval: 0,
         hideOverlap: false,
       },
     },
     yAxis: valueAxis(unit),
-    // Con el CÓDIGO de cuenta en la cabecera: el eje solo cabe el rótulo, y truncado, así que el
-    // tooltip es donde el contador identifica la fila de su plan. Se lee de `ranked` y no de
-    // `entries` porque el orden dibujado es el ordenado, y `byCategory` va por índice.
+    // With the account CODE in the header: the axis only fits the label, and truncated at that, so
+    // the tooltip is where the accountant identifies the row of their plan. It is read off `ranked`
+    // and not `entries` because the drawn order is the ordered one, and `byCategory` goes by index.
     tooltip: axisTooltip("shadow", unit, undefined, categoryCodes(ranked)),
     series: [
       {
@@ -678,8 +685,8 @@ export function verticalBarOption(
         })),
         barMaxWidth: CHART_MARK.barMaxWidth,
         emphasis: { focus: "series" },
-        // La cifra encima de su barra, como en la hoja del contador: es lo que se coteja, y la
-        // columna más pequeña de un anexo real mide dos píxeles y sin su número no dice nada.
+        // The figure above its bar, as in the accountant's sheet: it is what is checked, and the
+        // smallest column of a real annex measures two pixels and without its number says nothing.
         label: directLabel(true, unit, "top"),
         labelLayout: { hideOverlap: true },
       },
@@ -688,31 +695,32 @@ export function verticalBarOption(
 }
 
 /**
- * Una cuenta contra los TOTALES que la contienen, como PARTE DE UN TODO: una fila por total, la
- * barra llena hasta lo que esa cuenta pesa y el resto en un relleno recesivo hasta el 100 %.
+ * One account against the TOTALS that contain it, as PART OF A WHOLE: one row per total, the bar
+ * filled up to what that account weighs and the rest in a recessive fill up to 100 %.
  *
- * Es la forma que responde «qué parte ocupa», y la elección está en el RESTO: sin él una barra al
- * 27,4 % sobre un eje que se auto-escala se lee como una cifra cualquiera, y hay que ir a mirar el
- * eje para saber contra qué. Con el resto dibujado, el todo está a la vista y la lectura es
- * inmediata — el eje deja de hacer falta y por eso va fijo a 100.
+ * It is the shape that answers «what part does it take up», and the choice is in the REST: without it
+ * a bar at 27.4 % over a self-scaling axis reads as just any figure, and one has to go and look at the
+ * axis to know what it is against. With the rest drawn, the whole is in sight and the reading is
+ * immediate — the axis stops being needed and that is why it goes fixed at 100.
  *
- * Cada barra lleva su MONTO y debajo su porcentaje, con el mismo `rich` de dos renglones que usan
- * las cuentas anidadas: el monto es la cifra que se coteja contra la hoja y el porcentaje la
- * lectura que la fila añade. Van JUSTO A LA DERECHA del relleno y no dentro, y eso se probó al
- * revés primero: dentro, `$307,005.37` no cabe en una barra del 27 % y sale recortado, y el umbral
- * que decidiera cuándo entra y cuándo no dependería del ancho del texto, que no se puede medir sin
- * un canvas. A la derecha caen sobre el relleno recesivo, que es claro, así que se leen en tinta
- * normal y no hay caso que resolver.
+ * Each bar carries its AMOUNT and below it its percentage, with the same two-line `rich` the nested
+ * accounts use: the amount is the figure checked against the sheet and the percentage the reading the
+ * row adds. They go JUST TO THE RIGHT of the fill and not inside it, and that was tried the other way
+ * round first: inside, `$307,005.37` does not fit in a 27 % bar and comes out clipped, and the
+ * threshold deciding when it fits would depend on the text's width, which cannot be measured without a
+ * canvas. To the right they fall over the recessive fill, which is light, so they are read in normal
+ * ink and there is no case to resolve.
  *
- * El resto NO se rotula: su porcentaje es el complemento del que ya está escrito, y decir «72,6 %»
- * al lado de «27,4 %» es la misma cifra dos veces compitiendo con la que importa.
+ * The rest is NOT labelled: its percentage is the complement of the one already written, and saying
+ * «72.6 %» next to «27.4 %» is the same figure twice competing with the one that matters.
  */
 export interface ShareOfTotalRow {
   id: string;
-  /** Contra qué se mide: «Del total de costos y gastos». */
+  /** What it is measured against: «Del total de costos y gastos». */
   label: string;
   value: number;
-  /** El todo. `null` deja la fila fuera: no hay contra qué medir, que no es lo mismo que 0 %. */
+  /** The whole. `null` leaves the row out: there is nothing to measure against, which is not the same
+   *  as 0 %. */
   total: number | null;
 }
 
@@ -731,8 +739,8 @@ export function shareOfTotalOption(
     grid: SHARE_ROW_GRID,
     xAxis: {
       ...valueAxis("porcentaje"),
-      // Fijo a 100: el eje de una parte-de-un-todo no se auto-escala, o el mismo relleno diría
-      // cosas distintas en dos filas y la comparación entre ellas dejaría de ser posible.
+      // Fixed at 100: the axis of a part-of-a-whole does not self-scale, or the same fill would say
+      // different things in two rows and comparing them would stop being possible.
       min: 0,
       max: 100,
       axisLabel: { show: false },
@@ -771,8 +779,8 @@ export function shareOfTotalOption(
           },
           rich: {
             monto: { color: CHART_INK.strong, fontSize: 11, lineHeight: 14 },
-            // Más tenue que el monto, la misma jerarquía que en las cuentas anidadas: el porcentaje
-            // es la anotación sobre la barra, no la cifra de la barra.
+            // Fainter than the amount, the same hierarchy as in the nested accounts: the percentage is
+            // the annotation over the bar, not the bar's figure.
             [SHARE_RICH_KEY]: { color: CHART_INK.muted, fontSize: 10, lineHeight: 12 },
           },
         },
@@ -783,8 +791,8 @@ export function shareOfTotalOption(
         type: "bar",
         name: "Resto",
         stack: "todo",
-        // Recesivo y SILENCIOSO: existe para que se vea el todo, no para ser leído — resaltarlo al
-        // pasar por encima invitaría a compararlo con la parte, y no es una entidad.
+        // Recessive and SILENT: it exists so the whole can be seen, not to be read — highlighting it
+        // on hover would invite comparing it with the part, and it is not an entity.
         silent: true,
         data: drawn.map((_, index) => ({
           value: 100 - shares[index],
@@ -800,7 +808,34 @@ export function shareOfTotalOption(
   };
 }
 
-/** La gemela en tabla: el monto, su parte y el todo contra el que se mide. */
+/** The table twin: the amount, its part and the whole it is measured against. */
+/**
+ * The table twin of an account's BREAKDOWN: code, amount and what part of the parent it is.
+ *
+ * It does not cut —it receives `all` and not `rows`—, which is what keeps the drawing's cut from
+ * hiding a figure: the same division of labour as the annex, where the bars reduce and the table is
+ * the whole list. And it carries no colour dot, because there every bar goes in the same hue and a dot
+ * per row would promise a distinction that does not exist.
+ */
+export function breakdownTable(rows: readonly BreakdownRow[], base: string): ChartTable {
+  return {
+    // The header NAMES the denominator instead of saying «% de la cuenta»: a percentage that does not
+    // say what it is measured against forces deducing it from the window's title, and that is exactly
+    // the kind of computation nobody does and everybody assumes. It is the rule the annex already
+    // applies in its two columns («% del gasto», «% del ingreso»).
+    columns: ["Valor", `% de ${base}`],
+    rows: rows.map((row) => ({
+      id: row.code,
+      label: row.label,
+      sublabel: row.code,
+      values: [
+        formatCurrency(row.value, { cents: true }),
+        row.share === null ? null : formatChartValue(row.share, "porcentaje"),
+      ],
+    })),
+  };
+}
+
 export function shareOfTotalTable(
   rows: readonly ShareOfTotalRow[],
   context: { colorOf: (id: string) => string },
@@ -885,15 +920,15 @@ export function variationBarOption(
 }
 
 /**
- * La TARTA, alimentada por `toPieSlices` — que es quien pliega la cola en «Otros» y aparta las
- * entradas no positivas. `4.1.4 Rebaja y/o Descuentos sobre Ventas` es negativa y dibujaría un
- * ángulo negativo; vuelve en `excluded` para que la tarjeta la nombre al pie.
+ * The PIE, fed by `toPieSlices` — which is what folds the tail into «Otros» and sets aside the
+ * non-positive entries. `4.1.4 Rebaja y/o Descuentos sobre Ventas` is negative and would draw a
+ * negative angle; it comes back in `excluded` so the card can name it in its footnote.
  *
- * Sin agujero, y eso es una decisión: el hueco de un anillo existe para poner el TOTAL en medio,
- * que es lo único que una tarta no puede decir, y ninguna tarjeta lo pone ahí —el total del anexo
- * vive en su nota al pie y en la fila de cierre de la tabla gemela—. Un anillo vacío gasta el
- * centro del círculo en nada y, al estrechar cada porción a una banda, deja el reparto peor dicho
- * que una tarta, que es lo que la firma dibuja en su propio anexo.
+ * With no hole, and that is a decision: a ring's hole exists to put the TOTAL in the middle, which is
+ * the only thing a pie cannot say, and no card puts it there —the annex's total lives in its footnote
+ * and in the table twin's closing row—. An empty ring spends the circle's centre on nothing and, by
+ * narrowing each slice to a band, states the breakdown worse than the pie the firm draws in its own
+ * annex.
  */
 export function pieOption(result: PieResult, context: EntryOptionContext): ChartOption {
   return {
@@ -908,8 +943,8 @@ export function pieOption(result: PieResult, context: EntryOptionContext): Chart
           return "";
         }
         const share = param.percent === undefined ? "" : ` · ${formatPercent(param.percent)}`;
-        // La porción es la cuenta, así que el código va en su nombre — y «Otros», que es el
-        // pliegue de la cola y no una cuenta, se queda sin él por `accountCodeOf`.
+        // The slice is the account, so the code goes in its name — and «Otros», which is the tail's
+        // fold and not an account, is left without one by `accountCodeOf`.
         const name = withCode(
           param.name,
           accountCodeOf(result.slices[param.dataIndex]?.code ?? ""),
@@ -1033,10 +1068,10 @@ const WATERFALL_SERIES = {
 
 const WATERFALL_STACK = "cascada";
 
-/** El plot que asume el reparto de abajo: la tarjeta más estrecha que dibuja una cascada (A4). */
+/** The plot the layout below assumes: the narrowest card that draws a cascade (A4). */
 const WATERFALL_PLOT = 780;
 
-/** Lo que cabe por categoría, nunca más de lo que un nombre de cuenta necesita. */
+/** What fits per category, never more than an account name needs. */
 function waterfallLabelWidth(steps: number): number {
   return Math.max(48, Math.min(84, Math.floor(WATERFALL_PLOT / Math.max(steps, 1))));
 }
@@ -1087,10 +1122,10 @@ export function waterfallOption(steps: WaterfallStep[]): ChartOption {
     barMaxWidth: CHART_MARK.barMaxWidth,
     label: {
       show: true,
-      // ENCIMA de la barra, no dentro. El diseño la pedía dentro, y dentro se cortaba: el ancho
-      // de una barra lo topa `barMaxWidth`, así que «$206,570» no cabe por más pasos que se
-      // quiten, y salía impreso como «$206,57». Una cifra a medias es peor que una fuera de
-      // sitio, y arriba `hideOverlap` puede además descartar la que no quepa.
+      // ABOVE the bar, not inside. The design asked for it inside, and inside it was clipped: a bar's
+      // width is capped by `barMaxWidth`, so «$206,570» does not fit however many steps are removed,
+      // and it came out printed as «$206,57». A half figure is worse than one out of place, and above
+      // `hideOverlap` can also drop the one that does not fit.
       position: "top",
       color: CHART_INK.strong,
       fontSize: 10.5,
@@ -1112,9 +1147,9 @@ export function waterfallOption(steps: WaterfallStep[]): ChartOption {
       // Account names are long and every step must be named: they wrap instead of being
       // dropped by `hideOverlap`, and `outerBoundsContain` shrinks the plot to fit them.
       //
-      // El ancho SALE DEL NÚMERO DE PASOS. Estaba fijo en 84 px, que es lo que da una cascada de
-      // diez pasos en una tarjeta ancha; con doce en una hoja A4 cada categoría dispone de menos
-      // que eso y los nombres se montan unos sobre otros («IngresosOtros GastosComisiones…»).
+      // The width COMES FROM THE NUMBER OF STEPS. It was fixed at 84 px, which is what a ten-step
+      // cascade in a wide card gives; with twelve on an A4 page each category has less than that and
+      // the names ride over each other («IngresosOtros GastosComisiones…»).
       axisLabel: {
         color: CHART_INK.muted,
         fontSize: 10.5,
@@ -1342,16 +1377,16 @@ const CATEGORY_ROW_GRID = {
 } as const;
 
 /**
- * El canal de la fila de «parte de un todo». Mucho más estrecho que el del ranking porque su rótulo
- * no es un nombre de cuenta sino contra qué se mide —dos filas, texto corto y conocido—, y aquí
- * cada píxel cuenta: esto vive en el panel lateral, que son 440 px, y entre el canal y el hueco de
- * la cifra se le puede comer a la barra todo el ancho que tiene para decir algo.
+ * The channel of the «part of a whole» row. Much narrower than the ranking's because its label is not
+ * an account name but what it is measured against —two rows, short and familiar text—, and here every
+ * pixel counts: this lives in the side panel, which is 440 px, and between the channel and the
+ * figure's gap the bar can be robbed of all the width it has to say anything.
  */
 const SHARE_LABEL_WIDTH = 106;
 const SHARE_ROW_GRID = {
   left: SHARE_LABEL_WIDTH + 14,
-  // El monto y su porcentaje se escriben a la derecha del relleno, así que la barra no puede
-  // llegar al borde: sin este hueco, la fila más llena imprimiría su cifra fuera de la tarjeta.
+  // The amount and its percentage are written to the right of the fill, so the bar cannot reach the
+  // edge: without this gap, the fullest row would print its figure outside the card.
   right: 104,
   top: 10,
   bottom: 10,
@@ -1366,16 +1401,16 @@ const ROW_AXIS_LABEL = {
 } as const;
 
 /**
- * El ancho que se le da a cada rótulo bajo su columna antes de partirlo en líneas, y el hueco que
- * la retícula le reserva abajo. Son fijos por lo mismo que el canal de `CATEGORY_ROW_GRID`: medir
- * el texto real exigiría un canvas, así que se reserva una cota y se parte contra ella.
+ * The width given to each label under its column before splitting it into lines, and the gap the grid
+ * reserves for it below. They are fixed for the same reason as `CATEGORY_ROW_GRID`'s channel:
+ * measuring the real text would require a canvas, so a bound is reserved and it is split against it.
  */
 const COLUMN_LABEL_WIDTH = 74;
 const COLUMN_GRID = {
   left: 8,
   right: 16,
   top: 28,
-  // Cuatro líneas de rótulo a 10 px, que es lo que pide el nombre más largo de un anexo real.
+  // Four label lines at 10 px, which is what the longest name of a real annex asks for.
   bottom: 62,
   outerBoundsMode: "same",
   outerBoundsContain: "axisLabel",
@@ -1387,8 +1422,8 @@ const TOOLTIP_CHROME: Omit<ChartTooltip, "trigger" | "formatter"> = {
   borderWidth: 1,
   padding: [8, 10],
   textStyle: { color: CHART_INK.strong, fontSize: 12 },
-  // Dentro de la TARJETA, no dentro de la ventana — ver `ChartTooltip.confine`. Va aquí y no en
-  // cada tooltip porque el recorte es de la tarjeta y todas las tarjetas son la misma.
+  // Inside the CARD, not inside the window — see `ChartTooltip.confine`. It goes here and not in each
+  // tooltip because the clipping belongs to the card and every card is the same one.
   confine: true,
 };
 
@@ -1458,58 +1493,58 @@ function valueAxis(unit: ChartUnit = "moneda"): ChartAxis {
 }
 
 /**
- * El código de cuenta con el que se nombra algo del plan, o `undefined` cuando lo dibujado no es
- * una cuenta.
+ * The account code something of the plan is named with, or `undefined` when what is drawn is not an
+ * account.
  *
- * Es una línea porque una sola cosa puede estar mal: `OTHERS_CODE` es el pliegue de la cola —el
- * de la tarta y el de la pila—, y escribirlo afirmaría que el contador tiene una cuenta llamada
- * «otros». Lo demás que llega aquí ya sale del árbol (`SeriesKey.code`, `AmountEntry.code`), así
- * que no hay nada que validar contra la fuente.
+ * It is one line because only one thing can be wrong: `OTHERS_CODE` is the tail's fold —the pie's and
+ * the stack's—, and writing it would claim the accountant has an account called «otros». Everything
+ * else that arrives here already comes from the tree (`SeriesKey.code`, `AmountEntry.code`), so there
+ * is nothing to validate against the source.
  */
 function accountCodeOf(code: string): string | undefined {
   return code === OTHERS_CODE || code.length === 0 ? undefined : code;
 }
 
 /**
- * El nombre precedido de su código, que es el orden del plan de cuentas y el de la tabla de
- * Datos, donde la columna del código va a la izquierda del nombre.
+ * The name preceded by its code, which is the chart of accounts' order and the Datos table's, where
+ * the code column goes to the left of the name.
  */
 function withCode(label: string, code: string | undefined): string {
   return code === undefined ? label : `${code} · ${label}`;
 }
 
 /**
- * Dónde cae el código dentro de un tooltip, que no es lo mismo en las dos formas de tarjeta.
+ * Where the code falls inside a tooltip, which is not the same in the two card shapes.
  *
- * Cuando la cuenta ES la serie —la evolución, la comparación, la pila— hay una fila por serie y
- * el código va en la suya. Cuando la cuenta es la CATEGORÍA del eje —el ranking, la variación, el
- * pareto—, la serie se llama «Monto» y el nombre de la cuenta es la primera línea del tooltip,
- * así que es ahí donde tiene que ir. Un mismo formateador y dos sitios; ningún builder pasa los
- * dos, porque ningún gráfico es de las dos formas a la vez.
+ * When the account IS the series —the evolution, the comparison, the stack— there is one row per
+ * series and the code goes in its own. When the account is the axis' CATEGORY —the ranking, the
+ * variation, the pareto—, the series is called «Monto» and the account's name is the tooltip's first
+ * line, so that is where it has to go. One same formatter and two places; no builder passes both,
+ * because no chart is of both shapes at once.
  */
 interface TooltipCodes {
-  /** Por `seriesId`. */
+  /** By `seriesId`. */
   bySeries?: ReadonlyMap<string, string>;
-  /** Por índice de categoría, en el orden en que se dibujan. */
+  /** By category index, in the order they are drawn. */
   byCategory?: readonly (string | undefined)[];
 }
 
 /**
- * El código como `sublabel` de una fila de la tabla gemela — ausente cuando no hay cuenta que
- * nombrar. Va debajo del nombre y no pegado a él porque en la tabla sí hay sitio para los dos,
- * la misma regla con la que Sueldos por Áreas cuelga el cargo bajo el empleado.
+ * The code as a `sublabel` of a table twin's row — absent when there is no account to name. It goes
+ * under the name and not stuck to it because in the table there is room for both, the same rule
+ * Sueldos por Áreas hangs the job title under the employee with.
  */
 function sublabelFor(code: string): { sublabel?: string } {
   const account = accountCodeOf(code);
   return account === undefined ? {} : { sublabel: account };
 }
 
-/** Los pares `(id de serie, código)` de una tanda, con el id que cada serie lleva al dibujarse. */
+/** The `(series id, code)` pairs of a batch, with the id each series carries when drawn. */
 function seriesCodes(series: readonly Series[]): [string, string][] {
   return series.map((entry) => [seriesKeyId(entry.key), entry.key.code]);
 }
 
-/** El mapa del tooltip, sin las series que no nombran una cuenta. */
+/** The tooltip's map, without the series that name no account. */
 function tooltipCodes(pairs: readonly (readonly [string, string])[]): TooltipCodes {
   const bySeries = new Map<string, string>();
   for (const [id, code] of pairs) {
@@ -1521,7 +1556,7 @@ function tooltipCodes(pairs: readonly (readonly [string, string])[]): TooltipCod
   return { bySeries };
 }
 
-/** Lo mismo para un eje de categorías, donde el índice del dato ES el puesto en el eje. */
+/** The same for a category axis, where the datum's index IS the position on the axis. */
 function categoryCodes(entries: readonly { code: string }[]): TooltipCodes {
   return { byCategory: entries.map((entry) => accountCodeOf(entry.code)) };
 }
@@ -1531,14 +1566,14 @@ function categoryCodes(entries: readonly { code: string }[]): TooltipCodes {
  * renders nothing at all when a period has no covered series. `axis` trigger also makes the
  * whole column sensitive, which is how the hit area ends up larger than the mark.
  *
- * Es el único sitio donde el porcentaje sale NOMBRANDO su base («28.4 % de Ingresos»): en la
- * barra esa frase no cabe en doce columnas, y aquí sobra el ancho. Sale siempre que exista,
- * también cuando el eje estaba demasiado apretado para imprimirlo encima de la barra.
+ * It is the only place the percentage comes out NAMING its base («28.4 % de Ingresos»): on the bar
+ * that phrase does not fit in twelve columns, and here width is plentiful. It comes out whenever it
+ * exists, including when the axis was too cramped to print it above the bar.
  *
- * Y es donde sale el CÓDIGO de la cuenta, que en el gráfico no está en ningún otro sitio: en el
- * eje se comería el canal de rótulos —150 px en las de barras horizontales— y truncaría los
- * nombres, así que se paga al pasar el ratón, que es cuando se pregunta por una cuenta concreta
- * para cotejarla contra el plan.
+ * And it is where the account's CODE comes out, which in the chart is nowhere else: on the axis it
+ * would eat the label channel —150 px in the horizontal bar ones— and would truncate the names, so it
+ * is paid for on hover, which is when one asks about a particular account to check it against the
+ * plan.
  */
 function axisTooltip(
   pointer: "shadow" | "cross",
@@ -1569,8 +1604,8 @@ function axisTooltip(
         );
         return `${param.marker ?? ""} ${name}: ${formatChartValue(param.value as number, unit)}${suffix}`;
       });
-      // La primera línea es el PERIODO en las de series y la CUENTA en las de categorías: solo la
-      // segunda lleva código, y por eso `byCategory` se lee aquí y no en las filas.
+      // The first line is the PERIOD in the series ones and the ACCOUNT in the category ones: only the
+      // second carries a code, and that is why `byCategory` is read here and not in the rows.
       const head = withCode(covered[0].name, codes.byCategory?.[covered[0].dataIndex]);
       return [head, ...rows].join("<br/>");
     },
@@ -1586,8 +1621,8 @@ function barSeries(
     seamless?: boolean;
     sharedCount?: number;
     /**
-     * Los porcentajes ya decididos por quien llama, saltándose `shareLabelFor`. Solo los pasa la
-     * pila con total, cuyo presupuesto es la altura de cada segmento y no el elenco del eje.
+     * The percentages already decided by the caller, skipping `shareLabelFor`. Only the stack with a
+     * total passes them, whose budget is each segment's height and not the axis' cast.
      */
     shares?: readonly (number | null)[];
   } = {},
@@ -1595,10 +1630,10 @@ function barSeries(
   const stacked = options.stacked ?? false;
   // Contiguous fills — stacked segments, grouped bars — are separated by 2px of the surface.
   //
-  // `seamless` es la excepción, y solo la pide una pila que ya lleva un TOTAL encima: allí la
-  // columna es una sola cifra repartida, no varias puestas en fila, y esas costuras la parten en
-  // trozos sueltos. Lo que separa un segmento del siguiente pasa a ser el salto de color, que su
-  // escala ordenada ya garantiza.
+  // `seamless` is the exception, and only a stack that already carries a TOTAL above it asks for it:
+  // there the column is one single figure broken down, not several put in a row, and those seams
+  // split it into loose pieces. What separates one segment from the next becomes the colour step,
+  // which its ordered scale already guarantees.
   const separation =
     (stacked && !options.seamless) || (!stacked && seriesCount > 1)
       ? { borderColor: CHART_SURFACE, borderWidth: CHART_MARK.gap }
@@ -1655,8 +1690,8 @@ function lineSeries(
 }
 
 /**
- * Los porcentajes que esta serie imprimirá bajo su monto, o `undefined` si no lleva ninguno —
- * porque no cae dentro de ninguna cuenta marcada, o porque su elenco no cabe en el eje.
+ * The percentages this series will print under its amount, or `undefined` if it carries none —
+ * because it falls inside no marked account, or because its cast does not fit on the axis.
  */
 function shareLabelFor(
   series: Series,
@@ -1672,10 +1707,10 @@ function shareLabelFor(
  * fit rather than drawing it clipped, and the empty string for a `null` keeps an uncovered
  * period from printing a value it does not have.
  *
- * `shares` añade una SEGUNDA línea con lo que la cuenta ocupa dentro de la marcada que la
- * contiene. Las dos líneas son independientes: con el eje apretado el monto se apaga y el
- * porcentaje sigue —es más corto y es la lectura que se pidió—, y una barra cuyo porcentaje no
- * se puede calcular (base en cero, periodo sin cobertura) imprime su monto y nada debajo.
+ * `shares` adds a SECOND line with what the account takes up within the marked one containing it. The
+ * two lines are independent: with a cramped axis the amount switches off and the percentage stays —it
+ * is shorter and it is the reading that was asked for—, and a bar whose percentage cannot be computed
+ * (a zero base, a period with no coverage) prints its amount and nothing below.
  */
 function directLabel(
   show: boolean,
@@ -1693,8 +1728,8 @@ function directLabel(
     ...(shares
       ? {
           rich: {
-            // Más tenue que el monto: el porcentaje es una anotación sobre la barra, no la cifra
-            // de la barra. Sobre un relleno saturado gana `onFill`, que es el único que se lee.
+            // Fainter than the amount: the percentage is an annotation over the bar, not the bar's
+            // figure. Over a saturated fill `onFill` wins, which is the only one that reads.
             [SHARE_RICH_KEY]: {
               color: inside ? CHART_INK.onFill : CHART_INK.muted,
               fontSize: 10,

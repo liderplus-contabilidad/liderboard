@@ -1,12 +1,12 @@
 /**
- * El nombre del archivo y la descarga. Delgado a propósito: `downloadBlob` (`lib/download.ts`) ya
- * es la única forma en que esta app baja un archivo, y aquí solo se decide cómo se llama.
+ * The file's name and the download. Deliberately thin: `downloadBlob` (`lib/download.ts`) is already
+ * the only way this app downloads a file, and all that is decided here is what it is called.
  */
 import { downloadBlob } from "@/lib/download";
 import { zipStore, type ZipEntry } from "@/lib/zip";
 import type { PayslipDocument } from "./types";
 
-/** Un trozo de nombre apto para un sistema de archivos: sin tildes, sin espacios, sin signos. */
+/** A piece of a name fit for a file system: no accents, no spaces, no punctuation. */
 function slug(text: string): string {
   return text
     .normalize("NFD")
@@ -26,25 +26,25 @@ export function payslipFilename(year: number, monthIndex: number, employeeName: 
 }
 
 /**
- * El rótulo del control que baja el .zip. Vive aquí y no en cada componente porque lo dicen DOS
- * pantallas —el encabezado del período y la fila del historial—, y un botón que promete un PDF
- * donde el otro promete un .zip haría dudar de si bajan lo mismo.
+ * The label of the control that downloads the .zip. It lives here and not in each component because
+ * TWO screens say it —the período's header and the history's row—, and a button promising a PDF where
+ * the other promises a .zip would raise doubts about whether they download the same thing.
  */
 export const PAYSLIP_ZIP_LABEL = "Descargar roles (ZIP)";
 
-/** `Rol-2026-03-comprobantes.zip` — el sobre con un PDF por empleado. */
+/** `Rol-2026-03-comprobantes.zip` — the envelope with one PDF per employee. */
 export function payslipBatchFilename(year: number, monthIndex: number): string {
   return `Rol-${periodPart(year, monthIndex)}-comprobantes.zip`;
 }
 
 /**
- * CÓMO SE LLAMA CADA PDF DENTRO DEL .ZIP — puro, y la única regla de eso.
+ * WHAT EACH PDF INSIDE THE .ZIP IS CALLED — pure, and the only rule for it.
  *
- * Es `payslipFilename` en el orden de la nómina, con un desempate: dos personas del mismo nombre
- * darían el mismo archivo, y un extractor no avisa de eso — pisa el primero en silencio y una de
- * las dos se queda sin comprobante. Se desempata con la POSICIÓN en la nómina, que es lo que el
- * propio comprobante imprime en su `Codigo:`; un correlativo `-2` diría que hay dos versiones del
- * mismo papel en vez de decir de quién es cada uno.
+ * It is `payslipFilename` in nómina order, with a tie-break: two people with the same name would give
+ * the same file, and an extractor does not warn about that — it silently overwrites the first one and
+ * one of the two is left with no payslip. It is tie-broken with the POSITION in the nómina, which is
+ * what the payslip itself prints in its `Codigo:`; a running `-2` would say there are two versions of
+ * the same paper instead of saying whose each one is.
  */
 export function payslipZipEntryNames(
   employeeNames: readonly string[],
@@ -67,8 +67,8 @@ export function payslipZipEntryNames(
 }
 
 /**
- * Genera y baja los comprobantes en UN PDF, uno por página. `pdf-lib` entra por el import dinámico
- * de `render.ts`, así que el módulo no se carga hasta que alguien pulsa el botón.
+ * Generates and downloads the payslips in ONE PDF, one per page. `pdf-lib` comes in through
+ * `render.ts`'s dynamic import, so the module is not loaded until someone presses the button.
  */
 export async function downloadPayslips(
   documents: readonly PayslipDocument[],
@@ -76,22 +76,22 @@ export async function downloadPayslips(
 ): Promise<void> {
   const { renderPayslips } = await import("./render");
   const bytes = await renderPayslips(documents);
-  // `Uint8Array` → `ArrayBuffer` propio: el búfer que devuelve pdf-lib puede ser una vista sobre
-  // uno mayor, y `Blob` copiaría de más.
+  // `Uint8Array` → its own `ArrayBuffer`: the buffer pdf-lib returns may be a view over a larger one,
+  // and `Blob` would copy too much.
   downloadBlob(new Blob([bytes.slice().buffer], { type: "application/pdf" }), filename);
 }
 
 /**
- * LOS COMPROBANTES DE UN PERÍODO: **un PDF por empleado**, dentro de un .zip.
+ * A PERÍODO'S PAYSLIPS: **one PDF per employee**, inside a .zip.
  *
- * Un solo PDF de treinta páginas es un archivo que hay que partir a mano antes de repartirlo, y
- * repartirlo es para lo que existe: cada empleado firma el suyo. Por eso el papel de la nómina
- * entera no es un documento más largo sino treinta documentos, y el .zip es solo el sobre en el que
- * el navegador puede bajarlos de un gesto.
+ * A single thirty-page PDF is a file that has to be split by hand before handing it out, and handing
+ * it out is what it exists for: each employee signs their own. That is why the paper of the whole
+ * nómina is not one longer document but thirty documents, and the .zip is only the envelope in which
+ * the browser can download them in one gesture.
  *
- * Cada comprobante pasa por `renderPayslips` con UNA sola entrada — el caso `N = 1` que la ficha de
- * un empleado ya usaba —, así que no hay una segunda forma de dibujar un comprobante capaz de
- * separarse de la primera.
+ * Each payslip goes through `renderPayslips` with ONE single input — the `N = 1` case an employee's
+ * record already used —, so there is no second way of drawing a payslip that could drift from the
+ * first.
  */
 export async function downloadPayslipZip(
   documents: readonly PayslipDocument[],

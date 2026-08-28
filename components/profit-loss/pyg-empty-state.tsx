@@ -7,23 +7,23 @@ import { usePygData } from "./pyg-data-provider";
 import { PygExcelActions } from "./pyg-excel-actions";
 
 /**
- * El vacío de PyG, en sus dos formas — porque son dos huecos distintos y solo uno se llena con un
- * archivo:
+ * PyG's empty state, in its two forms — because they are two different gaps and only one is filled by
+ * a file:
  *
- * - **Sin clientes**: no falta un Excel, falta el paso anterior. La única salida es crear el
- *   primero, y el texto dice qué se gana al hacerlo (cada cliente guarda LO SUYO), que es lo que
- *   convierte «otro formulario más» en «así es como llevo diez clientes».
- * - **Con cliente y sin datos**: ahí sí falta el archivo, y van las acciones de Excel. La fila de
- *   tabs solo las monta en Datos, así que Gráficas y Análisis sin dataset se quedaban sin ninguna
- *   acción: van aquí, hermanas del `EmptyState` (que envuelve sus children en un `span`, y el menú
- *   de descarga es un `div`).
+ * - **No clients**: no Excel is missing, the previous step is. The only exit is creating the first
+ *   one, and the copy says what is gained by doing it (each client holds ITS OWN), which is what
+ *   turns «one more form» into «this is how I keep ten clients».
+ * - **A client with no data**: there the file really is missing, and the Excel actions go with it.
+ *   The tab row only mounts them in Datos, so Gráficas and Análisis with no dataset were left with no
+ *   action at all: they go here, siblings of the `EmptyState` (which wraps its children in a `span`,
+ *   and the download menu is a `div`).
  */
 export function PygEmptyState() {
   const { activeClientId, isConsolidated } = usePygData();
 
-  // El consolidado sin nada que sumar es un TERCER hueco: no falta un archivo ni un cliente, sino
-  // un segundo cliente con datos. Ofrecer «Cargar Excel» aquí apuntaría al sitio equivocado, que
-  // es el cliente concreto al que ese archivo pertenece.
+  // The consolidado with nothing to sum is a THIRD gap: neither a file nor a client is missing, but a
+  // second client with data. Offering «Cargar Excel» here would point at the wrong place, which is
+  // the particular client that file belongs to.
   if (isConsolidated) {
     return (
       <div className="flex flex-col items-center gap-4 px-7 py-20">

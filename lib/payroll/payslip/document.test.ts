@@ -13,10 +13,10 @@ import {
 import type { PayslipDocument, PayslipRow } from "./types";
 
 /**
- * El empleado 6 de MARZO 2026 del libro real, `GENERAL!36`: la única fila del archivo con un
- * anticipo, así que ejercita las dos mitades del comprobante. Su ficha va aquí verbatim y las
- * cifras salen del MOTOR, no escritas a mano — lo que se afirma abajo es que el comprobante que
- * la app imprime dice lo mismo que la hoja `INDIVIDUAL` del contador.
+ * The real book's employee 6 of MARCH 2026, `GENERAL!36`: the only row of the file with an advance, so
+ * it exercises both halves of the payslip. Their record goes here verbatim and the figures come from
+ * the ENGINE, not written by hand — what is asserted below is that the payslip the app prints says the
+ * same as the accountant's `INDIVIDUAL` sheet.
  */
 const SORIA: PayrollEmployeeLine = {
   id: "e6",
@@ -38,9 +38,9 @@ const SORIA: PayrollEmployeeLine = {
 };
 
 /**
- * El mismo empleado con TODO capturado. Es el único caso en el que el comprobante imprime sus 26
- * filas, así que es donde se puede afirmar el orden completo del papel — con la ficha real solo
- * salen cinco.
+ * The same employee with EVERYTHING captured. It is the only case in which the payslip prints its 26
+ * rows, so it is where the paper's complete order can be asserted — with the real record only five
+ * come out.
  */
 const FULL: PayrollEmployeeLine = {
   ...SORIA,
@@ -102,7 +102,7 @@ describe("el comprobante del empleado 6 de marzo 2026", () => {
     expect(doc.daysLine).toBe("Dias Trabajados: 30");
     expect(doc.employeeName).toBe("SORIA CHALA MISHELL FERNANDA");
     expect(doc.role).toBe("RECEPCIONISTA POLIVALENTE CERTIFICADA");
-    // `G7` concatena el número crudo: un cero sale `FR=0`, no `FR=-`.
+    // `G7` concatenates the raw number: a zero comes out `FR=0`, not `FR=-`.
     expect(doc.reserveFundLine).toBe("FR=0");
     expect(doc.idCardLine).toBe("C.C. 1723220065");
   });
@@ -118,7 +118,7 @@ describe("el comprobante del empleado 6 de marzo 2026", () => {
   it("cierra con los tres totales en $", () => {
     expect(doc.totalIncome).toBe("$567.98");
     expect(doc.totalDeductions).toBe("$246.04");
-    // `AP36` guarda 321.94000000000005 — el motor no redondea sus totales y el comprobante sí.
+    // `AP36` stores 321.94000000000005 — the engine does not round its totals and the payslip does.
     expect(doc.netPay).toBe("$321.94");
   });
 
@@ -132,8 +132,8 @@ describe("el comprobante del empleado 6 de marzo 2026", () => {
 
 describe("qué filas se imprimen", () => {
   it("solo las que traen importe", () => {
-    // La ficha real de SORIA: sueldo, los dos décimos, el aporte al IESS y su anticipo. Las otras
-    // veintiuna valen cero y no ocupan renglón.
+    // SORIA's real record: salary, the two décimos, the IESS contribution and their advance. The
+    // other twenty-one are zero and take up no line.
     expect(build(SORIA).incomes.map((r) => r.label)).toEqual([
       "SUELDO UNIFICADO",
       "DECIMO IV SUELDO-MENSUAL",
@@ -170,8 +170,8 @@ describe("qué filas se imprimen", () => {
   });
 
   it("un total en cero SÍ es una cifra: no se esconde", () => {
-    // Lo omitido son FILAS. Un total es una afirmación sobre el mes —«no se le descontó nada»— y
-    // esconderlo lo haría parecer un dato que falta.
+    // What is omitted are ROWS. A total is a claim about the month —«nothing was deducted from
+    // them»— and hiding it would make it look like a missing datum.
     const doc = build({ ...SORIA, capture: undefined, baseSalary: 0, days: 0 });
     expect(doc.deductions).toHaveLength(0);
     expect(doc.totalDeductions).toBe("$0.00");
@@ -193,8 +193,8 @@ describe("la nota al pie sigue a la marca que explica", () => {
   });
 
   it("no sale cuando el fondo de reserva y el bono se quedaron fuera", () => {
-    // Son las dos filas que más veces valen cero: un pie que aclara un `(*)` ausente manda a
-    // buscar en la hoja algo que no está.
+    // They are the two rows that are zero most often: a footnote clarifying an absent `(*)` sends the
+    // reader hunting the sheet for something that is not there.
     const doc = build(SORIA);
     expect(doc.incomes.some((r) => r.quantity === "(*)")).toBe(false);
     expect(doc.footnote).toBeNull();
@@ -233,24 +233,24 @@ describe("el orden es el de columnas del libro, no el del catálogo", () => {
   });
 
   it("omitir filas no reordena las que quedan", () => {
-    // El orden es el del papel, no el de lo que sobrevivió: las tres de SORIA salen en las mismas
-    // posiciones relativas que ocupan con todo capturado.
+    // The order is the paper's, not that of whatever survived: SORIA's three come out in the same
+    // relative positions they occupy with everything captured.
     const printed = build(SORIA).incomes.map((r) => r.label);
     const all = build(FULL).incomes.map((r) => r.label);
     expect(printed).toEqual(all.filter((label) => printed.includes(label)));
   });
 
   it("una columna de dos letras va DESPUÉS de una de una", () => {
-    // Sin la regla de longitud, un orden alfabético a secas pondría `AA` antes que `Z` y el
-    // bloque de egresos saldría al revés.
+    // Without the length rule, a plain alphabetical order would put `AA` before `Z` and the
+    // deductions block would come out backwards.
     expect(["AB", "Z", "AA"].sort(compareExcelColumns)).toEqual(["Z", "AA", "AB"]);
   });
 });
 
 describe("las horas extras", () => {
   it("salen enteras aunque Gerencia apruebe menos", () => {
-    // `approvedOvertime` recorta lo que SUMA, no lo que se muestra: la fila sigue declarando las
-    // horas trabajadas y su valor entero, y el recorte se ve en el total.
+    // `approvedOvertime` trims what ADDS UP, not what is shown: the row still declares the hours
+    // worked and their whole value, and the trim shows in the total.
     const line: PayrollEmployeeLine = {
       ...SORIA,
       capture: { ...emptyCapture(), overtimeHours50: 5, approvedOvertime: 0 },
@@ -263,8 +263,8 @@ describe("las horas extras", () => {
   });
 
   it("sin horas no hay fila que imprimir", () => {
-    // Sin horas la fila vale cero, y una fila en cero ya no ocupa renglón: por eso la columna
-    // `Cantidad` no tiene caso para el cero en ningún sitio.
+    // With no hours the row is worth zero, and a row at zero no longer takes up a line: that is why
+    // the `Cantidad` column has no case for zero anywhere.
     const doc = build({ ...SORIA, capture: undefined });
     expect(row(doc.incomes, "VALOR GANADO EXTRAS 100%")).toBeUndefined();
   });
@@ -357,8 +357,8 @@ describe("el rótulo propio de una fila del catálogo", () => {
     });
   };
 
-  // El motivo entero de `row-labels.ts`: `E-11` es la columna `AH OTROS` del libro, y un
-  // comprobante que imprime el nombre de la COLUMNA no dice qué se descontó.
+  // The whole reason for `row-labels.ts`: `E-11` is the book's `AH OTROS` column, and a payslip that
+  // prints the COLUMN's name does not say what was deducted.
   it("«Otros» se imprime con el nombre del descuento, en mayúsculas", () => {
     const document = withLabels({ "E-11": "Uniformes" }, 36);
     expect(row(document.deductions, "UNIFORMES")?.value).toBe("$36.00");
@@ -398,8 +398,8 @@ describe("el membrete del cliente", () => {
     position: 6,
   });
 
-  // Las líneas llegan COMPUESTAS, no como campos: es lo que hace imposible que el papel escriba la
-  // dirección de una manera y el Excel de otra.
+  // The lines arrive COMPOSED, not as fields: it is what makes it impossible for the paper to write
+  // the address one way and the Excel another.
   it("baja el perfil a las líneas de `letterheadLines`", () => {
     expect(withCompany.companyLines).toEqual([
       "DELICMAR S.A.S. · RUC 1891234567001",
@@ -408,7 +408,7 @@ describe("el membrete del cliente", () => {
     ]);
   });
 
-  // El nombre del cliente y su razón social son dos cosas distintas, y el papel escribe las dos.
+  // The client's name and its razón social are two different things, and the paper writes both.
   it("no toca el nombre del cliente, que sigue siendo la primera línea", () => {
     expect(withCompany.company).toBe("HOTEL BOUTIQUE CULTURA MANOR");
   });

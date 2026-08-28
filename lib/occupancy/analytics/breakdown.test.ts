@@ -43,7 +43,7 @@ const A = dataset("a", 2026);
 const B = dataset("b", 2026);
 
 describe("reportTotals", () => {
-  /** Un mes entero a cifra plana por día. */
+  /** A whole month at a flat figure per day. */
   function withMonth(
     built: OccupancyDataset,
     monthIndex: number,
@@ -87,9 +87,9 @@ describe("reportTotals", () => {
     expect(total.figures.adr).toBeCloseTo(revenue / sold, 10);
     expect(total.figures.occupancy).toBeCloseTo(sold / available, 10);
     expect(total.figures.revpar).toBeCloseTo(revenue / available, 10);
-    // El promedio de los dos ADR mensuales es 57,5; el ratio de sumas no.
+    // The average of the two monthly ADRs is 57.5; the ratio of sums is not.
     expect(total.figures.adr).not.toBeCloseTo(57.5, 3);
-    // Y la identidad del módulo sobrevive al agregado.
+    // And the module's identity survives the aggregate.
     expect((total.figures.adr ?? 0) * (total.figures.occupancy ?? 0)).toBeCloseTo(
       total.figures.revpar ?? 0,
       10,
@@ -110,7 +110,7 @@ describe("reportTotals", () => {
   it("la capacidad de un mes sin ventas no entra en el denominador", () => {
     const built = emptyDataset(2026, "HOTEL AMBATO", { id: "centro", name: "Centro" });
     withMonth(built, 0, { available: 22, sold: 11, revenue: 627 });
-    // Agosto: la plantilla del año, con disponibles y habitaciones pero sin ventas.
+    // August: the year's scaffolding, with available and rooms but no sales.
     built.months[7].fromFile = true;
     built.months[7].inputs.available = built.months[7].inputs.available.map(() => 22);
     built.months[7].inputs.rooms.simples = built.months[7].inputs.rooms.simples.map(() => 3);
@@ -175,7 +175,7 @@ describe("weekdayRhythm", () => {
   it("reparte los días en su día de la semana empezando en lunes", () => {
     const { labels, series } = weekdayRhythm([A], query({ centerIds: ["a"] }));
     expect(labels[0]).toBe("Lun");
-    // El 1 de enero de 2026 es jueves: ahí cae el único día con datos.
+    // 1 January 2026 is a Thursday: that is where the only day with data falls.
     expect(series[0].values[3]).toBeCloseTo(0.5, 10);
   });
 

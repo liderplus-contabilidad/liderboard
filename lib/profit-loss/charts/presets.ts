@@ -36,13 +36,13 @@ export function leavesOfAny(source: AnalyticsSource | undefined, ancestors: stri
 export const RANKING_SIZE = 8;
 
 /**
- * El «Ranking de gastos» de Gráficos es el único que llega a quince, y el número no es suyo: son
- * los pasos de `CHART_RANKING_RAMP`, la escala ordinal con la que se pinta, igual que
- * `CHART_COMPOSITION_MAX` fija el corte de la tarta. Atarlo a la rampa es lo que garantiza que
- * ninguna barra dibujada se quede sin tono.
+ * Gráficos' «Ranking de gastos» is the only one that reaches fifteen, and the number is not its own:
+ * it is the legibility cut `CHART_RANKING_MAX` declares, next to the sequence it is painted with, just
+ * as `CHART_COMPOSITION_MAX` fixes the pie's cut. Tying it there is what guarantees no drawn bar is
+ * left without a hue — the sequence gives twenty, so five are spare.
  *
- * Las demás siguen en `RANKING_SIZE`: las de Análisis se pintan con las ranuras de IDENTIDAD, que
- * son ocho, y ahí una novena barra sí caería en el neutro.
+ * The others stay at `RANKING_SIZE`: Análisis' are painted with the IDENTITY slots, which are eight,
+ * and there a ninth bar would indeed fall back to the neutral.
  */
 export const EXPENSE_RANKING_SIZE = CHART_RANKING_MAX;
 
@@ -60,10 +60,10 @@ const UNCAPPED = Number.MAX_SAFE_INTEGER;
 export interface PresetQueryOptions {
   limit?: number;
   /**
-   * Los centros que la consulta lee, cuando NO son el resuelto. Lo pide la vista de líneas de
-   * negocio, que dibuja una barra por establecimiento y por tanto necesita leer varios a la vez —
-   * el resto de tarjetas siguen leyendo el que resolvió la barra, que es lo que las hace comparables
-   * entre sí.
+   * The centers the query reads, when they are NOT the resolved one. It is asked for by the business
+   * lines view, which draws one bar per establishment and therefore needs to read several at once —
+   * the rest of the cards keep reading the one the bar resolved, which is what makes them comparable
+   * with each other.
    */
   centerIds?: readonly string[];
   /** Marked periods that narrow the eje; omit (or empty) for the whole axis of the frequency —
@@ -175,25 +175,25 @@ export function coveredPeriods(bundle: SeriesBundle): PeriodRef[] {
 }
 
 /**
- * Los periodos en los que el bundle se MOVIÓ — los cubiertos menos los que valen cero en todas sus
- * series. Es el gemelo de `coveredPeriods` y la diferencia entre los dos es justo lo que el botón
- * «Ocultar meses en 0» de Gráficos quita del eje.
+ * The periods in which the bundle MOVED — the covered ones minus those worth zero across all their
+ * series. It is `coveredPeriods`' twin and the difference between the two is exactly what Gráficos'
+ * «Ocultar meses en 0» button removes from the axis.
  *
- * Se juzga contra el EJE, que es el de la frecuencia —las doce columnas del año salvo que «Periodo»
- * lo acote— y no contra la cobertura: un archivo que llega hasta julio dibuja Ago–Dic vacías aunque
- * el rótulo diga «Ene–Jul», y son justo esas las que estorban en pantalla. Cae además el mes que sí
- * se cargó y no movió nada, que solo existe cuando la cobertura viene DECLARADA por el workspace
- * (`loadedMonthsByYear`).
+ * It is judged against the AXIS, which is the frequency's —the year's twelve columns unless «Periodo»
+ * narrows it— and not against the coverage: a file that runs to July draws Aug–Dec empty even though
+ * the label says «Ene–Jul», and it is precisely those that get in the way on screen. The month that
+ * was loaded and moved nothing also drops, which only exists when the coverage comes DECLARED by the
+ * workspace (`loadedMonthsByYear`).
  *
- * Los dos casos se van juntos y para el motor siguen siendo cosas distintas —un `null` nunca es un
- * `0`, y el rótulo y las cifras lo leen por `coveredPeriods`—: esta función no decide qué está
- * cargado sino qué columnas se dibujan, y ahí las dos son una columna vacía.
+ * Both cases go together and to the engine they are still different things —a `null` is never a `0`,
+ * and the label and the figures read it through `coveredPeriods`—: this function does not decide what
+ * is loaded but which columns are drawn, and there both are an empty column.
  *
- * Se juzga el bundle ENTERO y no una serie, la misma regla que `computeCoverage`: la pregunta es si
- * el negocio se movió en ese periodo, no si lo hizo una cuenta. Por eso quien la llama le pasa el
- * estado completo (Ingresos + las raíces de gasto) — con una sola cuenta marcada, un mes parado
- * PARA ELLA seguiría siendo un mes del ejercicio, y borrarlo del eje de todas las tarjetas a la vez
- * afirmaría que no pasó nada.
+ * The WHOLE bundle is judged and not a series, the same rule as `computeCoverage`: the question is
+ * whether the business moved in that period, not whether one account did. That is why the caller
+ * passes it the complete statement (Ingresos + the expense roots) — with a single account marked, a
+ * month idle FOR IT would still be a month of the exercise, and erasing it from every card's axis at
+ * once would claim nothing happened.
  */
 export function movingPeriods(bundle: SeriesBundle): PeriodRef[] {
   return bundle.periods.filter((_, index) =>

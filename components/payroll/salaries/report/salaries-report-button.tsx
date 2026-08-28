@@ -14,11 +14,11 @@ const SalariesReportPreview = dynamic(
 );
 
 /**
- * «Informe PDF» de Sueldos por Áreas, en la cabecera de la pantalla — no en la barra de filtros,
- * que es la única superficie de SELECCIÓN de este módulo, y pedir un informe no selecciona nada.
+ * Sueldos por Áreas' «Informe PDF», in the screen's header — not in the filter bar, which is this
+ * module's only SELECTION surface, and asking for a report selects nothing.
  *
- * Carga la vista previa en dinámico: el informe monta un gráfico por sección y no puede pesar en
- * la carga de una pantalla que la mayoría de las veces solo se mira.
+ * It loads the preview dynamically: the report mounts one chart per section and cannot weigh on the
+ * load of a screen that most of the time is only looked at.
  */
 export function SalariesReportButton({
   clientName,

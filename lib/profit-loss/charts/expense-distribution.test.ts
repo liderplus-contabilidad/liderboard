@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { AmountEntry } from "../analytics/structure";
+import type { AnalyticsSource } from "../analytics/types";
 import {
+  ANNEX_MAX_SLICES,
+  annexPlanOf,
   buildExpenseDistribution,
+  DECLARED_ANNEX_ROWS,
   describeExpenseDistribution,
   shareOf,
 } from "./expense-distribution";
 
 /**
- * Las cifras son las del anexo real que trajo la firma (Hospital General Privado Durán, del 01 de
- * enero al 30 de junio de 2026): 1.120.438,68 de gasto contra 1.441.884,42 de ingreso. Comprobar
- * contra ese archivo es lo único que dice que las dos columnas de porcentaje significan lo que su
- * cabecera promete.
+ * The figures are those of the real annex the firm brought (Hospital General Privado Durán, from 01
+ * January to 30 June 2026): 1,120,438.68 of expense against 1,441,884.42 of revenue. Checking against
+ * that file is the only thing that says the two percentage columns mean what their header promises.
  */
 const GASTO_TOTAL = 1_120_438.68;
 const INGRESO_TOTAL = 1_441_884.42;
@@ -24,8 +27,8 @@ const ANEXO: AmountEntry[] = [
   { code: "5.3.03.04", label: "Mantenimiento y Reparaciones", value: 44_094.43 },
   { code: "5.3.03.06", label: "Promoción y Publicidad", value: 42_608.16 },
   { code: "5.3.03.07", label: "Combustibles", value: 1_214.81 },
-  { code: "5.3.03.12", label: "Seguros y Reaseguros", value: 16_045.0 },
-  { code: "5.3.03.13", label: "Gastos de Viaje Nacionales", value: 268.36 },
+  { code: "5.3.03.09", label: "Seguros y Reaseguros", value: 16_045.0 },
+  { code: "5.3.03.12", label: "Gastos de Viaje Nacionales", value: 268.36 },
   { code: "5.3.03.14", label: "Servicios Básicos", value: 17_956.63 },
   { code: "5.3.03.17", label: "Otros Gastos", value: 81_086.25 },
   { code: "5.3.03.19", label: "Depreciaciones", value: 83_799.76 },
@@ -55,7 +58,7 @@ describe("el anexo real cuadra", () => {
   });
 
   it("reproduce los porcentajes que imprime el archivo del contador", () => {
-    // Los redondeados a entero que se leen en su columna PORCENTAJE.
+    // The ones rounded to whole numbers that are read in their PORCENTAJE column.
     const redondeado = (code: string) => Math.round(categoryOf(code).shareOfExpenses as number);
 
     expect(redondeado("5.3.03.01")).toBe(27); // Honorarios Médicos
@@ -65,7 +68,7 @@ describe("el anexo real cuadra", () => {
     expect(redondeado("5.3.03.19")).toBe(7); // Depreciaciones
     expect(redondeado("5.3.03.17")).toBe(7); // Otros Gastos
     expect(redondeado("5.3.03.14")).toBe(2); // Servicios Básicos
-    expect(redondeado("5.3.03.13")).toBe(0); // Gastos de Viaje Nacionales
+    expect(redondeado("5.3.03.12")).toBe(0); // Gastos de Viaje Nacionales
   });
 
   it("los porcentajes sobre el gasto suman 100", () => {
@@ -78,8 +81,8 @@ describe("el anexo real cuadra", () => {
   });
 
   it("la segunda columna mide contra el INGRESO, no contra el gasto", () => {
-    // Honorarios Médicos es el 27,4 % del gasto pero solo el 21,3 % de lo que el hospital facturó.
-    // Son las dos preguntas del anexo y no se pueden responder con un solo denominador.
+    // Honorarios Médicos is 27.4 % of the expense but only 21.3 % of what the hospital billed. They
+    // are the annex's two questions and they cannot be answered with a single denominator.
     const honorarios = categoryOf("5.3.03.01");
 
     expect(honorarios.shareOfExpenses).toBeCloseTo(27.4, 1);
@@ -102,11 +105,12 @@ describe("el orden y lo que se deja fuera", () => {
       "5.2.01.01",
       "5.5.01.01",
     ]);
-    expect(categories.at(-1)?.code).toBe("5.3.03.13");
+    expect(categories.at(-1)?.code).toBe("5.3.03.12");
   });
 
   it("deja fuera las cuentas paradas y las CUENTA en vez de nombrarlas", () => {
-    // Un estado declara cada cuenta de su plan se mueva o no; el anexo solo lista las que sí.
+    // A statement declares every account of its plan whether it moves or not; the annex only lists
+    // the ones that do.
     const conParadas = [
       ...ANEXO,
       { code: "5.3.03.20", label: "Venta Parqueadero", value: 0 },
@@ -156,15 +160,15 @@ describe("un porcentaje que no se puede calcular no es cero", () => {
     });
 
     expect(categories.every((category) => category.shareOfExpenses === null)).toBe(true);
-    // El ingreso sí da base, así que esa columna se conserva: son dos preguntas independientes.
+    // The revenue does give a base, so that column is kept: they are two independent questions.
     expect(categories.every((category) => category.shareOfRevenue !== null)).toBe(true);
   });
 });
 
 describe("el denominador es el rollup, no la suma de lo que hay en pantalla", () => {
   it("un subconjunto de categorías suma menos de 100 %, y eso es lo correcto", () => {
-    // Es la misma regla que sigue la ficha con su cuenta padre y la pila del 100 %: elegir tres de
-    // ocho hijas se queda corto a propósito, porque el total no es «lo que se ve».
+    // It is the same rule the ficha follows with its parent account and the 100 % stack: choosing
+    // three of eight children falls short on purpose, because the total is not «what is visible».
     const tres = ANEXO.slice(0, 3);
     const total = buildExpenseDistribution(tres, TOTALES).categories.reduce(
       (sum, category) => sum + (category.shareOfExpenses ?? 0),
@@ -188,7 +192,7 @@ describe("la nota al pie", () => {
   });
 
   it("dice cuántos rubros agrupó «Otros» y dónde están enteros", () => {
-    // Sin esa línea, «Otros» se lee como una cuenta más del plan en vez de como un pliegue.
+    // Without that line, «Otros» reads as one more account of the plan instead of as a fold.
     const note = describeExpenseDistribution(buildExpenseDistribution(ANEXO, TOTALES), {
       grouped: 3,
       format,
@@ -205,5 +209,267 @@ describe("la nota al pie", () => {
     );
 
     expect(note).toBeUndefined();
+  });
+});
+
+/**
+ * THE DECLARED ANNEX. The plan is transcribed by its SHAPE from MicroPlus' real tree —the codes with
+ * their nesting and the labels the file itself writes—, never from `.context/`: `parse.fixtures.ts`'
+ * rule. What is tested is that the list chooses and names, which is the only thing that can be wrong
+ * here; the figures are tested by the block above.
+ */
+const CLINICA: Array<[string, string]> = [
+  ["5", "COSTOS Y GASTOS"],
+  ["5.2", "COSTOS DE VENTAS"],
+  ["5.2.01", "COSTOS DE VENTAS MEDICINAS E INSUMOS"],
+  ["5.2.01.01", "COSTOS DE VENTAS MEDICINAS E INSUMOS"],
+  ["5.2.01.01.01", "Costo de ventas medicamentos 0%"],
+  ["5.2.01.02", "COSTO ALIMENTACION"],
+  ["5.2.01.02.01", "Costo Alimentacion, Viveres, Pacientes , Empleados"],
+  // An annex line with GRANDCHILDREN: `5.2.02` hangs sections that in turn hang accounts.
+  ["5.2.02", "MANO DE OBRA DIRECTA / FARMACIA/ LABORATORIO/MANO DE OBRA DIRECTA"],
+  ["5.2.02.01", "SUELDOS Y SALARIOS Y DEMAS REMUNERACIONES / FARMACIA/ LABORATORIO"],
+  ["5.2.02.01.01", "Sueldos y Salarios"],
+  ["5.2.02.02", "APORTES A LA SEGURIDAD SOCIAL (Incluído Fondo Res / FARMACIA"],
+  ["5.2.02.02.01", "Aporte Patronal"],
+  // A branch the annex does NOT list: in the real file it does not move.
+  ["5.2.03", "(-) DESCUENTO EN COMPRAS"],
+  ["5.2.03.01", "DESCUENTO EN COMPRAS"],
+  ["5.2.03.01.01", "Descuento en Compras"],
+  ["5.2.04", "OTROS GASTOS DIRECTOS"],
+  ["5.2.04.01", "HONORARIOS MEDICOS-PLANTA"],
+  ["5.2.04.01.01", "Honorarios Médicos-Planta"],
+  ["5.3", "COSTOS INDIRECTOS"],
+  // With GREAT-GRANDCHILDREN: three levels below the line.
+  ["5.3.02", "MANO DE OBRA INDIRECTA /ADMISIONES / CAJA / INFORMACION"],
+  ["5.3.02.01", "MANO DE OBRA INDIRECTA /ADMISIONES / CAJA / INFORMACION"],
+  ["5.3.02.01.01", "SUELDOS, SALARIOS Y DEMAS REMUNERACIONES / ADMISIONES"],
+  ["5.3.02.01.01.01", "Sueldos y Salarios"],
+  ["5.3.03", "OTROS GASTOS INDIRECTOS"],
+  ["5.3.03.01", "HONORARIOS MEDICOS"],
+  ["5.3.03.01.01", "Honorarios Medicos-Externos"],
+  ["5.3.03.02", "REMUNERACIONES A OTROS TRABAJADORES AUTONOMOS"],
+  ["5.3.03.02.01", "Trabajos Ocasionales"],
+  ["5.3.03.04", "MANTENIMIENTO Y REPARACIONES"],
+  ["5.3.03.04.01", "Mantenimiento y Reparaciones de Edificio e Instala"],
+  ["5.3.03.06", "PROMOCION Y PUBLICIDAD"],
+  ["5.3.03.06.01", "Promoción y Publicidad"],
+  ["5.3.03.07", "COMBUSTIBLES"],
+  ["5.3.03.07.01", "Combustibles - Gasolina- Diesel"],
+  ["5.3.03.09", "SEGUROS Y REASEGUROS (Primas y Cesiones)"],
+  ["5.3.03.09.01", "Seguros Contratados Instalaciones"],
+  ["5.3.03.12", "GASTOS DE VIAJE NACIONALES"],
+  ["5.3.03.12.02", "GASTOS DE VIAJE NACIONALES"],
+  ["5.3.03.12.02.01", "Pasajes Aereos Nacionales"],
+  ["5.3.03.14", "AGUA, ENERGIA, LUZ Y TELECOMUNICACIONES"],
+  ["5.3.03.14.01", "Luz"],
+  ["5.3.03.17", "OTROS GASTOS"],
+  ["5.3.03.17.01", "Suministros de Oficina"],
+  ["5.3.03.19", "DEPRECIACIONES"],
+  ["5.3.03.19.01", "Gasto Dep. Edificios"],
+  ["5.5", "GASTOS"],
+  ["5.5.01", "GASTOS ADMINISTRATIVOS"],
+  ["5.5.01.01", "GASTOS NOMINA /ADMINISTRACION"],
+  ["5.5.01.01.01", "SUELDOS, SALARIOS Y DEMAS REMUNERACIONES / ADMINISTRACION"],
+  ["5.5.01.01.01.01", "Sueldos y Salarios"],
+  ["5.5.01.02", "OTROS GASTOS OPERACIONALES"],
+  ["5.5.01.02.01", "HONORARIOS, COMISIONES Y DIETAS"],
+  ["5.5.01.02.01.01", "Honorarios Asesoria Contable"],
+  ["5.5.02", "GASTOS NO OPERACIONALES"],
+  ["5.5.02.01", "GASTOS FINANCIEROS"],
+  ["5.5.02.01.01", "INTERESES FINANCIEROS"],
+  ["5.5.02.01.01.01", "Intereses Entidades Financieras"],
+  ["5.5.03", "OTROS GASTOS NO OPERACIONALES"],
+  ["5.5.03.01", "GASTOS NO DEDUCIBLES"],
+  ["5.5.03.01.01", "Intereses y Multas (SRI-IESS-ATS-ATM)"],
+];
+
+/** Another MicroPlus plan: the same two roots and not one of the codes the annex declares. */
+const OTRA_EMPRESA: Array<[string, string]> = [
+  ["5", "Costos y Gastos"],
+  ["5.1", "Costo de Servicios de Salud"],
+  ["5.1.01", "Honorarios Médicos"],
+  ["5.1.01.01", "Honorarios Medicina General"],
+  ["5.1.02", "Insumos y Medicamentos"],
+  ["5.1.02.01", "Medicamentos"],
+];
+
+function planSource(rows: ReadonlyArray<readonly [string, string]>): AnalyticsSource {
+  const present = new Set(rows.map(([code]) => code));
+  const parentOf = (code: string): string | undefined => {
+    const parts = code.split(".");
+    for (let cut = parts.length - 1; cut > 0; cut -= 1) {
+      const candidate = parts.slice(0, cut).join(".");
+      if (present.has(candidate)) {
+        return candidate;
+      }
+    }
+    return undefined;
+  };
+  return {
+    centerId: "clinica",
+    centerName: "Clínica",
+    year: 2026,
+    baseFrequency: "mensual",
+    valuesByCode: new Map(rows.map(([code]) => [code, [1]])),
+    namesByCode: new Map(rows.map(([code, name]) => [code, name])),
+    parentByCode: new Map(
+      rows.flatMap(([code]) => {
+        const parent = parentOf(code);
+        return parent ? [[code, parent] as [string, string]] : [];
+      }),
+    ),
+    coverage: new Set([0]),
+  };
+}
+
+const codesOf = (plan: ReturnType<typeof annexPlanOf>) => plan?.rows.map((row) => row.code);
+
+describe("el anexo que la clínica declara", () => {
+  it("el plan real lo abre y el reparto son sus diecisiete rubros", () => {
+    const plan = annexPlanOf(planSource(CLINICA));
+
+    expect(codesOf(plan)).toEqual(DECLARED_ANNEX_ROWS.map((row) => row.code));
+    expect(plan?.residual).toBe(true);
+  });
+
+  it("entran los rubros que tienen NIETOS, que es por lo que es una lista y no una regla", () => {
+    // Six of the seventeen are not «the deepest ancestor with children» — the structural rule that was
+    // tried first would have split them into their sections and sunk them into «Otros».
+    const codes = codesOf(annexPlanOf(planSource(CLINICA))) ?? [];
+
+    expect(codes).toEqual(expect.arrayContaining(["5.2.02", "5.3.02", "5.3.03.12", "5.5.01.01"]));
+    expect(codes).not.toContain("5.2.02.01");
+    expect(codes).not.toContain("5.3.02.01");
+    expect(codes).not.toContain("5.3.03.12.02");
+  });
+
+  it("otro plan de cuentas no la abre, aunque salga del mismo sistema", () => {
+    expect(annexPlanOf(planSource(OTRA_EMPRESA))).toBeNull();
+    expect(annexPlanOf(undefined)).toBeNull();
+  });
+
+  it("que falte un rubro no cierra la puerta; que falte la mayoría, sí", () => {
+    const sinUno = CLINICA.filter(([code]) => !code.startsWith("5.5.03"));
+    expect(codesOf(annexPlanOf(planSource(sinUno)))).toHaveLength(16);
+
+    const soloDosRamas = CLINICA.filter(([code]) => code.startsWith("5.2") || code === "5");
+    expect(annexPlanOf(planSource(soloDosRamas))).toBeNull();
+  });
+
+  it("marcar una sección deja sus rubros y apaga el residuo", () => {
+    const plan = annexPlanOf(planSource(CLINICA), ["5.3.03"]);
+
+    expect(codesOf(plan)).toEqual([
+      "5.3.03.01",
+      "5.3.03.04",
+      "5.3.03.06",
+      "5.3.03.07",
+      "5.3.03.09",
+      "5.3.03.12",
+      "5.3.03.14",
+      "5.3.03.17",
+      "5.3.03.19",
+    ]);
+    // A piece of the annex does not drag the rest of the expense into one bar: the column adds up to
+    // less than 100 %, which is what says a piece is being looked at.
+    expect(plan?.residual).toBe(false);
+  });
+
+  it("marcar por debajo de sus rubros no deja ninguno, y entonces no hay anexo", () => {
+    expect(codesOf(annexPlanOf(planSource(CLINICA), ["5.3.03.01.01"]))).toEqual([]);
+    expect(codesOf(annexPlanOf(planSource(CLINICA), ["4"]))).toEqual([]);
+  });
+});
+
+describe("cómo se dibuja el anexo declarado", () => {
+  const PLAN = { rows: [...DECLARED_ANNEX_ROWS], residual: true };
+
+  it("el rótulo declarado pisa al que trae el plan de cuentas", () => {
+    // The file calls these three something else; the annex names them as its own sheet does.
+    const { categories } = buildExpenseDistribution(
+      [
+        { code: "5.2.02", label: "MANO DE OBRA DIRECTA / FARMACIA/ LABORATORIO", value: 100 },
+        { code: "5.3.03.14", label: "AGUA, ENERGIA, LUZ Y TELECOMUNICACIONES", value: 90 },
+        { code: "5.5.01.01", label: "GASTOS NOMINA /ADMINISTRACION", value: 80 },
+      ],
+      { expenses: 270, revenue: 1_000 },
+      { annex: PLAN },
+    );
+
+    expect(categories.map((entry) => entry.label)).toEqual([
+      "EMPLEADOS M.O.D. / FARMACIA/ LABORATORIO",
+      "SERVICIOS BASICOS",
+      "EMPLEADOS ADMINISTRACION",
+    ]);
+  });
+
+  it("dibuja los diecisiete sin plegar la cola por tamaño", () => {
+    const reparto = buildExpenseDistribution(ANEXO, TOTALES, { annex: PLAN });
+
+    expect(reparto.categories).toHaveLength(17);
+    expect(reparto.maxSlices).toBe(17);
+    // The seventeen add up to the whole expense, so nothing is missing and «Otros» is not drawn.
+    expect(reparto.residual).toBe(false);
+    expect(reparto.categories.map((entry) => entry.code)).not.toContain("otros");
+  });
+
+  it("un «Otros» en cero no se cuenta como cuenta parada", () => {
+    // The breakdown covers the whole expense, so the residue is zero — and it is not an account.
+    const reparto = buildExpenseDistribution(ANEXO, TOTALES, { annex: PLAN });
+
+    expect(reparto.idle).toBe(0);
+    expect(
+      describeExpenseDistribution(reparto, { format: (value) => String(value) }),
+    ).not.toContain("no se movió");
+  });
+
+  it("«Otros» es lo que falta para el total del gasto, no una suma de cuentas", () => {
+    const reparto = buildExpenseDistribution(
+      ANEXO,
+      { expenses: GASTO_TOTAL + 5_000, revenue: INGRESO_TOTAL },
+      { annex: PLAN },
+    );
+    const otros = reparto.categories.find((entry) => entry.code === "otros");
+
+    expect(otros?.value).toBeCloseTo(5_000, 2);
+    expect(reparto.residual).toBe(true);
+    expect(describeExpenseDistribution(reparto, { format: (value) => String(value) })).toContain(
+      "«Otros» es el resto del gasto que el anexo no nombra",
+    );
+    // And with it inside, the column closes at 100 % again.
+    const suma = reparto.categories.reduce(
+      (total, entry) => total + (entry.shareOfExpenses ?? 0),
+      0,
+    );
+    expect(suma).toBeCloseTo(100, 6);
+  });
+
+  it("acotado por marcas no arrastra el resto del gasto a «Otros»", () => {
+    const reparto = buildExpenseDistribution(ANEXO.slice(0, 3), TOTALES, {
+      annex: { rows: [...DECLARED_ANNEX_ROWS], residual: false },
+    });
+
+    expect(reparto.categories).toHaveLength(3);
+    expect(reparto.residual).toBe(false);
+  });
+
+  it("sin ningún rubro que nombrar no hay anexo, hay cuentas", () => {
+    const reparto = buildExpenseDistribution(
+      [{ code: "5.3.03.01.01", label: "Honorarios Medicos-Externos", value: 100 }],
+      TOTALES,
+      { annex: { rows: [], residual: true } },
+    );
+
+    expect(reparto.categories[0]?.label).toBe("Honorarios Medicos-Externos");
+    expect(reparto.maxSlices).toBe(ANNEX_MAX_SLICES);
+  });
+
+  it("sin plan declarado el reparto es el de siempre", () => {
+    const reparto = buildExpenseDistribution(ANEXO, TOTALES);
+
+    expect(reparto.maxSlices).toBe(ANNEX_MAX_SLICES);
+    expect(reparto.residual).toBe(false);
+    expect(reparto.categories).toHaveLength(17);
   });
 });

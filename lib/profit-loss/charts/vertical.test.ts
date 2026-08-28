@@ -6,7 +6,7 @@ import { buildVerticalAnalysis } from "./vertical";
 
 const ARRENDAMIENTO = "5.1.5.12";
 
-/** El mismo plan de cuentas sin una sola cuenta de ingresos: la base sale 0 en cada mes. */
+/** The same chart of accounts without a single income account: the base comes out 0 every month. */
 const SOLO_GASTOS = makeSource({
   centerId: "solo-gastos",
   centerName: "Solo Gastos",
@@ -22,8 +22,8 @@ function rowOf(rows: VerticalRow[], code: string): VerticalRow {
 }
 
 /**
- * Una fuente de dos cuentas y dos meses, escrita a mano: el caso de «Total año» necesita
- * bases de tamaños muy distintos (100 y 900) que el plan de cuentas compartido no produce.
+ * A source of two accounts and two months, written by hand: the «Total año» case needs bases of very
+ * different sizes (100 and 900) that the shared chart of accounts does not produce.
  */
 function makeTinySource(values: Record<string, number[]>): AnalyticsSource {
   const codes = Object.keys(values);
@@ -53,7 +53,7 @@ describe("buildVerticalAnalysis", () => {
 
   it("expresses each account as a share of the base in each period", () => {
     const table = buildVerticalAnalysis(CULTURA_MANOR_SOURCE, base);
-    // 8.000 sobre ingresos de 25.229.
+    // 8,000 over revenue of 25,229.
     expect(rowOf(table.rows, ARRENDAMIENTO).values[0] ?? 0).toBeCloseTo(31.71, 2);
   });
 
@@ -100,7 +100,7 @@ describe("buildVerticalAnalysis · cobertura", () => {
   const base = { baseCode: "4", frequency: "mensual" } as const;
 
   it("leaves an unloaded period empty instead of at zero", () => {
-    // El archivo llega a julio; agosto no se cargó nunca.
+    // The file runs to July; August was never loaded.
     const table = buildVerticalAnalysis(CULTURA_MANOR_SOURCE, base);
     for (const row of table.rows) {
       expect(row.values[7]).toBeNull();
@@ -132,9 +132,9 @@ describe("buildVerticalAnalysis · cobertura", () => {
 
   it("leaves an account with no value empty while the base has one", () => {
     const table = buildVerticalAnalysis(CULTURA_MANOR_SOURCE, base);
-    // Ventas Eventos no factura en febrero, pero febrero sí está cargado: es un cero real.
+    // Ventas Eventos bills nothing in February, but February IS loaded: it is a real zero.
     expect(rowOf(table.rows, "4.1.1.3").values[1]).toBe(0);
-    // Agosto no está cargado: eso sí es vacío.
+    // August is not loaded: that one is empty.
     expect(rowOf(table.rows, "4.1.1.3").values[7]).toBeNull();
   });
 
@@ -160,7 +160,7 @@ describe("buildVerticalAnalysis · Total año", () => {
 
     expect(row.values[0]).toBeCloseTo(50, 6);
     expect(row.values[1]).toBeCloseTo(10, 6);
-    // 150 ÷ 1000, no el promedio de 50 y 10.
+    // 150 ÷ 1000, not the average of 50 and 10.
     expect(row.total ?? 0).toBeCloseTo(14, 6);
   });
 
@@ -232,7 +232,7 @@ describe("buildVerticalAnalysis · lo que acota la barra de filtros", () => {
       frequency: "trimestral",
     });
     expect(table.periods).toHaveLength(4);
-    // El archivo llega a julio: T1–T3 tienen cobertura, T4 no.
+    // The file runs to July: Q1–Q3 have coverage, Q4 does not.
     expect(rowOf(table.rows, "4").values.map((value) => value && Math.round(value))).toEqual([
       100,
       100,

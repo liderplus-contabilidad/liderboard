@@ -16,8 +16,8 @@ describe("readWorkbook", () => {
   });
 
   it("null en vez de lanzar cuando el buffer no es un Excel", () => {
-    // Texto plano SheetJS lo acepta como CSV de una celda; un ZIP truncado es lo que hace
-    // fallar `XLSX.read` de verdad ("Unsupported ZIP file"), y es lo que este caso cubre.
+    // Plain text is accepted by SheetJS as a one-cell CSV; a truncated ZIP is what really makes
+    // `XLSX.read` fail ("Unsupported ZIP file"), and that is what this case covers.
     const garbage = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]).buffer;
     expect(readWorkbook(garbage)).toBeNull();
   });

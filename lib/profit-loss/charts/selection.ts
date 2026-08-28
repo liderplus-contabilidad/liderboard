@@ -63,8 +63,8 @@ export const SHAPES_BY_TRANSFORM: Record<TransformId, readonly ChartType[]> = {
   "pct-contenedor": ["barras-100"],
   variacion: ["barras"],
   pareto: ["pareto"],
-  // Una cascada es una cascada: la lista de una sola entrada es lo que hace que `shapeFor`
-  // devuelva siempre la misma forma y que la tarjeta no tenga selector que ofrecer.
+  // A cascade is a cascade: the single-entry list is what makes `shapeFor` always return the same
+  // shape and the card have no selector to offer.
   cascada: ["cascada"],
 };
 
@@ -99,14 +99,14 @@ export interface SelectionContext {
   frequency: Frequency;
   year: number;
   /**
-   * Los centros del cliente SIN el Consolidado, que no es un centro sino su suma. `[]` en modo
-   * estado único.
+   * The client's centers WITHOUT the Consolidado, which is not a center but their sum. `[]` in
+   * single-statement mode.
    *
-   * Cada uno dice si es un establecimiento o el cajón «Sin centro de costo» del sistema contable,
-   * porque la vista de líneas de negocio reparte por establecimiento y ese cajón no lo es: entra
-   * solo si el usuario lo marca a mano. Lo llena el proveedor porque el rol de cada vista vive
-   * ahí; una fuente de analítica solo trae id y nombre, y distinguirlos por el nombre sería
-   * adivinar.
+   * Each one says whether it is an establishment or the accounting system's «Sin centro de costo»
+   * catch-all, because the business lines view breaks down by establishment and that catch-all is not
+   * one: it only goes in if the user marks it by hand. It is filled in by the provider because each
+   * view's role lives there; an analytics source only brings an id and a name, and telling them apart
+   * by the name would be guessing.
    */
   centers: readonly { id: string; name: string; kind: "centro" | "sin-centro" }[];
 }

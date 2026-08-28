@@ -76,16 +76,17 @@ export function compareIdentity(
 }
 
 /**
- * Una de las dos tarjetas que el diálogo compara — la forma genérica de `@/lib/workspaces`, que
- * Ocupaciones usa igual. Aquí `caption` es «CLIENTE ABIERTO»/«EL ARCHIVO», `name` la etiqueta del
- * cliente o la razón social, y `detail` la empresa (si difiere de `name`) y el sistema contable.
+ * One of the two cards the dialog compares — the generic shape from `@/lib/workspaces`, which
+ * Ocupaciones uses the same way. Here `caption` is «CLIENTE ABIERTO»/«EL ARCHIVO», `name` the client's
+ * label or the razón social, and `detail` the company (if it differs from `name`) and the accounting
+ * system.
  *
- * NUNCA lleva un NIT: ninguna estrategia lo extrae, así que prometerlo sería inventarlo. Lo que se
- * compara es empresa y sistema.
+ * It NEVER carries a NIT: no strategy extracts one, so promising it would be inventing it. What is
+ * compared is company and system.
  */
 export type IdentityCard = ComparisonCardData;
 
-/** El bloque secundario de 6B: reemplazar el cliente abierto, con su motivo y lo que descarta. */
+/** The secondary block of 6B: replacing the open client, with its reason and what it discards. */
 export interface IdentityReplaceOption {
   label: string;
   heading: string;
@@ -93,51 +94,51 @@ export interface IdentityReplaceOption {
 }
 
 export interface IdentityChangeConfirmation {
-  /** `other-client` = 6A (otro cliente ya tiene esta identidad); `no-match` = 6B (ninguno). */
+  /** `other-client` = 6A (another client already has this identity); `no-match` = 6B (none does). */
   form: "other-client" | "no-match";
   title: string;
   cards: { current: IdentityCard; incoming: IdentityCard };
-  /** El veredicto bajo las tarjetas: a qué cliente pertenece este archivo. */
+  /** The verdict under the cards: which client this file belongs to. */
   verdict: string;
-  /** La acción principal, que es la correcta en cada caso. */
+  /** The primary action, which is the right one in each case. */
   primaryLabel: string;
-  /** Lo que esa acción implica; solo 6A, donde cambia el cliente activo. */
+  /** What that action implies; only 6A, where the active client changes. */
   primaryHint?: string;
-  /** Solo 6B: reemplazar el cliente abierto, degradado a acción secundaria. */
+  /** Only 6B: replacing the open client, demoted to a secondary action. */
   replace?: IdentityReplaceOption;
 }
 
 export interface IdentityChangeContext {
-  /** La etiqueta del cliente abierto — la del usuario, no la razón social del archivo. */
+  /** The open client's label — the user's, not the file's razón social. */
   activeClientName: string;
-  /** El cliente que SÍ tiene la identidad entrante (6A), o `null` (6B). */
+  /** The client that DOES have the incoming identity (6A), or `null` (6B). */
   matchingClientName: string | null;
-  /** El nombre propuesto para el cliente nuevo; editable antes de crear (6B). */
+  /** The proposed name for the new client; editable before creating it (6B). */
   proposedClientName: string;
-  /** Lo que el cliente abierto perdería, en palabras: «2024–2026, 3 centros de costo». */
+  /** What the open client would lose, in words: «2024–2026, 3 centros de costo». */
   activeClientContents: string;
 }
 
-/** El modo dicho como un cambio («pasó a llevarse …»), que es la única forma en que aparece:
- * las tarjetas comparan empresa y sistema, no modo. */
+/** The mode stated as a change («pasó a llevarse …»), which is the only way it ever appears: the
+ * cards compare company and system, not mode. */
 const MODE_CHANGE_LABELS: Record<WorkspaceMode, string> = {
   single: "como un estado único",
   centers: "por centros de costo",
 };
 
 /**
- * El diálogo que un choque de identidad muestra, en sus DOS formas. Cuál se rinde no lo decide
- * este módulo por gusto: lo decide si existe o no otro cliente con exactamente la identidad
- * entrante, que es la única diferencia que cambia cuál es la acción correcta.
+ * The dialog an identity clash shows, in its TWO forms. Which one renders is not decided by this
+ * module out of preference: it is decided by whether another client with exactly the incoming
+ * identity exists, which is the only difference that changes which action is the right one.
  *
- * - **6A, `other-client`**: el archivo pertenece a un cliente que ya existe. La acción principal
- *   es cargarlo allí; nada se destruye, solo cambia el cliente activo.
- * - **6B, `no-match`**: ningún cliente coincide. La acción principal es CREAR uno —el nombre se
- *   propone desde la razón social y el diálogo lo deja editar—, y reemplazar el cliente abierto
- *   baja a acción secundaria, explicando en qué caso tiene sentido (que se haya renombrado o haya
- *   cambiado de sistema) y qué descarta exactamente.
+ * - **6A, `other-client`**: the file belongs to a client that already exists. The primary action is
+ *   loading it there; nothing is destroyed, only the active client changes.
+ * - **6B, `no-match`**: no client matches. The primary action is to CREATE one —the name is proposed
+ *   from the razón social and the dialog allows editing it—, and replacing the open client drops to a
+ *   secondary action, explaining in which case it makes sense (that it was renamed or that it changed
+ *   system) and exactly what it discards.
  *
- * Los sistemas se nombran con la `label` de su estrategia (`systemLabel`), nunca con su `id`.
+ * The systems are named with their strategy's `label` (`systemLabel`), never with their `id`.
  */
 export function describeIdentityChange(
   current: WorkspaceIdentity,
@@ -187,9 +188,9 @@ export function describeIdentityChange(
 }
 
 /**
- * La primera frase del bloque de reemplazo: el ÚNICO caso en que reemplazar es lo correcto es que
- * el cliente abierto sea de verdad el mismo y haya cambiado. Cada motivo del choque nombra ese
- * cambio, y varios a la vez se enumeran en una sola frase.
+ * The replacement block's first sentence: the ONLY case in which replacing is the right thing is that
+ * the open client really is the same one and has changed. Each reason for the clash names that
+ * change, and several at once are enumerated in a single sentence.
  */
 function replacePremise(
   current: WorkspaceIdentity,
@@ -214,10 +215,10 @@ function replacePremise(
 }
 
 /**
- * Una tarjeta comparativa. La empresa solo se repite cuando difiere del nombre en negrita: en el
- * archivo son la misma cosa, y en un cliente casi nunca lo son —el usuario llama «Manor Galápagos»
- * a lo que el archivo llama `DARWIN & WOLF…`—, así que decirlo dos veces o esconderlo serían dos
- * formas distintas de mentir.
+ * A comparison card. The company is only repeated when it differs from the bold name: in the file
+ * they are the same thing, and in a client they almost never are —the user calls «Manor Galápagos»
+ * what the file calls `DARWIN & WOLF…`—, so saying it twice or hiding it would be two different ways
+ * of lying.
  */
 function card(caption: string, name: string, identity: WorkspaceIdentity): IdentityCard {
   const parts = [

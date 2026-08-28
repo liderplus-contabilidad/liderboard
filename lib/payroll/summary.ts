@@ -1,7 +1,7 @@
 /**
  * The four "Historial de nómina" stat tiles, computed from the ALREADY-FILTERED período list — the
  * same rule PyG's cards follow (`lib/profit-loss/filters.ts`): a card built from the raw list would
- * show "Períodos registrados: 5" over a table the búsqueda or el filtro de año just narrowed to 2.
+ * show "Períodos registrados: 5" over a table the search box or the year filter just narrowed to 2.
  */
 import type { PayrollPeriodFinancials } from "./period-detail";
 import { periodShortLabel, sortPeriodsDesc } from "./periods";
@@ -9,22 +9,22 @@ import type { PayrollPeriod, PayrollRosterSummary } from "./types";
 
 export interface PayrollSummary {
   periodCount: number;
-  /** «JUN 2026», el período más reciente en su etiqueta corta; `null` sin nada que mostrar. */
+  /** «JUN 2026», the most recent período in its short label; `null` with nothing to show. */
   latestPeriodLabel: string | null;
   /**
-   * Empleados del período MÁS RECIENTE únicamente — nunca la suma entre períodos, que contaría a
-   * la misma persona una vez por cada mes en que aparece.
+   * Employees of the MOST RECENT período only — never the sum across períodos, which would count the
+   * same person once per month they appear in.
    */
   latestEmployees: number;
-  /** Suma de `net` de los períodos que SÍ tienen totales; `null` sin ninguno — que `StatTile`
-   * pinta como la raya de una tarjeta vacía, no como cero. */
+  /** Sum of `net` of the períodos that DO have totals; `null` with none — which `StatTile` paints as
+   * an empty card's dash, not as zero. */
   netAccrued: number | null;
 }
 
 /**
- * `rosterByPeriod` y `financialsByPeriod` son SIEMPRE lo derivado de la nómina guardada de cada
- * período (`lib/payroll/period-detail.ts`), nunca un total persistido junto a él — un total
- * guardado aparte podría divergir de las líneas que de verdad tiene el período.
+ * `rosterByPeriod` and `financialsByPeriod` are ALWAYS what is derived from each período's stored
+ * nómina (`lib/payroll/period-detail.ts`), never a total persisted next to it — a total stored
+ * separately could diverge from the lines the período really has.
  */
 export function buildPayrollSummary(
   periods: readonly PayrollPeriod[],

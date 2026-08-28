@@ -50,8 +50,8 @@ describe("validateBatch — identidad del propio lote", () => {
   });
 
   it("rejects a batch mixing accounting systems", () => {
-    // Misma empresa, mismo año, meses distintos: sin esta comprobación el lote entraría y
-    // fusionaría dos planes de cuentas incompatibles.
+    // Same company, same year, different months: without this check the batch would come in and fuse
+    // two incompatible charts of accounts.
     try {
       validateBatch([
         { ...singleSlice(0), companyName: "HOSPITAL X" },
@@ -84,7 +84,7 @@ describe("validateBatch — varios años", () => {
   });
 
   it("accepts the same month of two different years", () => {
-    // `(2025, marzo)` y `(2026, marzo)` son dos columnas de dos datasets distintos.
+    // `(2025, marzo)` and `(2026, marzo)` are two columns of two different datasets.
     expect(() => validateBatch([slice(2, 2025), slice(2, 2026)])).not.toThrow();
   });
 
@@ -144,7 +144,7 @@ describe("applyBatch — seis meses de golpe", () => {
     const norte2026 = datasets.filter((d) => d.centerId === "sucursal-norte" && d.year === 2026);
     expect(norte2025).toHaveLength(1);
     expect(norte2026).toHaveLength(1);
-    // Cada año escribe SOLO sus meses: febrero de 2026 nunca se cargó.
+    // Each year writes ONLY its own months: February of 2026 was never loaded.
     expect(norte2025[0].accounts.find((a) => a.code === "4")?.values[1]).toBe(100);
     expect(norte2026[0].accounts.find((a) => a.code === "4")?.values[1]).toBe(0);
   });

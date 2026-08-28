@@ -46,17 +46,18 @@ export interface AccountDetail {
   shareOfContainer: number | null;
   containerLabel: string | null;
   /**
-   * Qué parte del TOTAL de costos y gastos es esta cuenta, y qué parte del TOTAL de ingresos.
+   * What part of the TOTAL of costs and expenses this account is, and what part of the TOTAL of
+   * revenue.
    *
-   * No son lo mismo que `shareOfContainer` y por eso no lo sustituyen: aquel divide por el padre
-   * INMEDIATO —«Honorarios Médicos es el 43 % de Gastos Operacionales»—, que responde dónde está
-   * dentro de su rama, y estos dos dividen por las raíces del estado —«es el 27 % de todo el gasto
-   * y el 21 % de lo que se facturó»—, que es la pregunta con la que el contador abre su anexo. Una
-   * cuenta hundida tres niveles tiene un peso enorme en su padre y minúsculo en el estado, así que
-   * leer solo el primero engaña.
+   * They are not the same as `shareOfContainer` and that is why they do not replace it: that one
+   * divides by the IMMEDIATE parent —«Honorarios Médicos is 43 % of Gastos Operacionales»—, which
+   * answers where it sits within its branch, and these two divide by the statement's roots —«it is
+   * 27 % of the whole expense and 21 % of what was billed»—, which is the question the accountant
+   * opens their annex with. An account buried three levels deep has an enormous weight in its parent
+   * and a tiny one in the statement, so reading only the first is misleading.
    *
-   * `null` cuando el denominador no da base, nunca `0 %`, y `null` también cuando quien llama no
-   * los pide: la ficha de un INGRESO no divide por el gasto.
+   * `null` when the denominator gives no base, never `0 %`, and `null` too when the caller does not
+   * ask for them: an INCOME account's ficha does not divide by the expense.
    */
   shareOfExpenses: number | null;
   shareOfRevenue: number | null;
@@ -71,9 +72,10 @@ export interface AccountDetailInput {
   source: AnalyticsSource;
   frequency: Frequency;
   /**
-   * Los totales del estado sobre el MISMO tramo que la serie, para los dos pesos de arriba. Los
-   * pide quien llama en vez de derivarse aquí porque salen de otra consulta al motor, y hacerla
-   * dentro abriría la puerta a que la ficha cuadre contra un tramo distinto del que dibuja.
+   * The statement's totals over the SAME span as the series, for the two weights above. The caller
+   * asks for them instead of deriving them here because they come from another query to the engine,
+   * and doing it inside would open the door to the ficha squaring against a different span from the
+   * one it draws.
    */
   totals?: { expenses: number | null; revenue: number | null };
 }
@@ -145,8 +147,8 @@ export function buildAccountDetail({
     averageActive: active.length > 0 ? total / active.length : null,
     best: bestPeriod(covered),
     ...containerShare(series, total),
-    // La MISMA definición de «porcentaje sobre un total» que usan las dos columnas del anexo, para
-    // que la ficha de un rubro y su fila en la tabla no puedan decir cifras distintas.
+    // The SAME definition of «percentage over a total» the annex's two columns use, so a line's ficha
+    // and its row in the table cannot say different figures.
     shareOfExpenses: totals ? shareOf(total, totals.expenses) : null,
     shareOfRevenue: totals ? shareOf(total, totals.revenue) : null,
     periodNoun: periodNoun(frequency),

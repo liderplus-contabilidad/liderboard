@@ -12,7 +12,7 @@ import {
   CHART_NEUTRAL,
   CHART_PALETTE,
   CHART_RANKING_MAX,
-  CHART_RANKING_TAIL_RAMP,
+  CHART_RANKING_SEQUENCE,
   CHART_SLICE_MAX,
   CHART_SLICE_SEQUENCE,
   CHART_SIGN,
@@ -26,41 +26,6 @@ import {
 } from "./palette";
 
 const CENTERS = ["consolidado", "cultura-manor", "centro-de-costo-principal", "sin-centro"];
-
-/** WCAG relative luminance, para poder afirmar la monotonía de una rampa en vez de suponerla. */
-function relativeLuminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const channel = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-const contrastOnWhite = (hex: string) => 1.05 / (relativeLuminance(hex) + 0.05);
-
-/** Los ejes a/b de OKLab, de donde salen el croma y el hue de un hex. */
-function oklabAB(hex: string): [number, number] {
-  const [r, g, b] = [1, 3, 5].map((i) => {
-    const channel = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
-}
-
-/** Croma en OKLCH: cuánto COLOR lleva un tono, que es lo que separa la cola de las ranuras. */
-const chroma = (hex: string) => Math.hypot(...oklabAB(hex));
-
-/** Hue en OKLCH: QUÉ color es, que es lo que hace de la cola una sola gama. */
-const hue = (hex: string) => {
-  const [a, b] = oklabAB(hex);
-  return ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
-};
 
 describe("el orden de las ranuras", () => {
   it("keeps the eight slots in the sequence that makes them separable", () => {
@@ -134,7 +99,7 @@ describe("constantes de marca", () => {
 
 describe("CHART_PERIOD_PALETTE · un color por marca", () => {
   it("está apagado a propósito: doce barras saturadas cansan la vista", () => {
-    // Ninguno es el tono pleno del set de identidad: son mezclas hacia gris.
+    // None of them is the full hue of the identity set: they are mixes toward grey.
     for (const hue of CHART_PERIOD_PALETTE) {
       expect(CHART_PALETTE).not.toContain(hue);
     }
@@ -156,7 +121,7 @@ describe("CHART_PERIOD_PALETTE · un color por marca", () => {
   });
 
   it("no se pisa con los slots de serie: son dos trabajos distintos", () => {
-    // Comparten los primeros por diseño (misma familia de marca), pero el set es más largo.
+    // They share the first ones by design (same brand family), but the set is longer.
     expect(CHART_PERIOD_PALETTE.length).toBeGreaterThan(CHART_PALETTE.length);
   });
 });
@@ -174,8 +139,8 @@ describe("CHART_DISTRIBUTION_RAMP · la pila ordenada", () => {
   });
 
   it("son cinco pasos y el neutro: el arco no da para más sin juntar dos vecinos", () => {
-    // El corte no es estético — a ocho pasos el peor par vecino cae a ΔE 8, bajo el piso de
-    // visión normal, y en una pila los vecinos son justo lo que hay que distinguir.
+    // The cut is not aesthetic — at eight steps the worst neighbouring pair drops to ΔE 8, below the
+    // normal-vision floor, and in a stack neighbours are exactly what has to be told apart.
     expect(CHART_DISTRIBUTION_MAX).toBe(6);
     expect(CHART_DISTRIBUTION_MAX).toBeLessThan(CHART_MAX_SERIES);
     expect(CHART_DISTRIBUTION_RAMP.at(-1)).toBe(CHART_NEUTRAL);
@@ -211,13 +176,13 @@ describe("CHART_COMPOSITION_PALETTE · el reparto de la tarta", () => {
   });
 
   it("NO son los tonos de la referencia, y por eso no hay ningún rojo puro", () => {
-    // `#ff0000` y `#ff5600` daban ΔE 7.6 en visión NORMAL: la porción del 30 % y la del 20 %
-    // eran casi el mismo rojo para cualquiera. Allí lo salvaba el «20%» impreso dentro de la
-    // porción; aquí los rótulos van fuera, así que ese relieve no existe.
+    // `#ff0000` and `#ff5600` gave ΔE 7.6 in NORMAL vision: the 30 % slice and the 20 % one were
+    // almost the same red to anyone. There it was saved by the «20%» printed inside the slice; here
+    // the labels go outside, so that relief does not exist.
     for (const hex of ["#ff0000", "#ff5600", "#ff8500", "#99aa27"]) {
       expect(CHART_COMPOSITION_PALETTE).not.toContain(hex);
     }
-    // El teal sí se conserva: es uno de los cinco de la referencia y pasa tal cual.
+    // The teal is kept: it is one of the reference's five and passes as it is.
     expect(CHART_COMPOSITION_PALETTE).toContain("#00836f");
   });
 
@@ -243,88 +208,50 @@ describe("CHART_COMPOSITION_PALETTE · el reparto de la tarta", () => {
   });
 });
 
-describe("CHART_RANKING_TAIL_RAMP · la cola del ranking", () => {
-  it("es la gama verde lima medida, de oscuro a claro", () => {
-    expect([...CHART_RANKING_TAIL_RAMP]).toEqual([
-      "#4e6e16",
-      "#5b7a2c",
-      "#69863e",
-      "#769350",
-      "#84a061",
-      "#92ad72",
-      "#a1ba83",
-    ]);
-  });
-
-  it("es UNA gama: los siete pasos comparten hue y solo cambia el tono", () => {
-    // Lo que la separa de un set de identidad. Si dos pasos tuvieran hues distintos, la cola
-    // dejaría de leerse como un tramo y volvería a parecer siete asuntos sueltos.
-    const hues = CHART_RANKING_TAIL_RAMP.map((step) => Math.round(hue(step)));
-    expect(new Set(hues).size).toBe(1);
+describe("CHART_RANKING_SEQUENCE · las quince barras del ranking", () => {
+  it("son las ocho de identidad seguidas de los doce del periodo", () => {
+    expect([...CHART_RANKING_SEQUENCE]).toEqual([...CHART_PALETTE, ...CHART_PERIOD_PALETTE]);
   });
 
   it("las ocho primeras barras siguen siendo las ranuras de identidad", () => {
-    // La cola es un añadido, no un reemplazo: el ranking no cambia de aspecto hasta la novena.
+    // The tail is an addition, not a replacement: the ranking does not change look until the ninth
     for (let slot = 0; slot < CHART_PALETTE.length; slot++) {
       expect(colorForRankingSlot(slot)).toBe(CHART_PALETTE[slot]);
     }
   });
 
-  it("la novena barra estrena la gama y la decimoquinta la cierra", () => {
-    expect(colorForRankingSlot(8)).toBe(CHART_RANKING_TAIL_RAMP[0]);
-    expect(colorForRankingSlot(14)).toBe(CHART_RANKING_TAIL_RAMP[6]);
+  it("la novena barra estrena el set del periodo", () => {
+    expect(colorForRankingSlot(8)).toBe(CHART_PERIOD_PALETTE[0]);
+    expect(colorForRankingSlot(14)).toBe(CHART_PERIOD_PALETTE[6]);
   });
 
-  it("las siete de la cola son DISTINTAS entre sí: ese era el defecto que corrige", () => {
-    // Con `colorForEntity` las siete devolvían el mismo `CHART_NEUTRAL` — siete barras iguales
-    // justo al fondo de la lista, que es donde se mira para saber qué recortar.
-    const tail = Array.from({ length: 7 }, (_, i) => colorForRankingSlot(8 + i));
-    expect(new Set(tail).size).toBe(7);
-    expect(tail).not.toContain(CHART_NEUTRAL);
+  it("las quince son DISTINTAS entre sí: ese es el defecto que corrige", () => {
+    const drawn = Array.from({ length: CHART_RANKING_MAX }, (_, i) => colorForRankingSlot(i));
+    expect(new Set(drawn).size).toBe(CHART_RANKING_MAX);
+    expect(drawn).not.toContain(CHART_NEUTRAL);
   });
 
-  it("es MONÓTONA en luminosidad, que es lo único que se le exige a una escala secuencial", () => {
-    // La comprobación que sustituye a la banda y a la separación CVD: aquellas son de un set
-    // categórico, donde el color es lo único que distingue dos series. Aquí lo que el tono tiene
-    // que hacer es no romper el orden que la longitud de la barra ya dice.
-    const lums = CHART_RANKING_TAIL_RAMP.map(relativeLuminance);
-    for (let i = 1; i < lums.length; i++) {
-      expect(lums[i]).toBeGreaterThan(lums[i - 1]);
+  it("no arranca por el set de la tarta, que se dibuja justo encima en la misma pantalla", () => {
+    // `CHART_SLICE_SEQUENCE` starts with the six warm hues of «Composición de los ingresos», which
+    // sits above the ranking; with them the first six bars would take the hue of its six rows and,
+    // since in both the colour goes by POSITION, it would read as though row 1 of one were row 1 of
+    // the other. They are disjoint sets, so starting with identity is what avoids the clash.
+    for (const slot of CHART_COMPOSITION_PALETTE) {
+      expect(CHART_RANKING_SEQUENCE).not.toContain(slot);
     }
   });
 
-  it("su paso más claro sigue siendo un relleno visible sobre la superficie", () => {
-    // El piso de una escala ordinal: 2:1 contra el papel. Por debajo, la barra más pequeña —que
-    // además es la más corta de las quince— desaparece. Es lo que fija dónde deja de aclararse.
-    expect(contrastOnWhite(CHART_RANKING_TAIL_RAMP.at(-1) as string)).toBeGreaterThanOrEqual(2);
-  });
-
-  it("es más apagada que TODAS las ranuras de identidad, para que la cola se lea como cola", () => {
-    // Son las barras más pequeñas de la lista: un verde vivo las pondría por delante de las ocho
-    // de arriba, al revés de lo que el ranking dice. Es también lo que la separa de los dos
-    // verdes de identidad y del oliva de la sección de ingresos — comparten familia, no croma.
-    const menosSaturadaDeIdentidad = Math.min(...CHART_PALETTE.map(chroma));
-    for (const step of CHART_RANKING_TAIL_RAMP) {
-      expect(chroma(step)).toBeLessThan(menosSaturadaDeIdentidad);
-    }
-  });
-
-  it("el corte del ranking se DERIVA, así que ninguna barra dibujada queda sin tono", () => {
-    expect(CHART_RANKING_MAX).toBe(CHART_PALETTE.length + CHART_RANKING_TAIL_RAMP.length);
+  it("el corte cabe en la secuencia, así que ninguna barra dibujada queda sin tono", () => {
+    // The invariant that used to be an accidental identity (8 + 7 = 15). Fifteen is the legibility
+    // limit the firm asked for and the sequence gives twenty: what has to hold is the «≤».
     expect(CHART_RANKING_MAX).toBe(15);
+    expect(CHART_RANKING_MAX).toBeLessThanOrEqual(CHART_RANKING_SEQUENCE.length);
     expect(colorForRankingSlot(CHART_RANKING_MAX - 1)).not.toBe(CHART_NEUTRAL);
-    // Una decimosexta sí cae en el neutro — pero no llega, porque el corte es el de arriba.
-    expect(colorForRankingSlot(CHART_RANKING_MAX)).toBe(CHART_NEUTRAL);
-    expect(colorForRankingSlot(-1)).toBe(CHART_NEUTRAL);
   });
 
-  it("no reutiliza un slot de identidad ni un paso de otra escala", () => {
-    for (const step of CHART_RANKING_TAIL_RAMP) {
-      expect(CHART_PALETTE).not.toContain(step);
-      expect(CHART_DISTRIBUTION_RAMP).not.toContain(step);
-      expect(CHART_COMPOSITION_PALETTE).not.toContain(step);
-      expect(step).not.toBe(CHART_NEUTRAL);
-    }
+  it("pasada la secuencia se cae en el neutro: no se inventa un tono", () => {
+    expect(colorForRankingSlot(CHART_RANKING_SEQUENCE.length)).toBe(CHART_NEUTRAL);
+    expect(colorForRankingSlot(-1)).toBe(CHART_NEUTRAL);
   });
 });
 
@@ -364,8 +291,8 @@ describe("CHART_HEAT_RAMP · un solo tono", () => {
 
 describe("CHART_SLICE_SEQUENCE · la tarta que nombra todas sus porciones", () => {
   it("encadena los seis cálidos de la composición y los doce del periodo", () => {
-    // El orden importa: las porciones grandes conservan el aspecto que la tarta ya tenía, y la cola
-    // —la que aparece de más al no plegarse— toma el set hecho para «una serie con muchas marcas».
+    // The order matters: the large slices keep the look the pie already had, and the tail —the part
+    // that appears extra by not being folded— takes the set made for «one series with many marks».
     expect(CHART_SLICE_SEQUENCE.slice(0, CHART_COMPOSITION_PALETTE.length)).toEqual([
       ...CHART_COMPOSITION_PALETTE,
     ]);
@@ -375,7 +302,7 @@ describe("CHART_SLICE_SEQUENCE · la tarta que nombra todas sus porciones", () =
   });
 
   it("da para un anexo real sin repetir ni caer en el neutro", () => {
-    // El del hospital trae diecisiete rubros; la secuencia tiene que cubrirlos todos.
+    // The hospital's carries seventeen lines; the sequence has to cover them all.
     expect(CHART_SLICE_MAX).toBe(18);
     expect(new Set(CHART_SLICE_SEQUENCE).size).toBe(CHART_SLICE_MAX);
     expect(CHART_SLICE_SEQUENCE).not.toContain(CHART_NEUTRAL);

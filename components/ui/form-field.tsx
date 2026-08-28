@@ -2,17 +2,16 @@ import type { InputHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * El campo de un formulario: rótulo arriba, control debajo, y el motivo por el que falla debajo
- * del control.
+ * A form field: label on top, control below, and the reason it fails under the control.
  *
- * Existe porque hasta ahora esta app no tenía ninguno —`Select` traía su propio `label` y no había
- * ningún input de texto con borde— y el alta de un empleado necesita nueve campos alineados en una
- * rejilla. El rótulo copia EXACTAMENTE el de `Select` (`text-[11px] font-semibold text-faint`) para
- * que un `Select` y un `TextField` puestos uno al lado del otro caigan en la misma línea.
+ * It exists because until now this app had none —`Select` brought its own `label` and there was no
+ * bordered text input— and creating an employee needs nine fields aligned in a grid. The label copies
+ * `Select`'s EXACTLY (`text-[11px] font-semibold text-faint`) so a `Select` and a `TextField` placed
+ * side by side fall on the same line.
  *
- * El error se pinta bajo el control y NO como tooltip: un control apagado o en rojo sin motivo
- * visible obliga a apuntarle con el ratón para saber qué le pasa — la misma razón por la que
- * `ExcelActions` rinde su `disabledReason` como pastilla al lado y no como `title`.
+ * The error is painted under the control and NOT as a tooltip: a control switched off or in red with
+ * no visible reason forces you to point at it with the mouse to know what is wrong — the same reason
+ * `ExcelActions` renders its `disabledReason` as a pill beside it and not as a `title`.
  */
 export function FormField({
   label,
@@ -22,9 +21,9 @@ export function FormField({
   children,
 }: {
   label: ReactNode;
-  /** El motivo por el que este campo falla, o `undefined` si no falla. */
+  /** The reason this field fails, or `undefined` if it does not. */
   error?: string;
-  /** Una aclaración permanente del campo, para lo que el rótulo no alcanza a decir. */
+  /** A permanent clarification of the field, for what the label cannot say. */
   hint?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -42,8 +41,8 @@ export function FormField({
   );
 }
 
-/** El borde y el relleno de un control de formulario — la misma caja que `Select` dibuja, para
- *  envolver un control que trae la suya (`NumericInput` es transparente por diseño). */
+/** The border and padding of a form control — the same box `Select` draws, for wrapping a control
+ *  that brings its own (`NumericInput` is transparent by design). */
 export function FieldBox({
   invalid = false,
   children,
@@ -67,8 +66,8 @@ interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "si
   label: ReactNode;
   error?: string;
   hint?: ReactNode;
-  /** `mono` para lo que se coteja carácter a carácter contra la hoja del contador: una cédula, un
-   *  código sectorial. */
+  /** `mono` for what is checked character by character against the accountant's sheet: a cédula, a
+   *  sector code. */
   variant?: "sans" | "mono";
   fieldClassName?: string;
 }

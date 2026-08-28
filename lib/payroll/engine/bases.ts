@@ -1,24 +1,24 @@
 /**
- * Las SEIS bases de cálculo del rol (§2 de `docs/payroll/rol-de-pagos-formulas.md`).
+ * The SIX computation bases of the rol (§2 of `docs/payroll/rol-de-pagos-formulas.md`).
  *
- * Lo más sutil del libro del contador: cada derivación suma un subconjunto DISTINTO de los
- * ingresos, y **ninguna usa el total** (`W`). Se parecen tanto entre sí que una columna de más
- * o de menos no rompe nada visible — sale como una diferencia de céntimos contra el Excel meses
- * después. Por eso viven aquí, nombradas de una en una, en vez de estar escritas a mano dentro
- * de cada fórmula de `compute.ts`.
+ * The subtlest thing in the accountant's book: each derivation adds a DIFFERENT subset of the income
+ * items, and **none of them uses the total** (`W`). They are so alike that one column too many or too
+ * few breaks nothing visible — it comes out as a difference of cents against the Excel months later.
+ * That is why they live here, named one by one, instead of being written by hand inside each formula
+ * of `compute.ts`.
  *
- * Cada función declara con un `Pick` exactamente qué columnas lee. Esa firma es la
- * especificación: si alguien añade un componente de ingreso nuevo, el compilador no le va a
- * decir en qué bases entra, pero la tabla de verdad de `bases.test.ts` sí.
+ * Each function declares with a `Pick` exactly which columns it reads. That signature is the
+ * specification: if someone adds a new income component, the compiler will not tell them which bases
+ * it enters, but `bases.test.ts`'s truth table will.
  *
- * Ninguna redondea. El redondeo es de quien las consume, porque el libro redondea el RESULTADO
- * de cada derivación, no su base (§9).
+ * None of them rounds. Rounding belongs to whoever consumes them, because the book rounds each
+ * derivation's RESULT, not its base (§9).
  */
 import type { IncomeComponents } from "./types";
 
-/** Lo que comparten las cinco bases parciales: sueldo, horas extras, los cuatro «otros pagos»
- *  que siempre entran (viáticos y las dos comisiones van juntos en todas) y los conceptos extra
- *  APORTABLES que el período declare. */
+/** What the five partial bases share: salary, overtime, the four «other payments» that always enter
+ *  (viáticos and the two commissions travel together in all of them) and the CONTRIBUTORY extra
+ *  concepts the período declares. */
 type CoreEarnings = Pick<
   IncomeComponents,
   | "unifiedSalary"
@@ -30,12 +30,12 @@ type CoreEarnings = Pick<
 >;
 
 /**
- * `contributoryExtras` entra AQUÍ y no base por base, y esa es toda la implementación de «un bono
- * aportable se comporta como los viáticos»: este punto único es lo que lo mete de una vez en el
- * aporte personal `X`, el patronal `AU`, el décimo III `O`, la provisión de vacaciones `AV`, el
- * fondo de reserva `U`/`AW` y la provisión XIII `AS`. Repartirlo en cinco sumandos serían cinco
- * sitios donde equivocarse, y este archivo avisa arriba de lo que cuesta una columna de más o de
- * menos en una base.
+ * `contributoryExtras` comes in HERE and not base by base, and that is the whole implementation of «a
+ * contributory bonus behaves like viáticos»: this single point is what puts it at once into the
+ * personal contribution `X`, the employer one `AU`, décimo III `O`, the vacation provision `AV`, the
+ * reserve fund `U`/`AW` and provision XIII `AS`. Spreading it over five addends would be five places
+ * to get it wrong, and this file warns above about what one column too many or too few in a base
+ * costs.
  */
 function core(c: CoreEarnings): number {
   return (
@@ -49,8 +49,8 @@ function core(c: CoreEarnings): number {
 }
 
 /**
- * `F+M+P+Q+R+S+T` — la base sobre la que se aporta al IESS (`X` personal, `AU` patronal) y la
- * del fondo de reserva que se paga en el mes (`U`). Es la más ancha de las parciales.
+ * `F+M+P+Q+R+S+T` — the base the IESS contribution is computed on (`X` personal, `AU` employer) and
+ * that of the reserve fund paid within the month (`U`). It is the widest of the partial ones.
  */
 export function contributoryBase(
   c: CoreEarnings & Pick<IncomeComponents, "vacationPay" | "privateInsurance">,
@@ -59,8 +59,8 @@ export function contributoryBase(
 }
 
 /**
- * `F+M+Q+R+S+T` — el doceavo que produce el décimo tercero mensualizado (`O`).
- * Es la aportable **menos las vacaciones mensualizadas** (`P`).
+ * `F+M+Q+R+S+T` — the twelfth that produces the monthly décimo tercero (`O`).
+ * It is the contributory one **minus the monthly vacations** (`P`).
  */
 export function thirteenthBase(
   c: CoreEarnings & Pick<IncomeComponents, "privateInsurance">,
@@ -69,8 +69,9 @@ export function thirteenthBase(
 }
 
 /**
- * `F+M+P+R+S+T` — sobre la que se acumula el fondo de reserva en el IESS (`AW`).
- * Es la aportable **menos el seguro privado** (`Q`), al revés que su gemela `U`, que sí lo suma.
+ * `F+M+P+R+S+T` — the one the reserve fund accrues on at the IESS (`AW`).
+ * It is the contributory one **minus the private insurance** (`Q`), the opposite of its twin `U`,
+ * which does add it.
  */
 export function reserveFundAccrualBase(
   c: CoreEarnings & Pick<IncomeComponents, "vacationPay">,
@@ -79,8 +80,8 @@ export function reserveFundAccrualBase(
 }
 
 /**
- * `F+M+N+P+R+S+T` — la provisión de vacaciones (`AV`). Es la única base parcial que suma el
- * décimo cuarto (`N`), y tampoco lleva el seguro privado.
+ * `F+M+N+P+R+S+T` — the vacation provision (`AV`). It is the only partial base that adds the décimo
+ * cuarto (`N`), and it does not carry the private insurance either.
  */
 export function vacationBase(
   c: CoreEarnings & Pick<IncomeComponents, "fourteenthMonthly" | "vacationPay">,
@@ -89,8 +90,8 @@ export function vacationBase(
 }
 
 /**
- * `F+M+N+O+P+Q+R+S+T` — la provisión del décimo tercero (`AS`). Es la aportable **más los dos
- * décimos mensualizados**, y por eso es la más ancha de todas las parciales.
+ * `F+M+N+O+P+Q+R+S+T` — the décimo tercero provision (`AS`). It is the contributory one **plus the
+ * two monthly décimos**, and that is why it is the widest of all the partial ones.
  */
 export function thirteenthProvisionBase(
   c: CoreEarnings &
@@ -103,23 +104,23 @@ export function thirteenthProvisionBase(
 }
 
 /**
- * `W` · TOTAL INGRESO — los once componentes. Es la ÚNICA que suma el fondo de reserva pagado
- * (`U`) y el bono (`V`): esos dos no son base de nada, solo llegan al total.
+ * `W` · TOTAL INGRESO — the eleven components. It is the ONLY one that adds the paid reserve fund
+ * (`U`) and the bonus (`V`): those two are the base of nothing, they only reach the total.
  *
- * Sin redondear, igual que en el libro. De ahí sale el `569.5500000000001` del archivo (§9).
+ * Unrounded, just as in the book. That is where the file's `569.5500000000001` comes from (§9).
  *
- * Los sumandos van en el ORDEN DE COLUMNAS del libro (`+F+N+M+P+Q+R+S+T+U+O+V`) y no en el que
- * saldría de componer `thirteenthProvisionBase() + U + V`, que es la forma corta y equivalente
- * en aritmética exacta. Como este total NO se redondea, la suma en coma flotante no es
- * asociativa: dos órdenes distintos pueden separarse en el último bit, y ese bit es justo lo
- * que se compara contra el `PAGADO` tecleado a mano. Con los seis empleados de marzo 2026 los
- * dos órdenes coinciden —solo `F`, `N` y `O` son distintos de cero—, así que ningún test lo
- * habría delatado: por eso se escribe explícito.
+ * The addends go in the book's COLUMN ORDER (`+F+N+M+P+Q+R+S+T+U+O+V`) and not in the one that would
+ * come out of composing `thirteenthProvisionBase() + U + V`, which is the short and exactly
+ * equivalent form in exact arithmetic. Since this total is NOT rounded, floating-point addition is
+ * not associative: two different orders can drift apart in the last bit, and that bit is exactly what
+ * gets compared against the hand-typed `PAGADO`. With the six employees of March 2026 the two orders
+ * agree —only `F`, `N` and `O` are non-zero—, so no test would have given it away: that is why it is
+ * written explicitly.
  *
- * Los dos agregados de conceptos extra van AL FINAL por ese mismo motivo leído al revés: no tienen
- * columna en el libro, así que no hay orden que heredar y el sitio en la suma es una decisión que
- * se escribe en vez de heredarse. Con un período que no declara ninguno los dos valen `0`, y
- * `x + 0 === x` exacto en IEEE-754, así que el fixture de oro no se mueve ni un bit.
+ * The two extra-concept aggregates go AT THE END for that same reason read the other way round: they
+ * have no column in the book, so there is no order to inherit and their place in the sum is a
+ * decision that gets written rather than inherited. With a período that declares none both are worth
+ * `0`, and `x + 0 === x` exactly in IEEE-754, so the golden fixture does not move a single bit.
  */
 export function grossIncome(c: IncomeComponents): number {
   return (

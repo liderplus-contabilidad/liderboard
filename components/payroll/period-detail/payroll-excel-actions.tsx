@@ -11,15 +11,16 @@ import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 import { RolUploadModal } from "../rol-upload-modal";
 
 /**
- * El envoltorio de Rol de Pagos sobre `ExcelActions` — la misma regla que siguen `PygExcelActions`
- * y `OccupancyExcelActions`: el módulo aporta qué abre «Cargar», qué genera «Descargar» y qué dice
- * el `ⓘ`; la forma de los controles es del primitivo y ningún módulo la escribe.
+ * Rol de Pagos' wrapper over `ExcelActions` — the same rule `PygExcelActions` and
+ * `OccupancyExcelActions` follow: the module supplies what «Cargar» opens, what «Descargar»
+ * generates and what the `ⓘ` says; the shape of the controls belongs to the primitive and no module
+ * writes it.
  *
- * Va en el `rightSlot` de la barra de pestañas, y solo sobre «Empleados»: cargar y descargar el rol
- * es lo que se hace en esa vista, igual que PyG monta las suyas solo sobre Datos.
+ * It goes in the tab bar's `rightSlot`, and only over «Empleados»: loading and downloading the rol is
+ * what happens in that view, just as PyG mounts its own only over Datos.
  *
- * La descarga se arma AQUÍ, en el momento de pulsar, desde la nómina y el motor: nada de lo que
- * lleva el archivo está guardado, que es la misma regla del comprobante en PDF y del asiento.
+ * The download is assembled HERE, at the moment of the click, from the nómina and the engine: nothing
+ * the file carries is stored, which is the same rule as the payslip in PDF and the journal entry.
  */
 export function PayrollExcelActions({
   period,

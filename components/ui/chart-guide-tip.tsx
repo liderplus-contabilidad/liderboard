@@ -14,29 +14,30 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import type { ChartGuide } from "@/lib/charts/types";
 
-/** El ancho del panel. Fijo: un ancho elástico haría que dos tarjetas vecinas midieran distinto. */
+/** The panel's width. Fixed: an elastic width would make two neighbouring cards measure
+ *  differently. */
 const PANEL_WIDTH = 320;
-/** El aire contra el borde de la ventana, y la separación entre el botón y el panel. */
+/** The breathing room against the window's edge, and the gap between the button and the panel. */
 const MARGIN = 12;
 const GAP = 8;
 
 /**
- * El ⓘ de la cabecera de una tarjeta: para qué sirve, qué controles la mueven y cómo se lee.
+ * A card header's ⓘ: what it is for, which controls move it and how it is read.
  *
- * Va en la cabecera y no bajo el subtítulo porque son cinco tarjetas en una pantalla: una guía
- * permanente multiplicada por cinco empuja las gráficas fuera del primer golpe de vista, que es
- * justo lo que cualquiera de ellas viene a enseñar.
+ * It goes in the header and not under the subtitle because there are five cards on one screen: a
+ * permanent guide multiplied by five pushes the charts out of the first glance, which is exactly what
+ * any of them is there to show.
  *
- * **El panel se dibuja en un PORTAL sobre el `<body>`, y ese es su detalle importante.** La tarjeta
- * es un `<section>` con `overflow-hidden` —lo necesita para que la tabla no se salga de sus
- * esquinas redondeadas—, así que un panel posicionado dentro de ella se RECORTA contra su borde:
- * las guías largas perdían las últimas líneas y las de las tarjetas bajas se cortaban por el lado.
- * Fuera del `<section>` no hay nada que lo recorte, y a cambio hay que colocarlo a mano contra el
- * botón, que es lo que hace `place()`.
+ * **The panel is drawn in a PORTAL over the `<body>`, and that is its important detail.** The card is
+ * a `<section>` with `overflow-hidden` —it needs it so the table does not spill out of its rounded
+ * corners—, so a panel positioned inside it is CLIPPED against its edge: long guides lost their last
+ * lines and those of short cards were cut off at the side. Outside the `<section>` there is nothing
+ * to clip it, and in exchange it has to be placed by hand against the button, which is what `place()`
+ * does.
  *
- * No se apoya en `InfoTip` por lo mismo: aquel vive en las barras, donde nada recorta, y es un
- * tooltip oscuro de una frase. Esto es un panel de tres bloques y se lee mejor en claro, con el
- * mismo fondo y el mismo borde que las tarjetas de las que habla.
+ * It does not lean on `InfoTip` for the same reason: that one lives in the bars, where nothing clips,
+ * and it is a dark one-sentence tooltip. This is a three-block panel and reads better in light, with
+ * the same fill and the same border as the cards it talks about.
  */
 export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGuide }) {
   const [open, setOpen] = useState(false);
@@ -52,8 +53,8 @@ export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGui
       closeTimer.current = null;
     }
   }, []);
-  // Un respiro antes de cerrar: el panel está en un portal, así que salir del botón hacia él pasa
-  // por fuera de los dos y sin esta espera se cerraría justo cuando se va a leer.
+  // A breath before closing: the panel is in a portal, so moving from the button to it passes outside
+  // both, and without this wait it would close just as it is about to be read.
   const scheduleClose = useCallback(() => {
     cancelClose();
     closeTimer.current = setTimeout(() => setOpen(false), 160);
@@ -62,9 +63,9 @@ export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGui
   useEffect(() => cancelClose, [cancelClose]);
 
   /**
-   * Colgado del botón por su borde derecho, y debajo salvo que no quepa. Lo que garantiza que
-   * nada se corte no es el volteo sino el `maxHeight`: se le da el hueco REAL que queda hasta el
-   * borde de la ventana y el panel hace scroll dentro de sí mismo si su texto no cabe.
+   * Hung off the button by its right edge, and below it unless it does not fit. What guarantees
+   * nothing gets cut off is not the flip but the `maxHeight`: it is given the REAL room left down to
+   * the window's edge and the panel scrolls inside itself if its text does not fit.
    */
   const place = useCallback(() => {
     const trigger = triggerRef.current;
@@ -72,7 +73,7 @@ export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGui
     const rect = trigger.getBoundingClientRect();
     const below = window.innerHeight - rect.bottom - GAP - MARGIN;
     const above = rect.top - GAP - MARGIN;
-    // Solo se voltea si arriba hay bastante MÁS sitio: abajo es donde el lector lo espera.
+    // It only flips if there is considerably MORE room above: below is where the reader expects it.
     const measured = panelRef.current?.scrollHeight ?? 0;
     const flip = below < Math.min(measured, 220) && above > below;
     const left = Math.max(
@@ -89,7 +90,8 @@ export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGui
   useLayoutEffect(() => {
     if (!open) return;
     place();
-    // Una segunda pasada con el panel ya medido: la primera lo coloca sin saber cuánto ocupa.
+    // A second pass with the panel already measured: the first one places it without knowing how much
+    // room it takes.
     const frame = requestAnimationFrame(place);
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
@@ -173,9 +175,10 @@ export function ChartGuideTip({ title, guide }: { title: string; guide: ChartGui
                         aria-hidden
                         className="mt-[6px] h-[5px] w-[5px] shrink-0 rounded-full bg-brand/60"
                       />
-                      {/* El rótulo del control y lo que hace, en dos tintas y en una sola línea
-                          que fluye: en dos columnas el nombre largo se truncaría, y truncar
-                          justo el nombre que hay que ir a buscar es lo peor que puede pasar. */}
+                      {/* The control's label and what it does, in two inks and on a single flowing
+                          line: in two columns the long name would be truncated, and truncating
+                          exactly the name you have to go and look for is the worst that can
+                          happen. */}
                       <p className="text-[12px] leading-[1.45] text-muted">
                         <span className="font-semibold text-ink">{action.control}</span>{" "}
                         {action.effect}

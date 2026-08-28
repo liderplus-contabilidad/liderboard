@@ -40,9 +40,9 @@ describe("parseRolGeneral — archivo bien formado", () => {
     expect(result.monthIndex).toBe(2);
   });
 
-  // Las tres formas que un archivo puede tener hoy. La segunda y la tercera son las que la app
-  // GENERA, y sin esto un rol descargado volvía a entrar sin empresa: `B1` es una fila en blanco de
-  // la banda del logo.
+  // The three shapes a file can have today. The second and the third are the ones the app GENERATES,
+  // and without this a downloaded rol came back in with no company: `B1` is a blank row of the logo's
+  // band.
   it("lee la empresa aunque la banda del logo empuje el preámbulo hacia abajo", () => {
     const conBanda = [[], [], [], ...ROL_GENERAL_AOA];
     const result = parseRolGeneral(bufferOf(conBanda));
@@ -68,8 +68,8 @@ describe("parseRolGeneral — archivo bien formado", () => {
   });
 
   it("el período nunca sale del nombre del archivo — la función ni siquiera lo recibe", () => {
-    // A diferencia del formato mensual por centros de PyG (que sí lee el nombre), este parser no
-    // toma ningún nombre de archivo como argumento: no hay forma de que el período salga de ahí.
+    // Unlike PyG's monthly-by-centers format (which does read the name), this parser takes no file
+    // name as an argument: there is no way the period can come from there.
     const result = parseRolGeneral(bufferOf(ROL_GENERAL_AOA));
     expect(result.year).toBe(2026);
     expect(result.monthIndex).toBe(2);
@@ -83,9 +83,9 @@ describe("parseRolGeneral — archivo bien formado", () => {
     }
   });
 
-  // El archivo sirve para SUBIR información, no para dictar cifras: sus columnas de resultado
-  // (`TOTAL INGRESO`, `TOTAL EGRESOS`, `LIQUIDO A RECIBIR`, `COSTO TOTAL`) ni se leen — las
-  // calcula el motor. Lo que sí entra es `PAGADO`, que es un insumo y no un resultado.
+  // The file serves to UPLOAD information, not to dictate figures: its result columns
+  // (`TOTAL INGRESO`, `TOTAL EGRESOS`, `LIQUIDO A RECIBIR`, `COSTO TOTAL`) are not even read — the
+  // engine computes them. What does come in is `PAGADO`, which is an input and not a result.
   it("lee el PAGADO del libro como un capturado más", () => {
     const [primero] = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines;
     expect(primero?.capture?.paid).toBe(550);
@@ -141,9 +141,9 @@ describe("parseRolGeneral — la captura del mes", () => {
         partTimeDeduction: 52,
         medicalLeaveDeduction: 53,
       },
-      // `BZ` viaja también aquí, no solo a `figures`: es un valor tecleado y la pantalla lo deja
-      // corregir sin tocar lo que el archivo declaró.
-      paid: 550, // `BZ` del fixture de esta prueba
+      // `BZ` travels here too, not only to `figures`: it is a typed value and the screen lets it be
+      // corrected without touching what the file declared.
+      paid: 550, // this test's fixture `BZ`
     });
   });
 
@@ -177,8 +177,8 @@ describe("parseRolGeneral — approvedOvertime se DEDUCE de los valores, no se t
   });
 
   it("el ruido de coma flotante por debajo del centavo no se lee como recorte", () => {
-    // 16,75 + 79,41 + 0,10 da 96,25999999999999 y `M` guarda 96,26: comparados con `===` esto
-    // inventaría un recorte que el libro no hizo.
+    // 16.75 + 79.41 + 0.10 gives 96.25999999999999 and `M` stores 96.26: compared with `===` this
+    // would invent a trim the book did not make.
     const morales = parseRolGeneral(bufferOf(ROL_GENERAL_OVERTIME_FLOAT_NOISE_AOA)).lines.find(
       (l) => l.name === "MORALES PEREZ ANA LUCIA",
     );
@@ -212,9 +212,9 @@ describe("parseRolGeneral — las provisiones de décimos se deducen de AS y AT"
   });
 
   /**
-   * Aterrizan en la FICHA y no en la captura, que es lo que hace que `copyRoster` las arrastre.
-   * Sin este test, moverlas de vuelta a la captura seguiría pasando todos los de arriba con solo
-   * cambiar el sitio donde se leen.
+   * They land on the RECORD and not on the capture, which is what makes `copyRoster` drag them along.
+   * Without this test, moving them back into the capture would still pass every one above by merely
+   * changing where they are read from.
    */
   it("aterrizan en la ficha, no en la captura", () => {
     const vega = parseRolGeneral(bufferOf(ROL_GENERAL_AOA)).lines.find(
@@ -241,14 +241,14 @@ describe("parseRolGeneral — FR y AC FR, las dos banderas del fondo de reserva"
       (l) => l.name === "SANDOVAL RUIZ PEDRO JOSE",
     );
     expect(sandoval?.hasReserveFund).toBe(true);
-    expect(sandoval?.accumulatesReserveFund).toBe(true); // la celda trae "s"
+    expect(sandoval?.accumulatesReserveFund).toBe(true); // the cell brings "s"
   });
 
   it('vacío y basura apagan, sin avisar: el libro compara `="S"` y lo demás cae en el else', () => {
     const result = parseRolGeneral(bufferOf(ROL_GENERAL_ODD_RESERVE_FUND_AOA));
     const sandoval = result.lines.find((l) => l.name === "SANDOVAL RUIZ PEDRO JOSE");
-    expect(sandoval?.hasReserveFund).toBe(false); // celda vacía
-    expect(sandoval?.accumulatesReserveFund).toBe(false); // "SI" no es "S"
+    expect(sandoval?.hasReserveFund).toBe(false); // an empty cell
+    expect(sandoval?.accumulatesReserveFund).toBe(false); // "SI" is not "S"
     expect(result.warnings).toEqual([]);
   });
 });
@@ -319,8 +319,8 @@ describe("parseRolGeneral — fecha de ingreso ilegible", () => {
 
 describe("parseRolGeneral — errores tipados", () => {
   it("archivo ilegible", () => {
-    // Texto plano SheetJS lo acepta como CSV de una celda; un ZIP truncado es lo que hace
-    // fallar `XLSX.read` de verdad, y es lo que este caso cubre.
+    // Plain text is accepted by SheetJS as a one-cell CSV; a truncated ZIP is what really makes
+    // `XLSX.read` fail, and that is what this case covers.
     const garbage = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]).buffer;
     expect(errorOf(garbage).code).toBe("invalid-file");
   });

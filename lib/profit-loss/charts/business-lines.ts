@@ -1,45 +1,45 @@
 /**
- * Las LÍNEAS DE NEGOCIO de un hotel: Hospedaje, Restaurante, Lavandería, Bar, Tours y el resto de
- * los ingresos ordinarios — seis barras que suman, cada una, varias cuentas del plan.
+ * A hotel's BUSINESS LINES: Hospedaje, Restaurante, Lavandería, Bar, Tours and the rest of the
+ * ordinary revenue — six bars each of which sums several accounts of the plan.
  *
- * Es la primera vez que una serie NO es una cuenta, y no lo es porque la pregunta que produce esta
- * lectura no cabe en el plan. En el real: «hospedaje» son dos ramas enteras de tarifa menos lo que
- * el contador colgó ahí y es otro negocio; «restaurante» y «bar» viven MEZCLADOS bajo una sola
- * cuenta de Alimentos y Bebidas, donde solo el nombre los separa; y «lavandería» y «tours» están
- * DUPLICADOS —`4.1.1.5 Ventas Lavanderia` y `4.1.11.1 Servicios de Lavandería`, `4.1.3 Venta de
- * Servicios de Tours` y `4.1.5 Venta de Servicios Tours`—, en ramas distintas y a distinta
- * profundidad. Ninguna marca de «Cuenta contable» dibuja eso, por muchas que se marquen.
+ * It is the first time a series is NOT an account, and it is not because the question that produces
+ * this reading does not fit in the plan. In the real one: «hospedaje» is two whole rate branches
+ * minus what the accountant hung there and is another business; «restaurante» and «bar» live MIXED
+ * under a single Alimentos y Bebidas account, where only the name separates them; and «lavandería»
+ * and «tours» are DUPLICATED —`4.1.1.5 Ventas Lavanderia` and `4.1.11.1 Servicios de Lavandería`,
+ * `4.1.3 Venta de Servicios de Tours` and `4.1.5 Venta de Servicios Tours`—, in different branches
+ * and at different depths. No «Cuenta contable» mark draws that, however many are marked.
  *
- * **Son CATEGORÍAS declaradas y no una barra por cuenta.** Se probó al revés —cada cuenta suelta de
- * la sección con su propia barra— y el plan real daba DOCE líneas para ocho ranuras de paleta, así
- * que la lectura dependía de cuáles cabían: las dos lavanderías salían separadas, una dibujada y la
- * otra dentro de un «Otras líneas» que nadie podía cuadrar. Con las cinco que la firma llama
- * importantes más el resto son seis, nunca se pliega nada, y una cuenta duplicada suma en su
- * categoría en vez de competir consigo misma por una ranura.
+ * **They are declared CATEGORIES and not a bar per account.** It was tried the other way round —each
+ * loose account of the section with its own bar— and the real plan gave TWELVE lines for eight
+ * palette slots, so the reading depended on which ones fitted: the two lavanderías came out separate,
+ * one drawn and the other inside an «Otras líneas» nobody could square. With the five the firm calls
+ * important plus the rest there are six, nothing is ever folded, and a duplicated account adds up in
+ * its category instead of competing with itself for a slot.
  *
- * Todo se localiza POR RÓTULO y jamás por código — la misma regla de `microplus-grid.ts` y
- * `dingoo-grid.ts`, y lo que hace que funcione con `4.1.01.01` y con `4.1.1.1` a la vez. El nodo de
- * hospedaje se busca por su nombre a cualquier profundidad bajo Ingresos y su PADRE es la sección
- * de actividades ordinarias, en vez de dar por hecho que es `4.1`: en un plan se llama «Ingresos de
- * Actividades Ordinarias» y en otro «Ventas».
+ * Everything is located BY LABEL and never by code — the same rule as `microplus-grid.ts` and
+ * `dingoo-grid.ts`, and what makes it work with `4.1.01.01` and with `4.1.1.1` at once. The hospedaje
+ * node is looked for by its name at any depth under Ingresos and its PARENT is the ordinary
+ * activities section, instead of assuming it is `4.1`: in one plan it is called «Ingresos de
+ * Actividades Ordinarias» and in another «Ventas».
  *
- * Tres decisiones son las que pueden estar mal, y por eso están probadas:
+ * Three decisions are what can be wrong, and that is why they are tested:
  *
- * - **Quién entra en «Hospedaje».** Solo las hijas DIRECTAS del nodo cuyo nombre dice hospedaje,
- *   alojamiento, habitación, suite o tarifa — y esas se llevan su rama COMPLETA, incluida esa
- *   `Ventas Restaurante` que el contador colgó dentro de `Habitaciones Sencillas`. Lo que cuelga
- *   del nodo y no dice eso (Eventos, Lavandería) NO es hospedaje: se clasifica como cualquier otra.
- *   El corte es de PROFUNDIDAD y no de nombre, que es lo que separa esos dos casos.
- * - **Dónde corta Restaurante contra Bar.** Bar es lo que dentro de Alimentos y Bebidas dice
- *   bebida, bar o licor; Restaurante es EL RESTO de esa rama, no otra lista de palabras. Por resto,
- *   los dos SIEMPRE suman esa cuenta: un «Sin desglosar» o un «Catering» nuevos caen en Restaurante
- *   en vez de desaparecer de la pantalla.
- * - **Hasta dónde se busca una categoría.** Se DESCIENDE por las cuentas que no encajan en ninguna,
- *   porque el plan esconde `Servicios de Lavandería` bajo un padre llamado «Otros Ingresos de
- *   Actividades Ordinarias»; la primera coincidencia se lleva la rama y ahí se para.
+ * - **Who goes into «Hospedaje».** Only the DIRECT children of the node whose name says hospedaje,
+ *   alojamiento, habitación, suite or tarifa — and those take their COMPLETE branch, including that
+ *   `Ventas Restaurante` the accountant hung inside `Habitaciones Sencillas`. What hangs off the node
+ *   and does not say that (Eventos, Lavandería) is NOT hospedaje: it is classified like any other.
+ *   The cut is one of DEPTH and not of name, which is what separates those two cases.
+ * - **Where Restaurante cuts against Bar.** Bar is whatever within Alimentos y Bebidas says bebida,
+ *   bar or licor; Restaurante is THE REST of that branch, not another list of words. Being the rest,
+ *   the two ALWAYS add up to that account: a new «Sin desglosar» or «Catering» falls into Restaurante
+ *   instead of disappearing from the screen.
+ * - **How far a category is searched.** The accounts that fit none are DESCENDED INTO, because the
+ *   plan hides `Servicios de Lavandería` under a parent called «Otros Ingresos de Actividades
+ *   Ordinarias»; the first match takes the branch and stops there.
  *
- * Rebajas y descuentos quedan fuera de todo —son un menos dentro de los ingresos y no una línea de
- * negocio—, y la tarjeta lo DICE en vez de descontarlos en silencio.
+ * Rebajas and descuentos are left out of everything —they are a minus inside revenue and not a
+ * business line—, and the card SAYS so instead of discounting them silently.
  */
 import { colorForEntity } from "@/lib/charts/palette";
 import { formatCurrency } from "@/lib/format";
@@ -47,38 +47,38 @@ import { normalizeLabel } from "@/lib/workspaces";
 import type { AnalyticsSource, Series, SeriesKey, SeriesPoint } from "../analytics/types";
 import { childrenOf, seriesTotal } from "./presets";
 
-/** Una barra: su id, su rótulo y los nodos DISJUNTOS del plan cuya suma es. */
+/** A bar: its id, its label and the DISJOINT nodes of the plan whose sum it is. */
 export interface BusinessLine {
   id: string;
   label: string;
   /**
-   * Nodos del plan, nunca hojas: son disjuntos por construcción (ninguno desciende de otro), así
-   * que sumarlos no puede contar dos veces, y cada uno ya trae su rollup.
+   * Nodes of the plan, never leaves: they are disjoint by construction (none descends from another),
+   * so summing them cannot double count, and each already brings its rollup.
    */
   codes: string[];
 }
 
 export interface BusinessLineSet {
-  /** En el orden que pidió la firma: Hospedaje, Restaurante, Lavandería, Bar, Tours y el resto. */
+  /** In the order the firm asked for: Hospedaje, Restaurante, Lavandería, Bar, Tours and the rest. */
   lines: BusinessLine[];
   /**
-   * Las cuentas que ninguna línea recoge (rebajas, descuentos, devoluciones), con su código: sin
-   * él la tarjeta puede nombrarlas pero no puede SUMARLAS, y sin esa suma la nota no cuadra contra
-   * el estado — que es la primera cuenta que hace quien mira estas barras.
+   * The accounts no line picks up (rebajas, descuentos, devoluciones), with their code: without it
+   * the card can name them but cannot SUM them, and without that sum the note does not square against
+   * the statement — which is the first computation anyone looking at these bars does.
    */
   excluded: { code: string; label: string }[];
   /**
-   * Las líneas que la LEYENDA dejó apagadas — apartadas, nunca borradas: sus cuentas siguen siendo
-   * ingresos del estado, así que el cuadre tiene que contarlas o la nota declararía miles «sin
-   * clasificar», que es justo el aviso de que la lectura no cierra.
+   * The lines the LEGEND left switched off — set aside, never deleted: their accounts are still
+   * revenue of the statement, so the balance has to count them or the note would declare thousands
+   * «unclassified», which is precisely the warning that the reading does not close.
    */
   hidden: BusinessLine[];
   /**
-   * Las ramas de actividades ordinarias que la lectura recorre: la del hospedaje y toda hermana
-   * que el PLAN declare también ordinaria. Contra la suma de estas se cuadra la lectura.
+   * The ordinary-activities branches the reading walks: hospedaje's and every sibling the PLAN also
+   * declares ordinary. The reading is squared against the sum of these.
    */
   sectionCodes: string[];
-  /** Cómo las llama el plan, para nombrarlas en la nota. */
+  /** What the plan calls them, so they can be named in the note. */
   sectionLabels: string[];
 }
 
@@ -90,24 +90,24 @@ const EMPTY: BusinessLineSet = {
   sectionLabels: [],
 };
 
-/** Ingresos: el nodo de hospedaje se busca DENTRO de esta raíz y en ninguna otra. */
+/** Ingresos: the hospedaje node is looked for INSIDE this root and in no other. */
 const REVENUE_PREFIX = "4.";
 
-/** Ingresos, la raíz: de sus hijas sale el universo que la lectura recorre. */
+/** Ingresos, the root: the universe the reading walks comes from its children. */
 const REVENUE_ROOT = "4";
 /**
- * Qué hermana de la sección entra además. El plan de un cliente real llama a su `4.2` «Otros
- * Ingresos de Actividades Ordinarias» y mete ahí las `Comisiones Tours`, que su propio informe
- * cuenta como Tours; el de otro llama al suyo «Otros Ingresos» a secas y no las cuenta. Se sigue lo
- * que el plan DECLARA en vez de dar por hecho que lo ordinario es solo `4.1`, y por eso los
- * ingresos financieros —que ningún plan llama ordinarios— se quedan fuera solos.
+ * Which sibling of the section also goes in. A real client's plan calls its `4.2` «Otros Ingresos de
+ * Actividades Ordinarias» and puts the `Comisiones Tours` there, which its own report counts as
+ * Tours; another's calls its own plain «Otros Ingresos» and does not count them. What the plan
+ * DECLARES is followed instead of assuming that ordinary is only `4.1`, and that is why the financial
+ * revenue —which no plan calls ordinary— is left out on its own.
  */
 const ORDINARY = /ordinari/;
 
 const LODGING = /hospedaj|alojamient/;
-/** Con qué se reconoce el nodo cuando el plan no escribe «hospedaje»: sus hijas venden cuartos. */
+/** What the node is recognised by when the plan does not write «hospedaje»: its children sell rooms. */
 const ROOMS = /habitacion|hospedaj|alojamient|suite/;
-/** Quién se funde en la barra de hospedaje: la rama de habitaciones y sus desgloses por tarifa. */
+/** Who is fused into the hospedaje bar: the rooms branch and its breakdowns by rate. */
 const LODGING_MEMBER = /hospedaj|alojamient|habitacion|suite|tarifa|sin desglosar/;
 const FOOD_AND_DRINK = /aliment|bebida|comida|restaurant|restaurac|banquet|cafeteri/;
 const LAUNDRY = /lavander|lenceri/;
@@ -118,9 +118,9 @@ const FOOD =
 const DISCOUNT = /rebaj|descuent|devoluc/;
 
 /**
- * Las categorías, en el orden en que se leen y en el que se buscan. El orden IMPORTA dos veces: es
- * el de las barras y es el de la prioridad —una cuenta que dijera «lavandería del restaurante»
- * cuenta como lavandería, la más específica—. `otros` no se busca: es lo que sobra.
+ * The categories, in the order they are read in and the order they are searched in. The order MATTERS
+ * twice: it is the bars' and it is the priority's —an account that said «lavandería del restaurante»
+ * counts as lavandería, the more specific one—. `otros` is not searched for: it is what is left over.
  */
 const CATEGORIES = [
   { id: "hospedaje", label: "Hospedaje" },
@@ -142,12 +142,12 @@ function depthOf(code: string): number {
 }
 
 /**
- * Las líneas que el plan del centro activo declara, o un conjunto VACÍO cuando no las declara — que
- * es lo que hace que el interruptor de la barra no se rinda con un cliente que no es un hotel.
+ * The lines the active center's plan declares, or an EMPTY set when it declares none — which is what
+ * makes the bar's switch not render for a client that is not a hotel.
  *
- * Se exige que salgan DOS o más: una sola barra no es una comparación, es la misma cifra que ya da
- * la tarjeta de composición con otro nombre. Es la misma regla con la que el Consolidado entre
- * clientes se ofrece.
+ * TWO or more are required to come out: a single bar is not a comparison, it is the same figure the
+ * composition card already gives under another name. It is the same rule the cross-client Consolidado
+ * is offered by.
  */
 export function buildBusinessLines(source: AnalyticsSource | undefined): BusinessLineSet {
   if (!source) {
@@ -176,10 +176,10 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
   };
 
   /**
-   * Clasifica una rama de arriba hacia abajo: la primera categoría que coincide se lleva la rama
-   * entera y ahí se para; lo que no coincide se DESCIENDE, y una hoja que llega sin categoría cae
-   * en `fallback` — «restaurante» dentro de Alimentos y Bebidas, para que sea el resto de esa
-   * cuenta, y el cajón de «otros» en cualquier otro sitio.
+   * Classifies a branch from the top down: the first category that matches takes the whole branch and
+   * stops there; what does not match is DESCENDED INTO, and a leaf that arrives with no category falls
+   * into `fallback` — «restaurante» inside Alimentos y Bebidas, so it is the rest of that account, and
+   * the «otros» catch-all anywhere else.
    */
   const classify = (code: string, fallback: CategoryId) => {
     const label = labelOf(code);
@@ -203,8 +203,8 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
     }
   };
 
-  // Hospedaje se corta por PROFUNDIDAD: solo las hijas directas del nodo que dicen hospedaje son la
-  // línea; las demás pasan por la clasificación como cualquier otra cuenta de la sección.
+  // Hospedaje cuts by DEPTH: only the node's direct children that say hospedaje are the line; the
+  // rest go through the classification like any other account of the section.
   for (const code of childrenOf(source, lodging)) {
     const label = labelOf(code);
     if (DISCOUNT.test(norm(label))) {
@@ -218,8 +218,8 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
     }
   }
 
-  // El resto de la sección. Alimentos y Bebidas es la única rama con fallback propio, que es lo que
-  // hace que Restaurante y Bar sumen siempre esa cuenta entera.
+  // The rest of the section. Alimentos y Bebidas is the only branch with a fallback of its own, which
+  // is what makes Restaurante and Bar always add up to that whole account.
   const siblings = childrenOf(source, section);
   const alsoOrdinary = childrenOf(source, REVENUE_ROOT).filter(
     (code) => code !== section && ORDINARY.test(norm(labelOf(code))),
@@ -238,9 +238,9 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
     classify(code, "otros");
   }
 
-  // Las hermanas que el plan también declara ordinarias no tienen hospedaje ni una rama de A y B
-  // que partir: sus cuentas pasan por la misma clasificación, y ahí es donde `Comisiones Tours`
-  // encuentra su categoría en vez de perderse fuera de la lectura.
+  // The siblings the plan also declares ordinary have no hospedaje and no A&B branch to split: their
+  // accounts go through the same classification, and that is where `Comisiones Tours` finds its
+  // category instead of getting lost outside the reading.
   for (const branch of alsoOrdinary) {
     for (const code of childrenOf(source, branch)) {
       classify(code, "otros");
@@ -268,16 +268,16 @@ export function buildBusinessLines(source: AnalyticsSource | undefined): Busines
 }
 
 /**
- * Lo que la LEYENDA deja encendido, y aparte lo que apagó.
+ * What the LEGEND leaves switched on, and separately what it switched off.
  *
- * Apagar una línea no es quitarla del estado: sus cuentas siguen siendo ingresos declarados, así
- * que se APARTAN en vez de borrarse y el cuadre las cuenta del lado de lo que queda fuera. Sin eso
- * la nota afirmaría un residuo «sin clasificar» del tamaño de la línea apagada, que es exactamente
- * el aviso que esa frase existe para dar cuando algo va mal de verdad.
+ * Switching a line off is not removing it from the statement: its accounts are still declared
+ * revenue, so they are SET ASIDE instead of deleted and the balance counts them on the side of what
+ * is left out. Without that the note would claim an «unclassified» residue the size of the switched
+ * off line, which is exactly the warning that phrase exists to give when something really is wrong.
  *
- * Un id que ninguna línea declara —el de un plan que ya no está abierto— vale como ninguno: es la
- * misma defensa que el resto del módulo aplica a una marca huérfana, porque vaciar la pantalla
- * sería peor que no acotar.
+ * An id no line declares —one of a plan that is no longer open— counts as none: it is the same
+ * defence the rest of the module applies to an orphan mark, because emptying the screen would be
+ * worse than not narrowing.
  */
 export function selectBusinessLines(
   set: BusinessLineSet,
@@ -291,7 +291,7 @@ export function selectBusinessLines(
   return { ...set, lines: visible, hidden: set.lines.filter((line) => off.has(line.id)) };
 }
 
-/** La categoría que un nombre declara, o `null` — el orden de la lista es la prioridad. */
+/** The category a name declares, or `null` — the list's order is the priority. */
 function categoryOf(name: string): CategoryId | null {
   if (LAUNDRY.test(name)) {
     return "lavanderia";
@@ -311,19 +311,19 @@ function categoryOf(name: string): CategoryId | null {
 }
 
 /**
- * El nodo de hospedaje, en DOS pasadas, porque no todos los planes escriben la palabra.
+ * The hospedaje node, in TWO passes, because not every plan writes the word.
  *
- * La primera busca el nodo MÁS SOMERO bajo Ingresos que se llame hospedaje o alojamiento y tenga
- * desglose. Somero porque un plan repite la palabra hacia dentro (`Venta de Hospedaje › Venta de
- * Hospedaje Tarifa 0%`) y la línea es la rama entera, no su primer nieto; con desglose porque una
- * cuenta de movimiento no tiene hijas que repartir entre hospedaje y lo demás.
+ * The first looks for the SHALLOWEST node under Ingresos that is called hospedaje or alojamiento and
+ * has a breakdown. Shallowest because a plan repeats the word inwards (`Venta de Hospedaje › Venta de
+ * Hospedaje Tarifa 0%`) and the line is the whole branch, not its first grandchild; with a breakdown
+ * because a movement account has no children to split between hospedaje and the rest.
  *
- * La segunda existe por un plan REAL que no dice «hospedaje» en ninguna parte: llama a su rama
- * `Ingresos de Actividades Ordinarias` y cuelga debajo `Ventas Habitaciones`, `Ventas Restaurante`,
- * `Ventas Lavanderia`. Ahí el nodo se reconoce por sus HIJAS — la que vende habitaciones —, que es
- * la evidencia que queda cuando el rótulo del padre no dice nada. Va después y no antes porque en
- * un plan que sí nombra el hospedaje, la sección ENTERA tiene una hija que habla de habitaciones, y
- * tomarla a ella sería tomar la sección por el negocio.
+ * The second exists because of a REAL plan that does not say «hospedaje» anywhere: it calls its
+ * branch `Ingresos de Actividades Ordinarias` and hangs `Ventas Habitaciones`, `Ventas Restaurante`,
+ * `Ventas Lavanderia` underneath. There the node is recognised by its CHILDREN — the one that sells
+ * rooms —, which is the evidence left when the parent's label says nothing. It comes after and not
+ * before because in a plan that does name hospedaje, the WHOLE section has a child that talks about
+ * rooms, and taking that one would be taking the section for the business.
  */
 function findLodgingNode(source: AnalyticsSource): string | null {
   const named = shallowestNode(source, (code) =>
@@ -337,7 +337,7 @@ function findLodgingNode(source: AnalyticsSource): string | null {
   );
 }
 
-/** La cuenta más somera bajo Ingresos que cumple el predicado y tiene desglose. */
+/** The shallowest account under Ingresos that meets the predicate and has a breakdown. */
 function shallowestNode(
   source: AnalyticsSource,
   matches: (code: string) => boolean,
@@ -360,24 +360,24 @@ function shallowestNode(
 export interface SummedBusinessLines {
   series: Series[];
   /**
-   * Cuántas líneas se quitaron por no moverse en todo el tramo — dichas, nunca borradas en
-   * silencio. Un plan declara cada cuenta tenga o no movimiento (el real trae `Venta Parqueadero` y
-   * `Ventas Telefono` en cero todo el año), y una leyenda de barras invisibles entierra a la que
-   * importa. Es la misma regla con la que `foldDistribution` poda sus hijas paradas.
+   * How many lines were removed for not moving in the whole span — said, never silently deleted. A
+   * plan declares every account whether or not it has movement (the real one brings `Venta
+   * Parqueadero` and `Ventas Telefono` at zero all year), and a legend of invisible bars buries the
+   * one that matters. It is the same rule `foldDistribution` prunes its idle children with.
    */
   idle: number;
 }
 
 /**
- * Las series de las cuentas miembro, sumadas en una serie por línea.
+ * The member accounts' series, summed into one series per line.
  *
- * La suma es por ÍNDICE porque todas vienen de una misma consulta y comparten eje, y hereda la
- * regla que sostiene todo el motor: un periodo vale `null` solo si NINGUNA de sus cuentas lo cubre.
- * Un mes que el archivo no trajo sigue siendo un hueco y no un `$0`, que dibujaría una caída.
+ * The sum is by INDEX because they all come from one same query and share an axis, and it inherits
+ * the rule that holds up the whole engine: a period is `null` only if NONE of its accounts covers it.
+ * A month the file did not bring is still a gap and not a `$0`, which would draw a fall.
  *
- * No hay tope que aplicar: las categorías son seis y la paleta tiene ocho ranuras, así que ninguna
- * línea puede quedarse sin color. Ese fue el motivo de declararlas en vez de dar una barra a cada
- * cuenta, que en el plan real daban doce.
+ * There is no cap to apply: the categories are six and the palette has eight slots, so no line can be
+ * left without a colour. That was the reason for declaring them instead of giving each account a bar,
+ * which in the real plan gave twelve.
  */
 export function sumBusinessLines(
   series: readonly Series[],
@@ -395,7 +395,7 @@ export function sumBusinessLines(
   return { series: moving, idle: built.length - moving.length };
 }
 
-/** El código sintético de una línea. No colisiona: ninguna cuenta del plan se llama así. */
+/** A line's synthetic code. It does not collide: no account of the plan is called that. */
 function codeOf(line: BusinessLine): string {
   return `linea:${line.id}`;
 }
@@ -429,43 +429,43 @@ function sumOf(line: BusinessLine, members: readonly Series[]): Series | null {
 }
 
 /**
- * Lo que el eje girado dibuja: las columnas del eje X y, dentro de cada una, las barras de lo que
- * se compara. Es la misma figura de siempre —el eje de comparación no se declara, sale de lo que
- * está marcado— pero girada: la categoría deja de ser una serie y pasa a ser una columna.
+ * What the rotated axis draws: the X axis' columns and, within each one, the bars of what is being
+ * compared. It is the usual figure —the comparison axis is not declared, it comes out of what is
+ * marked— but rotated: the category stops being a series and becomes a column.
  */
 export interface CategoryReading {
   categories: string[];
-  /** El renglón de arriba del eje: qué grupo cubre cuántas columnas, en su orden. Ausente cuando
-   * las columnas ya son las categorías y no hay nada que agrupar. */
+  /** The axis' top line: which group covers how many columns, in their order. Absent when the columns
+   * already are the categories and there is nothing to group. */
   groups?: { label: string; span: number }[];
   series: { id: string; label: string; values: (number | null)[] }[];
 }
 
-/** Una columna del eje: cómo se llama, a qué grupo pertenece y la serie que hay detrás. */
+/** A column of the axis: what it is called, which group it belongs to and the series behind it. */
 export interface CategoryColumn {
   label: string;
-  /** La categoría, cuando la columna es un establecimiento dentro de ella. */
+  /** The category, when the column is an establishment within it. */
   group?: string;
   series: Series;
 }
 
-/** Una columna por CATEGORÍA — la lectura por defecto, sin centros marcados. */
+/** One column per CATEGORY — the default reading, with no centers marked. */
 export function columnsByCategory(summed: readonly Series[]): CategoryColumn[] {
   return summed.map((series) => ({ label: series.label, series }));
 }
 
 /**
- * Una columna por (categoría, ESTABLECIMIENTO) — la forma exacta de la hoja del contador, donde
- * bajo cada actividad va una fila por sucursal.
+ * One column per (category, ESTABLISHMENT) — the exact shape of the accountant's sheet, where under
+ * each activity there is one row per sucursal.
  *
- * Las columnas se agrupan por categoría y dentro por centro, así que las de una misma actividad
- * quedan juntas. Cada una se rotula con el ESTABLECIMIENTO y la categoría viaja aparte, en `group`:
- * el eje la escribe una sola vez bajo sus columnas, en un renglón propio, en vez de repetirla
- * entera en cada rótulo — que es lo que hacía ilegible «Hospedaje · C. C. ALBEMARLE» cinco veces
- * seguidas.
+ * The columns are grouped by category and within it by center, so those of the same activity stay
+ * together. Each one is labelled with the ESTABLISHMENT and the category travels separately, in
+ * `group`: the axis writes it once under its columns, on a line of its own, instead of repeating it
+ * whole in every label — which is what made «Hospedaje · C. C. ALBEMARLE» five times in a row
+ * illegible.
  *
- * Un par que no se mueve NO abre columna: un hotel que no tiene bar dejaría una columna vacía por
- * cada mes, y son justo las columnas que hacen ilegible el resto.
+ * A pair that does not move opens NO column: a hotel with no bar would leave an empty column for
+ * every month, and it is precisely the empty columns that make the rest illegible.
  */
 export function columnsByCenter(
   centers: readonly { id: string; label: string; summed: readonly Series[] }[],
@@ -480,8 +480,8 @@ export function columnsByCenter(
 }
 
 /**
- * Una barra por columna con el TOTAL del tramo: la lectura más legible, y la única en la que cada
- * barra —también la de $761— imprime su cifra encima.
+ * One bar per column with the span's TOTAL: the most legible reading, and the only one in which every
+ * bar —including the $761 one— prints its figure above it.
  */
 export function readTotal(columns: readonly CategoryColumn[], label: string): CategoryReading {
   return {
@@ -492,9 +492,9 @@ export function readTotal(columns: readonly CategoryColumn[], label: string): Ca
 }
 
 /**
- * Los tramos del renglón de grupos, por CONSECUTIVOS y no por clave: el orden de las columnas es el
- * que fija dónde empieza y acaba cada categoría, igual que `groupViews` en Ocupaciones. Sin grupos
- * el campo no viaja, porque un `groups: []` y «no hay nada que agrupar» no son la misma forma.
+ * The group line's spans, by CONSECUTIVES and not by key: the columns' order is what fixes where each
+ * category starts and ends, just like `groupViews` in Ocupaciones. With no groups the field does not
+ * travel, because a `groups: []` and «there is nothing to group» are not the same shape.
  */
 function groupsOf(columns: readonly CategoryColumn[]): {
   groups?: { label: string; span: number }[];
@@ -515,11 +515,11 @@ function groupsOf(columns: readonly CategoryColumn[]): {
 }
 
 /**
- * Una barra por PERIODO dentro de cada columna — el gráfico que la firma ya dibuja a mano.
+ * One bar per PERIOD within each column — the chart the firm already draws by hand.
  *
- * Los periodos llegan con su ÍNDICE en el eje y no por su posición en la lista: lo que se dibuja
- * son los CUBIERTOS, y un año cargado hasta mayo tiene cinco de doce. Sin el índice, mayo leería el
- * valor de la quinta columna del eje solo por casualidad.
+ * The periods arrive with their INDEX on the axis and not by their position in the list: what is
+ * drawn are the COVERED ones, and a year loaded up to May has five out of twelve. Without the index,
+ * May would read the value of the axis' fifth column only by coincidence.
  */
 export function readByPeriod(
   columns: readonly CategoryColumn[],
@@ -537,41 +537,42 @@ export function readByPeriod(
 }
 
 /**
- * El color de cada línea por su lugar en la lectura, con la paleta de IDENTIDAD y no con una rampa:
- * aquí sí son entidades distintas —negocios distintos—, y el orden es el declarado, que no se mueve
- * cuando una línea deja de tener movimiento.
+ * Each line's colour by its place in the reading, with the IDENTITY palette and not with a ramp: here
+ * they really are different entities —different businesses—, and the order is the declared one, which
+ * does not move when a line stops having movement.
  */
 export function businessLineColor(series: readonly Series[]): (key: SeriesKey) => string {
   const order = series.map((entry) => entry.key.code);
   return (key) => colorForEntity(key.code, order);
 }
 
-/** El CUADRE de la lectura contra el estado, que la tarjeta calcula y la nota escribe. */
+/** The reading's BALANCE against the statement, which the card computes and the note writes. */
 export interface BusinessLinesBalance {
-  /** Suma de las seis líneas en el tramo. */
+  /** Sum of the six lines in the span. */
   lines: number | null;
-  /** Lo que el estado declara en la sección — contra esto se cuadra. */
+  /** What the statement declares in the section — this is what it is squared against. */
   section: number | null;
-  /** Suma de las cuentas dejadas fuera; negativa cuando son rebajas, que es el caso normal. */
+  /** Sum of the accounts left out; negative when they are rebajas, which is the normal case. */
   excluded: number | null;
   /**
-   * Suma de las líneas APAGADAS en la leyenda. Es opcional porque una lectura sin nada apagado no
-   * tiene que declarar un cero: la nota queda entonces letra por letra como estaba.
+   * Sum of the lines SWITCHED OFF in the legend. It is optional because a reading with nothing
+   * switched off does not have to declare a zero: the note then stays letter for letter as it was.
    */
   hidden?: number | null;
-  /** Categorías quitadas por no moverse en el tramo. */
+  /** Categories removed for not moving in the span. */
   idle: number;
 }
 
 /**
- * Qué agrupa la lectura, qué deja fuera y —sobre todo— POR QUÉ no suma lo mismo que el estado.
+ * What the reading groups, what it leaves out and —above all— WHY it does not add up to the same as
+ * the statement.
  *
- * Sin esta línea una barra llamada «Hospedaje» es indistinguible de la cuenta `Venta de Hospedaje`
- * del plan, que vale otra cosa porque incluye los eventos. Y sin el cuadre, la primera cuenta que
- * hace cualquiera al ver seis barras es sumarlas y compararlas con `4.1`: en el estado real dan
- * $2.047,25 de más, que son exactamente las rebajas y descuentos que quedan fuera. Esa resta la
- * escribe la tarjeta, porque hacerla a mano contra otra pestaña es lo que convierte una lectura
- * correcta en una sospecha.
+ * Without this line a bar called «Hospedaje» is indistinguishable from the plan's `Venta de
+ * Hospedaje` account, which is worth something else because it includes the events. And without the
+ * balance, the first computation anyone does on seeing six bars is summing them and comparing them
+ * with `4.1`: in the real statement they come out $2,047.25 higher, which is exactly the rebajas and
+ * descuentos left out. That subtraction is written by the card, because doing it by hand against
+ * another tab is what turns a correct reading into a suspicion.
  */
 export function describeBusinessLines(
   set: BusinessLineSet,
@@ -585,8 +586,9 @@ export function describeBusinessLines(
     set.excluded.length > 0
       ? `Fuera de las líneas: ${set.excluded.map((entry) => entry.label).join(", ")}.`
       : "",
-    // Las apagadas se NOMBRAN, y aquí y no en el cuadre: una barra que falta se lee como un dato
-    // que falta, y el cuadre puede no existir —un tramo sin cobertura no tiene cifras que restar—.
+    // The switched off ones are NAMED, and here and not in the balance: a missing bar reads as a
+    // missing datum, and the balance may not exist —a span with no coverage has no figures to
+    // subtract—.
     set.hidden.length > 0
       ? `Apagadas en la leyenda: ${set.hidden.map((line) => line.label).join(", ")}.`
       : "",
@@ -601,11 +603,11 @@ function balanceLine(set: BusinessLineSet, balance: BusinessLinesBalance): strin
   if (balance.lines === null || balance.section === null) {
     return "";
   }
-  // Con CENTAVOS, que es lo contrario de la regla del eje: aquí la cifra no se mira, se COTEJA
-  // contra el estado, y $201,998 no se puede cotejar contra $201,998.26.
+  // With CENTS, which is the opposite of the axis' rule: here the figure is not looked at, it is
+  // CHECKED against the statement, and $201,998 cannot be checked against $201,998.26.
   const amount = (value: number) => formatCurrency(value, { cents: true });
-  // «encendidas» solo cuando alguna está apagada: si no, la palabra sobra y esta frase se coteja
-  // contra el Excel del contador, donde cada letra de más es una pregunta.
+  // «encendidas» only when some is switched off: otherwise the word is superfluous and this phrase is
+  // checked against the accountant's Excel, where every extra letter is a question.
   const drawn = set.hidden.length > 0 ? "líneas encendidas" : "líneas";
   const total = `Las ${set.lines.length} ${drawn} suman ${amount(balance.lines)}`;
   if (sameAmount(balance.lines, balance.section)) {
@@ -613,10 +615,10 @@ function balanceLine(set: BusinessLineSet, balance: BusinessLinesBalance): strin
   }
   const excluded = balance.excluded ?? 0;
   const hidden = balance.hidden ?? 0;
-  // El residuo es la red de seguridad: si lo de fuera no explica la diferencia, la nota lo dice en
-  // vez de dejar al lector con dos cifras que no cierran y ninguna pista de por qué. Lo apagado
-  // entra en esa cuenta como una parte más de la diferencia — es plata del estado que no está en
-  // ninguna barra, igual que las rebajas.
+  // The residue is the safety net: if what is outside does not explain the difference, the note says
+  // so instead of leaving the reader with two figures that do not close and no clue why. What is
+  // switched off enters that computation as one more part of the difference — it is money of the
+  // statement that is in no bar, just like the rebajas.
   const residual = balance.section - (balance.lines + excluded + hidden);
   const parts = [
     `${amount(excluded)} de cuentas que quedan fuera`,
@@ -628,7 +630,7 @@ function balanceLine(set: BusinessLineSet, balance: BusinessLinesBalance): strin
     : `${explained}, y ${amount(residual)} sin clasificar.`;
 }
 
-/** Al centavo: las cifras vienen de sumas en coma flotante y `===` las separa por un `1e-10`. */
+/** To the cent: the figures come from floating-point sums and `===` separates them by a `1e-10`. */
 function sameAmount(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.005;
 }

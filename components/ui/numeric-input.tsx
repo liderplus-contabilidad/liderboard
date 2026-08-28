@@ -6,16 +6,16 @@ import { cn } from "@/lib/cn";
 import { formatAmount, formatNumber, parseCurrency } from "@/lib/format";
 
 interface NumericInputProps {
-  /** `null` se pinta VACÍO, nunca como cero — la distinción que `PAGADO` necesita para que un
-   *  período sin conciliar no afirme que no se pagó nada. */
+  /** `null` is painted EMPTY, never as zero — the distinction `PAGADO` needs so an unreconciled
+   *  período does not claim nothing was paid. */
   value: number | null;
-  /** Solo se llama cuando el valor CAMBIA. Emite `null` únicamente con `nullable`. */
+  /** Only called when the value CHANGES. It emits `null` only with `nullable`. */
   onCommit: (value: number | null) => void;
-  /** `amount` = dos decimales siempre («1,234.00»), que es lo que se compara contra una hoja de
-   *  cálculo celda por celda; `plain` = número agrupado sin relleno («30»), para una cantidad. */
+  /** `amount` = always two decimals («1,234.00»), which is what gets compared against a spreadsheet
+   *  cell by cell; `plain` = a grouped number with no padding («30»), for a quantity. */
   format?: "amount" | "plain";
-  /** Con `true`, vaciar el campo emite `null`; sin él, vaciarlo revierte al valor anterior en vez
-   *  de inventar un cero. */
+  /** With `true`, emptying the field emits `null`; without it, emptying reverts to the previous value
+   *  instead of inventing a zero. */
   nullable?: boolean;
   disabled?: boolean;
   ariaLabel: string;
@@ -25,17 +25,17 @@ interface NumericInputProps {
 }
 
 /**
- * Un input de importe o cantidad con BORRADOR local: mientras tiene el foco escribe sobre su propio
- * texto y solo confirma al salir o con Enter, así una re-render de arriba —el motor del rol deriva
- * veinte columnas con cada tecla— no puede arrancarle el cursor. Escape descarta el borrador.
+ * An amount or quantity input with a local DRAFT: while it has focus it writes over its own text and
+ * only commits on leaving or with Enter, so a re-render from above —the rol's engine derives twenty
+ * columns with every keystroke— cannot snatch the cursor away. Escape discards the draft.
  *
- * El texto se siembra con los formateadores de `@/lib/format`, que es lo que hace que el valor dé
- * la vuelta completa: `formatAmount(1234.5)` → «1,234.50» → `parseCurrency` → `1234.5`. Un texto
- * que no parsea NO se confirma: revertir es más honesto que escribir un cero que nadie tecleó.
+ * The text is seeded with the formatters of `@/lib/format`, which is what makes the value do the full
+ * round trip: `formatAmount(1234.5)` → «1,234.50» → `parseCurrency` → `1234.5`. Text that does not
+ * parse is NOT committed: reverting is more honest than writing a zero nobody typed.
  *
- * Es la misma mecánica que la celda diaria de Ocupaciones, extraída aquí porque el detalle de
- * nómina la necesita en dos formas distintas —campo de ficha y celda de tabla— y una segunda copia
- * podría separarse de la primera en qué considera «vacío».
+ * It is the same mechanic as Ocupaciones' daily cell, extracted here because the payroll detail needs
+ * it in two different forms —a record field and a table cell— and a second copy could drift from the
+ * first on what it considers «empty».
  */
 export function NumericInput({
   value,

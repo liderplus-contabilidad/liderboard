@@ -7,14 +7,14 @@ import { useOccupancyData } from "./occupancy-data-provider";
 import { OccupancyUploadModal } from "./occupancy-upload-modal";
 
 /**
- * Las acciones de Excel de Ocupaciones. Una sola descarga —la sucursal-año abierta—, así que
- * `ExcelActions` rinde un botón plano; el día que exista una segunda opción, pasa a menú sola.
+ * Ocupaciones' Excel actions. A single download —the open sucursal-year—, so `ExcelActions` renders
+ * a plain button; the day a second option exists, it turns into a menu on its own.
  */
 export function OccupancyExcelActions() {
   const { dataset, isConsolidated, activeHotel, activeHotelId } = useOccupancyData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
-  // El consolidado es sintético: no se descarga porque no es un archivo de nadie.
+  // The consolidado is synthetic: it is not downloaded because it is nobody's file.
   const year = isConsolidated ? undefined : dataset;
 
   const downloads = useMemo<ExcelDownloadOption[]>(
@@ -36,8 +36,8 @@ export function OccupancyExcelActions() {
             import("@/lib/download"),
           ]);
           const blob = await exportMod.workbookToBlob(
-            // La hoja ES una sucursal, así que lleva las dos mitades del membrete: el hotel a la
-            // izquierda y ella a la derecha.
+            // The sheet IS a sucursal, so it carries both halves of the letterhead: the hotel on the
+            // left and the sucursal on the right.
             exportMod.buildOccupancyWorkbook(
               year,
               activeHotel?.logo,
@@ -54,8 +54,8 @@ export function OccupancyExcelActions() {
   return (
     <>
       <ExcelActions
-        // Sin hotel no hay dónde cargar: el motivo se rinde junto al botón, porque lo que falta no
-        // es el archivo sino el paso anterior.
+        // With no hotel there is nowhere to load: the reason renders beside the button, because what
+        // is missing is not the file but the previous step.
         upload={{
           onClick: () => setUploadOpen(true),
           disabled: activeHotelId === null,

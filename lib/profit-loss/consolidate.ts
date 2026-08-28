@@ -1,26 +1,26 @@
 /**
- * Suma TODOS los clientes en un solo estado de resultados — el mismo Consolidado que ya existe
- * entre centros de costo y entre sucursales, un nivel arriba.
+ * Sums ALL the clients into a single estado de resultados — the same Consolidado that already exists
+ * between cost centers and between sucursales, one level up.
  *
- * Es DERIVADO en lectura y nunca se guarda: una copia almacenada quedaría obsoleta en cuanto
- * cualquiera de los cinco clientes ajustara una celda, y nada en pantalla lo diría.
+ * It is DERIVED on read and never stored: a stored copy would go stale as soon as any of the five
+ * clients adjusted a cell, and nothing on screen would say so.
  *
- * Suma UNA sola vez, con todos los centros de todos los clientes aplanados en una llamada a
- * `mergeCenters`. La suma es asociativa, así que sumar los centros dentro de cada cliente y luego
- * los clientes entre sí da exactamente lo mismo — y así no aparece una segunda definición de
- * «sumar» que pueda divergir de la primera.
+ * It sums just ONCE, with every center of every client flattened into one call to `mergeCenters`. The
+ * sum is associative, so summing the centers within each client and then the clients with one another
+ * gives exactly the same — and that way no second definition of «summing» appears that could diverge
+ * from the first.
  *
- * Los planes de cuentas se UNEN, no se fusionan: dos sistemas contables con numeraciones distintas
- * (`4.1.01.01.01` de Dingoo vs `4.1.1.1.1` de MicroPlus) producen ramas hermanas y los totales por
- * raíz cuadran igual, porque ambas cuelgan de `4`.
+ * The charts of accounts are UNITED, not merged: two accounting systems with different numbering
+ * (`4.1.01.01.01` of Dingoo vs `4.1.1.1.1` of MicroPlus) produce sibling branches and the totals per
+ * root balance all the same, because both hang off `4`.
  *
- * **Los CENTROS DE COSTO se cruzan entre clientes.** El consolidado devuelve, además del total, un
- * dataset por cada par (cliente, centro): eso es lo que el filtro «Centro de costo» lista dentro
- * del consolidado y lo que Gráficos compara. Marcar centros ACOTA la suma —igual que marcar
- * clientes—, y no los funde por nombre: el `restaurante` de tres empresas son tres columnas, no
- * una. Con centros marcados la suma es EXACTAMENTE esos centros: un cliente de estado único no
- * tiene ninguno con el que entrar y queda fuera, con un aviso que lo dice, porque no aparece en esa
- * lista y su ausencia no se vería en ningún otro sitio.
+ * **The COST CENTERS are crossed between clients.** The consolidado returns, besides the total, one
+ * dataset per (client, center) pair: that is what the «Centro de costo» filter lists inside the
+ * consolidado and what Gráficos compares. Marking centers NARROWS the sum —just as marking clients
+ * does—, and it does not fuse them by name: the `restaurante` of three companies is three columns, not
+ * one. With centers marked the sum is EXACTLY those centers: a single-statement client has none to
+ * come in with and is left out, with a notice saying so, because it does not appear in that list and
+ * its absence would not be visible anywhere else.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatList, pluralize } from "@/lib/format";
@@ -29,40 +29,40 @@ import type { CellEdit, Frequency, PygDataset } from "./types";
 import { CENTER_PALETTE } from "./workspace";
 
 /**
- * El id del consolidado, que NO es el de ningún cliente. Vive en la capa pura porque es a la vez
- * lo que `db.ts` guarda en la tabla `active` (y por tanto lo que hace que sobreviva al reload) y
- * lo que el selector marca; una sola definición para las dos cosas.
+ * The consolidado's id, which is NOT any client's. It lives in the pure layer because it is at once
+ * what `db.ts` stores in the `active` table (and therefore what makes it survive a reload) and what
+ * the selector marks; one single definition for both things.
  *
- * Los dos guiones bajos no son decoración: `crypto.randomUUID()` no produce esta forma, así que no
- * puede colisionar con un cliente real.
+ * The two underscores are not decoration: `crypto.randomUUID()` does not produce this shape, so it
+ * cannot collide with a real client.
  */
 export const CONSOLIDATED_CLIENT_ID = "__consolidado__";
 
 export const CONSOLIDATED_CLIENT_NAME = "Consolidado";
 
 /**
- * Separador del id de un centro DENTRO del consolidado. Los dos puntos dobles no aparecen ni en un
- * uuid de cliente ni en un slug de centro (`slugifyCenter` solo deja letras, dígitos y guiones), así
- * que el id compuesto nunca colisiona con el de un centro suelto.
+ * Separator of a center's id INSIDE the consolidado. The double colon appears neither in a client
+ * uuid nor in a center slug (`slugifyCenter` only leaves letters, digits and hyphens), so the composed
+ * id never collides with a loose center's.
  */
 const CENTER_REF_SEPARATOR = "::";
 
 /**
- * Cómo se llama un centro de un cliente CONCRETO cuando se cruza con los de los demás: es a la vez
- * la marca del filtro «Centro de costo» y el id de la vista.
+ * What a PARTICULAR client's center is called when it is crossed with the others': it is at once the
+ * «Centro de costo» filter's mark and the view's id.
  *
- * Es compuesto porque `restaurante` existe a la vez en tres clientes y son tres columnas distintas
- * — lo que se cruza es el PAR (cliente, centro), no el nombre del centro. Fundirlos por nombre
- * habría sumado el restaurante de tres empresas bajo una sola etiqueta sin que nada lo dijera.
+ * It is composed because `restaurante` exists in three clients at once and they are three different
+ * columns — what is crossed is the PAIR (client, center), not the center's name. Fusing them by name
+ * would have summed three companies' restaurants under a single label with nothing saying so.
  */
 export function consolidatedCenterId(clientId: string, centerId: string): string {
   return `${clientId}${CENTER_REF_SEPARATOR}${centerId}`;
 }
 
-/** Lo que un cliente aporta al consolidado: lo que tiene, ya leído de su partición. */
+/** What a client contributes to the consolidado: what it holds, already read from its partition. */
 export interface ClientContribution {
   clientId: string;
-  /** La etiqueta que el usuario le puso — lo que nombran los avisos. */
+  /** The label the user set — what the notices name. */
   name: string;
   datasets: PygDataset[];
   edits: CellEdit[];
@@ -70,52 +70,52 @@ export interface ClientContribution {
 }
 
 /**
- * Una PIEZA de la suma: el estado que entró y de qué cliente salió.
+ * A PIECE of the sum: the statement that went in and which client it came from.
  *
- * Es lo que hace que el consolidado se pueda escribir hoja por hoja sin que el Excel tenga que
- * volver a decidir quién entró — la lista ya es exactamente lo que se sumó, así que la invariante
- * «el Consolidado es la suma de sus hojas» no depende de que dos sitios apliquen el mismo filtro.
+ * It is what makes the consolidado writable sheet by sheet without the Excel having to decide again
+ * who went in — the list already is exactly what was summed, so the invariant «the Consolidado is the
+ * sum of its sheets» does not depend on two places applying the same filter.
  *
- * El `clientId` es el del cliente REAL y no el centinela, porque es lo único que empareja la pieza
- * con el logo de su empresa; el `dataset`, en cambio, ya viene con la partición del consolidado
- * puesta, como todo lo demás que sale de aquí.
+ * The `clientId` is the REAL client's and not the sentinel's, because it is the only thing that pairs
+ * the piece with its company's logo; the `dataset`, on the other hand, already arrives with the
+ * consolidado's partition set, like everything else that comes out of here.
  */
 export interface SummedDetail {
   clientId: string;
   dataset: PygDataset;
 }
 
-/** Un cliente que quedó fuera de la suma, y en qué palabras decirlo. */
+/** A client that was left out of the sum, and in what words to say it. */
 export interface ExcludedClient {
   name: string;
   reason: string;
 }
 
 export interface ConsolidatedWorkspace {
-  /** Uno sintético por año, ascendente. Vacío si no hay nada que sumar. */
+  /** One synthetic per year, ascending. Empty if there is nothing to sum. */
   datasets: PygDataset[];
   /**
-   * Un dataset por (cliente · centro) y año — lo que el filtro «Centro de costo» lista dentro del
-   * consolidado y lo que Gráficos compara como series.
+   * One dataset per (client · center) and year — what the «Centro de costo» filter lists inside the
+   * consolidado and what Gráficos compares as series.
    *
-   * Están TODOS los del universo, marcados o no: marcar acota lo que `datasets` SUMA, no lo que se
-   * puede marcar. Vacío cuando ningún cliente lleva centros, y entonces el consolidado sigue siendo
-   * el estado único de siempre.
+   * ALL of the universe's are there, marked or not: marking narrows what `datasets` SUMS, not what can
+   * be marked. Empty when no client carries centers, and then the consolidado is still the usual
+   * single statement.
    */
   centerDatasets: PygDataset[];
   /**
-   * Las piezas que el total SUMÓ, cliente por cliente y año por año: los centros que quedaron
-   * dentro de quien tiene centros, y el estado entero de quien es de estado único.
+   * The pieces the total SUMMED, client by client and year by year: the centers that were left inside
+   * for whoever has centers, and the whole statement of whoever is single-statement.
    *
-   * No es `centerDatasets` acotado: aquel es el UNIVERSO del filtro —marcado o no, y solo
-   * centros—, y este es lo que efectivamente se sumó. Con marcas, uno crece y el otro no.
+   * It is not `centerDatasets` narrowed: that one is the filter's UNIVERSE —marked or not, and centers
+   * only—, and this is what was actually summed. With marks, one grows and the other does not.
    */
   summedDatasets: SummedDetail[];
-  /** Unión de la cobertura de los clientes que entraron. */
+  /** Union of the coverage of the clients that went in. */
   loadedMonthsByYear: Record<number, number[]>;
-  /** Huecos de cobertura, conflictos estructurales y exclusiones, en ese orden. */
+  /** Coverage gaps, structural conflicts and exclusions, in that order. */
   warnings: string[];
-  /** Los clientes que entraron, por nombre y en el orden en que llegaron (alfabético). */
+  /** The clients that went in, by name and in the order they arrived (alphabetical). */
   contributors: string[];
   excluded: ExcludedClient[];
 }
@@ -131,20 +131,20 @@ const EMPTY: ConsolidatedWorkspace = {
 };
 
 /**
- * Hacen falta DOS clientes con datos: con uno, el «consolidado» sería ese mismo cliente con otro
- * nombre, y ofrecerlo sería prometer una suma que no existe.
+ * TWO clients with data are needed: with one, the «consolidado» would be that same client under
+ * another name, and offering it would be promising a sum that does not exist.
  */
 export function canConsolidate(contributions: readonly ClientContribution[]): boolean {
   return eligible(contributions).length >= 2;
 }
 
 /**
- * Los clientes que la barra de filtros dejó dentro. **Ninguno marcado es TODOS**, no ninguno — la
- * misma regla que centro de costo y año, para que la barra se lea igual dondequiera.
+ * The clients the filter bar left in. **None marked is ALL**, not none — the same rule as cost center
+ * and year, so the bar reads the same wherever it is.
  *
- * Marcar uno solo es legítimo y da ese cliente: la regla de «hacen falta dos» decide si el
- * consolidado se OFRECE (`canConsolidate`), no qué puede mirar quien ya está dentro. Dejarlo vacío
- * al desmarcar el penúltimo sería un callejón sin salida.
+ * Marking just one is legitimate and gives that client: the «two are needed» rule decides whether the
+ * consolidado is OFFERED (`canConsolidate`), not what whoever is already inside can look at. Leaving
+ * it empty on unmarking the second-to-last would be a dead end.
  */
 export function selectContributions(
   contributions: readonly ClientContribution[],
@@ -156,18 +156,19 @@ export function selectContributions(
   return picked.length > 0 ? picked : all;
 }
 
-/** Un cliente creado y todavía vacío no aporta: no tiene identidad ni datos. */
+/** A client that has been created and is still empty contributes nothing: it has neither identity nor
+ *  data. */
 function eligible(contributions: readonly ClientContribution[]): ClientContribution[] {
   return contributions.filter((contribution) => contribution.datasets.length > 0);
 }
 
 /**
- * Los centros que el filtro dejó dentro, o `null` —«todos»— cuando no hay ninguna marca VIVA.
+ * The centers the filter left in, or `null` —«all»— when there is no LIVE mark.
  *
- * Es la misma regla que `selectContributions`, y el «viva» es lo que la hace segura: al abrir el
- * consolidado, la barra puede traer todavía marcadas las de un cliente concreto, que aquí no
- * existen. Sin este cruce contra el universo, esas marcas huérfanas vaciarían la pantalla en vez de
- * no decir nada.
+ * It is the same rule as `selectContributions`, and «live» is what makes it safe: on opening the
+ * consolidado, the bar may still carry the marks of a particular client, which do not exist here.
+ * Without this cross-check against the universe, those orphan marks would empty the screen instead of
+ * saying nothing.
  */
 function selectCenters(
   universe: readonly PygDataset[],
@@ -179,15 +180,15 @@ function selectCenters(
 }
 
 /**
- * Si un dataset entra en la SUMA.
+ * Whether a dataset goes into the SUM.
  *
- * **Marcar centros manda sobre «Cliente»**: filtrar por centros es pedir la suma de ESOS centros y
- * de nada más, así que un cliente de estado único —que no tiene ninguno con el que entrar— queda
- * fuera mientras haya marcas, y se dice (`withoutCentersNotice`). Colarlo entero convertía «los
- * tres restaurantes del grupo» en «los tres restaurantes más una empresa completa», y como los
- * archivos de MicroPlus y Dingoo son de estado único, eso era casi siempre la suma entera.
+ * **Marking centers leads over «Cliente»**: filtering by centers is asking for the sum of THOSE
+ * centers and of nothing else, so a single-statement client —which has none to come in with— is left
+ * out while there are marks, and it is said (`withoutCentersNotice`). Slipping it in whole turned «the
+ * group's three restaurants» into «the three restaurants plus a whole company», and since MicroPlus'
+ * and Dingoo's files are single-statement, that was almost always the entire sum.
  *
- * Sin ninguna marca no hay nada que acotar y entra todo lo que «Cliente» dejó dentro.
+ * With no mark at all there is nothing to narrow and everything «Cliente» left in goes in.
  */
 function contributes(dataset: PygDataset, clientId: string, selected: Set<string> | null): boolean {
   if (selected === null) {
@@ -202,8 +203,8 @@ function contributes(dataset: PygDataset, clientId: string, selected: Set<string
 export function consolidateClients(
   contributions: readonly ClientContribution[],
   /**
-   * Los (cliente · centro) marcados en la barra. Ninguno marcado es TODOS, la misma regla que el
-   * resto de los filtros — y marcar acota qué se SUMA, no qué se puede marcar.
+   * The (client · center) pairs marked in the bar. None marked is ALL, the same rule as the rest of
+   * the filters — and marking narrows what is SUMMED, not what can be marked.
    */
   markedCenterIds: readonly string[] = [],
 ): ConsolidatedWorkspace {
@@ -229,14 +230,14 @@ export function consolidateClients(
     return EMPTY;
   }
 
-  // El universo de centros se arma sobre los clientes INCLUIDOS y antes de mirar ninguna marca:
-  // el filtro tiene que poder ofrecer lo que todavía no está marcado.
+  // The universe of centers is assembled over the INCLUDED clients and before looking at any mark:
+  // the filter has to be able to offer what is not marked yet.
   const centerDatasets = buildCenterDatasets(included);
   const selected = selectCenters(centerDatasets, markedCenterIds);
 
-  // Lo que cada cliente aporta a la suma, ya acotado. Un cliente cuyos centros quedaron todos
-  // fuera no aporta nada, y deja de contar también para la cobertura: un aviso que lo nombrara
-  // entre los ausentes hablaría de un cliente que el propio usuario apartó.
+  // What each client contributes to the sum, already narrowed. A client whose centers were all left
+  // out contributes nothing, and stops counting for the coverage too: a notice naming it among the
+  // absent ones would talk about a client the user themselves set aside.
   const contributing = included
     .map((contribution) => ({
       contribution,
@@ -266,10 +267,10 @@ export function consolidateClients(
 
   const structural = new Set<string>();
   const datasets = years.map((year) => {
-    // Todos los centros que quedaron dentro, de todos los clientes de ese año, con sus ajustes ya
-    // aplicados. Un cliente por centros aporta los suyos que estén marcados; uno de estado único
-    // aporta el suyo — la suma no distingue, que es justamente por qué el consolidado no necesita
-    // saber en qué modo está cada uno.
+    // Every center that was left inside, of every client of that year, with their adjustments already
+    // applied. A client by centers contributes those of its own that are marked; a single-statement
+    // one contributes its own — the sum does not tell them apart, which is precisely why the
+    // consolidado does not need to know which mode each one is in.
     const contributed = contributing.flatMap(({ contribution, datasets: own }) =>
       own
         .filter((dataset) => dataset.year === year)
@@ -305,13 +306,13 @@ export function consolidateClients(
 }
 
 /**
- * Las piezas de la suma, en el orden en que se leen: cliente por fuera —alfabético, el de
- * `contributions`— y, dentro de cada uno, sus centros por su `order` y luego por año.
+ * The pieces of the sum, in the order they are read: client on the outside —alphabetical,
+ * `contributions`'— and, within each one, its centers by their `order` and then by year.
  *
- * Un centro REUSA su entrada de `centerDatasets`, que ya trae el id compuesto, el color y los
- * ajustes aplicados: derivar una segunda versión del mismo centro es exactamente cómo las dos
- * acaban diciendo cifras distintas. Un cliente de estado único no tiene ninguna, así que se le
- * deriva la suya con la misma regla —ajustes plegados y la partición del consolidado puesta.
+ * A center REUSES its `centerDatasets` entry, which already brings the composed id, the colour and the
+ * applied adjustments: deriving a second version of the same center is exactly how the two end up
+ * saying different figures. A single-statement client has none, so its own is derived with the same
+ * rule —adjustments folded and the consolidado's partition set.
  */
 function buildSummedDatasets(
   contributing: readonly { contribution: ClientContribution; datasets: PygDataset[] }[],
@@ -336,10 +337,10 @@ function buildSummedDatasets(
 }
 
 /**
- * Un dataset del cliente tal como entra en el consolidado: sus ajustes ya plegados en las cuentas
- * —volver a aplicarlos aguas abajo los contaría dos veces— y la partición del consolidado puesta.
- * El nombre que lleva es la ETIQUETA que el usuario le puso al cliente y no la razón social del
- * archivo, que es como el consolidado nombra a sus clientes en todas las demás pantallas.
+ * A client's dataset as it goes into the consolidado: its adjustments already folded into the accounts
+ * —applying them again downstream would count them twice— and the consolidado's partition set. The
+ * name it carries is the LABEL the user gave the client and not the file's razón social, which is how
+ * the consolidado names its clients on every other screen.
  */
 function consolidatedDataset(contribution: ClientContribution, dataset: PygDataset): PygDataset {
   return {
@@ -351,30 +352,30 @@ function consolidatedDataset(contribution: ClientContribution, dataset: PygDatas
       dataset.accounts,
       contribution.edits.filter((edit) => edit.datasetId === dataset.id),
     ),
-    // Ningún archivo declara la utilidad de una pieza suelta dentro de una suma de empresas.
+    // No file declares the profit of a loose piece inside a sum of companies.
     resultFromFile: [],
     warnings: [],
   };
 }
 
 /**
- * Un dataset sintético por (cliente · centro) y año: el universo del filtro «Centro de costo»
- * dentro del consolidado, y las vistas que Gráficos compara.
+ * A synthetic dataset per (client · center) and year: the «Centro de costo» filter's universe inside
+ * the consolidado, and the views Gráficos compares.
  *
- * Las dos mitades del rótulo viajan SEPARADAS —`costCenterName` es el centro, `companyName` el
- * cliente— porque el desplegable las lee por separado (encabezado del cliente arriba, sus centros
- * debajo) y todo lo demás las lee juntas («Restaurante · Dingoo» en el chip, en la leyenda y en el
- * informe, porque el mismo centro existe en varias empresas). Componerlas aquí habría obligado al
- * desplegable a deshacer la composición para volver a partirla.
+ * The label's two halves travel SEPARATELY —`costCenterName` is the center, `companyName` the client—
+ * because the dropdown reads them separately (the client's heading above, its centers below) and
+ * everything else reads them together («Restaurante · Dingoo» in the chip, in the legend and in the
+ * report, because the same center exists in several companies). Composing them here would have forced
+ * the dropdown to undo the composition to split it again.
  *
- * El color y el orden se reparten sobre el universo ENTERO, cliente por fuera y centro por dentro,
- * para que los de una misma empresa queden juntos en el desplegable y un centro no cambie de color
- * al cambiar de año. `sin-centro` conserva el último lugar dentro de su cliente, que es donde el
- * `order` de origen ya lo había puesto.
+ * The colour and the order are handed out over the WHOLE universe, client on the outside and center on
+ * the inside, so those of one same company stay together in the dropdown and a center does not change
+ * colour on changing year. `sin-centro` keeps the last place within its client, which is where the
+ * source `order` had already put it.
  */
 function buildCenterDatasets(included: readonly ClientContribution[]): PygDataset[] {
-  // Una ranura por PAR, no por dataset: un centro con dos años ocupa una sola, así que conserva su
-  // color y su sitio al cambiar de año.
+  // One slot per PAIR, not per dataset: a center with two years takes just one, so it keeps its colour
+  // and its place on changing year.
   const slots = new Map<string, number>();
   const out: PygDataset[] = [];
   for (const contribution of included) {
@@ -398,7 +399,7 @@ function buildCenterDatasets(included: readonly ClientContribution[]): PygDatase
           dataset.accounts,
           contribution.edits.filter((edit) => edit.datasetId === dataset.id),
         ),
-        // Ningún archivo declara la utilidad de un centro suelto dentro de una suma de empresas.
+        // No file declares the profit of a loose center inside a sum of companies.
         resultFromFile: [],
         warnings: [],
       });
@@ -407,7 +408,7 @@ function buildCenterDatasets(included: readonly ClientContribution[]): PygDatase
   return out;
 }
 
-/** Los clientes de estado único: los que no tienen ningún centro con el que entrar. */
+/** The single-statement clients: the ones with no center to come in with. */
 function withoutCenters(included: readonly ClientContribution[]): string[] {
   return included
     .filter((contribution) =>
@@ -417,12 +418,12 @@ function withoutCenters(included: readonly ClientContribution[]): string[] {
 }
 
 /**
- * El aviso de a quién deja fuera un filtro por centros sin que se vea.
+ * The notice of who a filter by centers leaves out without it being visible.
  *
- * Solo aparece con centros marcados, y solo para los clientes de estado único: un cliente por
- * centros que se queda fuera lo hace porque el usuario no marcó ninguno de los suyos, y eso está a
- * la vista en la propia lista. Este no aparece en ella siquiera —no tiene centros que ofrecer—, así
- * que sin esta línea desaparecería de la suma sin que nada lo dijera.
+ * It only appears with centers marked, and only for single-statement clients: a client by centers that
+ * is left out is so because the user marked none of its own, and that is in plain sight in the list
+ * itself. This one does not even appear in it —it has no centers to offer—, so without this line it
+ * would disappear from the sum with nothing saying so.
  */
 function withoutCentersNotice(names: readonly string[]): string[] {
   if (names.length === 0) {
@@ -437,10 +438,10 @@ function withoutCentersNotice(names: readonly string[]): string[] {
 }
 
 /**
- * El TOTAL se presenta como un ESTADO ÚNICO (`role: "single"`), no como un centro: es la suma de
- * los centros que entraron más los clientes que no tienen ninguno, así que no es de ningún centro
- * en particular. Los centros viajan aparte, en `centerDatasets`, y es allí donde el filtro los
- * lista y Gráficos los compara.
+ * The TOTAL is presented as a SINGLE STATEMENT (`role: "single"`), not as a center: it is the sum of
+ * the centers that went in plus the clients that have none, so it belongs to no center in particular.
+ * The centers travel separately, in `centerDatasets`, and that is where the filter lists them and
+ * Gráficos compares them.
  */
 function syntheticDataset(
   year: number,
@@ -459,13 +460,13 @@ function syntheticDataset(
     baseFrequency: base,
     role: "single",
     accounts,
-    // Ningún archivo declara la utilidad de una suma de empresas: se deriva o no existe.
+    // No file declares the profit of a sum of companies: it is derived or it does not exist.
     resultFromFile: [],
     warnings: [],
   };
 }
 
-/** «Ene–Jun 2026» sobre la cobertura real, para que el header no prometa un año completo. */
+/** «Ene–Jun 2026» over the real coverage, so the header does not promise a complete year. */
 function coverageLabel(year: number, base: Frequency, covered: number[]): string {
   if (base !== "mensual" || covered.length === 0) {
     return `${year}`;
@@ -476,12 +477,11 @@ function coverageLabel(year: number, base: Frequency, covered: number[]): string
 }
 
 /**
- * La frecuencia base contra la que se mide el resto: la que comparten MÁS clientes, y a igualdad
- * la más fina.
+ * The base frequency the rest is measured against: the one MOST clients share, and on a tie the finest.
  *
- * Fijarla en `"mensual"` habría excluido a todos en un espacio enteramente anual, y tomar la del
- * primero habría dejado la suma a merced del orden alfabético. Hoy todo es mensual, así que esto
- * no excluye a nadie; existe para que un legado anual no se sume contra doce columnas.
+ * Fixing it at `"mensual"` would have excluded everyone in an entirely annual space, and taking the
+ * first one's would have left the sum at the mercy of alphabetical order. Today everything is monthly,
+ * so this excludes nobody; it exists so a legacy annual one is not summed against twelve columns.
  */
 function referenceFrequency(contributions: readonly ClientContribution[]): Frequency {
   const votes = new Map<Frequency, number>();
@@ -501,11 +501,11 @@ function describeFrequencies(contribution: ClientContribution): string {
 }
 
 /**
- * Un aviso por TRAMO de meses consecutivos a los que les faltan los mismos clientes — nunca uno
- * por mes ni por cuenta, la misma regla que el cuadre.
+ * One notice per SPAN of consecutive months missing the same clients — never one per month or per
+ * account, the same rule as the balance.
  *
- * Sin esto, una suma parcial es indistinguible de una caída real del negocio: abril con tres de
- * cinco clientes se lee como que el grupo vendió la mitad.
+ * Without this, a partial sum is indistinguishable from a real fall in the business: April with three
+ * of five clients reads as the group having sold half.
  */
 function coverageWarnings(
   included: readonly ClientContribution[],
@@ -515,7 +515,7 @@ function coverageWarnings(
   const warnings: string[] = [];
   for (const year of years) {
     const covered = loadedMonthsByYear[year] ?? [];
-    // Quién falta en cada mes cubierto, en el orden de la lista de clientes.
+    // Who is missing in each covered month, in the order of the client list.
     const missingByMonth = new Map<number, string[]>();
     for (const month of covered) {
       const missing = included
@@ -539,8 +539,8 @@ function coverageWarnings(
         flush();
         continue;
       }
-      // Mismo conjunto de ausentes Y meses consecutivos: un solo tramo. Un salto de mes rompe el
-      // tramo aunque falten los mismos, porque «Abril–Junio» diría que mayo también está cargado.
+      // The same set of absentees AND consecutive months: a single span. A month gap breaks the span
+      // even if the same ones are missing, because «Abril–Junio» would say May is loaded too.
       if (run && run.end === month - 1 && sameNames(run.missing, missing)) {
         run.end = month;
         continue;

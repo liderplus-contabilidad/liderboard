@@ -5,12 +5,12 @@ import type { StatementFit } from "@/lib/report/page-fit";
 import { SalariesReportTable } from "./salaries-report-table";
 
 /**
- * Una sección del informe: el consolidado, o el detalle de un área. Imprime las DOS lecturas a la
- * vez —la tabla arriba, la gráfica debajo— y nunca el interruptor «Ver como tabla / Ver como
- * gráfica» de `ChartCard`: un control impreso es un botón que nadie puede pulsar.
+ * One section of the report: the consolidado, or one area's detail. It prints BOTH readings at once
+ * —the table above, the chart below— and never `ChartCard`'s «Ver como tabla / Ver como gráfica»
+ * switch: a printed control is a button nobody can press.
  *
- * `card` es el MISMO `ChartCardSpec` que `SalariesView` monta en pantalla — el título, la tabla y
- * la gráfica salen de ahí sin ninguna segunda lectura del grid.
+ * `card` is the SAME `ChartCardSpec` `SalariesView` mounts on screen — the title, the table and the
+ * chart come from there without any second reading of the grid.
  */
 export function SalariesReportSection({
   card,

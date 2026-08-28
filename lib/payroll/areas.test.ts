@@ -19,8 +19,8 @@ describe("areaOptions", () => {
     ]);
   });
 
-  // El parser escribe el área VERBATIM de la hoja, así que dos ficheros pueden traer la misma
-  // área escrita distinto. Ofrecer las dos formas dejaría partir un área en dos bloques del rol.
+  // The parser writes the area VERBATIM from the sheet, so two files can bring the same area spelled
+  // differently. Offering both forms would allow splitting one area into two blocks of the rol.
   it("compara sin distinguir mayúsculas ni espacios de sobra", () => {
     expect(areaOptions([{ area: " cocina " }, { area: "Mantenimiento" }])).toEqual([
       ...STANDARD_PAYROLL_AREAS,
@@ -37,8 +37,8 @@ describe("areaOptions", () => {
     ]);
   });
 
-  // Una fila sin bloque de área queda con `area: ""` (lo dice `rol-general-grid.ts`): es la
-  // ausencia de un área, no un área que se pueda elegir.
+  // A row with no area block is left with `area: ""` (as `rol-general-grid.ts` says): it is the
+  // absence of an area, not an area that can be picked.
   it("descarta el área vacía", () => {
     expect(areaOptions([{ area: "" }, { area: "   " }])).toEqual([...STANDARD_PAYROLL_AREAS]);
   });

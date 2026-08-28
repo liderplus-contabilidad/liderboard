@@ -4,7 +4,7 @@ import { FilePlus2, FileSpreadsheet } from "lucide-react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
 import { Demo, DocSection } from "./section";
 
-/** Las descargas de la galería no generan nada: solo tardan, para que se vea el progreso. */
+/** The gallery's downloads produce nothing: they only take time, so the progress can be seen. */
 const pretendToWork = () => new Promise<void>((resolve) => setTimeout(resolve, 900));
 
 const TWO_OPTIONS: ExcelDownloadOption[] = [

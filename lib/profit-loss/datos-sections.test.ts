@@ -8,7 +8,7 @@ describe("sectionOf", () => {
     expect(sectionOf("4.1.02.01.01")).toBe("income");
     expect(sectionOf("5")).toBe("cost");
     expect(sectionOf("5.2.01")).toBe("cost");
-    // La raíz 6 la crea «Segmentar gastos»: es gasto, pero su propio bloque.
+    // Root 6 is created by «Segmentar gastos»: it is expense, but its own block.
     expect(sectionOf("6")).toBe("other");
     expect(sectionOf("6.1.1")).toBe("other");
   });
@@ -47,8 +47,8 @@ describe("sectionTone", () => {
   });
 
   it("la fila reacciona a su propio hover; la celda fija, al de la fila", () => {
-    // Con `hover:` propio, la columna fija se encendería sola y el borde derecho quedaría de otro
-    // color que el resto de la fila justo al pasar por encima.
+    // With a `hover:` of its own, the pinned column would light up by itself and the right border
+    // would end up a different colour from the rest of the row exactly on hover.
     const tone = sectionTone("4", 1);
     expect(tone?.row).toBe("bg-section-income hover:bg-section-income-hover");
     expect(tone?.sticky).toBe("bg-section-income group-hover:bg-section-income-hover");
@@ -65,14 +65,14 @@ describe("sectionTone", () => {
     ] as const) {
       const tone = sectionTone(code, level);
       expect(tone?.print).not.toContain("hover");
-      // Y es el MISMO tono que la tabla, no un segundo verde que pueda divergir.
+      // And it is the SAME hue as the table, not a second green that could diverge.
       expect(tone?.row.split(" ")[0]).toBe(tone?.print);
     }
   });
 
   it("las clases van LITERALES, o Tailwind no genera el CSS", () => {
-    // Una clase construida como `bg-section-${x}` no existe en el CSS generado y la fila sale
-    // transparente. Esto falla si alguien vuelve a plantillas al refactorizar.
+    // A class built as `bg-section-${x}` does not exist in the generated CSS and the row comes out
+    // transparent. This fails if someone goes back to templates while refactoring.
     const source = readFileSync(new URL("./datos-sections.ts", import.meta.url), "utf8");
     for (const section of ["income", "cost", "other"] as const) {
       expect(source).toContain(`hover:bg-section-${section}-hover`);
@@ -81,9 +81,9 @@ describe("sectionTone", () => {
   });
 
   it("el ARGB del Excel es el MISMO hex que el token de `@theme`", () => {
-    // Un `.xlsx` no resuelve una variable CSS, así que el hex está duplicado. Esta es la prueba
-    // que sostiene la duplicación: si alguien mueve un token y no mueve su ARGB, falla aquí en vez
-    // de salir un verde distinto en la descarga que en la pantalla.
+    // An `.xlsx` does not resolve a CSS variable, so the hex is duplicated. This is the test that
+    // holds the duplication up: if someone moves a token and does not move its ARGB, it fails here
+    // instead of a different green coming out in the download from the one on screen.
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     const tokenHex = (token: string): string => {
       const match = css.match(new RegExp(`--color-${token}:\\s*#([0-9a-fA-F]{6});`));

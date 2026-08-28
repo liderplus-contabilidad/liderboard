@@ -3,26 +3,26 @@ import { formatCurrency } from "@/lib/format";
 import type { PayrollEmployeeComputation } from "@/lib/payroll/engine/types";
 
 interface EmployeeTotalsProps {
-  /** Las cuatro cifras se LEEN de aquí, nunca se recomponen: `netPay` no es `grossIncome −
-   *  totalDeductions` calculado en pantalla, es la columna `AP` que el motor ya derivó. Una segunda
-   *  resta aquí podría separarse de la suya al centavo y nadie lo notaría. */
+  /** The four figures are READ from here, never recomposed: `netPay` is not `grossIncome −
+   *  totalDeductions` computed on screen, it is the `AP` column the engine already derived. A second
+   *  subtraction here could drift from its own by a cent and nobody would notice. */
   computed: PayrollEmployeeComputation;
 }
 
 /**
- * El cierre del rol, alineado a la derecha bajo las dos tablas: lo que entra, lo que sale, lo que
- * el empleado recibe y lo que le cuesta a la empresa.
+ * The close of the rol, right-aligned under the two tables: what comes in, what goes out, what the
+ * employee receives and what it costs the company.
  *
- * El líquido va en cuerpo grande y en `brand` porque es la única cifra de la pantalla que alguien
- * transfiere: las otras tres son el camino hasta ella. El costo total empresa queda debajo y
- * apagado — es la lectura del empleador, no la del rol, y compite con el líquido si pesa igual.
+ * The net pay goes in a large size and in `brand` because it is the only figure on the screen anyone
+ * transfers: the other three are the path to it. The total employer cost sits below and muted — it is
+ * the employer's reading, not the rol's, and it competes with the net pay if it weighs the same.
  *
- * El total de egresos NO se pinta en rojo: `negative` es el SIGNO de un valor y estas cifras son
- * todas positivas. Lo que se resta lo dice el rótulo, no el color.
+ * The deductions total is NOT painted red: `negative` is the SIGN of a value and these figures are all
+ * positive. What is subtracted is said by the label, not by the colour.
  *
- * No trae fondo propio ni margen: vive DENTRO de la tarjeta única del rol, y una caja blanca sobre
- * otra caja blanca solo añade un borde. El radio es el de las fichas de identidad —las otras cajas
- * anidadas de esa misma tarjeta—, no el de una tarjeta suelta.
+ * It carries no fill and no margin of its own: it lives INSIDE the rol's single card, and a white box
+ * over another white box only adds a border. The radius is that of the identity cards —the other boxes
+ * nested in that same card—, not that of a standalone card.
  */
 export function EmployeeTotals({ computed }: EmployeeTotalsProps) {
   return (

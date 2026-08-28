@@ -7,28 +7,28 @@ import {
 } from "@/lib/payroll/period-detail";
 
 /**
- * El mismo mapa que `period-detail/employee-row.tsx` declara para la tabla del período. Está
- * repetido porque aquel no lo exporta y su carpeta está fuera de esta ronda: en cuanto se pueda
- * tocar, el sitio de este mapa es `lib/payroll/period-detail.ts`, junto a
- * `employeeReconciliationStatus` — dos rótulos del mismo estado en dos pantallas es exactamente la
- * clase de discrepancia que ningún test de cifras detecta.
+ * The same map `period-detail/employee-row.tsx` declares for the período's table. It is duplicated
+ * because that one does not export it and its folder is outside this round: as soon as it can be
+ * touched, this map's place is `lib/payroll/period-detail.ts`, next to
+ * `employeeReconciliationStatus` — two labels for the same state on two screens is exactly the kind
+ * of discrepancy no test of figures detects.
  */
 interface EmployeeDetailCardProps {
-  /** El estado de conciliación del EMPLEADO (líquido contra pagado), no el del período. */
+  /** The EMPLOYEE's reconciliation status (net against paid), not the período's. */
   status: EmployeeReconciliationStatus;
-  /** El ordinal del empleado dentro de la nómina — el «No.» del comprobante impreso. */
+  /** The employee's ordinal within the nómina — the printed payslip's «No.». */
   number: number;
   children: ReactNode;
 }
 
 /**
- * La tarjeta única que contiene TODO el rol de un empleado: fichas de identidad, campos del
- * período, las dos tablas de conceptos y los totales.
+ * The single card that holds an employee's WHOLE rol: identity cards, período fields, the two
+ * concept tables and the totals.
  *
- * Es una sola caja y no cuatro porque lo que hay dentro es UN documento —el comprobante que el
- * empleado firma—, y partirlo en tarjetas sueltas lo lee como cuatro informes que casualmente
- * hablan de la misma persona. La cabecera declara de quién es el papel: el distintivo de
- * conciliación a la izquierda y su número de orden a la derecha, igual que el comprobante impreso.
+ * It is one box and not four because what is inside is ONE document —the payslip the employee signs—
+ * and splitting it into loose cards reads as four reports that happen to talk about the same person.
+ * The header declares whose the paper is: the reconciliation badge on the left and its order number
+ * on the right, just like the printed payslip.
  */
 export function EmployeeDetailCard({ status, number, children }: EmployeeDetailCardProps) {
   const badge = RECONCILIATION_BADGE[status];
@@ -47,9 +47,9 @@ export function EmployeeDetailCard({ status, number, children }: EmployeeDetailC
   );
 }
 
-/** El relleno de una sección de la tarjeta — 20 px a los lados y abajo. Se exporta para que quien
- *  componga la pantalla no tenga que adivinarlo ni repetirlo: dentro de una tarjeta única, el
- *  margen entre bloques es responsabilidad de la tarjeta, no de cada bloque. */
+/** The padding of one section of the card — 20 px at the sides and below. It is exported so whoever
+ *  composes the screen need not guess it or repeat it: inside a single card, the margin between
+ *  blocks is the card's responsibility, not each block's. */
 export function EmployeeDetailSection({
   children,
   className,

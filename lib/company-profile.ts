@@ -1,27 +1,27 @@
 /**
- * EL PERFIL DE EMPRESA DE UN WORKSPACE — lo que el papel de la firma imprime bajo su logo: la razón
- * social, dónde está la empresa y cómo llamarla.
+ * A WORKSPACE'S COMPANY PROFILE — what the firm's paper prints under its logo: the razón social,
+ * where the company is and how to reach it.
  *
- * Vive en `lib/` y no en `lib/payroll/` porque quien lo CAPTURA es el diálogo compartido del header
- * (`ClientNameDialog`), que es de `components/dashboard/` y lo usan los tres módulos: si el tipo
- * viviera dentro de un módulo, un componente del dashboard tendría que importar de Rol de Pagos y la
- * dependencia quedaría invertida. Es la misma vecindad de `lib/logos.ts` y `lib/workspaces.ts` — las
- * reglas genéricas de la identidad de un workspace, que cada módulo decide si usa. Hoy solo lo cablea
- * Rol de Pagos.
+ * It lives in `lib/` and not in `lib/payroll/` because what CAPTURES it is the header's shared dialog
+ * (`ClientNameDialog`), which belongs to `components/dashboard/` and is used by all three modules: if
+ * the type lived inside a module, a dashboard component would have to import from Rol de Pagos and
+ * the dependency would be inverted. It is the same neighbourhood as `lib/logos.ts` and
+ * `lib/workspaces.ts` — the generic rules of a workspace's identity, which each module decides
+ * whether to use. Today only Rol de Pagos wires it.
  *
- * **La regla que sostiene todo el archivo es `letterheadLines`**: devuelve LÍNEAS ya compuestas, no
- * campos. Las tres superficies que imprimen el membrete —la pantalla, el comprobante en PDF y el
- * Excel del período— reciben ese array y lo escriben; ninguna sabe que la ubicación se une con ` / `
- * ni que el RUC acompaña a la razón social. El modo de fallo real de esto no es que una dirección
- * salga mal: es que salga de DOS maneras, con coma en una pantalla y con barra en un archivo, sin
- * que ninguna cifra lo delate.
+ * **The rule that holds the whole file up is `letterheadLines`**: it returns already composed LINES,
+ * not fields. The three surfaces that print the letterhead —the screen, the payslip in PDF and the
+ * período's Excel— receive that array and write it; none of them knows the location is joined with
+ * ` / ` or that the RUC accompanies the razón social. The real failure mode of this is not an address
+ * coming out wrong: it is it coming out in TWO ways, with a comma on one screen and with a slash in a
+ * file, without any figure giving it away.
  *
- * El nombre del cliente NO es una de esas líneas. Es la primera línea del membrete en las tres, ya
- * viaja por su cuenta a las tres, y mezclarlo obligaría a cada una a saber que esa línea se pinta
- * distinto.
+ * The client's name is NOT one of those lines. It is the first line of the letterhead in all three,
+ * it already travels on its own to all three, and mixing it in would force each one to know that line
+ * is painted differently.
  */
 
-/** Los ocho campos, por su nombre. El borrador del diálogo es un `string` por cada uno. */
+/** The eight fields, by name. The dialog's draft is one `string` per field. */
 export type CompanyField =
   | "legalName"
   | "taxId"
@@ -33,10 +33,10 @@ export type CompanyField =
   | "email";
 
 /**
- * El perfil GUARDADO. Los seis del membrete son obligatorios en el formulario y por eso no son
- * opcionales aquí; el RUC y el correo sí, y cuando no vienen el campo NO se escribe —una cadena
- * vacía guardada y un campo ausente dirían lo mismo, y dejar los dos convierte «esta empresa no
- * declaró RUC» en dos preguntas distintas—.
+ * The STORED profile. The six of the letterhead are required in the form and that is why they are not
+ * optional here; the RUC and the email are, and when they do not arrive the field is NOT written —a
+ * stored empty string and an absent field would say the same thing, and keeping both turns «this
+ * company declared no RUC» into two different questions—.
  */
 export interface CompanyProfile {
   legalName: string;
@@ -49,40 +49,41 @@ export interface CompanyProfile {
   email?: string;
 }
 
-/** Lo que el diálogo tiene en la mano mientras se teclea: los ocho campos, siempre presentes. */
+/** What the dialog holds while typing: the eight fields, always present. */
 export type CompanyDraft = Record<CompanyField, string>;
 
 /**
- * El tope de un campo, en caracteres. Uno solo para los ocho: el más largo de todos es la dirección
- * («LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA», 39) y 120 le deja el triple, mientras que un tope por
- * campo serían siete números que nadie puede justificar por separado.
+ * A field's cap, in characters. One single cap for all eight: the longest of them all is the address
+ * («LUIS ANIBAL GRANJA Y CALLE LIBARDO PARRA», 39) and 120 leaves it triple the room, whereas a cap
+ * per field would be seven numbers nobody could justify separately.
  */
 export const MAX_COMPANY_FIELD_LENGTH = 120;
 
-/** Los trece dígitos de un RUC ecuatoriano. Se comprueba el LARGO y nada más: el dígito verificador
- *  tiene tres algoritmos según el tipo de contribuyente, y rechazar un RUC válido por implementar
- *  mal uno de ellos es peor que aceptar uno inventado en un membrete. */
+/** The thirteen digits of an Ecuadorian RUC. The LENGTH is checked and nothing else: the check digit
+ *  has three algorithms depending on the type of taxpayer, and rejecting a valid RUC through
+ *  implementing one of them badly is worse than accepting an invented one on a letterhead. */
 const TAX_ID_PATTERN = /^\d{13}$/;
 const TAX_ID_LENGTH_WORD = "trece";
 
 export interface CompanyFieldSpec {
   id: CompanyField;
-  /** El rótulo del campo en el diálogo. */
+  /** The field's label in the dialog. */
   label: string;
-  /** Cómo lo nombra el rechazo: «Falta la parroquia.» Va aparte del rótulo porque lleva artículo. */
+  /** How the rejection names it: «Falta la parroquia.» It goes apart from the label because it
+   *  carries an article. */
   missing: string;
   required: boolean;
-  /** Un ejemplo real del archivo del cliente, para que el campo diga qué espera sin una nota. */
+  /** A real example from the client's file, so the field says what it expects without a note. */
   placeholder: string;
-  /** Los que piden la fila entera de la rejilla del diálogo, porque su contenido es largo. */
+  /** The ones that ask for the dialog grid's whole row, because their content is long. */
   wide?: boolean;
 }
 
 /**
- * EL CATÁLOGO — el orden en que se piden, cuáles son obligatorios y cómo se llaman. Una sola lista
- * en vez de ocho campos escritos a mano en el diálogo, por lo mismo que `concepts.ts` y `journal.ts`
- * son catálogos: un campo nuevo se añade aquí y el formulario, la validación y el borrador vacío lo
- * heredan a la vez, en vez de en tres sitios que pueden separarse.
+ * THE CATALOGUE — the order in which they are asked for, which are required and what they are called.
+ * One single list instead of eight fields written by hand in the dialog, for the same reason
+ * `concepts.ts` and `journal.ts` are catalogues: a new field is added here and the form, the
+ * validation and the empty draft inherit it at once, instead of in three places that can drift apart.
  */
 export const COMPANY_FIELDS: readonly CompanyFieldSpec[] = [
   {
@@ -145,25 +146,26 @@ export const COMPANY_FIELDS: readonly CompanyFieldSpec[] = [
   },
 ];
 
-/** Los seis que el alta exige, en el orden en que se piden. */
+/** The six the creation requires, in the order they are asked for. */
 export const REQUIRED_COMPANY_FIELDS: readonly CompanyField[] = COMPANY_FIELDS.filter(
   (field) => field.required,
 ).map((field) => field.id);
 
-/** Recorta y colapsa espacios, la misma normalización que `normalizeEntityName` aplica al nombre. */
+/** Trims and collapses whitespace, the same normalization `normalizeEntityName` applies to the
+ *  name. */
 function clean(value: string | undefined): string {
   return (value ?? "").trim().replace(/\s+/g, " ");
 }
 
-/** El borrador de un cliente que todavía no tiene perfil. */
+/** The draft of a client that does not have a profile yet. */
 export function emptyCompanyDraft(): CompanyDraft {
   return Object.fromEntries(COMPANY_FIELDS.map((field) => [field.id, ""])) as CompanyDraft;
 }
 
 /**
- * El borrador precargado con lo guardado. Sin perfil da el borrador vacío: el diálogo abre mostrando
- * lo que hay, y si un perfil ausente diera otra cosa, renombrar un cliente antiguo parecería estar
- * borrándole datos que nunca tuvo.
+ * The draft preloaded with what is stored. With no profile it gives the empty draft: the dialog opens
+ * showing what is there, and if an absent profile gave anything else, renaming an old client would
+ * look like it was erasing data it never had.
  */
 export function companyDraftFrom(profile: CompanyProfile | null | undefined): CompanyDraft {
   const draft = emptyCompanyDraft();
@@ -177,10 +179,10 @@ export function companyDraftFrom(profile: CompanyProfile | null | undefined): Co
 }
 
 /**
- * El mensaje del PRIMER campo obligatorio que falta, o `null` si están los seis. Es lo que apaga el
- * botón del diálogo mientras se teclea, y va aparte de `checkCompanyProfile` porque juzga otra cosa:
- * aquel valida el perfil ENTERO al enviar —RUC incluido—, y un RUC a medio teclear no puede apagar
- * un botón que el usuario todavía no ha pulsado.
+ * The message of the FIRST required field that is missing, or `null` if all six are there. It is what
+ * switches the dialog's button off while typing, and it is separate from `checkCompanyProfile`
+ * because it judges something else: that one validates the WHOLE profile on submit —RUC included—,
+ * and a half-typed RUC cannot switch off a button the user has not pressed yet.
  */
 export function firstMissingCompanyField(draft: CompanyDraft): string | null {
   for (const field of COMPANY_FIELDS) {
@@ -196,12 +198,13 @@ export type CompanyProfileCheck =
   | { ok: false; field: CompanyField; message: string };
 
 /**
- * Valida el borrador y devuelve el perfil que se guarda, o el PRIMER campo que falla con su
- * mensaje. Devuelve el campo además del mensaje porque el diálogo tiene que poder señalar el input
- * que lo produjo: un rechazo que solo dice la frase obliga a buscar cuál de los ocho es.
+ * Validates the draft and returns the profile to be stored, or the FIRST field that fails with its
+ * message. It returns the field as well as the message because the dialog has to be able to point at
+ * the input that produced it: a rejection that only states the phrase forces you to work out which of
+ * the eight it is.
  *
- * Recorre `COMPANY_FIELDS` en su orden, así que el rechazo señala el primer hueco de arriba abajo,
- * que es por donde el usuario va llenando.
+ * It walks `COMPANY_FIELDS` in its order, so the rejection points at the first gap from top to
+ * bottom, which is the way the user fills it in.
  */
 export function checkCompanyProfile(draft: CompanyDraft): CompanyProfileCheck {
   const values = {} as Record<CompanyField, string>;
@@ -248,17 +251,17 @@ export function checkCompanyProfile(draft: CompanyDraft): CompanyProfileCheck {
   };
 }
 
-/** Lo que separa la razón social del RUC en su línea. Un punto medio y no tres espacios: el HTML
- *  colapsa los espacios y la pantalla diría una cosa donde el PDF y el Excel dicen otra. */
+/** What separates the razón social from the RUC on its line. A middle dot and not three spaces: HTML
+ *  collapses spaces and the screen would say one thing where the PDF and the Excel say another. */
 const TAX_ID_SEPARATOR = " · ";
 
-/** Lo que une provincia, cantón, parroquia y dirección, como en el papel del contador. */
+/** What joins provincia, cantón, parroquia and dirección, as on the accountant's paper. */
 const LOCATION_SEPARATOR = " / ";
 
 /**
- * LAS LÍNEAS DEL MEMBRETE, la única definición que hay. Un campo opcional ausente no produce línea
- * ni separador: el bloque tiene tantas líneas como datos hay, porque un separador colgando o una
- * línea en blanco se leen como un dato que falta cuando lo que pasa es que ese dato no existe.
+ * THE LETTERHEAD'S LINES, the only definition there is. An absent optional field produces neither a
+ * line nor a separator: the block has as many lines as there are data, because a dangling separator
+ * or a blank line reads as a missing datum when what is happening is that the datum does not exist.
  */
 export function letterheadLines(profile: CompanyProfile | null | undefined): string[] {
   if (!profile) {

@@ -131,7 +131,7 @@ function ReportGrid({
                 <OccupancyCell
                   key={column.id}
                   value={row.figures.occupancy}
-                  // El índice de la FILA (el periodo), no el de la columna: `index` de aquí es la columna.
+                  // The ROW's index (the period), not the column's: `index` here is the column.
                   color={colorAt(rowIndex)}
                 />
               ) : (

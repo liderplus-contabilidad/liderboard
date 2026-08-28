@@ -5,7 +5,7 @@ import type { PayrollEmployeeLine } from "../types";
 import { emptyFilters, type SalariesFilters } from "./filters";
 import { buildSalariesGrid, resolveAreaMode, salariesUniverse, type SalariesSource } from "./grid";
 
-/** Una ficha mínima y válida; solo se le pasa lo que cada caso necesita distinguir. */
+/** A minimal, valid record; only what each case needs to tell apart is passed to it. */
 function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
   return {
     id: crypto.randomUUID(),
@@ -27,7 +27,7 @@ function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine
   };
 }
 
-/** El costo que el MOTOR deriva de esa ficha: el grid no puede inventarse otro. */
+/** The cost the ENGINE derives from that record: the grid cannot invent another one. */
 function cost(overrides: Partial<PayrollEmployeeLine> = {}): number {
   return computeLinePayroll(line(overrides), PARAMS).employerCost;
 }
@@ -104,7 +104,7 @@ describe("las columnas", () => {
   });
 
   it("un mes sin período no produce columna", () => {
-    // Enero y marzo cargados, febrero no: dos columnas, sin hueco entre ellas.
+    // January and March loaded, February not: two columns, with no gap between them.
     const data = source([ENE_26, MAR_26], { e26: [line()], m26: [line()] });
 
     const grid = buildSalariesGrid(data, emptyFilters(), PARAMS);
@@ -194,7 +194,7 @@ describe("el consolidado por área", () => {
   });
 
   it("un cero real se distingue de un hueco", () => {
-    // Cero días pagados: la ficha SÍ está en la nómina y su costo es cero de verdad.
+    // Zero days paid: the record IS in the nómina and its cost is really zero.
     const data = source([ENE_26], { e26: [line({ area: "VENTAS", days: 0 })] });
 
     const grid = buildSalariesGrid(data, emptyFilters(), PARAMS);
@@ -350,7 +350,7 @@ describe("la fila de cierre", () => {
   });
 
   it("una columna sin ninguna fila con valor no tiene total", () => {
-    // Febrero registrado pero con la nómina vacía.
+    // February registered but with an empty nómina.
     const data = source([ENE_26, FEB_26], { e26: [line({ area: "COCINA" })], f26: [] });
 
     const grid = buildSalariesGrid(data, emptyFilters(), PARAMS);

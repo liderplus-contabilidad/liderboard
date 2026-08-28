@@ -47,8 +47,8 @@ describe("la identidad del informe", () => {
   it("distingue el nombre del cliente de la razón social del archivo", () => {
     const cover = describePygReport(input());
 
-    // Son cosas distintas y NUNCA se comparan: el usuario llama «Manor Galápagos» a lo que el
-    // archivo llama «DARWIN & WOLF».
+    // They are different things and are NEVER compared: the user calls «Manor Galápagos» what the
+    // file calls «DARWIN & WOLF».
     expect(cover.clientName).toBe("Manor Galápagos");
     expect(cover.companyName).toBe("DARWIN & WOLF S.A.");
   });
@@ -61,8 +61,8 @@ describe("la identidad del informe", () => {
       height: 160,
     };
     expect(describePygReport(input({ logo })).logo).toEqual(logo);
-    // Igual que el nombre: el logo es la etiqueta del usuario y no sale de ningún archivo, así que
-    // un cliente sin logo deja la portada tal como estaba.
+    // Like the name: the logo is the user's label and does not come from any file, so a client with
+    // no logo leaves the cover exactly as it was.
     expect(describePygReport(input()).logo).toBeUndefined();
   });
 

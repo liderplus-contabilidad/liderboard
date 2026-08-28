@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AccountOption } from "../filter";
 import { collapsedAtLevel, FULL_DETAIL, hiddenAccountCount, levelLabel } from "./level";
 
-/** Un trozo de plan con las seis profundidades que trae un archivo real. */
+/** A slice of a plan with the six depths a real file brings. */
 const OPTIONS: AccountOption[] = [
   { code: "4", name: "Ingresos", level: 1, hasChildren: true },
   { code: "4.1", name: "Ventas", level: 2, hasChildren: true },
@@ -15,7 +15,7 @@ const OPTIONS: AccountOption[] = [
 
 describe("el corte de nivel", () => {
   it("pliega todo padre a esa profundidad o más honda", () => {
-    // A nivel 3 se ve hasta «4.1.1»; lo que cuelga de ahí queda plegado.
+    // At level 3 it is visible down to «4.1.1»; what hangs off there is collapsed.
     expect([...collapsedAtLevel(OPTIONS, 3)].sort()).toEqual(["4.1.1", "4.1.1.1", "4.1.1.1.1"]);
   });
 
@@ -41,7 +41,7 @@ describe("lo que el corte deja fuera", () => {
   it("cuenta las cuentas con un ancestro plegado", () => {
     const collapsed = collapsedAtLevel(OPTIONS, 3);
 
-    // Quedan fuera 4.1.1.1, 4.1.1.1.1 y 4.1.1.1.1.1 — las tres que cuelgan de «4.1.1».
+    // Left out are 4.1.1.1, 4.1.1.1.1 and 4.1.1.1.1.1 — the three that hang off «4.1.1».
     expect(hiddenAccountCount(OPTIONS, collapsed)).toBe(3);
   });
 
@@ -50,7 +50,7 @@ describe("lo que el corte deja fuera", () => {
   });
 
   it("una cuenta cuyo ancestro lejano está plegado también cuenta", () => {
-    // «4.1» plegado esconde a todos sus descendientes, no solo a sus hijos directos.
+    // «4.1» collapsed hides all its descendants, not only its direct children.
     expect(hiddenAccountCount(OPTIONS, new Set(["4.1"]))).toBe(5);
   });
 });

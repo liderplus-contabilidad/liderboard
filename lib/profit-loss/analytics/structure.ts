@@ -169,9 +169,9 @@ export interface PieOptions {
 }
 
 /**
- * El código del pliegue de la cola. NO es una cuenta del plan: se exporta para que quien
- * imprima códigos —el tooltip y la tabla gemela— pueda callarse en esta fila en vez de afirmar
- * que existe una cuenta llamada «otros».
+ * The code for the tail's fold. It is NOT an account of the plan: it is exported so whoever prints
+ * codes —the tooltip and the table twin— can stay silent on this row instead of claiming there is an
+ * account called «otros».
  */
 export const OTHERS_CODE = "otros";
 

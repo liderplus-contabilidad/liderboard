@@ -901,7 +901,9 @@ app/(dashboard)/payroll/[periodId]/[employeeId]/page.tsx</code></pre>
         <li>
           <strong>El respaldo es la descarga a Excel.</strong> Está diseñada para eso: todo archivo
           que la app descarga vuelve a entrar sin pérdida, comentarios y ajustes incluidos. Conviene
-          establecer con la firma la costumbre de descargar al cerrar cada mes.
+          establecer con la firma la costumbre de descargar al cerrar cada mes. La excepción es
+          <em>Ventas por servicio</em>, que no descarga: ahí el Excel es la fuente y lo guardado se
+          reconstruye volviendo a subir los reportes del sistema contable.
         </li>
       </ul>
 

@@ -47,23 +47,23 @@ const withParams = (overrides: Partial<PayrollParameters>) =>
 const base = () => computeEmployeePayroll(BASE_INPUT, DEFAULT_PAYROLL_PARAMETERS);
 
 /**
- * Estos tests no comprueban una cuenta: comprueban que cada parámetro esté REALMENTE enchufado
- * y que llegue solo a donde le toca. Es lo que permite que 2027 sea un cambio de datos y no de
- * código, y que la respuesta del contador a §11.2 se aplique moviendo un número.
+ * These tests do not check a computation: they check that each parameter is REALLY plugged in and
+ * that it reaches only where it should. It is what allows 2027 to be a change of data and not of
+ * code, and the accountant's answer to §11.2 to be applied by moving a number.
  *
- * Un valor horneado a mano pasaría todos los tests de cifras —que usan los parámetros por
- * defecto— y solo saldría a la luz el enero en que el SBU cambie.
+ * A hand-baked value would pass every test of figures —which use the default parameters— and would
+ * only come to light the January the SBU changes.
  */
 describe("los parámetros del período están enchufados", () => {
   it("el SBU manda sobre el décimo cuarto y sobre NADA más", () => {
     const doble = withParams({ unifiedBasicSalary: 964 });
-    // Doblar el SBU NO dobla exactamente el resultado: `ROUND(482/360×30)` es `40,17` y
-    // `ROUND(964/360×30)` es `80,33`, no `80,34`. El redondeo rompe la linealidad, y por eso
-    // la cifra se afirma tal cual y no como «el doble de».
+    // Doubling the SBU does NOT exactly double the result: `ROUND(482/360×30)` is `40.17` and
+    // `ROUND(964/360×30)` is `80.33`, not `80.34`. Rounding breaks linearity, and that is why the
+    // figure is asserted as it is and not as «double of».
     expect(base().fourteenthMonthly).toBe(40.17);
     expect(doble.fourteenthMonthly).toBe(80.33);
 
-    // Sube el total ingreso porque el décimo entra en él, pero ninguna otra derivación se mueve.
+    // It raises the total income because the décimo enters it, but no other derivation moves.
     expect(doble.unifiedSalary).toBe(base().unifiedSalary);
     expect(doble.thirteenthMonthly).toBe(base().thirteenthMonthly);
     expect(doble.iessEmployee).toBe(base().iessEmployee);
@@ -85,8 +85,8 @@ describe("los parámetros del período están enchufados", () => {
   });
 
   it("la tasa del fondo de reserva NO toca el que se paga en el mes (§8)", () => {
-    // Las dos ramas usan reglas distintas —un doceavo contra 8,33 %— y el libro no las unifica.
-    // Si alguien las unificara, este test lo caza.
+    // The two branches use different rules —a twelfth against 8.33 %— and the book does not unify
+    // them. If someone unified them, this test catches it.
     const input = { ...BASE_INPUT, hasReserveFund: true, accumulatesReserveFund: false };
     const conTasaRara = computeEmployeePayroll(input, {
       ...DEFAULT_PAYROLL_PARAMETERS,
@@ -102,16 +102,16 @@ describe("los parámetros del período están enchufados", () => {
       ...DEFAULT_PAYROLL_PARAMETERS,
       reserveFundRate: 0.5,
     });
-    // La base es sueldo unificado MÁS horas extras (480 + 30), no el sueldo a secas: el
-    // empleado de este fixture trae 4 horas de cada clase y la bandera encendida.
+    // The base is the unified salary PLUS overtime (480 + 30), not the bare salary: this fixture's
+    // employee brings 4 hours of each class and the flag switched on.
     expect(r.reserveFundAccrued).toBe(255);
   });
 
   it("cada multiplicador de hora extra manda sobre su propia clase", () => {
     expect(withParams({ overtimeMultiplier50: 3 }).overtimePay50).toBe(base().overtimePay50 * 2);
     expect(withParams({ overtimeMultiplier100: 4 }).overtimePay100).toBe(base().overtimePay100 * 2);
-    // Es el número que cambia cuando el contador responda §11.2: 0,25 → 1,25 si resulta que la
-    // tercera clase es del mismo tipo que las otras dos.
+    // It is the number that changes when the accountant answers §11.2: 0.25 → 1.25 if it turns out
+    // the third class is of the same kind as the other two.
     expect(withParams({ overtimeMultiplier25: 1.25 }).overtimePay25).toBe(base().overtimePay25 * 5);
   });
 
@@ -140,8 +140,8 @@ describe("el motor es una función pura", () => {
 });
 
 describe("entradas degeneradas no producen NaN", () => {
-  // Un `NaN` que se cuele aquí se propaga a los cuatro totales y a la conciliación, y en
-  // pantalla se ve como una celda vacía en vez de como un error.
+  // A `NaN` that slips in here propagates to the four totals and to the reconciliation, and on screen
+  // it looks like an empty cell instead of an error.
   it.each([
     [
       "todo en cero",

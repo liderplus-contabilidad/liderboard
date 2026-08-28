@@ -18,8 +18,9 @@ export interface PygFilters {
   codes: string[];
   centerIds: string[];
   /**
-   * Clientes marcados — SOLO tiene sentido en el consolidado entre clientes, y fuera de él se poda
-   * a vacío. Marcar ninguno no es «ningún cliente»: es todos, la misma regla que centro y año.
+   * Marked clients — they ONLY make sense in the cross-client consolidado, and outside it they are
+   * pruned to empty. Marking none is not «no client»: it is all of them, the same rule as center and
+   * year.
    */
   clientIds: string[];
   /** Marked years. Marking none is not "no years": it is every year the workspace holds. */
@@ -27,12 +28,12 @@ export interface PygFilters {
   /** Marked periods, year-less: a mark narrows the axis of EVERY visible year. */
   periods: PeriodSlot[];
   /**
-   * La VISTA PREDETERMINADA elegida (`preset-views.ts`), o `null`. No es una marca sino otra forma
-   * de decidir qué compara la primera tarjeta de Gráficos, y por eso es EXCLUYENTE con `codes` en
-   * los dos sentidos: elegir una borra las marcas de cuenta y marcar una cuenta la deselecciona.
-   * Las dos a la vez pondrían dos respuestas distintas a «qué series dibujo» sin nada que las
-   * arbitre. Es un `string` y no el tipo del catálogo para que este módulo —que `PygDataProvider`
-   * importa por Datos— no arrastre `charts/` consigo.
+   * The chosen PRESET VIEW (`preset-views.ts`), or `null`. It is not a mark but another way of
+   * deciding what the first Gráficos card compares, and that is why it is MUTUALLY EXCLUSIVE with
+   * `codes` in both directions: choosing one clears the account marks and marking an account
+   * deselects it. Both at once would put two different answers to «which series do I draw» with
+   * nothing to arbitrate them. It is a `string` and not the catalogue's type so this module —which
+   * `PygDataProvider` imports for Datos— does not drag `charts/` along with it.
    */
   preset: string | null;
 }
@@ -57,14 +58,14 @@ function toggled<T>(current: readonly T[], value: T, universe: readonly T[]): T[
 }
 
 /**
- * Marcar una cuenta deselecciona la vista predeterminada, PORQUE NORMALMENTE son dos respuestas a
- * la misma pregunta: «Ventas» dibuja categorías que no son cuentas del plan, así que nada podría
- * arbitrar entre lo que ella reparte y lo que unas marcas piden.
+ * Marking an account deselects the preset view, BECAUSE NORMALLY they are two answers to the same
+ * question: «Ventas» draws categories that are not accounts of the plan, so nothing could arbitrate
+ * between what it breaks down and what some marks ask for.
  *
- * `keepPreset` es la excepción, y la declara la vista cuyos rubros SON cuentas del plan: en el
- * anexo de gastos la marca y la vista dicen lo mismo, así que marcar una acota el reparto en vez
- * de contradecirlo. Sin esta salida, acotar el anexo apagaría la vista entera — que es justo lo
- * contrario de para lo que están las marcas.
+ * `keepPreset` is the exception, and it is declared by the view whose lines ARE accounts of the plan:
+ * in the expense annex the mark and the view say the same thing, so marking one narrows the breakdown
+ * instead of contradicting it. Without this exit, narrowing the annex would switch the whole view off
+ * — which is precisely the opposite of what marks are for.
  */
 export function withCodeToggled(
   filters: PygFilters,
@@ -80,19 +81,20 @@ export function withCodeToggled(
 }
 
 /**
- * Elige una vista predeterminada — y elegir la que ya está puesta la quita, que es como se sale de
- * ella sin un «ninguna» que no dice nada.
+ * Picks a preset view — and picking the one already in place removes it, which is how one exits it
+ * without a «none» that says nothing.
  *
- * Y SIEMBRA lo que la vista reparte —los centros y los periodos— en vez de repartirlo por su
- * cuenta: lo que dibuja queda marcado en los desplegables de siempre, así que se ve qué entra y se
- * quita desde donde el usuario ya sabe buscar. Al salir se limpian: eran marcas que puso la vista,
- * y dejar chips detrás de un interruptor apagado es basura que el usuario no puso.
+ * And it SEEDS what the view breaks down —the centers and the periods— instead of breaking it down on
+ * its own: what it draws stays marked in the usual dropdowns, so it is visible what goes in and it is
+ * removed from where the user already knows to look. On leaving they are cleared: they were marks the
+ * view made, and leaving chips behind a switched-off toggle is litter the user did not create.
  *
- * Las CUENTAS se borran siempre al entrar y ninguna vista las siembra. El anexo de gastos lo hizo
- * —sus rubros son cuentas del plan, así que marcarlas era «ver cuáles entran»—, y no salía: son
- * todas las de movimiento del árbol de gastos, más de cien en un plan real, o sea más de cien chips
- * en la tira. Que se pueda acotar por cuenta sin apagar la vista sobrevive aparte, en el
- * `keepPreset` de `withCodeToggled`, que ahora la vista declara en vez de heredarlo de la siembra.
+ * The ACCOUNTS are always cleared on entering and no view seeds them. The expense annex did —its
+ * lines are accounts of the plan, so marking them was «seeing which ones go in»—, and it did not work
+ * out: they are all the movement ones of the expense tree, over a hundred in a real plan, that is,
+ * over a hundred chips in the strip. That it can be narrowed by account without switching the view off
+ * survives separately, in `withCodeToggled`'s `keepPreset`, which the view now declares instead of
+ * inheriting it from the seeding.
  */
 export function withPresetSelected(
   filters: PygFilters,
@@ -253,9 +255,8 @@ export interface FilterSanitizeContext {
   /** Every year the workspace holds. */
   loadedYears: readonly number[];
   /**
-   * Los clientes que el consolidado puede sumar, por id. `[]` fuera del consolidado — que es lo
-   * que hace que una marca no sobreviva a volver a un cliente concreto, donde no querría decir
-   * nada.
+   * The clients the consolidado can sum, by id. `[]` outside the consolidado — which is what keeps a
+   * mark from surviving a return to a particular client, where it would mean nothing.
    */
   clients: readonly string[];
   frequency: Frequency;
@@ -319,9 +320,9 @@ export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeCont
     clientIds: prunedClientIds,
     years: prunedYears,
     periods: prunedPeriods,
-    // No se poda aquí: si una vista predeterminada es dibujable se sabe por los NOMBRES de las
-    // cuentas, que este contexto no trae. Con un plan que no la admite queda inerte —la tarjeta
-    // dibuja lo de siempre— y la sección de la barra ni siquiera se rinde.
+    // It is not pruned here: whether a preset view is drawable is known from the account NAMES, which
+    // this context does not carry. With a plan that does not admit it it stays inert —the card draws
+    // the usual thing— and the bar's section does not even render.
     preset: filters.preset,
   };
 }

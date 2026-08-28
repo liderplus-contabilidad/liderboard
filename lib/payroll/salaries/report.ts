@@ -1,16 +1,16 @@
 /**
- * El informe imprimible de Sueldos por Áreas: qué secciones lleva, en qué orden, cuáles se omiten
- * y qué escribe su cabecera. Puro — no calcula ninguna cifra propia — y por eso testeable sin
- * montar un gráfico.
+ * Sueldos por Áreas' printable report: which sections it carries, in what order, which are omitted
+ * and what its header writes. Pure — it computes no figure of its own — and therefore testable
+ * without mounting a chart.
  *
- * Es la misma tarjeta pedida N+1 veces: cada sección sale de `buildSalariesGrid` +
- * `buildSalariesCard`, las MISMAS que la pantalla ya construye, variando solo `areas` — `[]` para
- * el consolidado y `[area]` para cada área. Eso es lo que hace que el papel no pueda decir una
- * cifra que la pantalla no diga: una segunda definición del costo de un empleado podría separarse
- * de la primera sin que ninguna pantalla lo delate.
+ * It is the same card asked for N+1 times: each section comes out of `buildSalariesGrid` +
+ * `buildSalariesCard`, the SAME ones the screen already builds, varying only `areas` — `[]` for the
+ * consolidado and `[area]` for each area. That is what makes it impossible for the paper to say a
+ * figure the screen does not say: a second definition of an employee's cost could drift from the
+ * first with no screen giving it away.
  *
- * El informe IGNORA la marca de Área de la barra —por definición saca el consolidado y todas las
- * áreas— y HONRA las de Año y Mes, que son las que deciden qué columnas existen.
+ * The report IGNORES the bar's Área mark —by definition it puts out the consolidado and every area—
+ * and HONOURS those of Año and Mes, which are the ones that decide which columns exist.
  */
 import { formatTimestampEs, MONTHS_SHORT_ES } from "@/lib/date";
 import type { ChartCardSpec } from "@/lib/charts/types";
@@ -25,25 +25,25 @@ import {
   type SalariesSource,
 } from "./grid";
 
-/** Una sección del informe: el consolidado, o el detalle de un área. */
+/** One section of the report: the consolidado, or one area's detail. */
 export interface SalariesReportSection {
-  /** Estable: `"consolidado"`, o `area:${area}`. */
+  /** Stable: `"consolidado"`, or `area:${area}`. */
   id: string;
   card: ChartCardSpec;
 }
 
 export interface SalariesReportHeader {
-  /** La etiqueta que el usuario le dio al cliente, con su centro de costo si lo declaró
-   *  («Delicmar · Planta Ambato») — nunca la razón social de ningún archivo. */
+  /** The label the user gave the client, with its cost center if it declared one («Delicmar · Planta
+   *  Ambato») — never the razón social of any file. */
   clientName: string;
-  /** El de la IZQUIERDA: el del cliente. Quién ocupa cada lado lo decide `letterheadLogos`, la
-   *  misma regla que colocan el comprobante y el Excel. */
+  /** The LEFT-hand one: the client's. Who occupies each side is decided by `letterheadLogos`, the
+   *  same rule that places the payslip's and the Excel's. */
   logo?: EntityLogo;
-  /** El de la DERECHA: el del centro de costo, cuando lo declaró y le subió logo. */
+  /** The RIGHT-hand one: the cost center's, when it was declared and given a logo. */
   rightLogo?: EntityLogo;
-  /** «Ene 2026 – Dic 2026», o una lista si el rango tiene huecos. */
+  /** «Ene 2026 – Dic 2026», or a list if the range has gaps. */
   rangeLabel: string;
-  /** Cuántas secciones de ÁREA trae el informe — el consolidado no cuenta como una. */
+  /** How many ÁREA sections the report carries — the consolidado does not count as one. */
   areaCount: number;
   generatedAt: string;
 }
@@ -60,15 +60,15 @@ export interface BuildSalariesReportInput {
   source: SalariesSource;
   filters: SalariesFilters;
   parameters: PayrollParameters;
-  /** El sello de la cabecera — se toma una vez, al abrir la vista previa, para que no vaya
-   *  avanzando mientras el lector mira el informe. La capa pura no lee el reloj por su cuenta. */
+  /** The header's stamp — it is taken once, on opening the preview, so it does not keep advancing
+   *  while the reader looks at the report. The pure layer does not read the clock on its own. */
   generatedAt: Date;
 }
 
 export function buildSalariesReport(input: BuildSalariesReportInput): SalariesReport {
   const { clientName, logo, rightLogo, source, filters, parameters, generatedAt } = input;
-  // La marca de Área se ignora aquí, en el único sitio que arma el informe: ni el consolidado ni
-  // ninguna sección de área la reciben.
+  // The Área mark is ignored here, in the only place that assembles the report: neither the
+  // consolidado nor any area section receives it.
   const baseFilters: SalariesFilters = { ...filters, areas: [] };
 
   const consolidated = buildSalariesGrid(source, baseFilters, parameters);
@@ -76,8 +76,7 @@ export function buildSalariesReport(input: BuildSalariesReportInput): SalariesRe
   const areaSections: SalariesReportSection[] = [];
   for (const area of salariesUniverse(source).areas) {
     const grid = buildSalariesGrid(source, { ...baseFilters, areas: [area] }, parameters);
-    // Ausente, no vacía: una página en blanco le cuesta al lector la vuelta de hoja igual que
-    // una llena.
+    // Absent, not empty: a blank page costs the reader a page turn just as a full one does.
     if (grid.rows.length === 0) {
       continue;
     }
@@ -103,9 +102,9 @@ export function buildSalariesReport(input: BuildSalariesReportInput): SalariesRe
 }
 
 /**
- * «Ene 2026 – Dic 2026» cuando las columnas son un tramo continuo; «Ene 2025, Ene 2026» cuando no
- * lo son — la misma distinción que `periodRangeLabel` de PyG hace para su propio eje, reescrita
- * aquí sobre `SalariesColumn` para no atar Rol de Pagos a PyG por la presentación.
+ * «Ene 2026 – Dic 2026» when the columns are a continuous span; «Ene 2025, Ene 2026» when they are
+ * not — the same distinction PyG's `periodRangeLabel` makes for its own axis, rewritten here over
+ * `SalariesColumn` so as not to tie Rol de Pagos to PyG through presentation.
  */
 function rangeLabel(columns: readonly SalariesColumn[]): string {
   if (columns.length === 0) {

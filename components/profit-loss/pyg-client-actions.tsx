@@ -36,9 +36,9 @@ function describeClient(client: ClientSummary): string | undefined {
 }
 
 /**
- * El diálogo de nombre conectado al provider de PyG. Las reglas y el estado son de
- * `useEntityNaming`; aquí solo se dice de qué lista se trata — las palabras son las del default,
- * que son justamente las de PyG.
+ * The name dialog wired to PyG's provider. The rules and the state belong to `useEntityNaming`; all
+ * that is said here is which list it is about — the words are the default ones, which are precisely
+ * PyG's.
  */
 function useClientNaming() {
   const { clients, createClient, updateClient } = usePygData();
@@ -98,9 +98,9 @@ export function PygClientActions() {
         ...(client.logo ? { logo: client.logo } : {}),
       };
     });
-    // Se ofrece con dos o más clientes con datos. Si ya está abierto se sigue ofreciendo aunque
-    // deje de poder sumarse —borrar el penúltimo cliente— porque si no, la entrada abierta
-    // desaparecería de su propia lista y no habría desde dónde salir.
+    // It is offered with two or more clients with data. If it is already open it keeps being offered
+    // even when it stops being summable —deleting the second-to-last client— because otherwise the
+    // open entry would disappear from its own list and there would be nowhere to exit from.
     if (!consolidatable && !isConsolidated) {
       return rows;
     }
@@ -143,8 +143,8 @@ export function PygClientActions() {
       : dataset.periodLabel
     : undefined;
 
-  // El consolidado no es una fila de `clients`, así que el bloque no lo encuentra por id: su
-  // nombre y su subtítulo salen de lo que está sumando.
+  // The consolidado is not a row of `clients`, so the block does not find it by id: its name and its
+  // subtitle come out of what it is summing.
   const open = isConsolidated
     ? {
         name: CONSOLIDATED_CLIENT_NAME,
@@ -155,7 +155,7 @@ export function PygClientActions() {
           name: activeClient.name,
           ...(period ? { period } : {}),
           ...(activeClient.logo ? { logo: activeClient.logo } : {}),
-          // Solo con UN centro resuelto: el Consolidado no es un centro y no tiene logo propio.
+          // Only with ONE resolved center: the Consolidado is not a center and has no logo of its own.
           ...(activeView?.logo ? { centerLogo: activeView.logo } : {}),
         }
       : undefined;

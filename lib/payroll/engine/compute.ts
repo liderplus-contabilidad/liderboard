@@ -1,22 +1,22 @@
 /**
- * El motor de cálculo del rol de pagos: las 20 columnas derivadas de la hoja `GENERAL`, en el
- * orden de dependencias del §5 de `docs/payroll/rol-de-pagos-formulas.md`.
+ * The rol de pagos computation engine: the 20 columns derived from the `GENERAL` sheet, in the
+ * dependency order of §5 of `docs/payroll/rol-de-pagos-formulas.md`.
  *
- * Es la reimplementación de las fórmulas del libro del contador, verificada contra el archivo
- * real de marzo 2026: reproduce las 20 columnas de los 6 empleados **exactas al bit**, ruido de
- * coma flotante incluido (`golden.test.ts`).
+ * It is the reimplementation of the accountant's book formulas, verified against the real March 2026
+ * file: it reproduces the 20 columns of the 6 employees **exact to the bit**, floating-point noise
+ * included (`golden.test.ts`).
  *
- * Dos reglas gobiernan todo lo de abajo y no son cosmética:
+ * Two rules govern everything below and they are not cosmetic:
  *
- * - **Las derivaciones redondean a dos decimales; los totales NO** (§9). `W`, `AO`, `AP`, `AX`
- *   y `AY` arrastran el ruido a propósito, porque es lo que guarda el archivo y lo que se
- *   compara contra el `PAGADO` tecleado a mano.
- * - **Los totales suman en el ORDEN DE COLUMNAS del libro.** Sin redondeo de por medio la suma
- *   en coma flotante no es asociativa, así que reordenar sumandos «para que se lea mejor»
- *   puede separar el resultado en el último bit.
+ * - **The derivations round to two decimals; the totals do NOT** (§9). `W`, `AO`, `AP`, `AX` and
+ *   `AY` carry the noise on purpose, because it is what the file stores and what gets compared
+ *   against the hand-typed `PAGADO`.
+ * - **The totals add in the book's COLUMN ORDER.** With no rounding in between, floating-point
+ *   addition is not associative, so reordering addends «so it reads better» can shift the result in
+ *   the last bit.
  *
- * Nada aquí decide qué es un empleado ni de dónde salen los números: eso es de `upload/` y de
- * `db.ts`. Este módulo es una función pura de `(input, parámetros) → cifras`.
+ * Nothing here decides what an employee is or where the numbers come from: that belongs to `upload/`
+ * and to `db.ts`. This module is a pure function of `(input, parameters) → figures`.
  */
 import { sameToTheCentavo } from "../amounts";
 import {
@@ -36,7 +36,7 @@ import type {
   PayrollEmployeeInput,
 } from "./types";
 
-/** `Y`…`AN` en el orden en que el libro los barre con `SUM(X:AN)`. */
+/** `Y`…`AN` in the order the book sweeps them with `SUM(X:AN)`. */
 function sumCapturedDeductions(d: CapturedDeductions): number {
   return (
     d.iessLoans +
@@ -54,9 +54,9 @@ function sumCapturedDeductions(d: CapturedDeductions): number {
   );
 }
 
-/** Cero exacto cuando el valor no llega a un centavo; si llega, se devuelve INTACTO, con su
- *  ruido. Se apoya en `sameToTheCentavo`, que es la única definición de «mismo importe» del
- *  módulo, para no abrir una segunda aquí. Ver el comentario de `difference` más abajo. */
+/** Exactly zero when the value does not reach a cent; if it does, it is returned INTACT, with its
+ *  noise. It leans on `sameToTheCentavo`, which is the module's only definition of «same amount», so
+ *  as not to open a second one here. See the comment on `difference` further below. */
 function collapseSubCentavoNoise(value: number): number {
   return sameToTheCentavo(value, 0) ? 0 : value;
 }
@@ -67,12 +67,12 @@ export function computeEmployeePayroll(
 ): PayrollEmployeeComputation {
   const p = parameters;
 
-  // 1 · `F` — el sueldo base prorrateado por días. No se acota por arriba: el libro no lo hace,
-  // y un mes de 31 días con 31 pagados es un caso real, no un error de captura.
+  // 1 · `F` — the base salary prorated by days. It is not capped from above: the book does not do
+  // it, and a 31-day month with 31 paid is a real case, not a capture error.
   const unifiedSalary = roundToCents((input.baseSalary / p.monthlyDays) * input.days);
 
-  // 2 · `J`, `K`, `L` — el valor de la hora sale del sueldo BASE, no del unificado: a quien
-  // trabajó medio mes su hora extra se le paga a tarifa completa.
+  // 2 · `J`, `K`, `L` — the hourly rate comes out of the BASE salary, not the unified one: someone
+  // who worked half a month is paid their overtime at the full rate.
   const hourlyRate = input.baseSalary / p.monthlyDays / p.dailyHours;
   const overtimePay50 = roundToCents(hourlyRate * p.overtimeMultiplier50 * input.overtimeHours50);
   const overtimePay100 = roundToCents(
@@ -80,25 +80,25 @@ export function computeEmployeePayroll(
   );
   const overtimePay25 = roundToCents(hourlyRate * p.overtimeMultiplier25 * input.overtimeHours25);
 
-  // 3 · `M` — el importe de horas extras que se reconoce. Se TECLEA, no se calcula: `null` es
-  // «todas las trabajadas» y cualquier número es ese importe exacto, incluido el `0` que el
-  // libro escribe como `*0`. Lo no reconocido sigue VISIBLE en las tres columnas de arriba pero
-  // no alimenta NADA: ni el total, ni el aporte, ni los décimos, ni las provisiones (§6).
+  // 3 · `M` — the overtime amount that is recognised. It is TYPED, not computed: `null` is «all the
+  // hours worked» and any number is that exact amount, including the `0` the book writes as `*0`.
+  // What is not recognised stays VISIBLE in the three columns above but feeds NOTHING: not the
+  // total, not the contribution, not the décimos, not the provisions (§6).
   //
-  // La rama `null` no redondea, igual que el libro, que escribe literalmente `(J+K+L)`: los tres
-  // sumandos ya vienen redondeados y su suma arrastra el ruido que `W` tiene que conservar (§9).
-  // Redondear aquí «para que quede limpio» rompería la igualdad al bit con el archivo.
+  // The `null` branch does not round, just like the book, which literally writes `(J+K+L)`: the
+  // three addends already arrive rounded and their sum carries the noise `W` has to keep (§9).
+  // Rounding here «to keep it clean» would break bit equality with the file.
   const overtimeTotal = input.approvedOvertime ?? overtimePay50 + overtimePay100 + overtimePay25;
 
-  // 4 · `N` — el SBU repartido en el año por días trabajados. No depende del sueldo del
-  // empleado; el contrato parcial cobra la mitad.
+  // 4 · `N` — the SBU spread over the year by days worked. It does not depend on the employee's
+  // salary; a part-time contract receives half.
   const fourteenthFull = (p.unifiedBasicSalary / p.yearlyDays) * input.days;
   const fourteenthMonthly = roundToCents(
     input.contractType === "CT" ? fourteenthFull : fourteenthFull / 2,
   );
 
-  // Los componentes se van llenando en el orden en que las bases los necesitan: `O` se deriva
-  // de una base que NO lo contiene, y después entra en otras dos.
+  // The components are filled in the order the bases need them: `O` is derived from a base that does
+  // NOT contain it, and afterwards it enters two others.
   const components: IncomeComponents = {
     unifiedSalary,
     overtimeTotal,
@@ -115,33 +115,33 @@ export function computeEmployeePayroll(
     nonContributoryExtras: input.extras.nonContributory,
   };
 
-  // 5 · `O` — un doceavo de su propia base, que deja fuera las vacaciones mensualizadas.
+  // 5 · `O` — a twelfth of its own base, which leaves the monthly vacations out.
   components.thirteenthMonthly = roundToCents(thirteenthBase(components) / 12);
 
-  // 6 · `U` — solo lo cobra quien tiene derecho Y no lo acumula. Un doceavo, no la tasa del
-  // 8,33 % que usa su gemelo `AW`: no dan lo mismo y el libro no los unifica (§7, §8).
+  // 6 · `U` — only received by whoever is entitled AND does not accrue it. A twelfth, not the 8.33 %
+  // rate its twin `AW` uses: they are not the same and the book does not unify them (§7, §8).
   components.reserveFundPaid =
     input.hasReserveFund && !input.accumulatesReserveFund
       ? roundToCents(contributoryBase(components) / 12)
       : 0;
 
-  // 7 · `W` — sin redondear, en el orden de columnas del libro.
+  // 7 · `W` — unrounded, in the book's column order.
   const gross = grossIncome(components);
 
-  // 8 · `X` — base aportable por la tasa personal.
+  // 8 · `X` — the contributory base times the personal rate.
   const iessEmployee = roundToCents(contributoryBase(components) * p.iessEmployeeRate);
 
-  // 9 · `AO` y 10 · `AP` — sin redondear ninguno de los dos.
+  // 9 · `AO` and 10 · `AP` — neither of the two rounded.
   const totalDeductions = iessEmployee + sumCapturedDeductions(input.deductions);
   const netPay = gross - totalDeductions;
 
-  // 11 · las cinco de la provisión, en orden de columna.
+  // 11 · the five of the provision, in column order.
   const thirteenthProvision = input.flags.provisionsThirteenth
     ? roundToCents(thirteenthProvisionBase(components) / 12)
     : 0;
-  // El libro escribe aquí un `470` rancio (y un `846` en su fila plantilla) en vez del SBU
-  // vigente, pero como la columna va siempre multiplicada por cero nunca se pudo verificar
-  // cuál era el correcto. Se usa el SBU del período, que es la única lectura defendible.
+  // The book writes a stale `470` here (and an `846` in its template row) instead of the current
+  // SBU, but since the column is always multiplied by zero it was never possible to verify which was
+  // the right one. The período's SBU is used, which is the only defensible reading.
   const fourteenthProvisionFull = (p.unifiedBasicSalary / p.yearlyDays) * input.days;
   const fourteenthProvision = input.flags.provisionsFourteenth
     ? roundToCents(
@@ -155,7 +155,7 @@ export function computeEmployeePayroll(
       ? roundToCents(reserveFundAccrualBase(components) * p.reserveFundRate)
       : 0;
 
-  // 12 · `AX` y 13 · `AY` — sin redondear.
+  // 12 · `AX` and 13 · `AY` — unrounded.
   const totalProvision =
     thirteenthProvision +
     fourteenthProvision +
@@ -164,17 +164,17 @@ export function computeEmployeePayroll(
     reserveFundAccrued;
   const employerCost = totalProvision + gross;
 
-  // 14 · `CA` — `null` cuando no hay `PAGADO`: sin él no se puede afirmar ni que cuadra ni que
-  // no, y un cero ahí sería una conciliación inventada.
+  // 14 · `CA` — `null` when there is no `PAGADO`: without it neither that it squares nor that it does
+  // not can be claimed, and a zero there would be an invented reconciliation.
   //
-  // Por DEBAJO del centavo la diferencia se colapsa a cero exacto, y no es una licencia: el
-  // líquido es una suma sin redondear que llega con ruido (`457.69000000000005`) mientras lo
-  // pagado está tecleado a mano con dos decimales (`457.69`), así que toda diferencia real es
-  // un número entero de centavos y cualquier resto es del binario. Es la misma regla que
-  // `sameToTheCentavo` ya aplica en el asiento, y es también lo que hace el archivo:
-  // Excel colapsa a cero una resta despreciable frente a sus operandos, por eso `CA15` guarda
-  // `0` y no `5,7e-14`. Lo que NO se toca es una diferencia de verdad: la de VEGA sigue siendo
-  // `-41.70999999999992`, con su ruido, exactamente como el libro la guarda.
+  // BELOW a cent the difference collapses to exactly zero, and that is not a liberty: the net pay is
+  // an unrounded sum that arrives with noise (`457.69000000000005`) while what was paid is typed by
+  // hand with two decimals (`457.69`), so every real difference is a whole number of cents and any
+  // remainder belongs to the binary. It is the same rule `sameToTheCentavo` already applies in the
+  // journal entry, and it is also what the file does: Excel collapses to zero a subtraction that is
+  // negligible against its operands, which is why `CA15` stores `0` and not `5.7e-14`. What is NOT
+  // touched is a real difference: VEGA's is still `-41.70999999999992`, with its noise, exactly as
+  // the book stores it.
   const difference = input.paid === null ? null : collapseSubCentavoNoise(netPay - input.paid);
 
   return {

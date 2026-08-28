@@ -36,7 +36,7 @@ const MESSAGES: Record<PygParseErrorCode, string> = {
   "missing-date-range":
     'El estado único debe declarar su rango de fechas ("Desde el … hasta el …"); no se encontró esa línea.',
   "invalid-date-range": "El rango de fechas del archivo no corresponde a un mes calendario.",
-  // El año salió de la identidad con `pyg-multi-year`: mezclar años en una carga es válido.
+  // The year came out of the identity with `pyg-multi-year`: mixing years in one upload is valid.
   "mixed-identity": "La carga mezcla archivos de empresas, sistemas o modos distintos.",
 };
 

@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 
 /**
- * Lo que rinde `/payroll/[periodId]` cuando el id no existe o no pertenece al cliente abierto —
- * nunca un crash ni una pantalla en blanco. Cubre las dos causas con el mismo mensaje: para quien
- * lee, «no está» y «no es tuyo» son la misma situación, y distinguirlas no cambiaría la salida.
+ * What `/payroll/[periodId]` renders when the id does not exist or does not belong to the open client
+ * — never a crash and never a blank screen. It covers both causes with the same message: to the
+ * reader, «it is not there» and «it is not yours» are the same situation, and telling them apart
+ * would not change the exit.
  */
 export function PeriodNotFound() {
   const router = useRouter();

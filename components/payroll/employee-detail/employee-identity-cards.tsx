@@ -1,32 +1,32 @@
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 
 interface EmployeeIdentityCardsProps {
-  /** El nombre que el usuario le puso al cliente — NO la razón social del archivo, que este módulo
-   *  nunca compara contra nada (misma regla que PyG y Ocupaciones).
+  /** The name the user gave the client — NOT the razón social of the file, which this module never
+   *  compares against anything (the same rule as PyG and Ocupaciones).
    *
-   *  Los DATOS DE LA EMPRESA no entran aquí, y es deliberado: se probaron —razón social, ubicación
-   *  y teléfonos bajo el nombre— y esta ficha pasó de cuatro líneas a ocho para repetir algo que en
-   *  pantalla no se usa. El membrete existe para el papel, así que vive donde se imprime: el
-   *  comprobante en PDF y el Excel del período. */
+   *  The COMPANY DATA does not go here, and that is deliberate: it was tried —razón social, location
+   *  and phone numbers under the name— and this card went from four lines to eight to repeat
+   *  something that is not used on screen. The letterhead exists for the paper, so it lives where it
+   *  prints: the payslip in PDF and the período's Excel. */
   clientName: string;
-  /** El centro de costo del empleado. `null` mientras la ficha no lo declare: no es «GENERAL», es
-   *  «no hay». */
+  /** The employee's cost center. `null` while the record does not declare it: it is not «GENERAL», it
+   *  is «there is none». */
   costCenter: string | null;
   employee: PayrollEmployeeLine;
 }
 
 /**
- * Las dos fichas de identidad del rol: de quién es la nómina y de quién es el sueldo. Van juntas y
- * en paralelo porque el comprobante del contador las imprime así — un rol se lee identificando las
- * dos partes antes que ninguna cifra.
+ * The rol's two identity cards: whose nómina it is and whose salary it is. They go together and side
+ * by side because the accountant's payslip prints them that way — a rol is read by identifying the
+ * two parties before any figure.
  *
- * Los datos van en TEXTO CORRIDO con su prefijo dentro («C.C. 1714097084»), no en pares de rótulo
- * y valor: son tres líneas de una ficha, no una tabla de dos columnas, y un rótulo en
- * micro-mayúsculas sobre cada dato pesaría más que el dato.
+ * The data goes in RUNNING TEXT with its prefix inside («C.C. 1714097084»), not in label/value pairs:
+ * they are three lines of a card, not a two-column table, and a micro-uppercase label over each
+ * datum would weigh more than the datum.
  *
- * El ÁREA se pinta del lado del empleador y no del empleado: es el bloque del rol (ADMINISTRACION,
- * HOSPEDAJE, COCINA…) bajo el que la empresa agrupa el gasto, y lo que lo hace legible es leerlo
- * junto al centro de costo.
+ * The ÁREA is painted on the employer's side and not the employee's: it is the block of the rol
+ * (ADMINISTRACION, HOSPEDAJE, COCINA…) under which the company groups the cost, and what makes it
+ * readable is reading it next to the cost center.
  */
 export function EmployeeIdentityCards({
   clientName,
@@ -44,8 +44,8 @@ export function EmployeeIdentityCards({
         </div>
       </div>
 
-      {/* El avatar va a la DERECHA: en esta ficha lo primero que se lee es el nombre, y una inicial
-          delante de él lo desplaza sin añadir nada que el nombre no diga ya. */}
+      {/* The avatar goes on the RIGHT: on this card the first thing read is the name, and an initial
+          in front of it displaces it without adding anything the name does not already say. */}
       <div className="flex items-start gap-3.5 rounded-[11px] border border-border px-[18px] py-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-bold text-brand">{employee.name}</p>
@@ -61,8 +61,8 @@ export function EmployeeIdentityCards({
   );
 }
 
-/** La inicial del empleado. Un nombre vacío nunca debería llegar, pero si llega vale más una caja
- *  con «?» que una caja rota. */
+/** The employee's initial. An empty name should never arrive, but if it does a box with «?» is worth
+ *  more than a broken box. */
 function InitialAvatar({ name }: { name: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || "?";
 

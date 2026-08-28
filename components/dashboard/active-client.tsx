@@ -37,9 +37,9 @@ export interface ActiveClientInfo {
   /** The logo, if this workspace has one. */
   logo?: EntityLogo;
   /**
-   * El del CENTRO abierto, cuando hay exactamente uno resuelto. Va junto al del cliente y en el
-   * mismo orden que en los archivos —principal primero—, así que la cabecera confirma en pantalla
-   * lo que el Excel y el informe van a imprimir.
+   * The one of the OPEN center, when exactly one is resolved. It goes next to the client's and in
+   * the same order as in the files —principal first—, so the header confirms on screen what the
+   * Excel and the report are going to print.
    */
   centerLogo?: EntityLogo;
 }
@@ -51,30 +51,30 @@ export interface ClientOption {
   /** «Por centros de costo · 2024–2026», or `undefined` for a client with no data yet. */
   caption?: string;
   /**
-   * Una entrada que se ABRE pero no se administra: sin menú `⋯`, y separada de la lista por una
-   * línea. Es lo que necesita el consolidado entre clientes, que no es una fila guardada sino una
-   * lectura derivada de todas ellas — renombrarlo o eliminarlo no querría decir nada.
+   * An entry that can be OPENED but not administered: no `⋯` menu, and separated from the list by a
+   * rule. It is what the cross-client consolidado needs, which is not a stored row but a reading
+   * derived from all of them — renaming or deleting it would not mean anything.
    */
   readOnly?: boolean;
-  /** El logo del cliente, si subió uno. El consolidado, que no es una fila guardada, no tiene. */
+  /** The client's logo, if it uploaded one. The consolidado, not being a stored row, has none. */
   logo?: EntityLogo;
 }
 
 /**
- * El logo de un workspace dibujado a un tamaño dado. Devuelve `null` sin logo en vez de un marcador
- * gris: la cabecera de quien no suba ninguno tiene que quedar exactamente como estaba, y un hueco
- * vacío ahí solo añadiría ruido a un bloque que hoy está limpio.
+ * A workspace's logo drawn at a given size. Returns `null` with no logo instead of a grey
+ * placeholder: the header of whoever uploads none has to stay exactly as it was, and an empty gap
+ * there would only add noise to a block that is clean today.
  *
- * El `alt` va VACÍO a propósito. El nombre del cliente está escrito al lado en las dos superficies
- * que lo usan, así que un texto alternativo lo repetiría en voz alta: el logo es decoración de una
- * etiqueta que ya se lee.
+ * The `alt` is EMPTY on purpose. The client's name is written beside it on both surfaces that use
+ * it, so alternative text would repeat it out loud: the logo is decoration for a label that is
+ * already being read.
  */
 function EntityLogoMark({ logo, size }: { logo: EntityLogo | undefined; size: number }) {
   if (!logo) {
     return null;
   }
   return (
-    // Sin `next/image`: la fuente es un data URL de IndexedDB, no un asset con ruta.
+    // No `next/image`: the source is a data URL from IndexedDB, not an asset with a path.
     // oxlint-disable-next-line next/no-img-element
     <img
       src={logo.dataUrl}
@@ -87,38 +87,38 @@ function EntityLogoMark({ logo, size }: { logo: EntityLogo | undefined; size: nu
   );
 }
 
-/** Ancho del menú `⋯` de una fila. Se resta del borde derecho del botón para alinearlos. */
+/** Width of a row's `⋯` menu. Subtracted from the button's right edge to line them up. */
 const ROW_MENU_WIDTH = 170;
 
 /**
- * Las palabras con que un módulo llama a lo que guarda. Este bloque es el mismo control en PyG y en
- * Ocupaciones, pero el sujeto NO es el mismo —allí es el cliente, aquí el hotel—, y un selector que
- * dijera «cliente» sobre una lista de hoteles sería una mentira pequeña repetida en diez sitios.
+ * The words a module uses for what it holds. This block is the same control in PyG and in
+ * Ocupaciones, but the SUBJECT is NOT the same —there it is the client, here the hotel—, and a
+ * selector saying «cliente» over a list of hotels would be a small lie repeated in ten places.
  *
- * El default es el de PyG, que es quien lo estrenó, así que sus llamadas no cambian.
+ * The default is PyG's, which is the one that introduced it, so its calls do not change.
  */
 export interface EntityLabels {
-  /** Singular en minúscula: «cliente», «hotel». Las frases se construyen con él. */
+  /** Lowercase singular: «cliente», «hotel». The phrases are built with it. */
   subject: string;
-  /** Plural en minúscula: «clientes», «hoteles». */
+  /** Lowercase plural: «clientes», «hoteles». */
   plural: string;
-  /** Lo que un renombrado NO toca, en las palabras del módulo. */
+  /** What a rename does NOT touch, in the module's own words. */
   renameKeeps: string;
   /**
-   * Cómo llama el módulo a un centro: «centro de costo», «sucursal». OPCIONAL porque hay módulos
-   * que no tienen ninguno —los clientes de Rol de Pagos—, y obligarles a nombrar algo que no
-   * existe sería copia muerta. Sin estas dos palabras la sección de logos por centro NO se rinde
-   * aunque lleguen centros: quedarse sin la sección se ve, y llamarla por el nombre del módulo
-   * equivocado no.
+   * What the module calls a center: «centro de costo», «sucursal». OPTIONAL because there are
+   * modules with none —Rol de Pagos' clients—, and forcing them to name something that does not
+   * exist would be dead copy. Without these two words the per-center logo section does NOT render
+   * even when centers arrive: missing the section shows, calling it by the wrong module's name does
+   * not.
    */
   centerSubject?: string;
-  /** Su plural: «centros de costo», «sucursales». No se deriva del singular — «centros de costo»
-   *  no es «centro de costo» + «s», y una regla que lo intentara acertaría en un módulo y no en el
-   *  otro. */
+  /** Its plural: «centros de costo», «sucursales». Not derived from the singular — «centros de
+   *  costo» is not «centro de costo» + «s», and a rule that tried would be right in one module and
+   *  wrong in the other. */
   centerPlural?: string;
 }
 
-/** Las de PyG, que es quien estrenó el bloque, y por eso son también el default. */
+/** PyG's, which is what introduced the block, and that is why they are also the default. */
 export const DEFAULT_ENTITY_LABELS: EntityLabels = {
   subject: "cliente",
   plural: "clientes",
@@ -146,7 +146,7 @@ export interface ActiveClientProps {
   onCreate?: () => void;
   onRename?: (clientId: string) => void;
   onDelete?: (clientId: string) => void;
-  /** Cómo llama el módulo a lo que lista. Por defecto, el cliente de PyG. */
+  /** What the module calls what it lists. By default, PyG's client. */
   labels?: EntityLabels;
 }
 
@@ -240,17 +240,17 @@ export function ActiveClient({
   );
 
   /**
-   * Si ALGUNA fila tiene logo. La columna de miniaturas aparece entera o no aparece: reservarla
-   * cuando nadie ha subido ninguno sangraría toda la lista por un espacio que nunca se llena, y
-   * quitársela a las filas sin logo cuando otras sí lo tienen desalinearía los nombres.
+   * Whether ANY row has a logo. The thumbnail column appears whole or not at all: reserving it when
+   * nobody has uploaded one would indent the entire list for a space that never gets filled, and
+   * taking it away from the rows without a logo when others have one would misalign the names.
    */
   const someHasLogo = useMemo(() => (clients ?? []).some((entry) => entry.logo), [clients]);
 
   const block = (
     <div className="flex min-w-0 items-center gap-2.5">
-      {/* A la IZQUIERDA del nombre, no encima: el bloque va alineado a la derecha contra el borde
-          de la cabecera, así que el logo es lo primero que se cruza al venir desde el contenido.
-          Con el del centro detrás, el par se lee en el mismo orden en que se imprime. */}
+      {/* To the LEFT of the name, not above it: the block is right-aligned against the header's
+          edge, so the logo is the first thing crossed coming in from the content. With the center's
+          behind it, the pair reads in the same order in which it prints. */}
       <EntityLogoMark logo={client?.logo} size={28} />
       <EntityLogoMark logo={client?.centerLogo} size={24} />
       <div className="flex min-w-0 flex-col items-end gap-[3px]">
@@ -313,9 +313,9 @@ export function ActiveClient({
       </button>
 
       {open && (
-        // Un contenedor sin rol: todo lo que hay dentro (el buscador, cada cliente, cada acción)
-        // es ya interactivo por sí mismo, así que un `role` aquí solo añadiría un nivel que
-        // ningún lector necesita anunciar. Escape se atiende arriba, junto a ⌘K.
+        // A container with no role: everything inside it (the search box, each client, each action)
+        // is already interactive on its own, so a `role` here would only add a level no reader
+        // needs announced. Escape is handled above, next to ⌘K.
         <div
           id={listId}
           className="absolute right-0 top-[calc(100%+8px)] z-40 w-[340px] rounded-[13px] border border-border bg-surface p-2 shadow-[0_18px_44px_rgba(15,23,42,0.18)]"
@@ -359,7 +359,7 @@ export function ActiveClient({
               {visible.map((entry, index) => (
                 <li
                   key={entry.id}
-                  // Una línea donde termina lo que no se administra y empieza la lista.
+                  // A rule where what is not administered ends and the list begins.
                   className={cn(
                     entry.readOnly &&
                       !visible[index + 1]?.readOnly &&
@@ -384,8 +384,8 @@ export function ActiveClient({
                       }}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      {/* Un hueco del mismo ancho cuando no hay logo: con unas filas sangradas y
-                          otras no, la columna de nombres deja de poder leerse en vertical. */}
+                      {/* A gap of the same width when there is no logo: with some rows indented and
+                          others not, the column of names stops being readable vertically. */}
                       {someHasLogo && (
                         <span className="flex size-5 shrink-0 items-center justify-center">
                           <EntityLogoMark logo={entry.logo} size={20} />
@@ -451,13 +451,13 @@ export function ActiveClient({
         </div>
       )}
 
-      {/* Fuera del panel y del `ul` que scrollea, anclado al botón que lo abrió: dentro sería
-          recortado por el contenedor de scroll y arrastraría su propia barra. */}
+      {/* Outside the panel and the `ul` that scrolls, anchored to the button that opened it: inside
+          it would be clipped by the scroll container and would drag its own scrollbar. */}
       {menuFor && (
         <div
           role="menu"
-          // El ancho va en el estilo, no en una clase, porque es la misma cifra que se resta del
-          // borde derecho del botón para alinearlos: una sola cifra, un solo sitio.
+          // The width goes in the style, not in a class, because it is the same figure subtracted
+          // from the button's right edge to line them up: one figure, one place.
           style={{ top: menuFor.top, left: menuFor.right - ROW_MENU_WIDTH, width: ROW_MENU_WIDTH }}
           className="fixed z-50 rounded-[9px] border border-border bg-surface p-1 shadow-[0_14px_36px_rgba(15,23,42,0.16)]"
         >
@@ -532,31 +532,31 @@ export function ClientNameDialog({
   value: string;
   logo: EntityLogo | null;
   /**
-   * Los centros de este workspace. SIN ellos —o vacíos— el diálogo queda exactamente como estaba,
-   * que es lo que deja intacto a Rol de Pagos, cuyos clientes no tienen centros, y a un cliente en
-   * estado único, que tampoco.
+   * This workspace's centers. WITHOUT them —or empty— the dialog stays exactly as it was, which is
+   * what leaves Rol de Pagos untouched, whose clients have no centers, and a client in single-
+   * statement mode, which has none either.
    */
   centers?: readonly CenterOption[];
   centerLogos?: CenterLogos | undefined;
   /**
-   * Los datos de la empresa que este workspace imprime en su membrete. Entran por la misma puerta
-   * que `centers`: sin ellos el diálogo queda EXACTAMENTE como estaba, que es lo que deja intactos a
-   * los módulos que no piden perfil. Hoy solo lo pasa Rol de Pagos.
+   * The company data this workspace prints in its letterhead. It comes in through the same door as
+   * `centers`: without it the dialog stays EXACTLY as it was, which is what leaves the modules that
+   * ask for no profile untouched. Today only Rol de Pagos passes it.
    */
   company?: CompanyDraft;
   onCompanyChange?: (field: CompanyField, value: string) => void;
-  /** El rechazo del perfil al enviar —un RUC que no tiene trece dígitos—, ya en castellano. */
+  /** The profile's rejection on submit —a RUC without thirteen digits—, already in Spanish. */
   companyError?: string | null;
   /**
-   * El CENTRO DE COSTO de este workspace: un nombre más específico que el suyo y su propio logo,
-   * los dos opcionales. Entra por la misma puerta que `company` y que `centers` —sin él el diálogo
-   * queda EXACTAMENTE como estaba—, y no es lo mismo que aquellos: `centers` LISTA los centros que
-   * salen de los datos para ponerles logo, y esto DECLARA uno que no está en ningún dato. Hoy solo
-   * lo pasa Rol de Pagos.
+   * This workspace's COST CENTER: a name more specific than its own plus its own logo, both
+   * optional. It comes in through the same door as `company` and `centers` —without it the dialog
+   * stays EXACTLY as it was—, and it is not the same as those: `centers` LISTS the centers that come
+   * out of the data so they can be given a logo, and this DECLARES one that is in no data at all.
+   * Today only Rol de Pagos passes it.
    */
   costCenter?: CostCenterDraft;
   onCostCenterChange?: (draft: CostCenterDraft) => void;
-  /** El rechazo del centro al enviar —un logo sin nombre—, ya en castellano. */
+  /** The center's rejection on submit —a logo with no name—, already in Spanish. */
   costCenterError?: string | null;
   error: string | null;
   busy?: boolean;
@@ -579,16 +579,17 @@ export function ClientNameDialog({
     return null;
   }
   const creating = mode === "create";
-  // Las dos palabras van juntas o no van: media sección rotulada «Logos por» sin sujeto es peor
-  // que ninguna.
+  // The two words travel together or not at all: half a section headed «Logos por» with no subject
+  // is worse than none.
   const centerWords =
     labels.centerSubject && labels.centerPlural
       ? { subject: labels.centerSubject, plural: labels.centerPlural }
       : null;
 
-  // El primer obligatorio que falta apaga «Guardar» y DICE cuál es. Un botón apagado sin motivo
-  // manda a repasar ocho campos a ojo, que es justo lo que este mensaje evita. El RUC no entra
-  // aquí: mientras se teclea está siempre a medias, así que se juzga al enviar.
+  // The first missing required field switches «Guardar» off and SAYS which one it is. A button
+  // switched off with no reason sends the reader over eight fields by eye, which is exactly what
+  // this message avoids. The RUC is not part of it: while being typed it is always half-written, so
+  // it is judged on submit.
   const missingCompany = company && onCompanyChange ? firstMissingCompanyField(company) : null;
 
   return (
@@ -599,9 +600,9 @@ export function ClientNameDialog({
           onSubmit();
         }}
         className={cn(
-          // Con la sección de empresa el modal es más ancho —seis campos en 440 px salen en una
-          // columna altísima— y puede scrollear: el botón que lo cierra no puede quedar fuera de
-          // la pantalla por cuántos campos pide.
+          // With the company section the modal is wider —six fields in 440 px come out as a very
+          // tall single column— and it can scroll: the button that closes it cannot end up off
+          // screen because of how many fields it asks for.
           "w-full max-h-[calc(100vh-56px)] overflow-y-auto rounded-[13px] border border-border bg-surface p-5 shadow-[0_24px_60px_rgba(15,23,42,0.24)]",
           (company && onCompanyChange) || (costCenter && onCostCenterChange)
             ? "max-w-[560px]"
@@ -653,11 +654,11 @@ export function ClientNameDialog({
         </div>
 
         {/*
-          El centro de costo va JUNTO al nombre y al logo del cliente porque es la otra mitad de lo
-          mismo —cómo se llama y qué cara tiene lo que emite este papel—, y encima del membrete
-          porque así el diálogo se lee en el orden en que el papel se imprime: primero quién
-          encabeza el papel, después de quién es el logo que lo cierra. La sección no existe
-          si el módulo no la pide.
+          The cost center goes NEXT TO the client's name and logo because it is the other half of the
+          same thing —what the paper that is issued is called and what face it has— and above the
+          letterhead because that way the dialog reads in the order in which the paper prints: first
+          who heads the paper, then whose is the logo that closes it. The section does not exist if
+          the module does not ask for it.
         */}
         {costCenter && onCostCenterChange && (
           <div className="mt-4 flex flex-col gap-1.5 rounded-[9px] border border-border-soft p-3">
@@ -699,10 +700,11 @@ export function ClientNameDialog({
         )}
 
         {/*
-          Los datos de la empresa son el MEMBRETE: lo que el papel de la firma imprime bajo el logo.
-          Van aquí y no en una pantalla propia porque son la otra mitad de lo mismo que el nombre y
-          el logo —la identidad de este workspace— y separarlos obligaría a recordar cuál se edita
-          dónde. La sección no existe si el módulo no la pide.
+          The company data is the LETTERHEAD: what the firm's paper prints under the logo. It goes
+          here and not on a screen of its own because it is the other half of the same thing as the
+          name and the logo —this workspace's identity— and separating them would force the reader to
+          remember which one is edited where. The section does not exist if the module does not ask
+          for it.
         */}
         {company && onCompanyChange && (
           <div className="mt-4 flex flex-col gap-1.5">
@@ -746,11 +748,11 @@ export function ClientNameDialog({
         )}
 
         {/*
-          Los logos de los centros van DEBAJO del principal y en el mismo diálogo porque son la
-          misma cosa —la identidad visual de este workspace— y separarlos en dos sitios obligaría a
-          recordar cuál se edita dónde. La sección no existe hasta que hay centros: un cliente
-          recién creado no tiene ninguno, y un título que promete una lista sobre una lista vacía es
-          peor que no estar.
+          The centers' logos go BELOW the main one and in the same dialog because they are the same
+          thing —this workspace's visual identity— and splitting them across two places would force
+          the reader to remember which one is edited where. The section does not exist until there
+          are centers: a freshly created client has none, and a title promising a list over an empty
+          list is worse than not being there.
         */}
         {centers && centers.length > 0 && onCenterLogoChange && centerWords && (
           <div className="mt-4 flex flex-col gap-1.5">
@@ -764,9 +766,9 @@ export function ClientNameDialog({
               En la hoja de cada {centerWords.subject}, el logo del {labels.subject} va a la
               izquierda y el suyo a la derecha.
             </p>
-            {/* Con más de cuatro centros la lista scrollea en vez de empujar «Guardar» fuera de
-                la pantalla: el botón que cierra el diálogo no puede depender de cuántos centros
-                cargó el cliente. */}
+            {/* Past four centers the list scrolls instead of pushing «Guardar» off screen: the
+                button that closes the dialog cannot depend on how many centers the client
+                loaded. */}
             <ul className="max-h-[196px] divide-y divide-border-faint overflow-y-auto rounded-[9px] border border-border-soft px-2.5">
               {centers.map((center) => (
                 <CenterLogoRow

@@ -1,19 +1,19 @@
 /**
- * LOS COLORES DEL COMPROBANTE, espejo de los tokens de `app/globals.css`.
+ * THE PAYSLIP'S COLOURS, a mirror of `app/globals.css`'s tokens.
  *
- * Un PDF no puede resolver una variable CSS, igual que no puede el canvas donde ECharts mide texto.
- * Esta duplicación es la MISMA que `lib/charts/palette.ts` declara y por la misma razón: los hexes
- * de aquí tienen que seguir a los del `@theme`, y si alguno se mueve allí, se mueve aquí.
+ * A PDF cannot resolve a CSS variable, just as the canvas where ECharts measures text cannot. This
+ * duplication is the SAME one `lib/charts/palette.ts` declares and for the same reason: the hexes
+ * here have to follow the `@theme`'s, and if one moves there, it moves here.
  *
- * Los dos que dan carácter al documento no son decorativos: `income` y `cost` son
- * `--color-section-income` y `--color-section-cost`, los rellenos EXACTOS del libro del contador
- * —verde oliva y celeste, muestreados de sus capturas— que la tabla de Datos de PyG ya usa para la
- * raíz 4 y la 5. Un verde quiere decir «ingresos» en las tres superficies: su Excel, la pantalla y
- * este papel.
+ * The two that give the document its character are not decorative: `income` and `cost` are
+ * `--color-section-income` and `--color-section-cost`, the EXACT fills of the accountant's book
+ * —olive green and light blue, sampled from their screenshots— that PyG's Datos table already uses
+ * for roots 4 and 5. A green means «income» on all three surfaces: their Excel, the screen and this
+ * paper.
  *
- * `net` es el fondo de la banda del líquido a recibir, y es `--color-ink`: el color del TEXTO, no
- * el `brand`. Es la cifra que todo el mundo busca y merece el contraste máximo, pero teñirla de
- * marca convertiría el comprobante en un documento de la app en vez del de la firma.
+ * `net` is the fill of the net-pay band, and it is `--color-ink`: the colour of the TEXT, not
+ * `brand`. It is the figure everyone looks for and it deserves maximum contrast, but tinting it with
+ * the brand would turn the payslip into a document of the app instead of the firm's.
  */
 export const PAYSLIP_COLORS = {
   /** `--color-ink` */
@@ -22,21 +22,21 @@ export const PAYSLIP_COLORS = {
   inkSoft: "#334155",
   /** `--color-muted` */
   muted: "#64748b",
-  /** `--color-faint` — las rayas de los conceptos sin importe, para que el ojo las salte. */
+  /** `--color-faint` — the dashes of the concepts with no amount, so the eye skips them. */
   faint: "#94a3b8",
   /** `--color-border` */
   border: "#e5e9ee",
   /** `--color-border-soft` */
   borderSoft: "#edf1f5",
-  /** `--color-surface-header` — la banda de las filas alternas. */
+  /** `--color-surface-header` — the band of the alternating rows. */
   zebra: "#fafbfc",
-  /** `--color-surface-muted` — el panel de identidad. */
+  /** `--color-surface-muted` — the identity panel. */
   panel: "#f8fafc",
   /** `--color-section-income` */
   income: "#d7e4bd",
   /** `--color-section-cost` */
   cost: "#b7dee8",
-  /** `--color-ink`, el fondo de la banda del líquido. */
+  /** `--color-ink`, the fill of the net-pay band. */
   net: "#1e293b",
   white: "#ffffff",
 } as const;

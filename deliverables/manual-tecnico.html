@@ -618,7 +618,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 24 ago 2026</span>
+      <span><b>Actualizado</b> 26 ago 2026</span>
       <span><b>Rama</b> main</span>
       <span><b>Repositorio</b> liderplboard</span>
     </div>
@@ -672,7 +672,8 @@
           <h4>Pérdidas y Ganancias</h4>
           <p>
             Estados de resultados por cliente, centro de costo y año. Datos, Gráficos, Análisis
-            vertical e informe imprimible.
+            vertical e informe imprimible. Su subitem <b>Ventas por servicio</b> lee el reporte de
+            facturación, con base propia.
           </p>
         </div>
         <div class="mod cost">
@@ -1045,9 +1046,10 @@
     <section id="datos">
       <h2><span class="num">04</span> Modelo de datos</h2>
       <p class="section-note">
-        Tres bases IndexedDB independientes, una por módulo. No comparten tablas ni claves: un
-        cliente de P&amp;G y un cliente de Rol de Pagos son entidades distintas aunque se llamen
-        igual.
+        Cuatro bases IndexedDB independientes. No comparten tablas ni claves: un cliente de P&amp;G
+        y un cliente de Rol de Pagos son entidades distintas aunque se llamen igual. La única que
+        comparte una <em>identidad</em> con otra es <code>liderboard-sales</code>, particionada por
+        el <code>clientId</code> de P&amp;G — lo compartido es el cliente, nunca el almacén.
       </p>
 
       <div class="card">
@@ -1076,14 +1078,28 @@
               </tr>
               <tr>
                 <td class="k">liderboard-payroll</td>
-                <td class="t">2</td>
+                <td class="t">4</td>
                 <td class="t">clients · periods · employees · active</td>
                 <td><code>clientId</code></td>
+              </tr>
+              <tr>
+                <td class="k">liderboard-sales</td>
+                <td class="t">1</td>
+                <td class="t">months</td>
+                <td><code>clientId</code> (el de P&amp;G)</td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
+
+      <p>
+        <code>liderboard-sales</code> es la excepción a las dos frases siguientes: no tiene
+        <code>active</code> —qué cliente está abierto lo decide P&amp;G, que es de donde toma la
+        partición— y su única tabla no guarda ninguna entidad propia. Base separada porque su grano
+        es la <strong>línea de factura</strong>: meterla en la base del estado obligaría a esa base
+        a guardar algo que no es una cuenta.
+      </p>
 
       <p>
         Cada base tiene una tabla <code>active</code> de una sola fila (clave literal
@@ -1440,6 +1456,118 @@
           mudó las filas de bono —rótulo, clase e importe juntos— a <code>capture.extras</code>, y
           v4 subió las dos banderas de provisión de décimos de la captura a la ficha. Ninguna de las
           dos tocó un índice: existen solo para correr su <code>upgrade</code>.
+        </figcaption>
+      </figure>
+
+      <h3>Diagrama ER — Ventas por servicio</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 830 300"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-sales"
+          >
+            <g class="er-line">
+              <path d="M 240 140 L 300 140" />
+            </g>
+            <text x="270" y="132" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="270" y="162" text-anchor="middle" class="er-card">particiona</text>
+
+            <rect
+              x="30"
+              y="80"
+              width="210"
+              height="100"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="30"
+              y="80"
+              width="210"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="30" y1="108" x2="240" y2="108" class="er-rule" />
+            <text x="44" y="99" class="er-title">clients</text>
+            <text x="44" y="127" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="44" y="145" class="er-field">name : string</text>
+            <text x="44" y="163" class="er-field" style="font-size: 10px">
+              otra base — liderboard-pyg
+            </text>
+
+            <rect x="300" y="40" width="270" height="232" rx="10" class="er-box" />
+            <rect x="300" y="40" width="270" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="300" y="58" width="270" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="300" y1="68" x2="570" y2="68" class="er-rule" />
+            <text x="314" y="59" class="er-title">months</text>
+            <text x="314" y="87" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : "clientId:AAAA-MM"
+            </text>
+            <text x="314" y="105" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              clientId : uuid
+            </text>
+            <text x="314" y="123" class="er-field">
+              <tspan class="er-key">UQ</tspan>
+              [clientId + year + monthIndex]
+            </text>
+            <text x="314" y="141" class="er-field">year : number</text>
+            <text x="314" y="159" class="er-field">monthIndex : 0–11</text>
+            <text x="314" y="177" class="er-field">companyName : declarado por el archivo</text>
+            <text x="314" y="195" class="er-field">declaredTotal : number | null</text>
+            <text x="314" y="213" class="er-field">lines : SalesLine[]</text>
+            <text x="314" y="231" class="er-field">warnings : string[]</text>
+            <text x="314" y="255" class="er-field" style="font-size: 10px">
+              un registro = cliente · año · mes
+            </text>
+
+            <rect
+              x="630"
+              y="80"
+              width="175"
+              height="160"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="630"
+              y="80"
+              width="175"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="630" y1="108" x2="805" y2="108" class="er-rule" />
+            <text x="644" y="99" class="er-title">SalesLine</text>
+            <text x="644" y="127" class="er-field">serviceCode : string</text>
+            <text x="644" y="145" class="er-field">serviceName : string</text>
+            <text x="644" y="163" class="er-field">payer : string</text>
+            <text x="644" y="181" class="er-field">quantity : number</text>
+            <text x="644" y="199" class="er-field">amount : number</text>
+            <text x="644" y="223" class="er-field" style="font-size: 10px">
+              embebida, no es tabla
+            </text>
+            <line x1="570" y1="156" x2="630" y2="156" class="er-line" stroke-dasharray="4 3" />
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-sales</code> v1. Una sola tabla y ninguna entidad propia: la partición es
+          el <code>clientId</code> de <strong>otra base</strong>, la de P&amp;G, porque el cliente
+          ya existe ahí y mantener dos listas para la misma empresa sería el error. El índice
+          compuesto es <strong>único</strong>, así que recargar un mes lo
+          <strong>reemplaza</strong> por construcción en vez de dejar dos filas del mismo periodo.
+          Nada derivado se guarda: el reparto por servicio, la concentración por pagador y la
+          evolución se recalculan en cada lectura.
         </figcaption>
       </figure>
     </section>
@@ -2273,15 +2401,148 @@
         </div>
       </div>
 
+      <h3>liderboard-sales</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>months</h4>
+          <span>
+            Cliente × año × mes · <code>id</code>, índices <code>clientId</code>,
+            <code>&amp;[clientId+year+monthIndex]</code>, <code>[clientId+year]</code>
+          </span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>
+                  <code>&lt;clientId&gt;:&lt;año&gt;-&lt;mes&gt;</code>. Derivado de la terna, así
+                  que recargar un mes lo reemplaza por <code>put</code> en vez de depender de que
+                  alguien recuerde borrar antes.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">clientId <span class="ix">IX</span></td>
+                <td class="t">string (uuid)</td>
+                <td>
+                  El cliente de <code>liderboard-pyg</code>. Lo <strong>estampa</strong>
+                  <code>db.ts</code> en la puerta: a qué cliente pertenece un archivo lo decide cuál
+                  está abierto, nunca el archivo. Ninguna consulta de este módulo va sin él.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">year · monthIndex</td>
+                <td class="t">number · 0–11</td>
+                <td>
+                  El periodo que <strong>declara el propio reporte</strong> (<code>Desde:</code> /
+                  <code>Hasta:</code>), validado como mes calendario completo. El nombre del archivo
+                  no participa.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">companyName</td>
+                <td class="t">string</td>
+                <td>
+                  La razón social que declara el archivo. Es la <strong>identidad</strong> del
+                  cliente en este módulo, derivada de lo que hay y nunca comparada con la etiqueta
+                  que el usuario le puso.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">lines</td>
+                <td class="t">SalesLine[]</td>
+                <td>
+                  Las líneas de factura del mes, embebidas (no son tabla): un mes real trae miles.
+                  Ninguna vista las recorre — <code>derive.ts</code> agrega antes por servicio, por
+                  pagador y por mes.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">declaredTotal</td>
+                <td class="t">number | null</td>
+                <td>
+                  El total de la fila de cierre del reporte, o <code>null</code> si no la escribe.
+                  Se guarda para poder decir <strong>contra qué</strong> se cuadró: sin él, una
+                  diferencia solo podría afirmarse en el momento de la carga.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">warnings</td>
+                <td class="t">string[]</td>
+                <td>
+                  Lo que la lectura tuvo que advertir — el descuadre contra
+                  <code>declaredTotal</code>, sobre todo. Una diferencia <strong>no rechaza</strong>
+                  la carga: puede ser del reporte.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>SalesLine</h4>
+          <span>Embebida en <code>months.lines</code></span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">serviceCode · serviceName</td>
+                <td class="t">string</td>
+                <td>
+                  El código va <strong>verbatim</strong> —el reporte escribe <code>\01</code>, con
+                  su barra—, la misma regla por la que Dingoo conserva los ceros de
+                  <code>5.02.01</code>: es lo que el contador coteja contra su archivo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">payer</td>
+                <td class="t">string</td>
+                <td>
+                  El nombre <strong>entero</strong>, incluidos los de personas. El anonimato es una
+                  decisión de <strong>presentación</strong> (<code>payer.ts</code>): una cifra cuyo
+                  dueño no se guardó deja de ser trazable contra el reporte.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">quantity · amount</td>
+                <td class="t">number</td>
+                <td>Cantidad e importe de la línea, en USD.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="callout">
         <span class="label">Lo que no se persiste</span>
         <p>
           Las 20 columnas del rol, los cuatro totales del período, el asiento contable de 25
           cuentas, los consolidados de P&amp;G y Ocupaciones, y todo indicador hotelero (ADR,
-          ocupación, RevPAR, PAX) son <strong>derivados en cada render</strong>. Los parámetros del
-          cálculo de nómina (SBU, tasas del IESS, multiplicadores de hora extra) hoy son la
-          constante <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para guardarse junto al
-          período cuando cambien por año, pero todavía no tienen columna.
+          ocupación, RevPAR, PAX) son <strong>derivados en cada render</strong>. También lo son las
+          tres lecturas de Ventas por servicio —reparto por servicio, concentración por pagador y
+          evolución del año—: lo único que guarda ese módulo son las líneas que trajo cada Excel.
+          Los parámetros del cálculo de nómina (SBU, tasas del IESS, multiplicadores de hora extra)
+          hoy son la constante <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para
+          guardarse junto al período cuando cambien por año, pero todavía no tienen columna.
         </p>
       </div>
     </section>
@@ -2378,6 +2639,15 @@
                   Las dos banderas de provisión de décimos suben de <code>capture</code> a la ficha
                   (<code>employees</code>). Con el archivo real es un no-op —van apagadas en los
                   seis—, pero una encendida perdida solo se notaría en el costo total empresa.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">sales</td>
+                <td class="t">1</td>
+                <td>
+                  Base nueva, una sola tabla <code>months</code>. Sin migración que correr: nació
+                  después de que la partición por cliente fuera la norma, así que su índice único
+                  <code>[clientId+year+monthIndex]</code> está desde la v1.
                 </td>
               </tr>
             </tbody>

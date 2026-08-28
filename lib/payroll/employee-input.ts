@@ -1,11 +1,11 @@
 /**
- * El puente entre lo que la base guarda de un empleado y lo que el motor consume.
+ * The bridge between what the database stores of an employee and what the engine consumes.
  *
- * Existe porque las dos formas responden a preguntas distintas y no deben fusionarse:
- * `PayrollEmployeeLine` es cómo se ALMACENA —ficha estable más la captura del mes—, y
- * `PayrollEmployeeInput` es lo que el CÁLCULO necesita, sin identidad ni procedencia. Que el motor
- * no conozca `id`, `periodId` ni `name` es lo que lo mantiene testeable contra el libro del
- * contador sin inventarse un empleado.
+ * It exists because the two shapes answer different questions and must not be fused:
+ * `PayrollEmployeeLine` is how it is STORED —a stable record plus the month's capture—, and
+ * `PayrollEmployeeInput` is what the COMPUTATION needs, with no identity and no provenance. That the
+ * engine knows neither `id`, `periodId` nor `name` is what keeps it testable against the accountant's
+ * book without inventing an employee.
  */
 import { computeEmployeePayroll } from "./engine/compute";
 import type { PayrollParameters } from "./engine/parameters";
@@ -14,11 +14,11 @@ import { sumExtraIncome } from "./extra-income";
 import type { ParsedPayrollEmployeeLine, PayrollMonthlyCapture } from "./types";
 
 /**
- * Una captura en blanco: todo en cero y sin recorte de horas extras.
+ * A blank capture: everything at zero and no overtime trim.
  *
- * Devuelve un objeto NUEVO en cada llamada, y eso no es ceremonia: una constante compartida
- * dejaría que editar el mes de un empleado moviera las cifras de otro, porque `deductions` es
- * un objeto anidado y se copiaría por referencia.
+ * It returns a NEW object on every call, and that is not ceremony: a shared constant would let
+ * editing one employee's month move another's figures, because `deductions` is a nested object and
+ * would be copied by reference.
  */
 export function emptyCapture(): PayrollMonthlyCapture {
   return {
@@ -52,35 +52,37 @@ export function emptyCapture(): PayrollMonthlyCapture {
 }
 
 /**
- * Cruza la ficha del empleado con lo capturado del mes. **Siempre devuelve una entrada**: una
- * línea sin captura se lee como una captura VACÍA.
+ * Crosses the employee's record with what was captured of the month. **It always returns an input**:
+ * a line with no capture is read as an EMPTY capture.
  *
- * Eso es deliberado y es lo que hace que la app sirva sin Excel. El rol de un empleado no
- * necesita ningún archivo para existir: su sueldo unificado sale del sueldo base y los días, el
- * décimo cuarto del SBU, el décimo tercero y el aporte al IESS de ahí. Lo único que aporta una
- * captura son las horas extras, los otros pagos y los descuentos — todo lo cual, sin capturar,
- * vale CERO de verdad, no «no se sabe». Una nómina recién copiada del mes anterior enseña su rol
- * completo desde el primer momento, que es el caso de uso principal del módulo.
+ * That is deliberate and it is what makes the app work with no Excel. An employee's rol needs no file
+ * to exist: their unified salary comes out of the base salary and the days, the décimo cuarto out of
+ * the SBU, the décimo tercero and the IESS contribution out of that. The only thing a capture
+ * contributes is the overtime, the other payments and the deductions — all of which, uncaptured, are
+ * really worth ZERO, not «unknown». A nómina just copied from the previous month shows its complete
+ * rol from the first moment, which is the module's main use case.
  *
- * Es la diferencia con PyG, de donde se copió al principio la regla contraria: allí un mes no
- * cargado no es un mes en cero porque nadie declaró esas cifras, mientras que aquí la ficha
- * DECLARA el sueldo y el resto se deriva. Lo que sí conserva esa distinción es `paid`: sin
- * nadie que declare lo transferido queda `null` y el empleado sale «sin conciliar», que no es lo
- * mismo que cuadrado.
+ * It is the difference from PyG, from which the opposite rule was copied at first: there a month that
+ * was not loaded is not a month at zero because nobody declared those figures, whereas here the
+ * record DECLARES the salary and the rest is derived. What does keep that distinction is `paid`: with
+ * nobody declaring what was transferred it stays `null` and the employee comes out «unreconciled»,
+ * which is not the same as squared.
  *
- * Reparto de responsabilidades entre las dos mitades, que es lo que decide qué campo sale de
- * dónde: el fondo de reserva (`hasReserveFund`, `accumulatesReserveFund`) y las dos banderas de
- * provisión de décimos (`provisionsThirteenth`, `provisionsFourteenth`) son de la FICHA porque
- * dependen de la antigüedad y de una elección del empleado, no del mes — si viajaran en la
- * captura, copiar la nómina del mes anterior las perdería. `paid` es del MES y por eso vive en la
- * captura, la teclee quien arma el rol o la traiga el `BZ` de un archivo: para el motor son
- * indistinguibles, que es lo que permite conciliar un alta a mano sin ningún Excel de por medio.
+ * How responsibilities are split between the two halves, which is what decides which field comes from
+ * where: the reserve fund (`hasReserveFund`, `accumulatesReserveFund`) and the two décimo provision
+ * flags (`provisionsThirteenth`, `provisionsFourteenth`) belong to the RECORD because they depend on
+ * seniority and on a choice of the employee, not on the month — if they travelled in the capture,
+ * copying the previous month's nómina would lose them. `paid` belongs to the MONTH and that is why it
+ * lives in the capture, whether whoever assembles the rol types it or a file's `BZ` brings it: to the
+ * engine they are indistinguishable, which is what allows reconciling a manual creation with no Excel
+ * in between.
  *
- * Las FILAS DE BONO llegan dentro de la captura y no por parámetro, y eso cierra un modo de fallo
- * en vez de tener que defenderlo: cuando la declaración vivía en el período, esta función recibía
- * la lista por argumento y el argumento se declaró obligatorio y sin default a propósito, para que
- * un consumidor que lo olvidara no compilara en lugar de devolver un rol POR DEBAJO con una cifra
- * plausible que ningún test de otro consumidor mira. Viajando en la línea no hay nada que olvidar.
+ * The BONUS ROWS arrive inside the capture and not by parameter, and that closes a failure mode
+ * instead of having to defend against it: when the declaration lived on the período, this function
+ * received the list as an argument and the argument was declared mandatory and with no default on
+ * purpose, so a consumer that forgot it would not compile instead of returning a rol that is TOO LOW
+ * with a plausible figure no test of another consumer looks at. Travelling in the line there is
+ * nothing to forget.
  */
 export function toEngineInput(line: ParsedPayrollEmployeeLine): PayrollEmployeeInput {
   const capture = line.capture ?? emptyCapture();
@@ -101,15 +103,16 @@ export function toEngineInput(line: ParsedPayrollEmployeeLine): PayrollEmployeeI
     fixedCommission: capture.fixedCommission,
     variableCommission: capture.variableCommission,
     bonus: capture.bonus,
-    // La lista se reduce AQUÍ a sus dos agregados: el motor no sabe cuántas filas hay ni cómo se
-    // llaman, porque para las seis bases tres bonos aportables de 50 y uno de 150 son lo mismo.
+    // The list is reduced HERE to its two aggregates: the engine does not know how many rows there
+    // are or what they are called, because to the six bases three contributory bonuses of 50 and one
+    // of 150 are the same thing.
     extras: sumExtraIncome(capture.extras),
-    // Copia, no referencia: quien reciba esta entrada puede editarla para previsualizar un
-    // cambio sin que eso toque lo guardado hasta que alguien decida escribirlo.
+    // A copy, not a reference: whoever receives this input can edit it to preview a change without
+    // that touching what is stored until someone decides to write it.
     deductions: { ...capture.deductions },
     paid: capture.paid,
-    // De la LÍNEA y no de la captura: provisionar los décimos o mensualizarlos es una elección del
-    // empleado, igual que las dos del fondo de reserva de arriba. Ver `PayrollEmployeeLine`.
+    // From the LINE and not from the capture: provisioning the décimos or taking them monthly is a
+    // choice of the employee, just like the two reserve-fund ones above. See `PayrollEmployeeLine`.
     flags: {
       provisionsThirteenth: line.provisionsThirteenth,
       provisionsFourteenth: line.provisionsFourteenth,
@@ -118,20 +121,19 @@ export function toEngineInput(line: ParsedPayrollEmployeeLine): PayrollEmployeeI
 }
 
 /**
- * El rol de UNA línea guardada: la composición de `toEngineInput` con el motor, declarada aquí
- * una sola vez.
+ * The rol of ONE stored line: the composition of `toEngineInput` with the engine, declared here just
+ * once.
  *
- * Existe porque esa pareja de llamadas la necesitan cuatro consumidores —la tarjeta de KPIs, la
- * tabla de la nómina, la ficha del empleado y la descarga de comprobantes— y estaba escrita a
- * mano en cada uno. Con una sola definición, ninguna pantalla puede quedarse con una versión
- * distinta de «el rol de este empleado»; sin ella, ya pasó: el badge de conciliación comparaba
- * una cosa y el motor otra.
+ * It exists because that pair of calls is needed by four consumers —the KPI card, the nómina's table,
+ * the employee's record and the payslip download— and it was written by hand in each. With one single
+ * definition, no screen can be left with a different version of «this employee's rol»; without it, it
+ * already happened: the reconciliation badge compared one thing and the engine another.
  */
 export function computeLinePayroll(
-  // `ParsedPayrollEmployeeLine` y no `PayrollEmployeeLine`: el rol de una línea no depende de su
-  // `id` ni de su `periodId`, y pedir la forma sin dueño es lo que deja a la PREVIA de una carga
-  // totalizar lo que el archivo trae antes de que exista en la base — con esta misma definición,
-  // no con una copia.
+  // `ParsedPayrollEmployeeLine` and not `PayrollEmployeeLine`: a line's rol does not depend on its
+  // `id` or its `periodId`, and asking for the ownerless shape is what lets an upload's PREVIEW
+  // total what the file brings before it exists in the database — with this same definition, not with
+  // a copy.
   line: ParsedPayrollEmployeeLine,
   parameters: PayrollParameters,
 ): PayrollEmployeeComputation {

@@ -201,8 +201,9 @@ export async function createHotel(name: string, logo?: EntityLogo): Promise<Stor
  * because the dialog edits them together; `logo: null` removes it, and an `undefined` in a Dexie
  * `update` deletes the property, which is what that means here.
  *
- * `centerLogos` viaja SIEMPRE, aunque venga vacío: quien llama es el mismo diálogo que los edita,
- * así que lo que trae es la foto completa y no hay que distinguir «no los toques» de «quítalos».
+ * `centerLogos` ALWAYS travels, even when it arrives empty: the caller is the same dialog that edits
+ * them, so what it brings is the complete picture and there is no need to tell «do not touch them»
+ * from «remove them».
  */
 export async function updateHotel(
   hotelId: string,
@@ -255,10 +256,10 @@ export interface HotelSummary extends StoredHotel {
   /** Sucursales counted across years: the same one in 2025 and 2026 is one sucursal. */
   centers: number;
   /**
-   * Sus sucursales, en el orden en que el selector las enseña; `[]` sin datos. Van en el MISMO
-   * resumen que ya alimenta el desplegable porque el diálogo que sube el logo de cada sucursal
-   * puede abrirse sobre un hotel que no está abierto, y las del proveedor son las del que sí lo
-   * está. Es la lista de la que `centers` es el conteo, así que las dos no pueden discrepar.
+   * Its sucursales, in the order the selector shows them; `[]` with no data. They travel in the SAME
+   * summary that already feeds the dropdown because the dialog that uploads each sucursal's logo can
+   * be opened over a hotel that is not open, and the provider's are those of the one that is. It is
+   * the list `centers` is the count of, so the two cannot disagree.
    */
   centerOptions: CenterRow[];
 }

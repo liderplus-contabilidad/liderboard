@@ -40,7 +40,7 @@ const date = (monthIndex: number, day: number, year = 2026): DateRef => ({
   monthIndex,
   day,
 });
-/** Un mes entero de 2026, que es el tramo de casi todos los casos. */
+/** A whole month of 2026, which is the span of almost every case. */
 const month = (monthIndex: number): OccupancyPeriod => ({
   mode: "rango",
   range: { from: date(monthIndex, 0), to: date(monthIndex, 30) },
@@ -99,7 +99,7 @@ describe("colorResolver", () => {
     const order = colorUniverse([MANOR, NORTE]);
     const colorOf = colorResolver(order);
     const manorColor = colorOf({ centerId: "manor" });
-    // Norte sigue pintado igual aunque Manor no esté en el resultado.
+    // Norte is still painted the same even though Manor is not in the result.
     expect(colorOf({ centerId: "norte" })).not.toBe(manorColor);
     expect(colorResolver(order)({ centerId: "manor" })).toBe(manorColor);
   });
@@ -144,7 +144,7 @@ describe("channelOption", () => {
     expect(option.series).toHaveLength(2);
     expect(option.series.map((s) => s.name)).toEqual(["Manor", "Norte"]);
     expect(option.legend?.show).toBe(true);
-    // El color pasa a decir QUÉ sucursal es, porque el canal ya es la fila.
+    // The colour now says WHICH sucursal it is, because the channel is already the row.
     expect(option.series[0].itemStyle?.color).toBe(colorOf({ centerId: "manor" }));
   });
 });
@@ -198,7 +198,7 @@ describe("buildHeatmaps", () => {
 
   it("la escala es común a todas las cuadrículas", () => {
     const result = buildHeatmaps([MANOR, NORTE], query);
-    // El máximo sale del mejor día de cualquiera de las dos (Manor, 9/10).
+    // The maximum comes from the best day of either of the two (Manor, 9/10).
     expect(result.scale).toEqual({ min: 0, max: 0.9 });
   });
 
@@ -237,7 +237,7 @@ describe("formatMetric", () => {
   it("y los suelta solo en el eje, donde la cifra no se coteja sino que se estima", () => {
     expect(formatAxisMetric(82.89, "currency")).toBe("$82.89");
     expect(formatAxisMetric(115302.4, "currency")).toBe("$115,302");
-    // El porcentaje y el conteo no tienen dos formas: el eje los escribe como todo lo demás.
+    // The percentage and the count have no two forms: the axis writes them like everything else.
     expect(formatAxisMetric(0.2984, "percent")).toBe("29.8 %");
     expect(formatAxisMetric(null, "currency")).toBeNull();
   });

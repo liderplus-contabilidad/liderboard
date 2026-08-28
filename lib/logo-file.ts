@@ -1,37 +1,39 @@
 /**
- * LEER UN LOGO DEL DISCO — la mitad que toca DOM, y por eso separada de `logos.ts`.
+ * READING A LOGO FROM DISK — the half that touches the DOM, and that is why it is separated from
+ * `logos.ts`.
  *
- * Vitest solo corre la capa pura, así que esta partición no es de estilo: todo lo que puede estar
- * MAL —qué se rechaza, cuánto mide la caja, cómo se decodifica— vive en `logos.ts`, que sí se
- * prueba, y aquí queda únicamente la mecánica de canvas, que o funciona o no dibuja nada.
+ * Vitest only runs the pure layer, so this split is not a matter of style: everything that can be
+ * WRONG —what is rejected, how big the box is, how it is decoded— lives in `logos.ts`, which is
+ * tested, and what is left here is only the canvas mechanics, which either work or draw nothing.
  *
- * **Se redimensiona al entrar, no al salir.** El original puede pesar hasta 2 MB, y guardarlo tal
- * cual haría que el desplegable —que lista TODOS los clientes— cargara todos los originales cada
- * vez que se abre. Reducido a `LOGO_MAX_SIDE` queda en el orden de los 100 KB, que es lo que
- * permite guardarlo en la propia fila del cliente en vez de en una tabla aparte.
+ * **It is resized on the way in, not on the way out.** The original can weigh up to 2 MB, and storing
+ * it as it is would make the dropdown —which lists ALL clients— load every original each time it is
+ * opened. Reduced to `LOGO_MAX_SIDE` it comes down to the order of 100 KB, which is what allows
+ * storing it in the client's own row instead of in a separate table.
  *
- * **El SVG entra y sale PNG.** Ni exceljs ni pdf-lib lo embeben, pero el canvas sí lo rasteriza, y
- * hacerlo aquí es lo que evita que el usuario tenga que saber en qué formato acaba su logo.
+ * **An SVG goes in and comes out PNG.** Neither exceljs nor pdf-lib embeds it, but the canvas does
+ * rasterize it, and doing it here is what saves the user from having to know what format their logo
+ * ends up in.
  */
 import { checkLogoFile, LOGO_MAX_SIDE, type EntityLogo, type LogoMime } from "@/lib/logos";
 
-/** Lo que un rechazo dice, con las mismas palabras que `checkLogoFile`. */
+/** What a rejection says, in the same words as `checkLogoFile`. */
 export class LogoFileError extends Error {}
 
 /**
- * El formato en que se GUARDA. Un PNG sigue siendo PNG porque puede llevar transparencia, y un
- * JPEG sigue siendo JPEG porque re-codificar una foto a PNG multiplica su peso. Todo lo demás
- * —hoy solo el SVG— aterriza en PNG, que es el que conserva el fondo transparente que casi todo
- * logo vectorial trae.
+ * The format it is STORED in. A PNG stays PNG because it can carry transparency, and a JPEG stays
+ * JPEG because re-encoding a photo to PNG multiplies its weight. Everything else —today only SVG—
+ * lands as PNG, which is the one that keeps the transparent background almost every vector logo
+ * brings.
  */
 function storedMime(type: string): LogoMime {
   return type === "image/jpeg" ? "image/jpeg" : "image/png";
 }
 
 /**
- * Un SVG puede no declarar tamaño intrínseco, y entonces `naturalWidth` sale 0 en algunos
- * navegadores. Se rasteriza sobre un lienzo cuadrado del lado máximo en vez de fallar: un logo
- * cuadrado de más es infinitamente mejor que un logo que no se puede subir.
+ * An SVG may not declare an intrinsic size, and then `naturalWidth` comes out 0 in some browsers. It
+ * is rasterized onto a square canvas of the maximum side instead of failing: an overly square logo is
+ * infinitely better than a logo that cannot be uploaded.
  */
 function intrinsicSize(image: HTMLImageElement): { width: number; height: number } {
   const width = image.naturalWidth || image.width;
@@ -61,9 +63,9 @@ function loadImage(source: string): Promise<HTMLImageElement> {
 }
 
 /**
- * El archivo del usuario convertido en el `EntityLogo` que se guarda: validado, reducido a
- * `LOGO_MAX_SIDE` de lado mayor y con sus dimensiones finales medidas UNA vez, que es lo que deja
- * al layout del comprobante colocarlo sin volver a decodificarlo.
+ * The user's file turned into the `EntityLogo` that gets stored: validated, reduced to
+ * `LOGO_MAX_SIDE` on its longer side and with its final dimensions measured ONCE, which is what lets
+ * the payslip's layout place it without decoding it again.
  */
 export async function readLogoFile(file: File): Promise<EntityLogo> {
   const check = checkLogoFile({ type: file.type, size: file.size });
@@ -75,9 +77,9 @@ export async function readLogoFile(file: File): Promise<EntityLogo> {
   const image = await loadImage(source);
   const intrinsic = intrinsicSize(image);
 
-  // El mismo `contain` que `fitLogoBox`, pero contra un cuadrado y redondeado a píxeles enteros:
-  // un canvas de 45,3 px de alto no existe, y las dimensiones que se guardan tienen que ser las
-  // que la imagen realmente tiene.
+  // The same `contain` as `fitLogoBox`, but against a square and rounded to whole pixels: a canvas
+  // 45.3 px tall does not exist, and the dimensions that are stored have to be the ones the image
+  // really has.
   const scale = Math.min(LOGO_MAX_SIDE / intrinsic.width, LOGO_MAX_SIDE / intrinsic.height, 1);
   const width = Math.max(1, Math.round(intrinsic.width * scale));
   const height = Math.max(1, Math.round(intrinsic.height * scale));
@@ -93,7 +95,7 @@ export async function readLogoFile(file: File): Promise<EntityLogo> {
 
   const mime = storedMime(file.type);
   return {
-    // Un JPEG se re-codifica al 92%: por debajo se ven artefactos en los bordes duros de un logo.
+    // A JPEG is re-encoded at 92%: below that, artefacts show on a logo's hard edges.
     dataUrl: canvas.toDataURL(mime, 0.92),
     mime,
     width,

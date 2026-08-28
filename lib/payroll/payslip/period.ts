@@ -1,19 +1,20 @@
 /**
- * LOS COMPROBANTES DE UN PERÍODO ENTERO: la nómina guardada → un `PayslipDocument` por empleado.
+ * A WHOLE PERÍODO'S PAYSLIPS: the stored nómina → one `PayslipDocument` per employee.
  *
- * Es `buildPayslipDocument` en bucle, y existe como función propia porque lo pide MÁS DE UNA
- * pantalla: la del período (`/payroll/[periodId]`) y la fila del historial, que baja el mismo .zip
- * sin abrir el período. Escrito a mano en las dos, «los comprobantes de este período» tendría dos
- * definiciones capaces de separarse —el orden, el `Codigo:`, el logo y el membrete del cliente— y nada lo
- * delataría: los dos archivos se abren por separado y cada uno parece correcto.
+ * It is `buildPayslipDocument` in a loop, and it exists as a function of its own because MORE THAN
+ * ONE screen asks for it: the período's (`/payroll/[periodId]`) and the history's row, which
+ * downloads the same .zip without opening the período. Written by hand in both, «this período's
+ * payslips» would have two definitions capable of drifting apart —the order, the `Codigo:`, the
+ * client's logo and letterhead— and nothing would give it away: the two files are opened separately
+ * and each one looks correct.
  *
- * Recibe las LÍNEAS y no un rol ya calculado, así que un consumidor no necesita el motor para pedir
- * su papel. Que la pantalla de detalle calcule su propio `rows` para los KPIs y la tabla no abre
- * ninguna grieta: las dos rutas pasan por `computeLinePayroll`, que es la única composición de
- * ficha + captura → motor del módulo, y el motor es determinista.
+ * It receives the LINES and not an already computed rol, so a consumer does not need the engine to
+ * ask for its paper. That the detail screen computes its own `rows` for the KPIs and the table opens
+ * no crack: both routes go through `computeLinePayroll`, which is the module's only composition of
+ * record + capture → engine, and the engine is deterministic.
  *
- * Es puro: no lee la base ni escribe nada. Quién trae las líneas y quién baja el archivo es de la
- * capa de arriba.
+ * It is pure: it neither reads the database nor writes anything. Who brings the lines and who
+ * downloads the file belongs to the layer above.
  */
 import type { CompanyProfile } from "@/lib/company-profile";
 import type { CostCenter } from "@/lib/cost-center";
@@ -34,7 +35,7 @@ export function buildPeriodPayslips({
   clientCostCenter,
 }: {
   period: PayrollPeriod;
-  /** La nómina en el orden en que se lee la tabla: es el que numera el `Codigo:`. */
+  /** The nómina in the order the table reads it: it is what numbers the `Codigo:`. */
   lines: readonly PayrollEmployeeLine[];
   parameters: PayrollParameters;
   clientName: string;
@@ -53,8 +54,8 @@ export function buildPeriodPayslips({
       ...(clientLogo ? { clientLogo } : {}),
       ...(clientCompany ? { clientCompany } : {}),
       ...(clientCostCenter ? { clientCostCenter } : {}),
-      // `Codigo:` es la POSICIÓN en la nómina, 1…N, no el `id` de la ficha: la columna `A` del
-      // libro es un contador por orden que salta las cabeceras de área.
+      // `Codigo:` is the POSITION in the nómina, 1…N, not the record's `id`: the book's column `A` is
+      // a running counter that skips the area headers.
       position: index + 1,
     }),
   );

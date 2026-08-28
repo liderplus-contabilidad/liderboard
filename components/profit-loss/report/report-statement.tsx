@@ -72,27 +72,29 @@ export function ReportStatement({
   showComparison: boolean;
   /** Whether the «Periodo» filter trimmed the axis, which is what renames a Total. */
   trimmed: boolean;
-  /** Qué centro es esta tabla; `null` cuando el informe imprime uno solo y ya lo dice la portada. */
+  /** Which center this table is; `null` when the report prints only one and the cover already says
+   *  so. */
   caption?: string | null;
-  /** El punto de color del centro en el selector, para que la tabla se reconozca desde la barra. */
+  /** The center's colour dot in the selector, so the table can be recognised from the bar. */
   captionColor?: string | undefined;
   /**
-   * El logo del CLIENTE, a la izquierda de la banda. Se repite en cada tabla y no solo en la
-   * portada porque cada una abre su propia página: separada de la portada, una hoja suelta tiene
-   * que poder decir de quién es.
+   * The CLIENT's logo, on the left of the band. It is repeated on every table and not only on the
+   * cover because each one opens its own page: away from the cover, a loose sheet has to be able to
+   * say whose it is.
    */
   logo?: EntityLogo | undefined;
-  /** El del CENTRO que esta tabla es, a la derecha. El Consolidado no tiene. */
+  /** The one of the CENTER this table is, on the right. The Consolidado has none. */
   centerLogo?: EntityLogo | undefined;
-  /** Abre página. Lo pone quien coloca las tablas, no la tabla: la primera no abre ninguna. */
+  /** Opens a page. It is set by whoever places the tables, not by the table: the first one opens
+   *  none. */
   breakBefore?: boolean;
 }) {
   // No sort — a printed statement reads in plan order. It DOES fold: the level cap is what keeps
   // a six-deep chart of accounts from arriving indented into a column too narrow for its names.
   const rows = flattenSorted(grid.rows, new Set(collapsed), null);
 
-  // La variación existe solo con un año contra otro; con uno solo la columna no se declara, en
-  // vez de dibujarse llena de rayas.
+  // The variation exists only with one year against another; with just one the column is not
+  // declared, instead of being drawn full of dashes.
   const comparing = showComparison && grid.columns.length >= 2;
   const extra = showComparison ? (comparing ? 2 : 1) : 0;
   const columnCount = grid.columns.length + extra;
@@ -123,8 +125,8 @@ export function ReportStatement({
           {...(centerLogo ? { rightLogo: centerLogo } : {})}
           className="border-b border-border bg-surface-header px-3 py-2"
         >
-          {/* El rótulo y su punto de color van en un renglón, centrados sobre la tabla: es la
-              cabecera de lo que hay debajo, no una etiqueta pegada al logo. */}
+          {/* The label and its colour dot go on one line, centred over the table: it is the heading
+              of what is below, not a tag stuck to the logo. */}
           <span className="flex min-w-0 items-center gap-2">
             {captionColor && (
               <span
@@ -137,10 +139,11 @@ export function ReportStatement({
         </ReportBand>
       )}
       {/*
-        `table-layout: fixed` con `<colgroup>` fija el reparto: sin él cada columna reclama el
-        ancho de su contenido y la última se sale del papel. Lo que NO hace por sí solo es que el
-        contenido quepa —una cifra más ancha que su columna se dibuja encima de la vecina, en
-        silencio—; eso lo decide `statementFit`, y por eso el ancho y la tipografía vienen de ahí.
+        `table-layout: fixed` with a `<colgroup>` fixes the split: without it each column claims the
+        width of its content and the last one falls off the paper. What it does NOT do on its own is
+        make the content fit —a figure wider than its column is drawn over its neighbour, in silence—;
+        that is decided by `statementFit`, and that is why the width and the typography come from
+        there.
       */}
       <table
         className="w-full table-fixed border-collapse"

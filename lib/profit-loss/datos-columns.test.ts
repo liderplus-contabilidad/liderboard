@@ -8,7 +8,7 @@ import {
 } from "./datos-columns";
 import type { DatosGrid } from "./datos-types";
 
-/** Dos años seguidos, cada uno con sus meses y su Total al cierre. */
+/** Two consecutive years, each with its months and its Total at the close. */
 function twoYears(): DatosColumn[] {
   return [
     { kind: "period", label: "Ene 25", year: 2025, index: 0 },
@@ -26,7 +26,7 @@ describe("qué columnas deja ver el filtro de periodo", () => {
   });
 
   it("un periodo marcado acota TODOS los años a la vez", () => {
-    // Marcar «Ene» es un slot sin año: acota 2025 y 2026 por igual.
+    // Marking «Ene» is a slot with no year: it narrows 2025 and 2026 alike.
     expect(visibleColumnPositions(twoYears(), [{ frequency: "mensual", index: 0 }])).toEqual([
       0, 2, 3, 5,
     ]);
@@ -44,14 +44,14 @@ describe("qué columnas están realmente cargadas", () => {
   it("resuelve la cobertura contra el año de CADA columna", () => {
     const loaded = loadedColumnPositions({
       columns: twoYears(),
-      // Enero cargado en 2025, febrero en 2026: nada que ver entre sí.
+      // January loaded in 2025, February in 2026: nothing to do with each other.
       loadedMonthsByYear: { 2025: [0], 2026: [1] },
       baseFrequency: "mensual",
       frequency: "mensual",
     });
 
-    // Ene 25 (0) sí, Feb 25 (1) no; Ene 26 (3) NO aunque enero sí exista en 2025, y Feb 26 (4)
-    // sí. Los dos Totales (2 y 5) siempre.
+    // Ene 25 (0) yes, Feb 25 (1) no; Ene 26 (3) NO even though January does exist in 2025, and Feb 26
+    // (4) yes. Both Totals (2 and 5) always.
     expect([...loaded].sort((a, b) => a - b)).toEqual([0, 2, 4, 5]);
   });
 

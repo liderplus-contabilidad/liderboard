@@ -4,52 +4,54 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { periodLongLabel } from "@/lib/payroll/periods";
 
-/** El mismo alto y radio que el control de período del encabezado hermano: las flechas de esta
- *  pantalla y las de aquella son el mismo gesto y no pueden medir distinto. */
+/** The same height and radius as the período control of the sibling header: the arrows on this
+ *  screen and the ones there are the same gesture and cannot measure differently. */
 const BOX_CLASS = "h-[38px] rounded-[9px] border border-border bg-surface transition-colors";
 
 export interface EmployeeNavTarget {
-  /** Adónde lleva la flecha. Llega como `href` ya armado y no como un id porque esta pantalla no
-   *  decide su propia ruta — quien la cablea es quien sabe bajo qué segmento vive. */
+  /** Where the arrow leads. It arrives as an already built `href` and not as an id because this
+   *  screen does not decide its own route — whoever wires it is who knows which segment it lives
+   *  under. */
   href: string;
-  /** El nombre del vecino, que es lo que la flecha anuncia al pasar por encima. */
+  /** The neighbour's name, which is what the arrow announces on hover. */
   name: string;
 }
 
 interface EmployeeDetailHeaderProps {
-  /** Adónde vuelve «← Volver al período». */
+  /** Where «← Volver al período» goes back to. */
   backHref: string;
-  /** El período que ese enlace nombra: «Volver al período MARZO 2026». */
+  /** The período that link names: «Volver al período MARZO 2026». */
   year: number;
   monthIndex: number;
   employeeName: string;
-  /** El sitio del empleado dentro de la nómina, para el «3 de 12» que acompaña a las flechas.
-   *  `index` es 1-based, como se lee. El estado de conciliación NO va aquí: es del empleado y vive
-   *  en la cabecera de su tarjeta (`EmployeeDetailCard`), junto a su número de orden. */
+  /** The employee's place within the nómina, for the «3 de 12» that goes with the arrows. `index`
+   *  is 1-based, as it reads. The reconciliation status does NOT go here: it belongs to the employee
+   *  and lives in the header of their card (`EmployeeDetailCard`), next to their order number. */
   position?: { index: number; total: number };
   prev: EmployeeNavTarget | null;
   next: EmployeeNavTarget | null;
-  /** Baja el comprobante de ESTE empleado, de una página. */
+  /** Downloads THIS employee's payslip, one page long. */
   onDownloadPayslip: () => void;
-  /** Mientras `pdf-lib` se carga y el PDF se arma. */
+  /** While `pdf-lib` loads and the PDF is assembled. */
   downloading: boolean;
-  /** Abre el diálogo de ficha en modo edición. */
+  /** Opens the employee dialog in edit mode. */
   onEdit: () => void;
-  /** Pide la baja del empleado. La confirmación la pone quien recibe esto, no este encabezado. */
+  /** Requests the employee's removal. The confirmation is put up by whoever receives this, not by
+   *  this header. */
   onDelete: () => void;
 }
 
 /**
- * El encabezado del detalle de un empleado: la vuelta al período, el título con su nombre y, a la
- * derecha, las flechas que recorren la nómina más las tres acciones sobre él.
+ * The header of an employee's detail: the way back to the período, the title with their name and, on
+ * the right, the arrows that walk the nómina plus the three actions on them.
  *
- * «Eliminar empleado» va la ÚLTIMA, en el borde, y no entre las dos benignas: es la única
- * destructiva de la fila y con tres botones seguidos un clic desviado tiene adónde caer.
+ * «Eliminar empleado» goes LAST, at the edge, and not between the two benign ones: it is the only
+ * destructive action of the row and with three buttons in a run a stray click has somewhere to land.
  *
- * Las flechas son el control que hace útil esta pantalla: revisar una nómina es pasar empleado por
- * empleado, y volver al listado entre uno y otro cuesta dos clics por persona. No hay desplegable
- * en medio —a diferencia del selector de período— porque el salto a un empleado lejano ya lo
- * resuelve el buscador de la tabla del período.
+ * The arrows are the control that makes this screen useful: reviewing a nómina is going employee by
+ * employee, and going back to the list in between costs two clicks per person. There is no dropdown
+ * in the middle —unlike the período selector— because jumping to a distant employee is already
+ * solved by the período table's search box.
  */
 export function EmployeeDetailHeader({
   backHref,
@@ -113,8 +115,9 @@ export function EmployeeDetailHeader({
   );
 }
 
-/** Una flecha al empleado vecino: `Link` real cuando existe, o la misma caja apagada —sin `href`,
- *  para que no sea foco de teclado ni parada de lector de pantalla— cuando ese lado se acabó. */
+/** An arrow to the neighbouring employee: a real `Link` when it exists, or the same box switched off
+ *  —with no `href`, so it is neither a keyboard focus stop nor a screen-reader stop— when that side
+ *  has run out. */
 function EmployeeNavArrow({
   direction,
   target,
@@ -133,8 +136,8 @@ function EmployeeNavArrow({
     );
   }
 
-  // El nombre del vecino va en el rótulo, no solo «anterior»/«siguiente»: saber a quién se salta
-  // es lo que evita el clic de comprobación.
+  // The neighbour's name goes in the label, not just «previous»/«next»: knowing who you skip to is
+  // what avoids the checking click.
   const label = `${direction === "prev" ? "Empleado anterior" : "Empleado siguiente"}: ${target.name}`;
 
   return (

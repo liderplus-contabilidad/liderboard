@@ -32,7 +32,7 @@ describe("toPctOfAccount", () => {
   });
 
   it("divides a series that does not hang from the base", () => {
-    // Un gasto sobre los ingresos: el caso normal del análisis vertical, no una excepción.
+    // An expense over revenue: the vertical analysis' normal case, not an exception.
     const pct = toPctOfAccount(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources, "4");
     expect(ARRENDAMIENTO.startsWith("4")).toBe(false);
     expect(pct.points[0].value ?? 0).toBeCloseTo(31.71, 2);
@@ -50,7 +50,7 @@ describe("toPctOfAccount", () => {
       sources,
       "5",
     );
-    // Los dos centros están ~100× separados en absoluto; sobre su propia base son el mismo peso.
+    // The two centers are ~100× apart in absolute terms; over their own base they are the same weight.
     expect(manor.points[0].value ?? 0).toBeCloseTo(principal.points[0].value ?? 0, 6);
   });
 
@@ -72,7 +72,7 @@ describe("toPctOfRevenue", () => {
 
   it("expresses an account as a share of its own revenue", () => {
     const pct = toPctOfRevenue(seriesOf(ARRENDAMIENTO, CULTURA_MANOR_SOURCE), sources);
-    // 8.000 sobre ingresos de 25.229.
+    // 8,000 over revenue of 25,229.
     expect(pct.points[0].value ?? 0).toBeCloseTo(31.71, 2);
   });
 
@@ -188,7 +188,7 @@ describe("toPareto", () => {
     expect(result.excluded).toHaveLength(2);
   });
 
-  /** La cola de un plan real: cuarenta cuentas de centavos dibujadas una sobre otra. */
+  /** A real chart of accounts' tail: forty accounts of cents drawn on top of each other. */
   const tail: AmountEntry[] = Array.from({ length: 24 }, (_, i) => ({
     code: `5.1.${i}`,
     label: `Cuenta ${i}`,
@@ -205,8 +205,8 @@ describe("toPareto", () => {
   it("acumula sobre el gasto ENTERO, no sobre las que caben", () => {
     const result = toPareto(tail);
 
-    // La última barra dibujada no llega al 100 %: las catorce que no se dibujan siguen contando
-    // en el total, que es lo que hace que «concentran el X %» sea verdad.
+    // The last drawn bar does not reach 100 %: the fourteen that are not drawn still count in the
+    // total, which is what makes «they concentrate X %» true.
     expect(result.entries[9].cumulativePct).toBeLessThan(100);
     expect(result.total).toBe(tail.reduce((sum, entry) => sum + entry.value, 0));
   });

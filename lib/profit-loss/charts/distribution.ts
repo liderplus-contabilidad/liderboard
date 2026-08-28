@@ -1,29 +1,30 @@
 /**
- * De qué está hecha una cuenta, PERIODO A PERIODO — las hijas apiladas bajo el total del padre.
+ * What an account is made of, PERIOD BY PERIOD — the children stacked under the parent's total.
  *
- * Es la tercera lectura de la composición y no repite ninguna de las dos anteriores: la dona dice
- * de qué se compone el tramo entero y el ranking cuáles son las más grandes, pero ninguna dice si
- * una hija está ganando peso mes a mes, que es la pregunta que produce una barra apilada.
+ * It is the composition's third reading and it repeats neither of the previous two: the doughnut says
+ * what the whole span is made of and the ranking which are the largest, but neither says whether a
+ * child is gaining weight month by month, which is the question that produces a stacked bar.
  *
- * Dos decisiones viven aquí porque pueden estar mal y por eso se prueban:
+ * Two decisions live here because they can be wrong and that is why they are tested:
  *
- * - **Qué cuenta se distribuye.** La figura de `resolveActiveCenterId` por quinta vez: exactamente
- *   una cuenta marcada es esa cuenta, ninguna o varias es Ingresos. Y luego DESCIENDE mientras
- *   haya una sola hija — un plan real encadena `4 → 4.1` y `5 → 5.1`, así que la distribución de
- *   la raíz sería un apilado de un solo segmento, que no es un apilado.
- * - **Qué se dibuja de las hijas.** La paleta tiene ocho ranuras y no cicla, así que pasadas ocho
- *   la cola se pliega en «Otros» — ordenando ANTES de cortar, como el ranking, porque cortar por
- *   orden de archivo dejaría fuera a la mayor. Las que no se mueven en todo el tramo se van y se
- *   dicen: un estado declara cada cuenta de su plan tenga o no movimiento, y diez leyendas en cero
- *   entierran a la que importa.
+ * - **Which account is distributed.** `resolveActiveCenterId`'s figure for the fifth time: exactly
+ *   one marked account is that account, none or several is Ingresos. And then it DESCENDS while there
+ *   is a single child — a real plan chains `4 → 4.1` and `5 → 5.1`, so the root's distribution would
+ *   be a stack of one single segment, which is not a stack.
+ * - **What is drawn of the children.** The palette has eight slots and does not cycle, so past eight
+ *   the tail is folded into «Otros» — ordering BEFORE cutting, like the ranking, because cutting by
+ *   file order would leave the largest out. The ones that do not move in the whole span go and are
+ *   said: a statement declares every account of its plan whether or not it has movement, and ten
+ *   legends at zero bury the one that matters.
  *
- * La línea del total NO es el techo del apilado y por eso existe: `4.1.4 Rebajas y/o Descuentos`
- * es una cuenta de ingreso con saldo negativo, que se apila hacia abajo, así que el total neto no
- * está en ningún borde de la pila. Con «Otros» plegado sigue siendo el total de verdad.
+ * The total's line is NOT the stack's ceiling and that is why it exists: `4.1.4 Rebajas y/o
+ * Descuentos` is an income account with a negative balance, which stacks downwards, so the net total
+ * is at no edge of the stack. With «Otros» folded it is still the real total.
  *
- * Y como la pregunta que produce esta tarjeta es «qué PARTE de la cuenta es cada hija», el monto
- * de la línea no la contesta solo: `distributionShares` reparte ese mismo total en porcentajes,
- * una vez, y de ahí salen las dos lecturas —el número dentro del segmento y el tooltip—.
+ * And since the question that produces this card is «what PART of the account each child is», the
+ * line's amount does not answer it on its own: `distributionShares` splits that same total into
+ * percentages, once, and the two readings come out of it —the number inside the segment and the
+ * tooltip—.
  */
 import { CHART_DISTRIBUTION_MAX, colorForDistributionSlot } from "@/lib/charts/palette";
 import { toPctOfContainer } from "../analytics/structure";
@@ -38,27 +39,28 @@ import { childrenOf, seriesTotal } from "./presets";
 import { DEFAULT_FOCUS_CODE } from "./selection";
 import type { MarkedShare } from "./share";
 
-/** El código de la serie sintética que recoge la cola. No colisiona: ninguna cuenta se llama así. */
+/** The code of the synthetic series that collects the tail. It does not collide: no account is called
+ *  that. */
 export const DISTRIBUTION_OTHERS_CODE = "otras-cuentas";
 
-/** La cuenta que se distribuye: su código y su nombre en el plan. */
+/** The account that is distributed: its code and its name in the plan. */
 export interface DistributionParent {
   code: string;
   label: string;
 }
 
 export interface Distribution {
-  /** Las hijas dibujadas, de mayor a menor y con «Otros» cerrando la pila. */
+  /** The children drawn, largest to smallest and with «Otros» closing the stack. */
   series: Series[];
-  /** Cuántas hijas se plegaron en «Otros» — dicho, nunca recortado en silencio. */
+  /** How many children were folded into «Otros» — said, never silently trimmed. */
   grouped: number;
-  /** Cuántas quedaron fuera por no moverse en todo el tramo. */
+  /** How many were left out for not moving in the whole span. */
   idle: number;
 }
 
 /**
- * La cuenta cuya distribución se dibuja, o `null` cuando no hay ninguna que distribuir — la
- * marcada es una cuenta de movimiento, o la fuente no trae Ingresos.
+ * The account whose distribution is drawn, or `null` when there is none to distribute — the marked
+ * one is a movement account, or the source does not bring Ingresos.
  */
 export function resolveDistributionParent(
   source: AnalyticsSource | undefined,
@@ -73,8 +75,9 @@ export function resolveDistributionParent(
     return null;
   }
 
-  // Se baja por la cadena de hija única: `4 → 4.1` no es una distribución, es la misma cifra con
-  // otro nombre. Se para en cuanto hay dos o más, que es donde empieza a haber algo que repartir.
+  // It descends through the single-child chain: `4 → 4.1` is not a distribution, it is the same
+  // figure under another name. It stops as soon as there are two or more, which is where there
+  // starts to be something to break down.
   let code = start;
   let children = childrenOf(source, code);
   while (children.length === 1) {
@@ -86,9 +89,10 @@ export function resolveDistributionParent(
 }
 
 /**
- * Las hijas que la pila dibuja: sin las paradas, ordenadas de mayor a menor y con la cola plegada
- * en «Otros» cuando no caben en la escala. `limit` es cuántas series salen en total, «Otros»
- * incluida — la línea del total no gasta paso, porque va en tinta y no en color de la escala.
+ * The children the stack draws: without the idle ones, ordered largest to smallest and with the tail
+ * folded into «Otros» when they do not fit the scale. `limit` is how many series come out in total,
+ * «Otros» included — the total's line does not spend a step, because it goes in ink and not in the
+ * scale's colour.
  */
 export function foldDistribution(
   series: readonly Series[],
@@ -112,18 +116,18 @@ export function foldDistribution(
 }
 
 /**
- * Lo que cada segmento ocupa dentro del total que la línea dibuja encima.
+ * What each segment takes up within the total the line draws above it.
  *
- * Es la misma figura que `markedShares` —el porcentaje sobre la cuenta que contiene, calculado una
- * sola vez y leído después por la etiqueta y por el tooltip— con la base ya sabida: aquí no hay
- * ancestro que buscar, porque la pila ES el desglose de esa cuenta. Y se pasa por
- * `toPctOfContainer`, la única definición de «porcentaje sobre el contenedor» del módulo, en vez
- * de dividir aquí: de ahí hereda las dos reglas que importan — un periodo sin cobertura y un total
- * en `0` dan `null`, nunca `0 %`.
+ * It is the same figure as `markedShares` —the percentage over the containing account, computed just
+ * once and read afterwards by the label and by the tooltip— with the base already known: here there
+ * is no ancestor to look for, because the stack IS that account's breakdown. And it goes through
+ * `toPctOfContainer`, the module's only definition of «percentage over the container», instead of
+ * dividing here: from it it inherits the two rules that matter — a period with no coverage and a
+ * total at `0` give `null`, never `0 %`.
  *
- * «Otros» lleva el suyo como cualquier otra: es la suma de la cola y ocupa lo que ocupa. Los
- * porcentajes NO suman 100 cuando una hija es negativa, y eso es correcto: es exactamente lo que
- * dice que el neto no está en el borde de la pila.
+ * «Otros» carries its own like any other: it is the tail's sum and it takes up what it takes up. The
+ * percentages do NOT add up to 100 when a child is negative, and that is correct: it is exactly what
+ * says the net is not at the stack's edge.
  */
 export function distributionShares(
   series: readonly Series[],
@@ -145,14 +149,14 @@ export function distributionShares(
 }
 
 /**
- * El color de cada segmento por su LUGAR en la pila, que aquí es su tamaño — y no por la entidad,
- * que es la regla del resto de la app.
+ * Each segment's colour by its PLACE in the stack, which here is its size — and not by the entity,
+ * which is the rest of the app's rule.
  *
- * No es una excepción caprichosa: `colorForEntity` existe para que quitar una serie no repinte a
- * las demás, y eso importa cuando lo comparado son entidades que van y vienen de la gráfica. Estos
- * segmentos no van y vienen: son el reparto ENTERO de una cuenta, siempre completo y siempre
- * ordenado, así que el único orden estable posible es el del reparto. Pedirle a este color que
- * siguiera al código sería además pedirle que dejara de decir lo único que dice, que es el rango.
+ * It is not a capricious exception: `colorForEntity` exists so removing a series does not repaint the
+ * others, and that matters when what is compared are entities that come and go from the chart. These
+ * segments do not come and go: they are an account's WHOLE breakdown, always complete and always
+ * ordered, so the only stable order possible is the breakdown's. Asking this colour to follow the code
+ * would also be asking it to stop saying the only thing it says, which is the rank.
  */
 export function distributionColor(series: readonly Series[]): (key: SeriesKey) => string {
   const slotByCode = new Map(series.map((entry, index) => [entry.key.code, index]));
@@ -160,8 +164,8 @@ export function distributionColor(series: readonly Series[]): (key: SeriesKey) =
 }
 
 /**
- * La cola como una serie más. Suma punto a punto por ÍNDICE porque todas vienen de una misma
- * tanda y comparten eje; un periodo que ninguna cubre sigue siendo `null` y no un cero inventado.
+ * The tail as one more series. It sums point by point by INDEX because they all come from one same
+ * batch and share an axis; a period none of them covers is still `null` and not an invented zero.
  */
 function othersSeries(folded: readonly Series[]): Series {
   const first = folded[0];

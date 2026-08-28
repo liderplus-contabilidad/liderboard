@@ -41,7 +41,7 @@ describe("orden de fechas", () => {
 
 describe("periodCells · rango", () => {
   it("recorta los meses de los extremos y deja enteros los de en medio", () => {
-    // Del 20 de marzo al 10 de mayo de 2026.
+    // From 20 March to 10 May 2026.
     const cells = periodCells(rango(date(2026, 2, 19), date(2026, 4, 9)));
     expect(cells.map((cell) => cell.monthIndex)).toEqual([2, 3, 4]);
     expect(cells[0].days).toHaveLength(12); // 20..31 de marzo
@@ -128,7 +128,7 @@ describe("periodCells · comparación de periodos", () => {
   });
 
   it("una fecha que no existe se descarta en vez de acercarse a otra", () => {
-    // 30 de febrero de 2026 no existe.
+    // 30 February 2026 does not exist.
     expect(periodCells(dias(date(2026, 1, 29)))).toEqual([]);
     expect(periodCells(dias(date(2028, 1, 28)))).toHaveLength(1);
   });

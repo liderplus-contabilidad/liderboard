@@ -46,6 +46,17 @@
   --color-section-other-hover: #e3c0a3;
   --color-section-other-sub-hover: #ead7c9;
 
+  /* The control that LEAVES its card towards another source —today only the cross-link from
+     «Composición de los ingresos» to Ventas por servicio—. It is not `brand`, and that is its whole
+     reason for being: `brand` is the primary action WITHIN the screen, so a link that carries the
+     reader off to another report painted in `brand` reads as one more control of the card. Nothing
+     else in the app uses this fuchsia, neither the series palette nor the section fills, so it says
+     «this belongs elsewhere» without competing with any reading. Measured over `surface-header`:
+     6.1:1. */
+  --color-crosslink: #a21caf;
+  --color-crosslink-hover: #86198f;
+  --color-crosslink-soft: rgba(162, 28, 175, 0.08);
+
   --color-chip: #eef2f6;
   --color-chip-border: #dce3eb;
 
@@ -82,7 +93,7 @@ body {
 }
 
 /* ── Printing ─────────────────────────────────────────────────────────────
-  Every printable report (PyG, Sueldos por Áreas) mounts in a portal over
+  Every printable report (PyG, Sueldos por Áreas, Ventas por servicio) mounts in a portal over
   <body> as `.report-layer` (see components/ui/report-layer.tsx) and prints
   with window.print(). The class, not an id, is what the app now has more
   than one of: nothing else from the app is included in the print output.

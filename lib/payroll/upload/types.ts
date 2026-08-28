@@ -18,6 +18,6 @@ export interface ParsedPayrollWorkbook {
   /** Every line carries its `capture`: this is always the month the file declares, never a roster
    * copy with nothing captured yet. */
   lines: ParsedPayrollEmployeeLine[];
-  /** Avisos en español, agrupados por tipo — nunca uno por empleado ni uno por columna. */
+  /** Notices in Spanish, grouped by type — never one per employee nor one per column. */
   warnings: string[];
 }

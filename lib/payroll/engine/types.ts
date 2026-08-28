@@ -1,22 +1,22 @@
 /**
- * Los tipos del motor de cálculo del rol. Cada campo nombra una columna de la hoja `GENERAL`
- * del libro del contador; el mapa completo está en `docs/payroll/rol-de-pagos-formulas.md` §1.
+ * The types of the rol's computation engine. Each field names a column of the accountant's book's
+ * `GENERAL` sheet; the complete map is in `docs/payroll/rol-de-pagos-formulas.md` §1.
  */
 
 /**
- * Los once componentes de ingreso, que son de donde salen las seis bases de cálculo (§2).
+ * The eleven income components, which are where the six computation bases come from (§2).
  *
- * Están todos juntos en un tipo —y no repartidos por función— porque el orden en que se llenan
- * importa: `thirteenthMonthly` (`O`) se deriva de una base que NO lo contiene, y luego entra en
- * otras dos. Cada función de `bases.ts` declara con un `Pick` exactamente cuáles lee, así que
- * el tipo de la función ES la documentación de qué columna entra en esa base.
+ * They are all together in one type —and not spread across functions— because the order in which
+ * they are filled matters: `thirteenthMonthly` (`O`) is derived from a base that does NOT contain it,
+ * and then enters two others. Each function of `bases.ts` declares with a `Pick` exactly which ones
+ * it reads, so the function's type IS the documentation of which column enters that base.
  */
 export interface IncomeComponents {
   /** `F` · SUELDO UNIFICADO */
   unifiedSalary: number;
-  /** `M` · TOTAL HORAS EXTRAS reconocido este mes — el importe tecleado (`approvedOvertime`) o,
-   *  si no hay ninguno, todo lo trabajado. Es la ÚNICA vía por la que las horas extras alcanzan
-   *  un total o una base: ningún consumidor suma `J+K+L` por su cuenta. */
+  /** `M` · TOTAL HORAS EXTRAS recognised this month — the typed amount (`approvedOvertime`) or, if
+   *  there is none, everything worked. It is the ONLY route by which overtime reaches a total or a
+   *  base: no consumer sums `J+K+L` on its own. */
   overtimeTotal: number;
   /** `N` · DECIMO IV MENSUAL */
   fourteenthMonthly: number;
@@ -32,30 +32,31 @@ export interface IncomeComponents {
   fixedCommission: number;
   /** `T` · COMISION VARIABLE */
   variableCommission: number;
-  /** `U` · FONDO DE RESERVA (el que se paga en el mes, no el que se acumula) */
+  /** `U` · FONDO DE RESERVA (the one paid within the month, not the one accrued) */
   reserveFundPaid: number;
   /** `V` · BONO CUMPLIMIENTO */
   bonus: number;
   /**
-   * Los conceptos extra APORTABLES que el período declara, ya sumados. **Sin columna en el libro**
-   * de Cultura Manor: son los que otros roles rotulan por su cuenta (`MOVILIZACION`,
-   * `ALIMENTACION`), y aquí llegan como un solo número porque para las seis bases tres bonos de 50
-   * y uno de 150 son indistinguibles.
+   * The CONTRIBUTORY extra concepts the período declares, already summed. **With no column in
+   * Cultura Manor's book**: they are the ones other roles label on their own (`MOVILIZACION`,
+   * `ALIMENTACION`), and here they arrive as a single number because to the six bases three bonuses
+   * of 50 and one of 150 are indistinguishable.
    *
-   * Se comporta como `R`, `S` y `T`: entra en las cinco bases parciales y en el total.
+   * It behaves like `R`, `S` and `T`: it enters the five partial bases and the total.
    */
   contributoryExtras: number;
-  /** Los conceptos extra NO aportables, ya sumados. Se comporta como `U` y `V`: solo llega al
-   *  total, sin ser base de nada. */
+  /** The NON-contributory extra concepts, already summed. It behaves like `U` and `V`: it only
+   *  reaches the total, without being the base of anything. */
   nonContributoryExtras: number;
 }
 
 /**
- * Los conceptos extra reducidos a lo único que el cálculo mira: cuánto suma cada clase.
+ * The extra concepts reduced to the only thing the computation looks at: how much each class adds up
+ * to.
  *
- * Vive aquí, en el vocabulario del motor, y no en `lib/payroll/extra-income.ts`, que es quien lo
- * PRODUCE: así el motor no adquiere una dependencia de la forma en que esos conceptos se almacenan
- * ni, a través de ella, de las reglas genéricas de nombre de `lib/workspaces.ts`.
+ * It lives here, in the engine's vocabulary, and not in `lib/payroll/extra-income.ts`, which is what
+ * PRODUCES it: that way the engine does not acquire a dependency on the way those concepts are stored
+ * nor, through it, on the generic name rules of `lib/workspaces.ts`.
  */
 export interface ExtraIncomeTotals {
   contributory: number;
@@ -63,12 +64,13 @@ export interface ExtraIncomeTotals {
 }
 
 /**
- * Los egresos que se CAPTURAN, en el orden de columnas del libro (`Y`…`AN`). El orden importa:
- * `AO` los suma sin redondear, y la suma en coma flotante no es asociativa (§9).
+ * The deductions that are CAPTURED, in the book's column order (`Y`…`AN`). The order matters: `AO`
+ * sums them unrounded, and floating-point addition is not associative (§9).
  *
- * Faltan a propósito las cuatro columnas sin rótulo `AJ`–`AM`, que el libro incluye en su
- * `SUM(X:AN)` pero siempre valen cero — es la pregunta abierta §11.4. Mientras valgan cero, no
- * modelarlas da el mismo total; si resultan ser descuentos reales, entran aquí con su nombre.
+ * The four unlabelled columns `AJ`–`AM` are deliberately missing; the book includes them in its
+ * `SUM(X:AN)` but they are always zero — it is open question §11.4. As long as they are zero, not
+ * modelling them gives the same total; if they turn out to be real deductions, they come in here with
+ * their name.
  */
 export interface CapturedDeductions {
   /** `Y` · PRESTAMOS QUIROGRAFARIOS E HIPOTECARIOS */
@@ -91,59 +93,62 @@ export interface CapturedDeductions {
   solidarityContribution: number;
   /** `AH` · OTROS */
   otherDeductions: number;
-  /** `AI` · DESCUENTO TIEMPO PACIAL (sic, así lo escribe el libro) */
+  /** `AI` · DESCUENTO TIEMPO PACIAL (sic, that is how the book writes it) */
   partTimeDeduction: number;
   /** `AN` · Descuento PERMISO MEDICO */
   medicalLeaveDeduction: number;
 }
 
 /**
- * Lo que el libro escribe como un `*0` al final de una fórmula (§6). Son decisiones POR EMPLEADO
- * y POR MES: el contador las aplica a mano, celda por celda. Modelarlas —y no hornear el cero—
- * es lo que permite que la app reproduzca el archivo tal como llegó y a la vez deje corregirlo.
+ * What the book writes as a `*0` at the end of a formula (§6). They are decisions PER EMPLOYEE and
+ * PER MONTH: the accountant applies them by hand, cell by cell. Modelling them —and not baking the
+ * zero in— is what allows the app to reproduce the file as it arrived and at the same time allow
+ * correcting it.
  */
 export interface PayrollComputationFlags {
-  /** `AS` · ¿se provisiona el décimo tercero? Apagada en todo el archivo real: ya se mensualiza
-   *  en `O`, así que provisionarlo otra vez lo contaría dos veces. */
+  /** `AS` · is the décimo tercero provisioned? Switched off throughout the real file: it is already
+   *  taken monthly in `O`, so provisioning it again would count it twice. */
   provisionsThirteenth: boolean;
-  /** `AT` · ¿se provisiona el décimo cuarto? Apagada en todo el archivo real, por lo mismo. */
+  /** `AT` · is the décimo cuarto provisioned? Switched off throughout the real file, for the same
+   *  reason. */
   provisionsFourteenth: boolean;
 }
 
-/** Todo lo que hace falta para calcular el mes de UN empleado. Nada aquí se deriva. */
+/** Everything needed to compute ONE employee's month. Nothing here is derived. */
 export interface PayrollEmployeeInput {
   /** `D` · SUELDO BASE */
   baseSalary: number;
-  /** `E` · DIAS pagados del mes */
+  /** `E` · DIAS paid in the month */
   days: number;
-  /** `BB` · TC. El parcial cobra la mitad del décimo cuarto. */
+  /** `BB` · TC. A part-time contract receives half the décimo cuarto. */
   contractType: "CT" | "TP";
-  /** `BA` · FR — ¿tiene derecho a fondo de reserva? */
+  /** `BA` · FR — is there an entitlement to the reserve fund? */
   hasReserveFund: boolean;
-  /** `AZ` · AC FR — ¿lo acumula en el IESS en vez de cobrarlo mensual? Ver §7. */
+  /** `AZ` · AC FR — is it accrued at the IESS instead of received monthly? See §7. */
   accumulatesReserveFund: boolean;
-  /** `G` · cantidad de horas al 50 % */
+  /** `G` · number of hours at 50 % */
   overtimeHours50: number;
-  /** `H` · cantidad de horas al 100 % */
+  /** `H` · number of hours at 100 % */
   overtimeHours100: number;
-  /** `I` · cantidad de horas de la tercera clase. El libro la rotula 15 % y a su valor 25 % (§11.2). */
+  /** `I` · number of hours of the third class. The book labels it 15 % and its value 25 % (§11.2). */
   overtimeHours25: number;
   /**
-   * `M` · el IMPORTE de horas extras que se reconoce este mes. `null` = todas las trabajadas
-   * (`J+K+L`); un número = ese importe exacto, y `0` es el `*0` que el libro escribe a mano.
+   * `M` · the AMOUNT of overtime recognised this month. `null` = all the hours worked (`J+K+L`); a
+   * number = that exact amount, and `0` is the `*0` the book writes by hand.
    *
-   * **Se teclea, no se calcula.** El rol se presenta a Gerencia antes de pagarse y lo aprobado
-   * puede ser la totalidad o una parte, según la ocupación del hotel ese mes y los acuerdos con
-   * cada empleado; la firma fue explícita en que «más que un porcentaje predeterminado no sería
-   * como tal» y en que «esa variación no es calculada, sino manual». Por eso esto es un importe
-   * y no un porcentaje: la app no deriva la cifra de nada, la recibe. Y por eso vive aquí, entre
-   * lo que se captura, y no en `PayrollParameters`, que es solo lo fijado por Ley.
+   * **It is typed, not computed.** The rol is presented to Gerencia before being paid and what is
+   * approved may be all of it or a part, depending on the hotel's occupancy that month and on the
+   * agreements with each employee; the firm was explicit that «anything more than a predetermined
+   * percentage would not be one» and that «that variation is not computed, it is manual». That is why
+   * this is an amount and not a percentage: the app derives the figure from nothing, it receives it.
+   * And that is why it lives here, among what is captured, and not in `PayrollParameters`, which is
+   * only what is fixed by Law.
    *
-   * Es exactamente lo que hace el Excel, donde `M` es una celda que el contador edita.
+   * It is exactly what the Excel does, where `M` is a cell the accountant edits.
    *
-   * Recorta lo que SUMA, no lo que se muestra: `J`, `K` y `L` siguen enseñando el valor entero
-   * de las horas trabajadas. Lo no reconocido no entra a `W` ni a NINGUNA base — ni al aporte al
-   * IESS, ni al décimo tercero, ni a la provisión de vacaciones.
+   * It trims what ADDS UP, not what is shown: `J`, `K` and `L` keep showing the whole value of the
+   * hours worked. What is not recognised does not enter `W` nor ANY base — not the IESS contribution,
+   * not the décimo tercero, not the vacation provision.
    */
   approvedOvertime: number | null;
   /** `P` · VACACIONES - MENSUAL */
@@ -157,56 +162,55 @@ export interface PayrollEmployeeInput {
   /**
    * `T` · COMISION VARIABLE.
    *
-   * **Es un IMPORTE ya calculado, no una base a la que aplicar un porcentaje.** La firma nombra
-   * un 20 % ligado a la comisión variable, pero confirmó que «es igual manual»: el porcentaje se
-   * aplica fuera de la app y aquí llega el resultado. No añadir un cálculo del 20 % — el libro
-   * tampoco lo tiene (no hay ninguna fórmula con `0.2` en las 8 hojas) y sería una segunda
-   * definición que puede separarse de la suya.
+   * **It is an AMOUNT already computed, not a base to apply a percentage to.** The firm names a 20 %
+   * tied to the variable commission, but confirmed that «it is manual anyway»: the percentage is
+   * applied outside the app and the result arrives here. Do not add a 20 % computation — the book
+   * does not have it either (there is no formula with `0.2` in its 8 sheets) and it would be a second
+   * definition that can drift from theirs.
    */
   variableCommission: number;
   /** `V` · BONO CUMPLIMIENTO */
   bonus: number;
   /**
-   * Los conceptos de ingreso que el PERÍODO declara además de los del libro, ya sumados por clase.
+   * The income concepts the PERÍODO declares in addition to the book's, already summed by class.
    *
-   * Llega agregado y no como lista porque el motor no tiene por qué saber cuántos hay ni cómo se
-   * llaman — eso lo necesitan la pantalla, el comprobante y el aviso de tope, que leen la
-   * declaración del período directamente. Quien reduce la lista a estos dos números es
-   * `sumExtraIncome` (`lib/payroll/extra-income.ts`), en el mismo sitio donde se cruza la ficha con
-   * la captura.
+   * It arrives aggregated and not as a list because the engine has no reason to know how many there
+   * are or what they are called — that is needed by the screen, the payslip and the cap notice, which
+   * read the período's declaration directly. What reduces the list to these two numbers is
+   * `sumExtraIncome` (`lib/payroll/extra-income.ts`), in the same place where the record is crossed
+   * with the capture.
    */
   extras: ExtraIncomeTotals;
   deductions: CapturedDeductions;
-  /** `BZ` · PAGADO, tecleado a mano. `null` cuando el período no lo declara todavía — y eso NO
-   *  es cero: sin él un empleado no está ni conciliado ni con diferencia. */
+  /** `BZ` · PAGADO, typed by hand. `null` when the período does not declare it yet — and that is NOT
+   *  zero: without it an employee is neither reconciled nor in difference. */
   paid: number | null;
   flags: PayrollComputationFlags;
 }
 
-/** Las 20 columnas derivadas. Ninguna se guarda: se recalculan siempre desde el input. */
+/** The 20 derived columns. None is stored: they are always recomputed from the input. */
 export interface PayrollEmployeeComputation {
   /** `F` */ unifiedSalary: number;
   /** `J` */ overtimePay50: number;
   /** `K` */ overtimePay100: number;
   /** `L` */ overtimePay25: number;
-  /** `M` — las horas extras recortadas por lo que Gerencia aprobó, mientras los tres valores de
-   *  arriba siguen enteros. Es lo que permite que el rol enseñe 16,75 de horas extras y un total
-   *  que no las contiene. */
+  /** `M` — the overtime trimmed by what Gerencia approved, while the three values above stay whole.
+   *  It is what allows the rol to show 16.75 of overtime and a total that does not contain it. */
   overtimeTotal: number;
   /** `N` */ fourteenthMonthly: number;
   /** `O` */ thirteenthMonthly: number;
   /** `U` */ reserveFundPaid: number;
-  /** `W` — sin redondear */ grossIncome: number;
+  /** `W` — unrounded */ grossIncome: number;
   /** `X` */ iessEmployee: number;
-  /** `AO` — sin redondear */ totalDeductions: number;
-  /** `AP` — sin redondear */ netPay: number;
+  /** `AO` — unrounded */ totalDeductions: number;
+  /** `AP` — unrounded */ netPay: number;
   /** `AS` */ thirteenthProvision: number;
   /** `AT` */ fourteenthProvision: number;
   /** `AU` */ iessEmployer: number;
   /** `AV` */ vacationProvision: number;
   /** `AW` */ reserveFundAccrued: number;
-  /** `AX` — sin redondear */ totalProvision: number;
-  /** `AY` — sin redondear */ employerCost: number;
-  /** `CA` — `null` cuando no hay `PAGADO` declarado, que no es lo mismo que cero. */
+  /** `AX` — unrounded */ totalProvision: number;
+  /** `AY` — unrounded */ employerCost: number;
+  /** `CA` — `null` when there is no declared `PAGADO`, which is not the same as zero. */
   difference: number | null;
 }

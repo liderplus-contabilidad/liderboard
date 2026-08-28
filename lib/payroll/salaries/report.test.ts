@@ -5,7 +5,7 @@ import { emptyFilters, type SalariesFilters } from "./filters";
 import type { SalariesSource } from "./grid";
 import { buildSalariesReport } from "./report";
 
-/** Una ficha mínima y válida; solo se le pasa lo que cada caso necesita distinguir. */
+/** A minimal, valid record; only what each case needs to tell apart is passed to it. */
 function line(overrides: Partial<PayrollEmployeeLine> = {}): PayrollEmployeeLine {
   return {
     id: crypto.randomUUID(),
@@ -105,8 +105,8 @@ describe("buildSalariesReport", () => {
     const consolidado = sections.find((s) => s.id === "consolidado");
     const cocina = sections.find((s) => s.id === "area:COCINA");
 
-    // Mismo grid + tarjeta que la pantalla ya construye: el título de `buildSalariesCard` delata
-    // el modo con el que se pidió cada sección.
+    // The same grid + card the screen already builds: `buildSalariesCard`'s title gives away the mode
+    // each section was asked for with.
     expect(consolidado?.card.title).toBe("Sueldos por área");
     expect(cocina?.card.title).toBe("Área COCINA");
   });
@@ -117,8 +117,8 @@ describe("buildSalariesReport", () => {
       f26: [line({ area: "COCINA" }), line({ area: "VENTAS", idCard: "2" })],
     });
 
-    // Marcar VENTAS como si se estuviera viendo su detalle en pantalla no recorta el informe:
-    // trae igual el consolidado y las DOS áreas.
+    // Marking VENTAS as if its detail were being looked at on screen does not trim the report: it
+    // still brings the consolidado and BOTH areas.
     const withArea = report(data, { ...emptyFilters(), areas: ["VENTAS"] });
     expect(withArea.sections.map((s) => s.id)).toEqual([
       "consolidado",
@@ -126,7 +126,7 @@ describe("buildSalariesReport", () => {
       "area:VENTAS",
     ]);
 
-    // Marcar un mes sí acota las columnas de cada tabla.
+    // Marking a month does narrow each table's columns.
     const withMonth = report(data, { ...emptyFilters(), months: [0] });
     const cocina = withMonth.sections.find((s) => s.id === "area:COCINA");
     expect(cocina?.card.table.columns).toEqual(["Ene"]);
@@ -152,7 +152,7 @@ describe("buildSalariesReport", () => {
       e25: [line()],
     });
 
-    // Enero de dos años distintos: no son meses consecutivos.
+    // January of two different years: they are not consecutive months.
     expect(report(data).header.rangeLabel).toBe("Ene 2025, Ene 2026");
   });
 

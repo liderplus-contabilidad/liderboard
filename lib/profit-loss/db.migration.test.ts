@@ -211,7 +211,7 @@ describe("v4 migration — retiring annual-base single-statement workspaces", ()
 
     expect(await db.datasets.count()).toBe(0);
     expect(await db.edits.count()).toBe(0);
-    // Sin datasets ni fila de workspace, v7 no crea ningún cliente.
+    // With no datasets and no workspace row, v7 creates no client.
     expect((await migrated(db)).clients).toEqual([]);
   });
 });
@@ -244,7 +244,7 @@ describe("v4 migration — a base-mensual single-statement workspace is conserve
     expect((await db.datasets.toArray()).map((d) => d.id)).toEqual(["single-1"]);
     expect(await db.edits.count()).toBe(1);
     const { meta } = await migrated(db);
-    // v4 infiere `loadedMonths`; v6 la mueve al eje del año sin perder nada.
+    // v4 infers `loadedMonths`; v6 moves it onto the year's axis without losing anything.
     expect(meta?.loadedMonthsByYear).toEqual({ 2026: [0, 1, 2, 3, 4, 5, 6] });
   });
 });
@@ -264,7 +264,7 @@ describe("v5 migration — el sistema de origen del workspace", () => {
     const { db } = await import("./db");
     await db.open();
 
-    // Nada se descarta: el dataset sigue ahí y la meta solo gana el campo.
+    // Nothing is discarded: the dataset is still there and the meta only gains the field.
     expect((await db.datasets.toArray()).map((d) => d.id)).toEqual(["single-1"]);
     const { meta } = await migrated(db);
     expect(meta?.sourceSystemId).toBe("monthly-single");
@@ -301,17 +301,17 @@ describe("v7 migration — el workspace único pasa a ser el primer cliente", ()
     expect(client.name).toBe("DARWIN & WOLF");
     expect(activeClientId).toBe(client.id);
 
-    // Todos los datasets llevan su cliente; ninguno se pierde.
+    // Every dataset carries its client; none is lost.
     const datasets = await db.datasets.toArray();
     expect(datasets.map((d) => d.id).sort()).toEqual(["a26", "c25", "c26"]);
     expect(datasets.every((d) => d.clientId === client.id)).toBe(true);
     expect(await db.datasets.where("clientId").equals(client.id).count()).toBe(3);
 
-    // La cobertura de LOS DOS años viaja entera en la fila re-tecleada.
+    // The coverage of BOTH years travels whole in the re-keyed row.
     expect(meta?.activeCenterId).toBe("consolidado");
     expect(meta?.sourceSystemId).toBe("monthly-centers");
     expect(meta?.loadedMonthsByYear).toEqual({ 2025: [0, 1], 2026: [0, 1, 2] });
-    // Y la fila vieja ya no existe.
+    // And the old row no longer exists.
     expect(await db.meta.get("workspace")).toBeUndefined();
   });
 

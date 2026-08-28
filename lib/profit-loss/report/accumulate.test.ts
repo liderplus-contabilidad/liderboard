@@ -58,7 +58,8 @@ describe("el acumulado del informe", () => {
   });
 
   it("no suma la columna Total del año, que ya es una suma", () => {
-    // Sumarla duplicaría el año entero: 600 + 600. El acumulado sale de los periodos.
+    // Summing it would duplicate the whole year: 600 + 600. The accumulated figure comes from the
+    // periods.
     const result = accumulate([row("4", [10, 20, 30, 60, 100, 200, 300, 600])]);
 
     expect(result.periods[0]?.positions).toEqual([4, 5, 6]);
@@ -89,7 +90,7 @@ describe("el acumulado del informe", () => {
 
   it("acumula solo los periodos que el filtro deja ver", () => {
     const result = accumulate([row("4", [10, 20, 30, 60, 100, 200, 300, 600])], {
-      // Ene y Feb de cada año; los Total siguen en la lista y siguen sin sumarse.
+      // Ene and Feb of each year; the Totals are still on the list and are still not summed.
       visibleColumns: [0, 1, 3, 4, 5, 7],
     });
 
@@ -99,7 +100,7 @@ describe("el acumulado del informe", () => {
 
   it("acumula solo los periodos que el workspace cargó", () => {
     const result = accumulate([row("4", [10, 20, 30, 60, 100, 200, 300, 600])], {
-      // 2026 solo tiene Ene cargado; 2025 lo tiene todo.
+      // 2026 only has Ene loaded; 2025 has it all.
       loadedColumns: new Set([0, 1, 2, 4]),
     });
 
@@ -112,7 +113,7 @@ describe("el acumulado del informe", () => {
 
   it("recorta el año anterior al mismo tramo, no a lo que él tenga cargado", () => {
     const result = accumulate([row("4", [10, 20, 30, 60, 100, 200, 300, 600])], {
-      // 2026 llega hasta Feb; 2025 está completo. La comparación corre Ene–Feb en los dos.
+      // 2026 runs to Feb; 2025 is complete. The comparison runs Ene–Feb in both.
       loadedColumns: new Set([0, 1, 2, 4, 5]),
     });
 
@@ -123,7 +124,7 @@ describe("el acumulado del informe", () => {
 
   it("descarta el año que no llega a cubrir el tramo, y dice cuál le falta", () => {
     const result = accumulate([row("4", [10, 20, 30, 60, 100, 200, 300, 600])], {
-      // 2025 solo tiene Ene: un acumulado suyo sobre un mes no se compara con tres.
+      // 2025 only has Ene: an accumulated figure of its own over one month is not compared with three.
       loadedColumns: new Set([0, 4, 5, 6]),
     });
 
@@ -171,8 +172,8 @@ describe("la variación entre dos acumulados", () => {
   });
 
   it("lee una pérdida que se achica como una mejora", () => {
-    // (-50 − -100) / |-100| = +50 %. Con el divisor sin valor absoluto saldría -50 %, que dice
-    // lo contrario de lo que pasó.
+    // (-50 − -100) / |-100| = +50 %. With the divisor without an absolute value it would come out
+    // -50 %, which says the opposite of what happened.
     expect(variationPct(-50, -100)).toBe(50);
     expect(variationPct(-150, -100)).toBe(-50);
   });

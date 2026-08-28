@@ -6,57 +6,57 @@ import { formatCurrency } from "@/lib/format";
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 
 interface EmployeePeriodFieldsProps {
-  /** Los tres extremos del calendario llegan YA FORMATEADOS. Dar formato a una fecha es una regla
-   *  de la app (`@/lib/date.ts`), no de esta pantalla: si la escribiera aquí habría dos
-   *  definiciones de «cómo se ve una fecha» y podrían separarse. `hireDate` es `null` cuando la
-   *  ficha no la declara. */
+  /** The calendar's three ends arrive ALREADY FORMATTED. Formatting a date is a rule of the app
+   *  (`@/lib/date.ts`), not of this screen: written here there would be two definitions of «what a
+   *  date looks like» and they could drift apart. `hireDate` is `null` when the record does not
+   *  declare it. */
   periodStart: string;
   periodEnd: string;
   hireDate: string | null;
-  /** `BB` · TC. Se enseña el código LITERAL («CT»/«TP»), no «Tiempo completo»: es lo que el libro
-   *  escribe y lo que el contador coteja celda por celda contra su hoja. */
+  /** `BB` · TC. The LITERAL code is shown («CT»/«TP»), not «Tiempo completo»: it is what the book
+   *  writes and what the accountant checks cell by cell against their sheet. */
   contractType: PayrollEmployeeLine["contractType"];
-  /** `AZ` · AC FR — de la ficha, no del mes: es una elección del empleado. */
+  /** `AZ` · AC FR — from the record, not the month: it is a choice of the employee. */
   accumulatesReserveFund: boolean;
-  /** `AS` y `AT` · lo que el motor derivó para las dos provisiones de décimos, o `null` cuando la
-   *  ficha las tiene apagadas. La caja enseña el IMPORTE cuando provisiona y «No» cuando no: son
-   *  las dos preguntas que alguien se hace ahí, y el importe implica ya la respuesta a la primera.
+  /** `AS` and `AT` · what the engine derived for the two décimo provisions, or `null` when the record
+   *  has them switched off. The box shows the AMOUNT when it provisions and «No» when it does not:
+   *  those are the two questions anyone asks there, and the amount already implies the answer to the
+   *  first.
    *
-   *  Están aquí, en solo lectura, porque estas dos cifras no salen en ninguna otra parte de la
-   *  pantalla —`EmployeeTotals` no desglosa ninguna de las cinco provisiones— y las casillas que
-   *  las enseñaban se fueron al diálogo de ficha, que es de donde salen. */
+   *  They are here, read-only, because these two figures appear nowhere else on the screen
+   *  —`EmployeeTotals` breaks out none of the five provisions— and the checkboxes that showed them
+   *  moved to the record dialog, which is where they come from. */
   thirteenthProvision: number | null;
   fourteenthProvision: number | null;
-  /** `E` · días pagados del mes. */
+  /** `E` · days paid in the month. */
   days: number;
   /** `D` · sueldo base. */
   baseSalary: number;
-  /** `BZ` · PAGADO. `null` mientras el período no lo declare — y eso NO es cero: sin él el empleado
-   *  no está ni conciliado ni con diferencia. */
+  /** `BZ` · PAGADO. `null` while the período does not declare it — and that is NOT zero: without it
+   *  the employee is neither reconciled nor in difference. */
   paid: number | null;
   onDaysChange: (days: number) => void;
   onBaseSalaryChange: (baseSalary: number) => void;
   onPaidChange: (paid: number | null) => void;
-  /** Apaga los tres editables: un período cerrado, o mientras se guarda. */
+  /** Switches the three editable ones off: a closed período, or while saving. */
   readOnly?: boolean;
 }
 
 /**
- * La rejilla de ocho campos entre las fichas de identidad y las tablas de conceptos: el marco bajo
- * el que se leen todas las cifras de abajo.
+ * The grid of eight fields between the identity cards and the concept tables: the frame under which
+ * every figure below is read.
  *
- * Cinco son de SOLO LECTURA sobre fondo gris y tres se editan, y esa es la única distinción que la
- * rejilla hace visible — la misma gramática que las tablas de conceptos usan un poco más abajo
- * (gris = lo que no se teclea), así que quien lee la pantalla aprende la regla una vez.
+ * Five are READ-ONLY on a grey fill and three are edited, and that is the only distinction the grid
+ * makes visible — the same grammar the concept tables use a little further down (grey = what is not
+ * typed), so whoever reads the screen learns the rule once.
  *
- * Los dos extremos del período no se editan porque los declara el período, no el empleado; el tipo
- * de contrato, la fecha de ingreso, la acumulación de fondo de reserva y las dos provisiones de
- * décimos son de la FICHA y cambian ahí —en «Editar ficha», del encabezado—, no en el mes que se
- * está capturando.
+ * The período's two ends are not edited because the período declares them, not the employee; the
+ * contract type, the hire date, the reserve-fund accumulation and the two décimo provisions belong to
+ * the RECORD and change there —in «Editar ficha», from the header—, not in the month being captured.
  *
- * El rótulo va a la IZQUIERDA del valor y alineado hacia él, no encima: con los ocho valores en
- * cajas del mismo ancho y a la derecha, la columna de cifras queda a plomo y se compara de un
- * vistazo, que es lo que se hace con estos campos.
+ * The label goes to the LEFT of the value and aligned towards it, not above: with the eight values in
+ * boxes of the same width and right-aligned, the column of figures stays plumb and is compared at a
+ * glance, which is what one does with these fields.
  */
 export function EmployeePeriodFields({
   periodStart,
@@ -117,20 +117,20 @@ export function EmployeePeriodFields({
   );
 }
 
-/** Una provisión encendida se dice con su importe; apagada, con un «No». Un `$0.00` no serviría:
- *  se leería como «provisiona cero» en vez de «no provisiona». */
+/** A provision that is on is stated with its amount; off, with a «No». A `$0.00` would not do: it
+ *  would read as «provisions zero» instead of «does not provision». */
 function provisionLabel(amount: number | null): string {
   return amount === null ? "No" : formatCurrency(amount, { cents: true });
 }
 
-/** Las dos clases de campo miden igual: el rótulo se encoge y la caja no, así que las ocho cajas
- *  quedan a plomo aunque los rótulos midan distinto. */
+/** Both classes of field measure alike: the label shrinks and the box does not, so the eight boxes
+ *  stay plumb even though the labels measure differently. */
 const LABEL_CLASS = "min-w-0 flex-1 truncate text-right text-[12px] text-muted";
 const BOX_CLASS =
   "w-[132px] shrink-0 rounded-lg px-2.5 py-2 text-right font-mono text-[12.5px] tabular-nums";
 
-/** Un dato que esta pantalla no decide: caja gris sin control dentro. Nada de un `<input disabled>`
- *  — un campo apagado invita a intentarlo; una caja que no lo es, no. */
+/** A datum this screen does not decide: a grey box with no control inside. Not an `<input disabled>`
+ *  — a switched-off field invites you to try it; a box that is not one does not. */
 function ReadOnlyField({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex items-center gap-3">

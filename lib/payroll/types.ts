@@ -1,11 +1,11 @@
 /**
- * Rol de Pagos domain types: PERÍODOS, la ficha de cada EMPLEADO (`PayrollEmployeeLine`) y lo que
- * se CAPTURA de su mes (`PayrollMonthlyCapture`). Aquí no hay ni una cifra del rol: las veinte
- * columnas las deriva el motor (`lib/payroll/engine/`) desde la ficha y la captura, y nada de eso
- * se persiste. `PayrollPeriod` tampoco guarda totales: los del período
- * (`lib/payroll/period-detail.ts`) y el conteo de su nómina (`PayrollRosterSummary`, abajo) se
- * DERIVAN siempre de `PayrollEmployeeLine[]`, nunca se persisten junto a él — un total guardado
- * aparte podría quedar desactualizado y entonces la tarjeta de KPIs diría una cosa y la tabla otra.
+ * Rol de Pagos domain types: PERÍODOS, each EMPLOYEE's record (`PayrollEmployeeLine`) and what is
+ * CAPTURED of their month (`PayrollMonthlyCapture`). There is not a single figure of the rol here:
+ * the twenty columns are derived by the engine (`lib/payroll/engine/`) from the record and the
+ * capture, and none of that is persisted. `PayrollPeriod` does not store totals either: the
+ * período's (`lib/payroll/period-detail.ts`) and its nómina's count (`PayrollRosterSummary`, below)
+ * are always DERIVED from `PayrollEmployeeLine[]`, never persisted next to it — a total stored
+ * separately could go stale and then the KPI card would say one thing and the table another.
  *
  * `ParsedPayrollPeriod` mirrors `ParsedDataset` in `lib/profit-loss/types.ts`: what a future parse
  * step would produce, with no owner yet — `db.ts` is what stamps the `clientId` at the door.
@@ -16,49 +16,48 @@ import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/workspaces";
 import type { CapturedDeductions } from "./engine/types";
 
-/** El cliente de Rol de Pagos: un nombre elegido por el usuario. Misma forma que `NamedEntity`
- *  de `@/lib/workspaces`, así que las reglas genéricas de nombre (validación, orden, búsqueda)
- *  se aplican sin envoltorio propio — este módulo no tiene identidad que comparar, a diferencia
- *  de PyG y Ocupaciones. */
+/** The Rol de Pagos client: a name chosen by the user. The same shape as `NamedEntity` of
+ *  `@/lib/workspaces`, so the generic name rules (validation, order, search) apply with no wrapper of
+ *  its own — this module has no identity to compare, unlike PyG and Ocupaciones. */
 export interface PayrollClient {
   id: string;
   name: string;
-  /** El logo que subió el usuario, si subió alguno — el que encabeza su comprobante en PDF.
-   *  Opcional y NO indexado, así que no costó migración de Dexie. */
+  /** The logo the user uploaded, if they uploaded one — the one that heads their payslip in PDF.
+   *  Optional and NOT indexed, so it cost no Dexie migration. */
   logo?: EntityLogo;
   /**
-   * Lo que el papel de la firma imprime bajo el logo: razón social, ubicación y teléfonos. Es
-   * OPCIONAL en el tipo aunque el diálogo exija sus seis campos, porque los clientes creados antes
-   * de que existiera no lo tienen: un tipo que lo declarara obligatorio afirmaría algo falso sobre
-   * lo que hay en la base y obligaría a cada lectura a mentir. La obligatoriedad es una regla del
-   * ALTA y vive en el formulario, no en el dato.
+   * What the firm's paper prints under the logo: razón social, location and phone numbers. It is
+   * OPTIONAL in the type even though the dialog requires its six fields, because the clients created
+   * before it existed do not have it: a type that declared it mandatory would assert something false
+   * about what is in the database and would force every read to lie. Being mandatory is a rule of the
+   * CREATION and lives in the form, not in the datum.
    *
-   * No indexado, como el logo, así que tampoco costó versión nueva de Dexie.
+   * Not indexed, like the logo, so it cost no new Dexie version either.
    */
   company?: CompanyProfile;
   /**
-   * El CENTRO DE COSTO al que pertenece el papel de este cliente: un nombre más específico que el
-   * suyo y —si el usuario lo subió— su propio logo. Opcional, declarado al crear el cliente, y UNO
-   * solo: no es la estructura de centros de PyG ni de Ocupaciones, donde un centro sale de los
-   * datos y hay varios (ver `lib/cost-center.ts`).
+   * The COST CENTER this client's paper belongs to: a name more specific than its own and —if the
+   * user uploaded one— its own logo. Optional, declared when creating the client, and just ONE: it is
+   * not PyG's or Ocupaciones' structure of centers, where a center comes out of the data and there
+   * are several (see `lib/cost-center.ts`).
    *
-   * Su efecto es entero del PAPEL: el rótulo del encabezado pasa a ser «Cliente · Centro»
-   * (`costCenterHeading`) y su logo cierra el membrete por la derecha, donde PyG y Ocupaciones
-   * ponen el del centro de cada hoja (`letterheadLogos`). Ni el motor, ni el asiento, ni una sola
-   * cifra lo miran.
+   * Its effect is entirely the PAPER's: the header's label becomes «Client · Center»
+   * (`costCenterHeading`) and its logo closes the letterhead on the right, where PyG and Ocupaciones
+   * put each sheet's center (`letterheadLogos`). Neither the engine, nor the journal entry, nor a
+   * single figure looks at it.
    *
-   * No indexado, como el logo y el perfil, así que tampoco costó versión nueva de Dexie.
+   * Not indexed, like the logo and the profile, so it cost no new Dexie version either.
    */
   costCenter?: CostCenter;
 }
 
-/** Único tipo de período por ahora; el tipo deja sitio a "décimos" y "liquidaciones" más adelante. */
+/** The only período type for now; the type leaves room for "décimos" and "liquidaciones" later on. */
 export type PayrollPeriodKind = "ordinario";
 
 /**
- * El número de empleados y de áreas de un período — SIEMPRE derivado de su nómina guardada
- * (`PayrollEmployeeLine[]`), nunca persistido junto a ella: un conteo guardado aparte podría
- * quedar desactualizado y entonces la tabla diría una cosa y los datos otra.
+ * A período's number of employees and areas — ALWAYS derived from its stored nómina
+ * (`PayrollEmployeeLine[]`), never persisted next to it: a count stored separately could go stale and
+ * then the table would say one thing and the data another.
  */
 export interface PayrollRosterSummary {
   employees: number;
@@ -66,33 +65,33 @@ export interface PayrollRosterSummary {
 }
 
 /**
- * Las dos clases de un concepto de ingreso extra, y lo único de él que el CÁLCULO mira.
+ * The two classes of an extra income concept, and the only thing about it the COMPUTATION looks at.
  *
- * `aportable` se comporta exactamente como `R` viáticos y `S`/`T` comisiones: entra en las cinco
- * bases parciales y en el total. `noAportable` se comporta como `V` bono y `U` fondo de reserva:
- * solo llega al total. El rótulo es libre justamente porque no decide nada.
+ * `aportable` behaves exactly like `R` viáticos and `S`/`T` commissions: it enters the five partial
+ * bases and the total. `noAportable` behaves like `V` bonus and `U` reserve fund: it only reaches the
+ * total. The label is free precisely because it decides nothing.
  */
 export type PayrollExtraConceptKind = "aportable" | "noAportable";
 
 /**
- * Una fila de bono que la captura de ESTE empleado declara, además de los trece ingresos del libro.
+ * A bonus row THIS employee's capture declares, on top of the book's thirteen income items.
  *
- * Existe porque el rol de cada empresa nombra los suyos: `MOVILIZACION NO APORTABLE` y
- * `ALIMENTACION NO APORTABLE` en el libro de DELICMAR, otros en el siguiente. Un catálogo cerrado
- * no puede crecer a ese ritmo sin tocar el motor, el asiento y el comprobante cada vez.
+ * It exists because each company's rol names its own: `MOVILIZACION NO APORTABLE` and `ALIMENTACION
+ * NO APORTABLE` in DELICMAR's book, others in the next one. A closed catalogue cannot grow at that
+ * rate without touching the engine, the journal entry and the payslip every time.
  *
- * **El rótulo y el importe viajan JUNTOS**, y esa es la diferencia con la forma anterior, donde la
- * declaración vivía en el período y el importe en la ficha: así no puede existir un importe
- * huérfano cuyo concepto ya nadie declara, ni dos definiciones de cómo se llama una fila. El
- * argumento que sostenía lo otro —una columna es de toda la nómina— se cae en cuanto el comodín
- * `AH OTROS` del propio libro significa cosas distintas en empleados distintos.
+ * **The label and the amount travel TOGETHER**, and that is the difference from the previous shape,
+ * where the declaration lived on the período and the amount on the record: that way there can be no
+ * orphan amount whose concept nobody declares any more, and no two definitions of what a row is
+ * called. The argument that held up the other one —a column belongs to the whole nómina— collapses as
+ * soon as the book's own `AH OTROS` wildcard means different things in different employees.
  *
- * El `id` es estable e independiente del rótulo dentro de esa captura: renombrar no mueve el
- * importe, que es todo el motivo por el que el `id` existe además del nombre.
+ * The `id` is stable and independent of the label within that capture: renaming does not move the
+ * amount, which is the whole reason the `id` exists on top of the name.
  */
 export interface PayrollExtraRow {
   id: string;
-  /** Como lo escribe el rol de esa empresa, verbatim: `MOVILIZACION NO APORTABLE`. */
+  /** As that company's rol writes it, verbatim: `MOVILIZACION NO APORTABLE`. */
   label: string;
   kind: PayrollExtraConceptKind;
   amount: number;
@@ -102,79 +101,78 @@ export interface PayrollPeriod {
   id: string;
   clientId: string;
   year: number;
-  /** 0–11, igual que el resto de la app. */
+  /** 0–11, like the rest of the app. */
   monthIndex: number;
   kind: PayrollPeriodKind;
 }
 
-/** Lo que produciría la capa de parseo, sin dueño todavía: `db.ts` estampa el `clientId`. */
+/** What the parse layer would produce, with no owner yet: `db.ts` stamps the `clientId`. */
 export type ParsedPayrollPeriod = Omit<PayrollPeriod, "clientId">;
 
 /**
- * La FICHA del empleado: lo estable mes a mes, y por tanto lo que una copia de nómina arrastra
- * (`lib/payroll/roster.ts`'s `copyRoster`). Horas extras, comisiones, bonos, anticipos, descuentos
- * y todo lo derivado (sueldo unificado, décimos, aporte IESS…) son del MES — se capturan o se
- * recalculan cada vez — y por eso no tienen campo aquí.
+ * The employee's RECORD: what is stable month to month, and therefore what a nómina copy drags along
+ * (`lib/payroll/roster.ts`'s `copyRoster`). Overtime, commissions, bonuses, advances, deductions and
+ * everything derived (unified salary, décimos, IESS contribution…) belong to the MONTH — they are
+ * captured or recomputed each time — and that is why they have no field here.
  */
 /**
- * Lo que se CAPTURA del mes de un empleado, más allá de su ficha: todo lo que el motor
- * (`lib/payroll/engine/`) necesita para derivar las 20 columnas del rol y que no es estable mes
- * a mes. Los importes van en las unidades del libro; las cantidades de horas, en horas.
+ * What is CAPTURED of an employee's month, beyond their record: everything the engine
+ * (`lib/payroll/engine/`) needs to derive the rol's 20 columns and that is not stable month to month.
+ * The amounts go in the book's units; the hour quantities, in hours.
  *
- * Es lo que `copyRoster` NO arrastra al copiar la nómina del mes anterior: un anticipo o unas
- * horas extras de marzo no son de abril.
+ * It is what `copyRoster` does NOT drag along when copying the previous month's nómina: an advance or
+ * some overtime from March does not belong to April.
  */
 export interface PayrollMonthlyCapture {
-  /** `G`, `H`, `I` · cantidades de horas extras por clase. */
+  /** `G`, `H`, `I` · overtime hour quantities by class. */
   overtimeHours50: number;
   overtimeHours100: number;
   overtimeHours25: number;
-  /** `M` · el IMPORTE de horas extras que se reconoce, tecleado. `null` = todo lo trabajado,
-   *  `0` = nada (el `*0` del libro). Se decide por Gerencia y por acuerdos con cada empleado,
-   *  así que no se calcula ni tiene default — ver §6 y §11.1 del documento de fórmulas. */
+  /** `M` · the AMOUNT of overtime that is recognised, typed. `null` = everything worked, `0` =
+   *  nothing (the book's `*0`). It is decided by Gerencia and by agreements with each employee, so it
+   *  is neither computed nor has a default — see §6 and §11.1 of the formulas document. */
   approvedOvertime: number | null;
-  /** `P`…`T`, `V` · los otros pagos del mes, ya calculados fuera de la app. */
+  /** `P`…`T`, `V` · the month's other payments, already computed outside the app. */
   vacationPay: number;
   privateInsurance: number;
   allowances: number;
   fixedCommission: number;
-  /** `T` · importe ya calculado. El 20 % que la firma nombra se aplica FUERA; aquí no se
-   *  recalcula nada. */
+  /** `T` · an already computed amount. The 20 % the firm names is applied OUTSIDE; nothing is
+   *  recomputed here. */
   variableCommission: number;
   bonus: number;
   /**
-   * Las filas de BONO que este empleado declara este mes, en el orden en que se declararon.
+   * The BONUS rows this employee declares this month, in the order they were declared.
    *
-   * Cada una lleva su rótulo, su clase y su importe: no hay declaración en un sitio e importe en
-   * otro, así que un importe huérfano no puede existir. Quitar la fila se lleva el importe con ella.
+   * Each carries its label, its class and its amount: there is no declaration in one place and amount
+   * in another, so an orphan amount cannot exist. Removing the row takes the amount with it.
    *
-   * AUSENTE en toda captura que no declara ninguna, que se lee como «ningún bono».
+   * ABSENT in every capture that declares none, which reads as «no bonuses».
    */
   extras?: PayrollExtraRow[];
   /**
-   * El RÓTULO PROPIO que este empleado le puso a una fila del catálogo, por código de concepto
-   * (`"E-11"` → `"Uniformes"`).
+   * The OWN LABEL this employee gave a catalogue row, by concept code (`"E-11"` → `"Uniformes"`).
    *
-   * Existe porque `E-11 OTROS` es un comodín: es la columna `AH` del libro y significa cosas
-   * distintas en empleados distintos, así que el comprobante que cada uno firma tiene que poder
-   * decir `UNIFORMES` en vez del nombre de la columna. Lo admite toda fila cuyo IMPORTE se teclea;
-   * las `calculado` no, porque su rótulo es una tasa de ley y no un nombre.
+   * It exists because `E-11 OTROS` is a wildcard: it is the book's `AH` column and it means different
+   * things in different employees, so the payslip each of them signs has to be able to say
+   * `UNIFORMES` instead of the column's name. Every row whose AMOUNT is typed admits it; the
+   * `calculado` ones do not, because their label is a statutory rate and not a name.
    *
-   * Vive en la captura y no en la ficha porque un rótulo acompaña a un importe, y los importes son
-   * del MES. AUSENTE se lee como «cada fila se llama como el libro».
+   * It lives in the capture and not in the record because a label accompanies an amount, and amounts
+   * belong to the MONTH. ABSENT reads as «every row is called what the book calls it».
    */
   labels?: Record<string, string>;
-  /** `Y`…`AN` · los doce egresos con nombre. El aporte al IESS (`X`) no está aquí: lo deriva
-   *  el motor. */
+  /** `Y`…`AN` · the twelve named deductions. The IESS contribution (`X`) is not here: the engine
+   *  derives it. */
   deductions: CapturedDeductions;
   /**
-   * `BZ` · PAGADO. `null` mientras nadie lo declare — y eso NO es cero: sin él el empleado no
-   * está ni conciliado ni con diferencia.
+   * `BZ` · PAGADO. `null` while nobody declares it — and that is NOT zero: without it the employee is
+   * neither reconciled nor in difference.
    *
-   * Vive en la captura porque se TECLEA: sin Excel, quien arma el rol escribe lo que se
-   * transfirió. Cuando el mes viene de un archivo, la carga escribe aquí su `BZ` y una corrección
-   * posterior lo pisa — que es lo que se quiere, porque quien corrige sabe más que el archivo del
-   * que salió.
+   * It lives in the capture because it is TYPED: with no Excel, whoever assembles the rol writes what
+   * was transferred. When the month comes from a file, the upload writes its `BZ` here and a later
+   * correction overrides it — which is what is wanted, because whoever corrects knows more than the
+   * file it came from.
    */
   paid: number | null;
 }
@@ -182,45 +180,44 @@ export interface PayrollMonthlyCapture {
 export interface PayrollEmployeeLine {
   id: string;
   periodId: string;
-  name: string; // hoja GENERAL, columna B
+  name: string; // GENERAL sheet, column B
   role: string; // C · cargo
-  area: string; // el bloque del rol: ADMINISTRACION, HOSPEDAJE, COCINA, RESTAURANTE, VENTAS
+  area: string; // the rol's block: ADMINISTRACION, HOSPEDAJE, COCINA, RESTAURANTE, VENTAS
   baseSalary: number; // D · sueldo base
-  contractType: "CT" | "TP"; // BB · tiempo completo / parcial. Parte a la mitad el décimo IV.
+  contractType: "CT" | "TP"; // BB · full / part time. It halves the décimo IV.
   idCard: string; // BD · cédula
-  hireDate: string | null; // BC · fecha de ingreso, ISO
-  sectorCode: string; // BF · código sectorial
-  /** `BA` · FR — ¿tiene derecho a fondo de reserva? Es de la ficha: cambia con la antigüedad,
-   *  no con el mes. */
+  hireDate: string | null; // BC · hire date, ISO
+  sectorCode: string; // BF · sector code
+  /** `BA` · FR — is there an entitlement to the reserve fund? It belongs to the record: it changes
+   *  with seniority, not with the month. */
   hasReserveFund: boolean;
-  /** `AZ` · AC FR — ¿lo acumula en el IESS en vez de cobrarlo mensual? También de la ficha:
-   *  es una elección del empleado, no del mes. */
+  /** `AZ` · AC FR — is it accrued at the IESS instead of received monthly? Also from the record:
+   *  it is a choice of the employee, not of the month. */
   accumulatesReserveFund: boolean;
   /**
-   * `AS`, `AT` · si se provisionan los décimos.
+   * `AS`, `AT` · whether the décimos are provisioned.
    *
-   * Están en la FICHA por la misma razón que las dos de arriba, y no es una analogía: cobrar los
-   * décimos mensualizados o acumularlos es una elección del EMPLEADO —la del SUT—, estable mes a
-   * mes. Viviendo en la captura no sobrevivían a `copyRoster`, así que había que volver a
-   * marcarlas cada mes empleado por empleado, y olvidarse un mes dejaba de provisionar sin que
-   * nada lo dijera.
+   * They are in the RECORD for the same reason as the two above, and it is not an analogy: taking the
+   * décimos monthly or accruing them is a choice of the EMPLOYEE —the SUT's—, stable month to month.
+   * Living in the capture they did not survive `copyRoster`, so they had to be marked again every
+   * month employee by employee, and forgetting one month stopped provisioning with nothing saying so.
    *
-   * Apagadas en todo el archivo real, porque los décimos ya se mensualizan en `N` y `O` y
-   * provisionarlos otra vez los contaría dos veces. Que estén aquí no las hace menos del mes para
-   * el motor: cada período guarda su propia ficha, así que el importador las sigue deduciendo del
-   * archivo mes a mes.
+   * Switched off throughout the real file, because the décimos are already taken monthly in `N` and
+   * `O` and provisioning them again would count them twice. That they are here does not make them any
+   * less of the month for the engine: each período stores its own record, so the importer keeps
+   * deducing them from the file month by month.
    */
   provisionsThirteenth: boolean;
   provisionsFourteenth: boolean;
-  /** E · días pagados del mes. Es del MES, no de la ficha, pero tiene un default natural: se
-   *  copia como 30 y se corrige al capturar (ingreso a mitad de mes, salida, licencia). */
+  /** E · days paid in the month. It belongs to the MONTH, not to the record, but it has a natural
+   *  default: it is copied as 30 and corrected on capture (a mid-month start, a departure, a leave). */
   days: number;
-  /** Lo capturado del mes. AUSENTE mientras nadie capture nada, y el motor la lee entonces como
-   *  una captura VACÍA: a diferencia de PyG, aquí la ficha DECLARA el sueldo y lo no capturado
-   *  vale cero de verdad. Ver `toEngineInput`. */
+  /** What was captured of the month. ABSENT while nobody captures anything, and the engine then reads
+   *  it as an EMPTY capture: unlike PyG, here the record DECLARES the salary and what is not captured
+   *  is really worth zero. See `toEngineInput`. */
   capture?: PayrollMonthlyCapture;
 }
 
-/** Una ficha sin dueño todavía: lo que produce `copyRoster`, antes de que `db.ts` la estampe con
- *  `id` y `periodId` al escribirla — el mismo patrón que `ParsedPayrollPeriod`. */
+/** A record with no owner yet: what `copyRoster` produces, before `db.ts` stamps it with an `id` and
+ *  a `periodId` on writing it — the same pattern as `ParsedPayrollPeriod`. */
 export type ParsedPayrollEmployeeLine = Omit<PayrollEmployeeLine, "id" | "periodId">;

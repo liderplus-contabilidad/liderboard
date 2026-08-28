@@ -13,12 +13,12 @@ import { PayrollEmptyState } from "./payroll-empty-state";
 import { PayrollPeriodRow } from "./payroll-period-row";
 import { PayrollYearFilter } from "./payroll-year-filter";
 
-/** Lo que una fila lee cuando su período todavía no tiene ninguna línea de nómina. */
+/** What a row reads when its período does not have a single nómina line yet. */
 const EMPTY_ROSTER: PayrollRosterSummary = { employees: 0, areas: 0 };
 
 /**
- * Historial de nómina: la vista inicial de Rol de Pagos. Sin `ModuleTabs` — el módulo no tiene
- * pestañas — así que esta es toda la página.
+ * Historial de nómina: Rol de Pagos' initial view. No `ModuleTabs` — the module has no tabs — so this
+ * is the whole page.
  */
 export function PayrollHistoryView() {
   const {
@@ -36,13 +36,13 @@ export function PayrollHistoryView() {
     ready,
   } = usePayrollData();
 
-  // Antes de la primera lectura de Dexie no se sabe si hay clientes: esperar evita el parpadeo
-  // del vacío «sin clientes» sobre un espacio que en realidad ya tiene uno.
+  // Before the first read from Dexie it is not known whether there are clients: waiting avoids the
+  // «no clients» empty state flickering over a space that actually already has one.
   if (!ready) {
     return null;
   }
 
-  // Sin cliente no hay tarjeta que rendir vacía: el vacío nombra el paso que falta.
+  // With no client there is no card to render empty: the empty state names the missing step.
   if (activeClientId === null) {
     return <PayrollEmptyState />;
   }

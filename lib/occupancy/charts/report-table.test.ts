@@ -76,7 +76,7 @@ describe("buildReportTable", () => {
     const revenue = (31 + 28) * 500;
     expect(built.total.revenue).toBe(revenue);
     expect(built.total.adr).toBeCloseTo(100, 10);
-    // Y la identidad del módulo sobrevive.
+    // And the module's identity survives.
     expect((built.total.adr ?? 0) * (built.total.occupancy ?? 0)).toBeCloseTo(
       built.total.revpar ?? 0,
       10,
@@ -87,7 +87,7 @@ describe("buildReportTable", () => {
     const tables = table([MANOR, NORTE], query({ centerIds: ["manor", "norte"] }));
     expect(tables.map((entry) => entry.label)).toEqual(["MANOR", "NORTE"]);
     expect(tables[1].key).toEqual({ centerId: "norte" });
-    // Norte solo tiene enero: febrero queda vacío en su tabla y no en la de Manor.
+    // Norte only has January: February is left empty in its table and not in Manor's.
     expect(tables[1].rows[1].covered).toBe(false);
     expect(tables[0].rows[1].covered).toBe(true);
   });

@@ -155,7 +155,7 @@ describe("dingooStrategy.parse — la rama de ingresos se niega al importar", ()
   it("la contra-cuenta positiva dentro de ingresos queda restando ingreso", () => {
     const slice = parseOk(DINGOO_AOA);
     expect(valueOf(slice, "4.01.11.01")).toBe(-150);
-    // 3 500,00 de ventas menos 150,00 de devoluciones = 3 350,00 de ingreso ordinario.
+    // 3,500.00 of sales minus 150.00 of returns = 3,350.00 of ordinary revenue.
     expect(valueOf(slice, "4.01.01.02") + valueOf(slice, "4.01.11.01")).toBe(3350);
   });
 
@@ -164,7 +164,7 @@ describe("dingooStrategy.parse — la rama de ingresos se niega al importar", ()
   });
 
   it("el resultado cuadra con el del archivo, sin aviso de descuadre", () => {
-    // 3 500,00 − 1 215,50 = 2 284,50, el −2 284,50 que declara el archivo, negado.
+    // 3,500.00 − 1,215.50 = 2,284.50, the −2,284.50 the file declares, negated.
     expect(parseOk(DINGOO_AOA).warnings).toEqual([]);
   });
 

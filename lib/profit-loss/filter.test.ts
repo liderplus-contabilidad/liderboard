@@ -57,8 +57,8 @@ describe("deepestLevel", () => {
   });
 
   it("cuenta los siete niveles de MicroPlus sin tope escrito", () => {
-    // MicroPlus anida un nivel más que los formatos anteriores (`5.5.01.02.22.01.01`); el
-    // filtro de Nivel los ofrece sin un solo cambio en su código, que solo cuenta segmentos.
+    // MicroPlus nests one level deeper than the previous formats (`5.5.01.02.22.01.01`); the Nivel
+    // filter offers them without a single change to its code, which only counts segments.
     const accounts: AccountRow[] = [
       { code: "5", name: "Costos y Gastos", values: [1] },
       { code: "5.5.01.02.22.01.01", name: "Cuenta de séptimo nivel", values: [1] },
@@ -104,10 +104,10 @@ describe("accountOptions", () => {
   });
 
   it("devuelve cada cuenta dentro de su rama aunque la lista llegue desordenada", () => {
-    // El universo del filtro es una UNIÓN por primer avistamiento (los años visibles en el
-    // proveedor, los centros/clientes en `mergeCenters`), así que un código que solo trae el
-    // segundo aporte aterriza al final de la lista — detrás del bloque de la raíz 6. Dibujado
-    // plano con sangrado por nivel, eso pinta cuentas de Ingresos colgando de No operacionales.
+    // The filter's universe is a UNION by first sighting (the visible years in the provider, the
+    // centers/clients in `mergeCenters`), so a code only the second contributor brings lands at the
+    // end of the list — behind root 6's block. Drawn flat with indentation by level, that paints
+    // Ingresos accounts hanging off No operacionales.
     const options = accountOptions([
       account("4"),
       account("4.1"),
@@ -129,8 +129,8 @@ describe("accountOptions", () => {
   });
 
   it("cuelga a un huérfano de su ancestro más cercano, como hace la tabla", () => {
-    // Sin `4.1` en el plan, `4.1.1` se anida bajo `4`: el mismo re-emparentado de
-    // `buildAccountTree`, para que el filtro y Datos no discrepen sobre quién es hija de quién.
+    // With no `4.1` in the plan, `4.1.1` nests under `4`: `buildAccountTree`'s same re-parenting, so
+    // the filter and Datos do not disagree about whose child is whose.
     expect(
       accountOptions([account("5"), account("4"), account("4.1.1")]).map((o) => o.code),
     ).toEqual(["4", "4.1.1", "5"]);
@@ -426,8 +426,8 @@ describe("movingColumnPositions", () => {
   });
 
   it("leaves no row alive with its only figure hidden", () => {
-    // El invariante que hace que juzgar filas y columnas a la vez sea seguro: la celda que salva
-    // a «4.1» salva también a su columna, así que la fila nunca queda sin nada que enseñar.
+    // The invariant that makes judging rows and columns at once safe: the cell that saves «4.1» also
+    // saves its column, so the row is never left with nothing to show.
     const rows = [
       valued("4", [{ value: 0 }, { value: 4 }], [valued("4.1", [{ value: 0 }, { value: 4 }])]),
     ];

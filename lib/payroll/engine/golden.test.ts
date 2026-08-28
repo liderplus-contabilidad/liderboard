@@ -5,12 +5,12 @@ import { DEFAULT_PAYROLL_PARAMETERS } from "./parameters";
 import type { PayrollEmployeeComputation } from "./types";
 
 /**
- * El test que decide si el motor sirve: reproducir, columna por columna, lo que las 1.199
- * fórmulas del libro del contador calcularon para marzo de 2026.
+ * The test that decides whether the engine is any good: reproducing, column by column, what the 1,199
+ * formulas of the accountant's book computed for March 2026.
  *
- * La igualdad es EXACTA (`toBe`), no aproximada. Una tolerancia de un céntimo dejaría pasar
- * justo el error que este motor existe para evitar — que la app y el Excel del contador digan
- * cifras distintas sin que nada lo delate.
+ * The equality is EXACT (`toBe`), not approximate. A tolerance of a cent would let through exactly
+ * the error this engine exists to avoid — that the app and the accountant's Excel say different
+ * figures with nothing giving it away.
  */
 const COLUMNS: readonly (keyof PayrollEmployeeComputation)[] = [
   "unifiedSalary",
@@ -67,8 +67,8 @@ describe("lo que el archivo real demuestra y ningún test sintético prueba", ()
   };
 
   it("los totales llegan con ruido de coma flotante, no redondeados", () => {
-    // Si alguien «limpia» los totales con un redondeo, estos tres se rompen — y con ellos la
-    // conciliación contra el PAGADO, que está tecleado a mano y sí es exacto.
+    // If someone «cleans up» the totals with a rounding, these three break — and with them the
+    // reconciliation against PAGADO, which is typed by hand and is exact.
     const sandoval = computeEmployeePayroll(
       byName("SANDOVAL COLIMBA").input,
       DEFAULT_PAYROLL_PARAMETERS,

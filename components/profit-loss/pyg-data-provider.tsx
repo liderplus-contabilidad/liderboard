@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { deleteSalesForClient } from "@/lib/sales/db";
 import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
 import { detectReloadConflicts, type ReloadConflict } from "@/lib/profit-loss/conflicts";
 import {
@@ -115,17 +116,19 @@ const EMPTY_WARNINGS: string[] = [];
 const CONSOLIDADO_COLOR = "#334155";
 
 /**
- * Lo que una vista predeterminada declara de sí misma y este proveedor necesita para encenderla:
- * qué marcas siembra y con qué granularidad se lee.
+ * What a preset view declares about itself and this provider needs in order to switch it on: which
+ * marks it seeds and at what granularity it is read.
  *
- * Es un ESPEJO de `PresetView` sin el catálogo, y esa duplicación es deliberada: el catálogo vive
- * en `charts/`, de donde este archivo no importa —lo que mantiene la capa de presentación fuera del
- * estado del módulo—, así que el botón de la barra, que sí lo conoce, es quien pasa esto.
+ * It is a MIRROR of `PresetView` without the catalogue, and that duplication is deliberate: the
+ * catalogue lives in `charts/`, which this file does not import from —which is what keeps the
+ * presentation layer out of the module's state—, so the bar's button, which does know it, is what
+ * passes this in.
  */
 export interface PresetSeeding {
   seeds?: { centers?: boolean; periods?: boolean };
   frequency?: Frequency;
-  /** Si marcar una cuenta ACOTA la vista en vez de apagarla; solo cuando sus rubros SON del plan. */
+  /** Whether marking an account NARROWS the view instead of switching it off; only when its lines ARE
+   *  from the chart of accounts. */
   narrowedByCodes?: boolean;
 }
 
@@ -153,10 +156,10 @@ export interface CenterView {
   shortName?: string;
   color?: string;
   /**
-   * El logo que el usuario le subió a ESTE centro, si le subió alguno. Va en la vista y no se
-   * resuelve en cada pantalla porque lo leen tres —el desplegable, la cabecera y el informe—, y
-   * tres resoluciones de «cuál es el logo de este centro» podrían separarse en cuanto una de ellas
-   * olvidara el consolidado entre clientes, donde el id es compuesto.
+   * The logo the user uploaded for THIS center, if they uploaded one. It travels in the view and is
+   * not resolved on each screen because three read it —the dropdown, the header and the report—, and
+   * three resolutions of «which is this center's logo» could drift apart the moment one of them
+   * forgot the cross-client consolidado, where the id is composed.
    */
   logo?: EntityLogo;
   role: "consolidado" | "center" | "sin-centro" | "single";
@@ -193,20 +196,20 @@ interface PygDataValue {
   /** The clients the consolidado is summing, by name; `[]` outside it. */
   contributors: string[];
   /**
-   * Las piezas que el consolidado SUMÓ —cada (cliente · centro) que entró y el estado entero de
-   * cada cliente de estado único—, que es lo que su descarga escribe hoja por hoja. `[]` fuera.
+   * The pieces the consolidado SUMMED —each (client · center) that went in and the whole statement of
+   * each single-statement client—, which is what its download writes sheet by sheet. `[]` outside.
    *
-   * Llegan de `consolidate.ts` en vez de rearmarse en el botón: cuáles entraron ya lo decidió el
-   * filtro al sumar, y decidirlo por segunda vez es cómo el archivo acaba con hojas que no cuadran
-   * con su propio total.
+   * They arrive from `consolidate.ts` instead of being reassembled in the button: which ones went in
+   * was already decided by the filter when summing, and deciding it a second time is how the file
+   * ends up with sheets that do not square with its own total.
    */
   consolidatedDetails: SummedDetail[];
-  /** Las opciones del filtro «Cliente» — todos los que el consolidado PODRÍA sumar. `[]` fuera. */
+  /** The «Cliente» filter's options — every client the consolidado COULD sum. `[]` outside. */
   clientOptions: { id: string; name: string }[];
   /** Creates an EMPTY client and opens it. Rejects nothing: the caller validates the name with
    * `clients.ts` where it can say what is wrong. */
   createClient: (name: string, logo?: EntityLogo) => Promise<string>;
-  /** Cambia la ETIQUETA — nombre y logo — y nada más. */
+  /** Changes the LABEL — name and logo — and nothing else. */
   updateClient: (
     clientId: string,
     name: string,
@@ -312,16 +315,16 @@ interface PygDataValue {
   filters: PygFilters;
   toggleCode: (code: string) => void;
   toggleCenter: (centerId: string) => void;
-  /** Marca o desmarca un cliente del consolidado. Ninguno marcado = todos. */
+  /** Marks or unmarks a client of the consolidado. None marked = all of them. */
   toggleClient: (clientId: string) => void;
   toggleYear: (year: number) => void;
   togglePeriod: (period: PeriodSlot) => void;
-  /** Elige (o quita, si ya estaba) una vista predeterminada; elegirla borra las marcas de cuenta. */
+  /** Picks (or removes, if it was already there) a preset view; picking it clears the account marks. */
   /**
-   * `view` es lo que la vista DECLARA de sí misma (`preset-views.ts`), y llega como argumento en
-   * vez de leerse aquí a propósito: este proveedor no importa de `charts/` — es lo que mantiene la
-   * capa de presentación fuera del estado del módulo—, así que quien ya conoce el catálogo, el
-   * botón de la barra, es quien se lo pasa.
+   * `view` is what the view DECLARES about itself (`preset-views.ts`), and it arrives as an argument
+   * instead of being read here on purpose: this provider does not import from `charts/` — which is
+   * what keeps the presentation layer out of the module's state—, so whoever already knows the
+   * catalogue, the bar's button, is what passes it in.
    */
   selectPreset: (id: string, view?: PresetSeeding) => void;
   clearPreset: () => void;
@@ -330,7 +333,7 @@ interface PygDataValue {
   clearYears: () => void;
   /** "Todos (Consolidado)" — clears only the center marks. */
   clearCenters: () => void;
-  /** «Todos los clientes» — vuelve a sumarlos todos. */
+  /** «Todos los clientes» — goes back to summing them all. */
   clearClients: () => void;
   clearPeriods: () => void;
   /** "Quitar todo" — clears every marked filter. */
@@ -362,11 +365,11 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // would return every client's rows at once, and nothing downstream could tell.
   const clients = useLiveQuery(() => listClientSummaries(), []) ?? EMPTY_CLIENTS;
   const activeClientId = useLiveQuery(() => getActiveClientId(), []) ?? null;
-  // El consolidado entre clientes es una ENTRADA del selector, no una fila de `clients`. Vive en
-  // la misma tabla `active`, que es lo que le da sobrevivir al reload sin ningún estado extra.
+  // The cross-client consolidado is an ENTRY of the selector, not a row of `clients`. It lives in the
+  // same `active` table, which is what gives it survival across a reload with no extra state.
   const isConsolidated = activeClientId === CONSOLIDATED_CLIENT_ID;
-  // El cliente abierto acota cada lectura. Con el consolidado abierto no hay ninguno, y las tres
-  // consultas quedan vacías para que ni una fila de un cliente concreto se cuele en la suma.
+  // The open client bounds every read. With the consolidado open there is none, and the three queries
+  // stay empty so not a single row of one particular client slips into the sum.
   const openClientId = isConsolidated ? null : activeClientId;
   const ownDatasets =
     useLiveQuery(
@@ -383,23 +386,23 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [openClientId],
   );
   const [frequency, setFrequencyState] = useState<Frequency>("mensual");
-  // Si la vista predeterminada abierta es DUEÑA de las marcas de cuenta. Se recuerda en vez de
-  // deducirse porque quien lo sabe es el catálogo, que vive en `charts/` y de aquí no se importa;
-  // es lo que decide si desmarcar un rubro ACOTA el reparto o apaga la vista entera.
+  // Whether the open preset view OWNS the account marks. It is remembered instead of deduced because
+  // the one that knows is the catalogue, which lives in `charts/` and is not imported from here; it is
+  // what decides whether unmarking a line NARROWS the breakdown or switches the whole view off.
   const [presetOwnsCodes, setPresetOwnsCodes] = useState(false);
   const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [hideZeroRows, setHideZeroRows] = useState(false);
 
-  // La única lectura cruzada, y solo mientras el consolidado está abierto.
+  // The only cross-cutting read, and only while the consolidado is open.
   const contributions =
     useLiveQuery(
       () => (isConsolidated ? consolidatedContributions() : Promise.resolve(EMPTY_CONTRIBUTIONS)),
       [isConsolidated],
     ) ?? EMPTY_CONTRIBUTIONS;
-  // Qué clientes puede sumar el consolidado — el universo del filtro «Cliente», y contra lo que
-  // `sanitizeFilters` poda una marca. `[]` fuera del consolidado, que es lo que hace que la marca
-  // no sobreviva a volver a un cliente concreto.
+  // Which clients the consolidado can sum — the «Cliente» filter's universe, and what `sanitizeFilters`
+  // prunes a mark against. `[]` outside the consolidado, which is what keeps the mark from surviving a
+  // return to one particular client.
   const consolidatableIds = useMemo(
     () =>
       isConsolidated
@@ -407,7 +410,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         : EMPTY_CLIENT_IDS,
     [isConsolidated, contributions],
   );
-  // Las opciones del filtro, ya con el nombre que el usuario le puso a cada cliente.
+  // The filter's options, already carrying the name the user gave each client.
   const clientOptions = useMemo(
     () =>
       consolidatableIds.map((id) => ({
@@ -416,9 +419,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       })),
     [consolidatableIds, contributions],
   );
-  // La selección se aplica ANTES de sumar: el consolidado es lo que quedó dentro, no un total al
-  // que después se le descuenta. Vale para las dos marcas — clientes y (cliente · centro) —, y por
-  // eso llegan las CRUDAS: `filters` se sanea contra las vistas, que es lo que esto produce.
+  // The selection is applied BEFORE summing: the consolidado is what was left inside, not a total that
+  // is discounted afterwards. It holds for both marks — clients and (client · center) —, and that is
+  // why they arrive RAW: `filters` is sanitized against the views, which is what this produces.
   const consolidated = useMemo<ConsolidatedWorkspace | null>(
     () =>
       isConsolidated
@@ -430,18 +433,18 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [isConsolidated, contributions, rawFilters.clientIds, rawFilters.centerIds],
   );
 
-  // A partir de aquí el consolidado ES el workspace: un estado único de solo lectura, con sus
-  // años y su cobertura. Nada aguas abajo —Datos, Gráficos, Análisis, la ficha— sabe la
-  // diferencia, que es exactamente el punto.
+  // From here on the consolidado IS the workspace: a read-only single statement, with its years and
+  // its coverage. Nothing downstream —Datos, Gráficos, Análisis, the ficha— knows the difference,
+  // which is exactly the point.
   const datasets = consolidated?.datasets ?? ownDatasets;
-  // Los ajustes de cada cliente ya están plegados en las cuentas sumadas; volver a aplicarlos
-  // aquí los contaría dos veces.
+  // Each client's adjustments are already folded into the summed accounts; applying them again here
+  // would count them twice.
   const allEdits = consolidated ? EMPTY_EDITS : ownEdits;
   const loadedMonthsByYear =
     consolidated?.loadedMonthsByYear ?? metaRow?.loadedMonthsByYear ?? EMPTY_COVERAGE;
   const workspaceWarnings = consolidated?.warnings ?? metaRow?.warnings ?? EMPTY_WARNINGS;
-  // Ofrecible con dos o más clientes CON datos: `years` está vacío mientras uno esté vacío, así
-  // que la lista del selector ya lo sabe y no hace falta una consulta más.
+  // Offerable with two or more clients WITH data: `years` is empty while one is empty, so the
+  // selector's list already knows it and no extra query is needed.
   const consolidatable = useMemo(
     () => clients.filter((client) => client.years.length > 0).length >= 2,
     [clients],
@@ -450,9 +453,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // Every year the workspace holds, read off the datasets rather than the metadata: the datasets
   // ARE the workspace, so the two can never disagree about which years exist.
   //
-  // En el consolidado el universo son los años de los CLIENTES, no los de la suma acotada: marcar
-  // un centro que solo tiene 2026 no puede borrar 2025 del filtro de años ni de la lista de
-  // centros, que es justamente de donde hay que desmarcarlo para volver.
+  // In the consolidado the universe is the CLIENTS' years, not those of the narrowed sum: marking a
+  // center that only has 2026 cannot erase 2025 from the year filter nor from the list of centers,
+  // which is precisely where it has to be unmarked from to go back.
   const loadedYears = useMemo(() => {
     const years = new Set(datasets.map((d) => d.year));
     for (const dataset of consolidated?.centerDatasets ?? EMPTY_DATASETS) {
@@ -469,10 +472,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * El logo de cada centro POR ID DE VISTA. Cubre las dos formas del id a la vez —el `centerId`
-   * suelto del cliente abierto y el compuesto `<clientId>::<centerId>` del consolidado entre
-   * clientes—, que es lo que deja a `buildViews` y a `buildConsolidatedViews` sin enterarse de que
-   * existen los logos.
+   * Each center's logo BY VIEW ID. It covers both forms of the id at once —the plain `centerId` of
+   * the open client and the composed `<clientId>::<centerId>` of the cross-client consolidado—, which
+   * is what leaves `buildViews` and `buildConsolidatedViews` unaware that logos exist.
    */
   const centerLogoById = useMemo(() => {
     const byId = new Map<string, EntityLogo>();
@@ -522,17 +524,17 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   // A workspace's mode is never mixed (centers-mode and single-mode datasets never coexist —
   // every write path that could mix them is rejected before it writes), so which role is
   // present decides it.
-  // `null` en el consolidado: no viene de ningún sistema contable —puede venir de varios a la
-  // vez—, y eso es lo que apaga «un mes en crudo», que solo tiene sentido sobre un formato.
+  // `null` in the consolidado: it does not come from any accounting system —it may come from several
+  // at once—, and that is what switches «un mes en crudo» off, which only makes sense over a format.
   const sourceSystemId =
     !isConsolidated && datasets.length > 0 ? (metaRow?.sourceSystemId ?? LEGACY_SYSTEM) : null;
 
   // The ACTIVE CLIENT's identity, derived exactly as every other client's is
   // (`listClientSummaries` uses the same function) — `null` while the client is empty, which is
   // what makes a first upload adopt instead of clash.
-  // `null` en el consolidado: una suma de empresas no tiene razón social ni sistema propios, y
-  // dejarle una identidad la haría comparable contra la de un archivo — que es justo lo que
-  // decide dónde aterriza una carga.
+  // `null` in the consolidado: a sum of companies has neither a razón social nor a system of its own,
+  // and giving it an identity would make it comparable against a file's — which is exactly what
+  // decides where an upload lands.
   const workspaceIdentity: WorkspaceIdentity | null = useMemo(
     () => (isConsolidated ? null : deriveWorkspaceIdentity(datasets, metaRow)),
     [isConsolidated, datasets, metaRow],
@@ -623,10 +625,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [allowed],
   );
 
-  // Marcar una cuenta APAGA la vista predeterminada abierta —son dos respuestas a «qué dibujo»—
-  // salvo cuando la vista declara dejarse acotar por ellas: en el anexo de gastos los rubros SON
-  // cuentas, así que marcar una acota el reparto en vez de contradecirlo, y apagar la vista entera
-  // sería lo contrario de para lo que están las marcas.
+  // Marking an account SWITCHES OFF the open preset view —they are two answers to «what do I draw»—
+  // except when the view declares it accepts being narrowed by them: in the expense annex the lines
+  // ARE accounts, so marking one narrows the breakdown instead of contradicting it, and switching the
+  // whole view off would be the opposite of what marks are for.
   const toggleCode = useCallback(
     (code: string) => {
       setRawFilters(
@@ -675,42 +677,46 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     [filters, frequency],
   );
 
-  // La vista predeterminada siembra TODO el listado de «Centro de costo» —los centros reales y
-  // también «Sin centro de costo»—, sin el Consolidado, que es su suma y abriría una columna que
-  // repite las otras: lo que dibuja queda marcado en el desplegable, así que se ve qué entra y se
-  // quita desmarcando. El cajón del sistema contable entra porque son dólares del estado, y
-  // dejarlo fuera por defecto los sacaba de todas las columnas a la vez — la nota que lo decía
-  // sigue ahí para quien lo desmarque a mano, que es donde ese aviso hace falta.
+  // The preset view seeds the WHOLE «Centro de costo» list —the real centers and «Sin centro de
+  // costo» too—, without the Consolidado, which is their sum and would open a column repeating the
+  // others: what it draws stays marked in the dropdown, so it is visible which ones go in and one is
+  // removed by unmarking it. The accounting system's catch-all goes in because those are dollars of
+  // the statement, and leaving it out by default took them out of every column at once — the note
+  // that said so is still there for whoever unmarks it by hand, which is where that warning is
+  // needed.
   //
-  // Salvo en el CONSOLIDADO ENTRE CLIENTES, donde no se siembra nada: ahí los centros son de todos
-  // los clientes juntos y sembrarlos abriría decenas de columnas de golpe. Quien entra al
-  // consolidado sabe cuántos hay, así que elegir cuáles comparar es suyo.
-  // Y siembra también los PERIODOS cubiertos de la granularidad abierta, por el mismo motivo: los
-  // meses que dibuja se quitan y se ponen desde «Periodo». Un mes que el archivo nunca trajo no se
-  // marca — sería una columna vacía pidiendo sitio.
-  // QUÉ siembra cada vista y con qué granularidad se lee lo declara la vista (`preset-views.ts`),
-  // no este callback: lo que hay que marcar depende de lo que se dibuja, la misma razón por la que
-  // `isAvailable` vive allí. «Ventas» reparte por establecimiento y mes y por eso los marca; el
-  // anexo de gastos es una columna por rubro sobre el tramo entero, así que no siembra nada.
+  // Except in the CROSS-CLIENT CONSOLIDADO, where nothing is seeded: there the centers belong to
+  // every client at once and seeding them would open dozens of columns in one go. Whoever enters the
+  // consolidado knows how many there are, so choosing which ones to compare is theirs.
+  // And it also seeds the covered PERIODS of the open granularity, for the same reason: the months it
+  // draws are removed and put back from «Periodo». A month the file never brought is not marked — it
+  // would be an empty column asking for room.
+  // WHAT each view seeds and at what granularity it is read is declared by the view
+  // (`preset-views.ts`), not by this callback: what has to be marked depends on what is drawn, the
+  // same reason `isAvailable` lives there. «Ventas» breaks down by establishment and month and that
+  // is why it marks them; the expense annex is one column per line over the whole span, so it seeds
+  // nothing.
   const selectPreset = useCallback(
     (id: string, view: PresetSeeding = {}) => {
       const turningOn = filters.preset !== id;
-      // La granularidad se aplica al ENCENDER y no se deshace al apagar: «Ver por» está a la vista
-      // y se vuelve de un clic, al revés que las marcas, que dejarían chips que el usuario no puso.
+      // The granularity is applied on SWITCHING ON and is not undone on switching off: «Ver por» is
+      // in plain sight and is restored with one click, unlike the marks, which would leave chips the
+      // user did not make.
       if (turningOn && view?.frequency) {
         setFrequency(view.frequency);
       }
-      // La cobertura se lee en la granularidad que la vista va a usar, no en la que estaba puesta:
-      // sembrar los doce meses justo antes de saltar a anual marcaría periodos que nadie dibuja.
+      // Coverage is read at the granularity the view is going to use, not at the one that was in
+      // place: seeding the twelve months right before jumping to annual would mark periods nobody
+      // draws.
       const next = turningOn ? (view?.frequency ?? frequency) : frequency;
       const covered = aggregateCoverage(
         new Set(loadedMonthsByYear[chartYear] ?? EMPTY_MONTHS),
         "mensual",
         next,
       );
-      // Ninguna vista siembra CUENTAS —el anexo lo hizo y eran más de cien chips—, pero la suya
-      // sigue pudiendo acotarse marcándolas, y eso lo declara ella: sin este pase, marcar una
-      // apagaría la vista, que es la regla general y aquí sería la contraria.
+      // No view seeds ACCOUNTS —the annex did and it was over a hundred chips—, but its own can still
+      // be narrowed by marking them, and the view declares that: without this pass, marking one would
+      // switch the view off, which is the general rule and here would be the opposite.
       setPresetOwnsCodes(turningOn && (view.narrowedByCodes ?? false));
       setRawFilters(
         withPresetSelected(
@@ -942,7 +948,15 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     ) => updateClientRow(clientId, name, logo, centerLogos),
     [],
   );
-  const deleteClient = useCallback((clientId: string) => deleteClientRow(clientId), []);
+  // Deleting a client takes EVERYTHING that hangs off it, including the billing «Ventas por servicio»
+  // stores in its own database partitioned by this same id. The call goes from here and not from
+  // `lib/profit-loss/db.ts` so the dependency points from the new module to the one that already
+  // existed and never the other way round; without it, those sales would be left in a partition no
+  // screen lists and no deletion reaches.
+  const deleteClient = useCallback(async (clientId: string) => {
+    await deleteClientRow(clientId);
+    await deleteSalesForClient(clientId);
+  }, []);
   const selectClient = useCallback((clientId: string) => setActiveClient(clientId), []);
 
   const saveEdit = useCallback(
@@ -981,7 +995,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   );
 
   const segmented = useMemo(() => datasets.some((d) => isSegmented(d.accounts)), [datasets]);
-  // Segmentar reescribe cada dataset del cliente: sobre el consolidado no habría a quién.
+  // Segmenting rewrites every dataset of the client: over the consolidado there would be nobody to.
   const segmentable = useMemo(
     () => !isConsolidated && datasets.some((d) => canSegment(d.accounts)),
     [isConsolidated, datasets],
@@ -1023,8 +1037,8 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       loadedYears,
       visibleYears,
       chartYear,
-      // La cobertura del año que leen las series, que es `chartYear` — ver el campo. Datos no
-      // usa esta lista: cada columna resuelve la cobertura de SU año contra el registro.
+      // The coverage of the year the series read, which is `chartYear` — see the field. Datos does not
+      // use this list: each column resolves ITS own year's coverage against the record.
       loadedMonths: loadedMonthsByYear[chartYear] ?? EMPTY_MONTHS,
       loadedMonthsByYear,
       workspaceIdentity,

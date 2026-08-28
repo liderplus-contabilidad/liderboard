@@ -2,20 +2,20 @@ import { cn } from "@/lib/cn";
 import type { ChartTable } from "@/lib/charts/types";
 import type { StatementFit } from "@/lib/report/page-fit";
 
-/** El mismo tope que las tablas del informe de PyG: bajo cuatro columnas, el ancho extra va al
- *  nombre de la fila en vez de inflar cifras que ya se leen bien. */
+/** The same cap as the tables of PyG's report: below four columns, the extra width goes to the row's
+ *  name instead of inflating figures that already read fine. */
 const MAX_COLUMN_PCT = 16;
 const BASE_INDENT = 10;
 
 /**
- * La tabla impresa de una sección del informe, a partir del MISMO `ChartTable` que la pantalla ya
- * construye — nunca una segunda lectura del grid.
+ * The printed table of one section of the report, built from the SAME `ChartTable` the screen already
+ * builds — never a second reading of the grid.
  *
- * No reusa `TableTwin` (en `chart-card.tsx`): esa tiene afordancias de pantalla —columna pegajosa,
- * `hover`, cuerpo fijo de 12 px— que en papel no significan nada, y no acepta el cuerpo de letra
- * que dicta `fit`. El reparto de columnas y la tipografía son la misma cuenta que
- * `ReportStatement`/`ReportVertical` de PyG hacen con `statementFit`: `colgroup` fija el ancho
- * para que ninguna cifra se dibuje encima de la vecina.
+ * It does not reuse `TableTwin` (in `chart-card.tsx`): that one has screen affordances —a sticky
+ * column, `hover`, a fixed 12 px body— that mean nothing on paper, and it does not accept the type
+ * size `fit` dictates. The column split and the typography are the same computation
+ * `ReportStatement`/`ReportVertical` of PyG do with `statementFit`: `colgroup` fixes the width so no
+ * figure is drawn over its neighbour.
  */
 export function SalariesReportTable({ table, fit }: { table: ChartTable; fit: StatementFit }) {
   const columnCount = table.columns.length;

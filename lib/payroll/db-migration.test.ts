@@ -1,18 +1,18 @@
 /**
- * LA MIGRACIÓN v2 → v3: el rótulo de una fila del rol se muda del PERÍODO a la CAPTURA.
+ * THE v2 → v3 MIGRATION: a rol row's label moves from the PERÍODO to the CAPTURE.
  *
- * Vive en su propio archivo y no en `db.test.ts` porque necesita ABRIR la base en la versión vieja,
- * escribir con la forma vieja y cerrarla antes de que nadie importe `./db` — que es un singleton
- * que se abre al importarse. Vitest aísla cada archivo, así que aquí eso se puede hacer.
+ * It lives in its own file and not in `db.test.ts` because it needs to OPEN the database at the old
+ * version, write in the old shape and close it before anybody imports `./db` — which is a singleton
+ * that opens on import. Vitest isolates each file, so here that can be done.
  *
- * Lo que se comprueba es lo único que puede salir mal: que ninguna fila y ningún importe se pierdan.
- * Dexie no baja de versión, así que una migración que borre de más no tiene vuelta atrás.
+ * What is checked is the only thing that can go wrong: that no row and no amount is lost. Dexie does
+ * not downgrade, so a migration that deletes too much has no way back.
  */
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
 import { describe, expect, it } from "vitest";
 
-/** La base tal como la dejaba la v2, con la declaración en el período y el importe en la ficha. */
+/** The database as v2 left it, with the declaration on the período and the amount on the record. */
 async function seedV2(): Promise<void> {
   const old = new Dexie("liderboard-payroll");
   old.version(1).stores({
@@ -36,7 +36,7 @@ async function seedV2(): Promise<void> {
         { id: "x2", label: "ALIMENTACION", kind: "noAportable" },
       ],
     },
-    // Un período que nunca declaró nada: la migración no puede inventarle filas.
+    // A período that never declared anything: the migration cannot invent rows for it.
     { id: "p-abril", clientId: "c1", year: 2026, monthIndex: 3, kind: "ordinario" },
   ]);
   await old.table("employees").bulkAdd([
@@ -56,8 +56,8 @@ async function seedV2(): Promise<void> {
       days: 30,
       capture: { extraAmounts: { x1: 50, x2: 30 }, deductions: {} },
     },
-    // El caso que hay que cuidar: un empleado SIN captura de un período que SÍ declaraba. La
-    // pantalla le mostraba las dos filas en cero, así que la migración tiene que dárselas.
+    // The case to watch out for: an employee WITHOUT a capture of a período that DID declare. The
+    // screen showed them both rows at zero, so the migration has to give them to them.
     {
       id: "e2",
       periodId: "p-marzo",
@@ -106,18 +106,19 @@ describe("la migración v2 → v3", () => {
     ]);
     expect(ana?.capture).not.toHaveProperty("extraAmounts");
 
-    // Sin captura previa, las filas llegan igual y en cero: es lo que la pantalla enseñaba.
+    // With no previous capture, the rows arrive all the same and at zero: it is what the screen
+    // showed.
     const luis = await db.employees.get("e2");
     expect(luis?.capture?.extras).toEqual([
       { id: "x1", label: "MOVILIZACION", kind: "aportable", amount: 0 },
       { id: "x2", label: "ALIMENTACION", kind: "noAportable", amount: 0 },
     ]);
 
-    // Un período que no declaraba nada no le inventa filas a nadie.
+    // A período that declared nothing invents rows for nobody.
     const zoe = await db.employees.get("e3");
     expect(zoe?.capture?.extras ?? []).toEqual([]);
 
-    // Y el período se queda sin la declaración, que es lo que hace que nadie vuelva a leerla.
+    // And the período is left without the declaration, which is what makes nobody read it again.
     const marzo = await db.periods.get("p-marzo");
     expect(marzo).not.toHaveProperty("extraConcepts");
     expect(marzo?.year).toBe(2026);

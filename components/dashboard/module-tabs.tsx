@@ -55,8 +55,8 @@ interface ModuleViews {
 
 const MODULE_VIEWS: Record<string, ModuleViews> = {
   "profit-loss": {
-    // El informe cubre las TRES pestañas, así que su botón está en las tres; las acciones de
-    // Excel siguen viviendo solo en Datos, que es donde se carga y se descarga.
+    // The report covers the THREE tabs, so its button is on all three; the Excel actions still live
+    // only in Datos, which is where loading and downloading happen.
     rightSlot: (tab) => (
       <div className="flex items-center gap-2.5">
         {tab === "datos" && <PygExcelActions />}

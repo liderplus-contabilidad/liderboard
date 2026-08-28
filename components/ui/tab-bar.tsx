@@ -5,18 +5,18 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * La barra de pestañas de CUALQUIER vista — icono, etiqueta y el subrayado `brand` del activo,
- * sobre una tira de `surface` cerrada por abajo.
+ * The tab bar of ANY view — icon, label and the active one's `brand` underline, over a `surface`
+ * strip closed off at the bottom.
  *
- * Existe porque el mismo aspecto lo necesitan dos sitios que no comparten estructura: `ModuleTabs`
- * (Datos · Gráficos · Análisis de un módulo, leídas del registro de `lib/modules.ts`) y las
- * pestañas internas del detalle de un período de Rol de Pagos, que no son un módulo ni están en
- * ese registro. Escribirlas dos veces es lo que hace que una se quede atrás cuando la otra cambia
- * —y ya había pasado: el detalle usaba un `SegmentedControl`, que en esta app significa otra cosa
- * (elegir cómo se ve UNA tarjeta, como el «Ver por» de Ocupaciones), no cambiar de vista.
+ * It exists because the same look is needed by two places that share no structure: `ModuleTabs`
+ * (a module's Datos · Gráficos · Análisis, read from the registry in `lib/modules.ts`) and the inner
+ * tabs of Rol de Pagos' período detail, which are neither a module nor in that registry. Writing them
+ * twice is what makes one fall behind when the other changes —and it had already happened: the detail
+ * used a `SegmentedControl`, which in this app means another thing (choosing how ONE card is seen,
+ * like Ocupaciones' «Ver por»), not switching view.
  *
- * Lo que NO posee es el margen horizontal: cada sitio lo pone por `className`, porque el ancho al
- * que la tira se alinea es del contenido que la rodea, no de la barra.
+ * What it does NOT own is the horizontal margin: each place sets it through `className`, because the
+ * width the strip aligns to belongs to the surrounding content, not to the bar.
  */
 
 export interface TabBarItem<Id extends string = string> {
@@ -31,13 +31,13 @@ interface TabBarProps<Id extends string> {
   onChange: (id: Id) => void;
   ariaLabel: string;
   /**
-   * Prefijo de los `id` de cada pestaña y del `aria-controls` que apunta a su panel. Quien rinde
-   * el panel debe darle `id={`${idPrefix}-panel`}` y `aria-labelledby={`${idPrefix}-tab-${value}`}`
-   * para cerrar el par.
+   * Prefix of each tab's `id` and of the `aria-controls` pointing at its panel. Whoever renders the
+   * panel must give it `id={`${idPrefix}-panel`}` and `aria-labelledby={`${idPrefix}-tab-${value}`}`
+   * to close the pair.
    */
   idPrefix: string;
-  /** Alineado a la altura de las etiquetas, no del subrayado — así el mismo slot sirve fuera de
-   *  la barra sin arrastrar la compensación. */
+  /** Aligned with the labels' height, not the underline's — that way the same slot works outside the
+   *  bar without dragging the offset along. */
   rightSlot?: ReactNode;
   className?: string;
 }

@@ -26,30 +26,31 @@ export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
   /** Default true. The account ficha turns it off: its numbers already sit above the chart. */
   tableToggle?: boolean;
   /**
-   * Default true. El informe imprimible lo apaga por la misma razón por la que apaga el toggle de
-   * tabla: un ⓘ en papel es un botón que nadie puede pulsar.
+   * Default true. The printable report switches it off for the same reason it switches off the table
+   * toggle: an ⓘ on paper is a button nobody can press.
    */
   showGuide?: boolean;
   /**
-   * La flecha que PLIEGA la tarjeta, la misma del árbol de cuentas de Datos y por el mismo motivo:
-   * una pestaña con cinco gráficas obliga a bajar hasta el final para leer la última, y plegar las
-   * que ya se leyeron es lo que devuelve la de abajo a la primera pantalla. Aquí no hay niveles que
-   * plegar —una tarjeta no contiene a otra—, así que la flecha abre y cierra SOLO su propio cuerpo.
+   * The arrow that COLLAPSES the card, the same one as Datos' account tree and for the same reason: a
+   * tab with five charts forces you to scroll to the very bottom to read the last one, and collapsing
+   * the ones already read is what brings the bottom one back to the first screenful. Here there are
+   * no levels to collapse —one card does not contain another—, so the arrow opens and closes ONLY its
+   * own body.
    *
-   * Se ofrece justo cuando llega `onToggleCollapsed`, y el estado lo guarda QUIEN LLAMA: es lo que
-   * permite un «Cerrar todos» sin que existan dos verdades sobre si una tarjeta está plegada. Sin
-   * ese callback no hay flecha — el informe imprimible y el panel de la ficha muestran una tarjeta
-   * que se lee sola, donde plegarla es un botón sin trabajo que hacer.
+   * It is offered exactly when `onToggleCollapsed` arrives, and the state is held by THE CALLER: that
+   * is what allows a «Cerrar todos» without there being two truths about whether a card is collapsed.
+   * Without that callback there is no arrow — the printable report and the ficha's panel show a card
+   * that is read on its own, where collapsing it is a button with no work to do.
    */
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
   /**
-   * Lo que va PEGADO al gráfico y bajo él: una leyenda propia, que es un control de lectura y no
-   * de encuadre. Va aquí y no en `headerSlot` porque se lee junto a las barras que nombra, y sigue
-   * dibujándose cuando no hay nada que dibujar — una leyenda que desapareciera al apagar el último
-   * ítem no tendría desde dónde volver a encenderlo.
+   * What goes STUCK to the chart and below it: a legend of its own, which is a reading control and
+   * not a framing one. It goes here and not in `headerSlot` because it is read next to the bars it
+   * names, and it keeps being drawn when there is nothing to draw — a legend that disappeared on
+   * switching the last item off would leave nowhere to switch it back on from.
    */
   footerSlot?: ReactNode;
 }
@@ -85,21 +86,21 @@ export const ChartCard = memo(function ChartCard({
   const collapsible = onToggleCollapsed !== undefined;
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
   const isCollapsed = collapsible && collapsed;
-  // Plegada se van con el cuerpo los controles que actúan SOBRE él: elegir «Ver como tabla» de una
-  // tabla que no está en pantalla no es una opción, es una trampa. La guía se queda, porque
-  // responde qué hay dentro, que es justo lo que se pregunta ante una tarjeta cerrada.
+  // Collapsed, the controls that act ON the body go with it: choosing «Ver como tabla» for a table
+  // that is not on screen is not an option, it is a trap. The guide stays, because it answers what is
+  // inside, which is exactly what one asks of a closed card.
   const showToggle = hasSeries && tableToggle && !isCollapsed;
-  // La guía se dibuja aunque no haya nada que dibujar: una tarjeta vacía es justo donde el lector
-  // pregunta qué tendría que marcar para llenarla.
+  // The guide is drawn even when there is nothing to draw: an empty card is precisely where the
+  // reader asks what they would have to mark to fill it.
   const helper = showGuide ? guide : undefined;
 
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-[13px] border border-border bg-surface">
-      {/* La cabecera ENTERA es el disparador cuando la tarjeta pliega, no solo la flecha: un blanco
-          de 20 px obliga a apuntar, y lo que el lector quiere pulsar es el título. El `::after` del
-          botón es lo que lo estira sobre toda la barra —un `<button>` no puede contener un `<h3>`,
-          así que envolverla no es opción—, y los controles de la derecha van por encima (`z-10`)
-          para que sigan siendo suyos. */}
+      {/* The WHOLE header is the trigger when the card collapses, not just the arrow: a 20 px target
+          forces you to aim, and what the reader wants to press is the title. The button's `::after`
+          is what stretches it over the entire bar —a `<button>` cannot contain an `<h3>`, so wrapping
+          it is not an option—, and the controls on the right sit above it (`z-10`) so they stay
+          theirs. */}
       <header
         className={cn(
           "group relative flex items-start justify-between gap-3 bg-surface-header px-[18px] py-3 transition-colors",
@@ -176,7 +177,7 @@ export const ChartCard = memo(function ChartCard({
 
             {hasSeries ? (
               asTable ? (
-                <TableTwin table={table} />
+                <TableTwin table={table} maxHeight={height} />
               ) : (
                 <Chart
                   option={option as ChartOption}
@@ -238,20 +239,34 @@ export function SpecCard({
  * Two optional fields shape a row: `sublabel` hangs under the name (the role beside an employee),
  * and `emphasis` gives it the weight a TOTAL needs to stop reading as one more entity. A table
  * whose rows declare neither renders exactly as it did before they existed.
+ *
+ * **The box is capped at the CHART's own height and scrolls inside itself.** Some twins are short
+ * (five services) and some are not: Ventas' concentración lists 956 pagadores, and uncapped it
+ * pushed the rest of the page a screenful away, so getting back to the card below meant scrolling
+ * past a thousand rows. Capping at `height` — rather than at some number of its own — buys the
+ * property that matters: **the card does not change size when you toggle**, so «Ver como tabla»
+ * stops moving everything under it. A table shorter than the cap is untouched, which is why this
+ * changes nothing for the twins that already fit.
+ *
+ * Both edges of the header STICK, and that is what makes the cap usable rather than merely tidy: a
+ * column of figures scrolled away from «2024 · 2025 · 2026 · Total» is a column of numbers that
+ * mean nothing. The separator is an inset shadow and not a `border`, because a border on a sticky
+ * cell of a `border-collapse` table is painted by the row and scrolls away with it.
  */
-function TableTwin({ table }: { table: ChartTable }) {
+function TableTwin({ table, maxHeight }: { table: ChartTable; maxHeight: number }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-auto" style={{ maxHeight }}>
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 border-b border-border bg-surface px-2 py-1.5 text-left font-semibold text-muted">
+            {/* The corner sits above the two sticky bands it crosses. */}
+            <th className="sticky left-0 top-0 z-30 bg-surface px-2 py-1.5 text-left font-semibold text-muted shadow-[inset_0_-1px_0_var(--color-border)]">
               Serie
             </th>
             {table.columns.map((column) => (
               <th
                 key={column}
-                className="border-b border-border px-2 py-1.5 text-right font-semibold text-muted"
+                className="sticky top-0 z-20 bg-surface px-2 py-1.5 text-right font-semibold text-muted shadow-[inset_0_-1px_0_var(--color-border)]"
               >
                 {column}
               </th>
