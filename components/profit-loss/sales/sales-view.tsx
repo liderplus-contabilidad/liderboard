@@ -12,15 +12,23 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import type { EvolutionView } from "@/lib/sales/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
 import { SalesExcelActions } from "./sales-excel-actions";
 import { SalesReportButton } from "./report/sales-report-button";
 import { SalesToolbar } from "./sales-toolbar";
+
+/** The two shapes of the broken-down evolution, as the header names them — see `EvolutionView`. */
+const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
+  { value: "skyline", label: "Skyline 3D" },
+  { value: "stacked", label: "Apilado" },
+];
 
 /**
  * «Ventas por servicio»: what the clinic billed, broken down by service, by payer and by month.
@@ -49,6 +57,8 @@ function SalesContent() {
     universe,
     hideEmptyMonths,
     toggleEmptyMonths,
+    evolutionView,
+    setEvolutionView,
   } = useSalesData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -84,6 +94,45 @@ function SalesContent() {
   }
 
   const empty = months.length === 0;
+
+  // The evolution's header controls, and BOTH are conditional on there being something for them to
+  // do: «Ver como» exists only where there is a breakdown to shape —comparing years the series is
+  // the year, and a skyline would have nothing to put on its depth axis— and «Ocultar meses en 0»
+  // only where there is an empty month to hide. Neither one sits disabled: with nothing to offer the
+  // card gets no header slot at all.
+  const evolutionControls =
+    cards.skylineAvailable || cards.emptyMonths > 0 ? (
+      <div className="flex items-center gap-3">
+        {cards.skylineAvailable && (
+          <span className="flex items-center gap-2">
+            <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+            <SegmentedControl
+              value={evolutionView}
+              options={EVOLUTION_VIEWS}
+              onChange={setEvolutionView}
+              ariaLabel="Ver como"
+            />
+          </span>
+        )}
+        {cards.emptyMonths > 0 && (
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-pressed={hideEmptyMonths}
+            onClick={toggleEmptyMonths}
+            icon={hideEmptyMonths ? <Eye size={14} /> : <EyeOff size={14} />}
+            className={cn(
+              "font-medium",
+              hideEmptyMonths && "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+            )}
+          >
+            {hideEmptyMonths
+              ? `Mostrar ${cards.emptyMonths} ${cards.emptyMonths === 1 ? "mes" : "meses"} en 0`
+              : "Ocultar meses en 0"}
+          </Button>
+        )}
+      </div>
+    ) : null;
 
   return (
     <div className="pb-5">
@@ -169,26 +218,9 @@ function SalesContent() {
                 {...cards.evolution}
                 collapsed={isCollapsed(cards.evolution.id)}
                 onToggleCollapsed={() => toggle(cards.evolution.id)}
-                {...(cards.emptyMonths > 0
+                {...(evolutionControls
                   ? {
-                      headerSlot: (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          aria-pressed={hideEmptyMonths}
-                          onClick={toggleEmptyMonths}
-                          icon={hideEmptyMonths ? <Eye size={14} /> : <EyeOff size={14} />}
-                          className={cn(
-                            "font-medium",
-                            hideEmptyMonths &&
-                              "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
-                          )}
-                        >
-                          {hideEmptyMonths
-                            ? `Mostrar ${cards.emptyMonths} ${cards.emptyMonths === 1 ? "mes" : "meses"} en 0`
-                            : "Ocultar meses en 0"}
-                        </Button>
-                      ),
+                      headerSlot: evolutionControls,
                     }
                   : {})}
               />

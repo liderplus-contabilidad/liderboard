@@ -304,13 +304,21 @@ export interface ChartGuide {
   reading?: string;
 }
 
-export interface ChartCardSpec {
+/**
+ * `O` is what this card can DRAW, and it defaults to the two-dimensional option because that is what
+ * almost every card in the app is. A card that can also come out in three dimensions widens it for
+ * itself —`ChartCardSpec<ChartOption | Chart3DOption>`— instead of the type widening for everyone:
+ * a builder that never returns a `grid3D` should not have to prove it does not on every read, and
+ * `option.yAxis` has to keep resolving without a narrowing step in the hundred places that ask for
+ * it.
+ */
+export interface ChartCardSpec<O = ChartOption> {
   /** Stable and independent of the copy: the React key, and what a test names. */
   id: string;
   title: string;
   subtitle?: string;
   /** `null` when there is nothing to draw — the card says why instead of drawing an empty plot. */
-  option: ChartOption | null;
+  option: O | null;
   /** The same numbers as rows and columns; every card has one. */
   table: ChartTable;
   /** `SeriesBundle.warnings`, shown whole and before the chart. */
@@ -320,4 +328,165 @@ export interface ChartCardSpec {
   /** What the header's ⓘ opens. A card with no guide does not draw the icon. */
   guide?: ChartGuide;
   height: number;
+}
+
+// ---------------------------------------------------------------------------
+// La tercera dimensión
+// ---------------------------------------------------------------------------
+
+/**
+ * The slice of `echarts-gl`'s contract this dashboard writes — declared here and not imported for
+ * the same reason as the rest of the file: `lib/` stays free of the renderer, and Vitest reasons
+ * about plain objects.
+ *
+ * It is a SEPARATE type from `ChartOption` rather than an extension of it, and that is the point:
+ * everything a 3D chart brings —a third scale, a camera, a light— would be dead weight on the
+ * twenty-odd 2D options the app already writes, and the invariant «no chart declares two `yAxis`»
+ * has to keep meaning what it means over there. Nothing here can loosen it.
+ *
+ * `is3DOption` is the ONE way to tell them apart. `grid3D` is required so that check is total.
+ */
+export interface Chart3DOption {
+  animationDuration?: number;
+  textStyle?: ChartTextStyle;
+  /** Required: it is what `is3DOption` discriminates on. */
+  grid3D: ChartGrid3D;
+  xAxis3D: ChartAxis3D;
+  yAxis3D: ChartAxis3D;
+  zAxis3D: ChartAxis3D;
+  legend?: ChartLegend;
+  tooltip?: Chart3DTooltip;
+  series: Chart3DSeries[];
+}
+
+/** Which of the two a card carries. The only place the two shapes are told apart. */
+export function is3DOption(option: ChartOption | Chart3DOption): option is Chart3DOption {
+  return "grid3D" in option;
+}
+
+/**
+ * The box the three axes live in, and the camera looking at it.
+ *
+ * `boxWidth`/`boxDepth`/`boxHeight` are what give the reading its SHAPE: a long width against a
+ * short depth is what turns a matrix of bars into a horizon —many months across, few services
+ * deep— instead of a cube where every row hides the one behind it.
+ */
+export interface ChartGrid3D {
+  boxWidth?: number;
+  boxDepth?: number;
+  boxHeight?: number;
+  /** Flat, ambient-only light. See `Chart3DSeries.shading`. */
+  light?: ChartLight3D;
+  /** The card's own background; a 3D grid paints its own and would show a seam otherwise. */
+  environment?: string;
+  axisPointer?: { show?: boolean; lineStyle?: ChartLineStyle };
+  axisLine?: { lineStyle?: ChartLineStyle };
+  splitLine?: { lineStyle?: ChartLineStyle };
+  viewControl?: ChartViewControl;
+}
+
+/**
+ * Ambient light only, at full strength, with the directional one off.
+ *
+ * It is not a taste decision: with a main light the renderer multiplies each face by its angle to
+ * it, so one bar comes out in three tones and `colorForEntity`'s hue stops being the entity's
+ * identity — the same hue the composition card and the stack use for that service. It would also
+ * throw away every contrast figure the palette's validator measured, since none of them were
+ * measured against a shaded face.
+ */
+export interface ChartLight3D {
+  main?: { intensity?: number; shadow?: boolean };
+  ambient?: { intensity?: number };
+}
+
+/**
+ * The camera. It starts STILL and stays where the reader leaves it.
+ *
+ * `autoRotate` is deliberately absent from this type instead of merely defaulting to false: a chart
+ * that turns on its own moves the very value being read, and on paper it would be a control nobody
+ * can press. Rotating is a gesture the reader makes.
+ */
+export interface ChartViewControl {
+  /** Degrees above the floor. */
+  alpha?: number;
+  /** Degrees around it. */
+  beta?: number;
+  distance?: number;
+  minDistance?: number;
+  maxDistance?: number;
+  /** Off: the box is read whole, and panning it out of frame has no way back. */
+  panSensitivity?: number;
+  rotateSensitivity?: number;
+  zoomSensitivity?: number;
+  damping?: number;
+  animation?: boolean;
+}
+
+export interface ChartAxis3D {
+  type: "category" | "value";
+  data?: string[];
+  name?: string;
+  nameGap?: number;
+  nameTextStyle?: ChartTextStyle;
+  min?: number | "dataMin";
+  max?: number | "dataMax";
+  axisLine?: { show?: boolean; lineStyle?: ChartLineStyle };
+  axisTick?: { show?: boolean };
+  splitLine?: { show?: boolean; lineStyle?: ChartLineStyle };
+  axisLabel?: ChartAxisLabel;
+}
+
+/**
+ * One datum of a `bar3D`: the two axis INDICES and the height.
+ *
+ * A month that never arrived produces no datum at all rather than a datum of zero — which is what
+ * finally makes «never loaded» and «loaded and sold nothing» two different drawings: the first is
+ * a gap in the floor, the second a tile flat on it.
+ */
+export interface Chart3DDatum {
+  /** `[x index, y index, z value]`. */
+  value: [number, number, number];
+}
+
+/** One series per entity, as in 2D: it is what gives the legend its names and the tooltip its. */
+export interface Chart3DSeries {
+  type: "bar3D";
+  id?: string;
+  name?: string;
+  data: Chart3DDatum[];
+  /**
+   * Always `"color"` — flat. See `ChartLight3D` for why the app does not light its bars.
+   */
+  shading?: "color" | "lambert" | "realistic";
+  itemStyle?: ChartItemStyle;
+  emphasis?: { itemStyle?: ChartItemStyle; label?: { show?: boolean } };
+  /** A hair of bevel reads as a solid; more than that eats a short bar's height. */
+  bevelSize?: number;
+  bevelSmoothness?: number;
+  /** `[width, depth]` in the box's own units. */
+  barSize?: number | [number, number];
+  /** A real zero still draws a tile: it is a figure the file asserted, not an absence. */
+  minHeight?: number;
+  animationDurationUpdate?: number;
+}
+
+/** What a 3D tooltip's formatter receives: `value` is the whole triple, not a scalar. */
+export interface Chart3DParam {
+  seriesName?: string;
+  name: string;
+  value: [number, number, number];
+  marker?: string;
+}
+
+/** The house tooltip, in 3D: `confine` for the same reason as everywhere else — `ChartCard` is an
+ *  `overflow-hidden`, and an unconfined box is CUT at the card's edge. */
+export interface Chart3DTooltip {
+  trigger?: "item";
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  padding?: number | number[];
+  textStyle?: ChartTextStyle;
+  confine?: boolean;
+  formatter?: (param: Chart3DParam) => string;
 }

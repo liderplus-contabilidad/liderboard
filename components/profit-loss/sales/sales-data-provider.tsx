@@ -4,6 +4,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import {
   buildSalesCards,
+  SCREEN_EVOLUTION_VIEW,
+  type EvolutionView,
   type SalesCards,
   type SalesCardsInput,
   type YearMonths,
@@ -87,6 +89,13 @@ interface SalesDataValue {
   cards: SalesCards;
   hideEmptyMonths: boolean;
   toggleEmptyMonths: () => void;
+  /**
+   * Which shape the broken-down evolution is drawn in. It lives here and not inside the card because
+   * the card is rebuilt from `cardsInput` on every read: held locally it would reset to the default
+   * on the next mark, and the reader would find the view they chose undone by an unrelated click.
+   */
+  evolutionView: EvolutionView;
+  setEvolutionView: (view: EvolutionView) => void;
   toggleYear: (year: number) => void;
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
@@ -105,6 +114,9 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   const { activeClientId, activeClient, isConsolidated } = usePygData();
   const [rawFilters, setRawFilters] = useState<SalesFilters>(emptyFilters);
   const [hideEmptyMonths, setHideEmptyMonths] = useState(false);
+  // The SCREEN opens in three dimensions; the pure layer's default stays flat so the printed report
+  // cannot inherit a canvas by omission. See `SCREEN_EVOLUTION_VIEW`.
+  const [evolutionView, setEvolutionView] = useState<EvolutionView>(SCREEN_EVOLUTION_VIEW);
   const clientId = isConsolidated ? null : activeClientId;
 
   // The ONLY query, and always bounded by the client: it is what stops the billing of two companies
@@ -220,8 +232,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   );
 
   const cards = useMemo(
-    () => buildSalesCards(cardsInput, { hideEmptyMonths }),
-    [cardsInput, hideEmptyMonths],
+    () => buildSalesCards(cardsInput, { hideEmptyMonths, evolutionView }),
+    [cardsInput, hideEmptyMonths, evolutionView],
   );
   const toggleEmptyMonths = useCallback(() => setHideEmptyMonths((current) => !current), []);
 
@@ -282,6 +294,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       cards,
       hideEmptyMonths,
       toggleEmptyMonths,
+      evolutionView,
+      setEvolutionView,
       toggleYear,
       selectAllYears,
       toggleMonth,
@@ -306,6 +320,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       cards,
       hideEmptyMonths,
       toggleEmptyMonths,
+      evolutionView,
+      setEvolutionView,
       toggleYear,
       selectAllYears,
       toggleMonth,

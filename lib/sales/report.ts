@@ -11,7 +11,12 @@
  * What the header writes is what the BAR says on screen, which is no longer there on paper: the
  * client, the period the report covers and the date it was generated.
  */
-import type { ChartCardSpec } from "@/lib/charts/types";
+import {
+  is3DOption,
+  type Chart3DOption,
+  type ChartCardSpec,
+  type ChartOption,
+} from "@/lib/charts/types";
 import { formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/workspaces";
 import {
@@ -77,7 +82,24 @@ export function buildSalesReport(input: BuildSalesReportInput): SalesReport {
     sections: [
       { id: "services", card: cards.services },
       { id: "payers", card: cards.payers },
-      { id: "evolution", card: cards.evolution },
+      { id: "evolution", card: printable(cards.evolution) },
     ],
   };
+}
+
+/**
+ * The evolution as PAPER can carry it.
+ *
+ * It never throws today: the call above passes no `evolutionView`, and the flat shape is what
+ * `buildSalesCards` returns by omission. Writing the check down rather than casting is the whole
+ * point — a 3D box is a WebGL canvas no printed sheet renders and a camera nobody can press, so if
+ * that default is ever flipped this has to fail HERE and loudly, instead of printing an empty
+ * rectangle where the year's evolution was.
+ */
+function printable(card: ChartCardSpec<ChartOption | Chart3DOption>): ChartCardSpec {
+  const option = card.option;
+  if (option !== null && is3DOption(option)) {
+    throw new Error("El informe no imprime la forma 3D de la evolución: se esperaba la apilada.");
+  }
+  return { ...card, option };
 }
