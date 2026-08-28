@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CHART_NEUTRAL, CHART_PALETTE, CHART_SLICE_SEQUENCE } from "@/lib/charts/palette";
 import { buildSalesCards, PAYER_SLICES, type SalesCardsInput } from "./cards";
 import { monthlySeries, monthlyServiceSeries, readSales, type MonthPoint } from "./derive";
 import { UNIDENTIFIED_PAYER } from "./payer";
@@ -109,6 +110,24 @@ describe("concentración por pagador", () => {
   it("la concentración se dice en una cifra", () => {
     const { payers } = buildSalesCards(input(many));
     expect(payers.note).toMatch(/Estos 10 son el \d+\.\d %/);
+  });
+
+  it("las barras son tonos saturados y NINGUNO es el de un servicio", () => {
+    // On this screen a service's hue is its IDENTITY —the composition and the evolution's stack paint
+    // «HONORARIOS» the same blue, and a legend names it—, so a payer out of that same blue would read
+    // as paired with it. The ranking opens with the warm composition hues instead, which are disjoint
+    // from the identity slots, and its dot in the table twin says the same.
+    const { payers } = buildSalesCards(input(many));
+    const fills = (payers.option?.series[0].data ?? []).map(
+      (datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color,
+    );
+
+    expect(fills).toEqual([...CHART_SLICE_SEQUENCE.slice(0, PAYER_SLICES)]);
+    for (const fill of fills) {
+      expect(CHART_PALETTE).not.toContain(fill);
+      expect(fill).not.toBe(CHART_NEUTRAL);
+    }
+    expect(payers.table.rows[0].color).toBe(fills[0]);
   });
 
   it("un pagador llega con su nombre al gráfico y a la tabla", () => {

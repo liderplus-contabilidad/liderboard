@@ -27,7 +27,7 @@ import {
   CHART_NEUTRAL,
   CHART_SURFACE,
   colorForEntity,
-  colorForPeriod,
+  colorForSliceSlot,
 } from "@/lib/charts/palette";
 import type {
   ChartAxis,
@@ -78,23 +78,33 @@ export const PAYER_SLICES = 10;
 export const PAYER_TABLE_PRINT_LIMIT = 30;
 
 /**
- * A payer's fill: its PLACE in the ranking, taken from the DECORATIVE set.
+ * A payer's fill: its PLACE in the ranking, taken from the sequence that OPENS WITH THE WARM
+ * composition hues.
  *
- * The ten bars went in one single blue, on the argument that the colour distinguished nothing the row
- * did not already say. That is true and it still reads badly: ten identical bars are one block of
- * texture exactly where a ranking has to be walked down. They take a tone each for the same reason
- * PyG's expense ranking does, and they pay for it with the same relief — every bar carries its label
- * and its figure, so a reader who cannot tell two of these tones apart loses nothing.
+ * The ten bars went first in one single blue and then in the DECORATIVE set, and both read the same
+ * way against the firm's own workbook: ten bars of one texture, muted, exactly where a ranking has to
+ * be walked down. They take a saturated tone each, like «Composición por servicio» right above.
  *
- * What they must NOT take is the identity set: «Composición por servicio» is the card right above,
- * spending those slots BY POSITION too, and the first service and the first payer would come out of
- * the same blue and read as paired. The three sets being disjoint is what makes this safe.
+ * What they must NOT take is that card's own set, and the reason is on this very screen: there the
+ * colour is IDENTITY —`movingServices` is the one list a service's hue comes from, so «HONORARIOS» is
+ * the same blue in the composition and in the evolution's stack, where a LEGEND names it—. A first
+ * payer bar out of that same blue would say that payer and that service go together. So the ranking
+ * takes the other saturated set the app already measured: `CHART_SLICE_SEQUENCE` opens with the six
+ * warm hues of PyG's composition —none of which is an identity slot— and continues into the
+ * decorative ones, which is the shape of this card: the head of the ranking, which is what gets read,
+ * comes out vivid, and the tail pays for the decorative set with the same relief the annex's doughnut
+ * pays it with — every bar carries its name and its figure, and the table twin lists them all.
+ *
+ * What the validator says about the ten slots drawn here, so nobody re-derives it: lightness band
+ * PASS, chroma floor PASS, normal-vision floor PASS —worst adjacent pair verde↔teal ΔE 16.2— and CVD
+ * separation inside the 6–8 band —worst pair teal↔magenta ΔE 6.8 deutan, the ninth and tenth bars—,
+ * which is legal only with that secondary encoding, and this card has it.
  *
  * **Only in the ONE-year shape.** Comparing several, the series is the YEAR and the colour goes back
  * to being identity, which is what the comparison needs to tell apart.
  */
 function payerColor(index: number): string {
-  return colorForPeriod(index);
+  return colorForSliceSlot(index);
 }
 
 /** The fill of a month that NEVER arrived — see `absenceMarks`. */

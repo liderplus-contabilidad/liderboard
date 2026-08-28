@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   FileSpreadsheet,
-  Info,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -195,8 +194,6 @@ function SalesContent() {
               />
             </div>
 
-            <BillingDisclaimer />
-
             {universe.months.length === 0 && (
               <p className="mt-3 text-[12px] text-faint">
                 Los años marcados no tienen ningún mes cargado. Marca otro en «Año», o sube su
@@ -207,30 +204,5 @@ function SalesContent() {
         )}
       </div>
     </div>
-  );
-}
-
-/**
- * **What is billed is NOT what is booked**, and the screen says so.
- *
- * The $229,616 of a billed April are not April's accounting revenue: there are recognition timings,
- * credit notes and VAT in between. Two revenue figures that do not square inside the same app do not
- * read as two sources, they read as an error — so these sales go into no reading of PyG, and that
- * silence has to be declared where it is produced. Reconciling the two is a legitimate reading, and
- * it goes separately.
- */
-function BillingDisclaimer() {
-  return (
-    <p className="mt-4 flex items-start gap-2 rounded-[10px] border border-border-soft bg-surface-sunken px-3.5 py-2.5 text-[11.5px] leading-snug text-muted">
-      <Info size={14} className="mt-px shrink-0 text-faint" aria-hidden />
-      <span>
-        Lo facturado no es lo contabilizado. Estas cifras salen del reporte de facturación y{" "}
-        <strong className="font-semibold text-ink-soft">
-          no entran en el estado de resultados
-        </strong>
-        : el ingreso contable del mes difiere por tiempos de reconocimiento, notas de crédito e IVA.
-        Pérdidas y Ganancias dibuja exactamente lo mismo con ventas cargadas y sin ellas.
-      </span>
-    </p>
   );
 }
