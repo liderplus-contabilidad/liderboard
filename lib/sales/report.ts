@@ -14,7 +14,12 @@
 import type { ChartCardSpec } from "@/lib/charts/types";
 import { formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/workspaces";
-import { buildSalesCards, PAYER_TABLE_PRINT_LIMIT, type SalesCardsInput } from "./cards";
+import {
+  buildSalesCards,
+  PAYER_TABLE_PRINT_LIMIT,
+  scopedPeriod,
+  type SalesCardsInput,
+} from "./cards";
 
 export interface SalesReportHeader {
   /** The label the user gave the client — never the razón social of any file. */
@@ -65,7 +70,8 @@ export function buildSalesReport(input: BuildSalesReportInput): SalesReport {
       ...(input.companyName ? { companyName: input.companyName } : {}),
       ...(input.logo ? { logo: input.logo } : {}),
       ...(input.rightLogo ? { rightLogo: input.rightLogo } : {}),
-      periodLabel: input.period,
+      // With services marked the paper HAS to say so: the bar that says it on screen is not here.
+      periodLabel: scopedPeriod(input),
       generatedAt: formatTimestampEs(input.generatedAt),
     },
     sections: [

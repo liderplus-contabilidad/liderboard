@@ -177,6 +177,12 @@ export interface ChartGrid {
 
 export interface ChartLegend {
   show: boolean;
+  /**
+   * WHICH series the legend lists, by name. Left out, it lists them all — which is right until a
+   * chart carries a series that is not an entity of the comparison: a total's line, or a mark that
+   * only holds space. Naming them is what keeps those out of a list the reader clicks to filter.
+   */
+  data?: string[];
   type?: "plain" | "scroll";
   bottom?: number | string;
   top?: number | string;

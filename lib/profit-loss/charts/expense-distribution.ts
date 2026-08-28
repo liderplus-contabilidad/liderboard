@@ -25,6 +25,7 @@
 import { OTHERS_CODE } from "../analytics/structure";
 import type { AmountEntry } from "../analytics/structure";
 import type { AnalyticsSource } from "../analytics/types";
+import { childrenOf, expenseRootsOf } from "./presets";
 
 /**
  * How many lines the annex draws before folding the tail into «Otros» — the SAME number for the bars
@@ -263,6 +264,48 @@ function annexEntries(
   }
   const rest = named.reduce((sum, entry) => sum + entry.value, totalExpenses * -1) * -1;
   return [...named, { code: OTHERS_CODE, label: "Otros", value: Math.round(rest * 100) / 100 }];
+}
+
+/**
+ * THE ACCOUNTS «Otros» GROUPS: the exact reverse of `annexEntries`, which SUBTRACTS the residual
+ * without ever looking at them.
+ *
+ * Subtracting is the right thing for the FIGURE — it is what makes the two cards close at 100 % by
+ * construction with any chart of accounts — but it leaves a bar that cannot be opened: its code is
+ * the `OTHERS_CODE` sentinel, so clicking it asked for the children of an account that does not
+ * exist and the window answered «this is a movement account», which is wrong twice over. This
+ * enumerates what the subtraction hides, and what it enumerates is CHECKED against it:
+ * `buildAccountBreakdown` compares their sum with the residual and says so when they disagree,
+ * rather than leaving two figures nobody adds up by hand.
+ *
+ * It stops at the HIGHEST level the annex does not cover and not at the movement accounts at the
+ * bottom: that is `buildAccountBreakdown`'s own rule — direct children, the next level is reached
+ * by going DOWN — and it is what leaves the few rows that read at a glance, at the same depth as
+ * the annex's own lines, each one openable in turn through the breadcrumb the window already has.
+ * A real plan returns three or four codes here where the leaves would be dozens.
+ *
+ * An expense root with no declared line under it (the `6` of a segmented statement) comes out
+ * WHOLE, which is exactly what the annex does not name of it.
+ */
+export function residualCodes(source: AnalyticsSource | undefined, annex: AnnexPlan): string[] {
+  const declared = new Set(annex.rows.map((row) => row.code));
+  // Descend through an ANCESTOR of a declared line and emit everything else; a declared line and
+  // its whole branch are skipped, because the annex already names them in their own bar.
+  const leadsToDeclared = (code: string) =>
+    annex.rows.some((row) => row.code.startsWith(`${code}.`));
+  const codes: string[] = [];
+  const visit = (code: string) => {
+    if (declared.has(code)) {
+      return;
+    }
+    if (leadsToDeclared(code)) {
+      childrenOf(source, code).forEach(visit);
+      return;
+    }
+    codes.push(code);
+  };
+  expenseRootsOf(source).forEach(visit);
+  return codes;
 }
 
 /**

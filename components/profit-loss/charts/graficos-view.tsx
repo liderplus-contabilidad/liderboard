@@ -16,6 +16,7 @@ import { PygEmptyState } from "../pyg-empty-state";
 import { BusinessLineLegend } from "./business-line-legend";
 import { SalesCrossLink } from "../sales/sales-cross-link";
 import { buildAccountBreakdown } from "@/lib/profit-loss/charts/account-breakdown";
+import { OTHERS_CODE } from "@/lib/profit-loss/analytics/structure";
 import { amountsOver, childrenOf, compositionQuery } from "@/lib/profit-loss/charts/presets";
 import { activeSource, expandSlots } from "@/lib/profit-loss/charts/selection";
 import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
@@ -59,10 +60,11 @@ export function GraficosView() {
    * switching client leaves nothing hanging.
    */
   const [hiddenLines, setHiddenLines] = useState<readonly string[]>([]);
-  const { periodName, tiles, cards, annex, annexShapes, emptyPeriods, lines } = useMemo(
-    () => buildGraficosCards(context, filters, { hideEmptyPeriods, hiddenLines }),
-    [context, filters, hideEmptyPeriods, hiddenLines],
-  );
+  const { periodName, tiles, cards, annex, annexResidualCodes, annexShapes, emptyPeriods, lines } =
+    useMemo(
+      () => buildGraficosCards(context, filters, { hideEmptyPeriods, hiddenLines }),
+      [context, filters, hideEmptyPeriods, hiddenLines],
+    );
   const toggleLine = useCallback((id: string) => {
     setHiddenLines((current) =>
       current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
@@ -143,17 +145,24 @@ export function GraficosView() {
       return null;
     }
     const source = activeSource(context);
-    const children = childrenOf(source, current.code);
-    if (children.length === 0) {
+    // «Otros» is the one leg with no code of its own: it is the residual the annex SUBTRACTS, so
+    // there is nothing to ask for its children and the list comes resolved from the pure layer.
+    // Only the FIRST leg can be it — anything reached by going down is a real account.
+    const residual = current.code === OTHERS_CODE && path.length === 1;
+    const children = residual ? annexResidualCodes : childrenOf(source, current.code);
+    if (children.length === 0 && !residual) {
       return null;
     }
     const periods = expandSlots(filters.periods, [context.year]);
     const bundle = runQuery(compositionQuery(children, context, { periods }));
+    // `total` stays the amount of the bar that was clicked, which for «Otros» is the subtracted
+    // residual: the breakdown then CHECKS what it enumerated against it and says so if they
+    // disagree, instead of quietly showing a list that does not add up to its own bar.
     return buildAccountBreakdown(amountsOver(bundle), {
       total: current.value,
       hasChildren: (code) => childrenOf(source, code).length > 0,
     });
-  }, [path, context, filters.periods, runQuery]);
+  }, [path, context, filters.periods, runQuery, annexResidualCodes]);
 
   if (!dataset) {
     return <PygEmptyState />;

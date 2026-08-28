@@ -9,7 +9,7 @@
  * Pure and tested, like the rest of `lib/`: these are the rules that can be wrong —what is summed,
  * what is ordered and what is a gap as against a zero—, and none of them needs a browser.
  */
-import { classifyPayer, payerLabel, type PayerKind } from "./payer";
+import { payerLabel } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
 /** A period's close: the four figures that head the screen. */
@@ -31,11 +31,10 @@ export interface ServiceTotal {
 }
 
 export interface PayerTotal {
-  /** The raw name, normalized only in whitespace: the key it was grouped by. */
+  /** The raw name, normalized only in whitespace: the key it was grouped by. Empty when none. */
   id: string;
-  /** What is WRITTEN. A person never reaches here with their name. */
+  /** What is WRITTEN — the file's own name, or the group for the ones it leaves blank. */
   label: string;
-  kind: PayerKind;
   amount: number;
   lineCount: number;
 }
@@ -99,16 +98,15 @@ export function byService(lines: readonly SalesLine[]): ServiceTotal[] {
 }
 
 /**
- * By payer, largest to smallest — and with the individuals' ORDINAL assigned over THAT order, which is
- * what makes «Particular · 1» always the largest of them and not the first the file wrote. The ordinal
- * counts only among individuals: with the companies inside, the numbering would skip gaps and would
- * look as though rows were missing.
+ * By payer, largest to smallest, each one under the name the report gives it.
+ *
+ * The lines the report leaves with NO payer group themselves: `payerKey` reduces every one of them to
+ * the same empty key, so they arrive as a single row that `payerLabel` names. There is no branch for
+ * it here on purpose — a special case would be a second place able to decide what counts as «no
+ * payer», and it would drift from the first.
  */
 export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
-  const totals = new Map<
-    string,
-    { id: string; kind: PayerKind; amount: number; lineCount: number }
-  >();
+  const totals = new Map<string, PayerTotal>();
   for (const line of lines) {
     const id = payerKey(line.payer);
     const existing = totals.get(id);
@@ -117,14 +115,9 @@ export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
       existing.lineCount += 1;
       continue;
     }
-    totals.set(id, { id, kind: classifyPayer(id), amount: line.amount, lineCount: 1 });
+    totals.set(id, { id, label: payerLabel(id), amount: line.amount, lineCount: 1 });
   }
-  const ranked = [...totals.values()].sort(byAmountDesc);
-  let particulars = 0;
-  return ranked.map((entry) => {
-    const ordinal = entry.kind === "particular" ? ++particulars : 0;
-    return { ...entry, label: payerLabel(entry.id, entry.kind, ordinal) };
-  });
+  return [...totals.values()].sort(byAmountDesc);
 }
 
 function byAmountDesc(a: { amount: number }, b: { amount: number }): number {
@@ -141,18 +134,79 @@ export function readSales(lines: readonly SalesLine[]): SalesReading {
  * A month that was never loaded is worth `null` and NOT `0`, which is the distinction the whole module
  * rests on: a zero claims nothing was sold, and only a file that arrived can say that. A loaded month
  * whose lines add up to zero is a zero, and it is drawn as such.
+ *
+ * `codes` NARROWS to those services, and an empty list is «all of them» and not «none» — the meaning a
+ * mark with nothing marked has everywhere in the app. Narrowing does not touch the coverage rule: a
+ * loaded month where the marked service did not sell is a real `0`, and only an absent month is `null`.
  */
-export function monthlySeries(months: readonly SalesMonth[], year: number): MonthPoint[] {
+export function monthlySeries(
+  months: readonly SalesMonth[],
+  year: number,
+  codes: readonly string[] = [],
+): MonthPoint[] {
   const loaded = new Map<number, number>();
   for (const month of months) {
     if (month.year === year) {
-      loaded.set(month.monthIndex, sum(month.lines.map((line) => line.amount)));
+      loaded.set(month.monthIndex, sum(narrow(month.lines, codes).map((line) => line.amount)));
     }
   }
   return Array.from({ length: 12 }, (_unused, monthIndex) => ({
     monthIndex,
     amount: loaded.has(monthIndex) ? (loaded.get(monthIndex) as number) : null,
   }));
+}
+
+/** A service's twelve months — what one segment of the stacked evolution draws. */
+export interface ServiceMonthSeries {
+  code: string;
+  name: string;
+  points: MonthPoint[];
+}
+
+/**
+ * The same axis, opened up BY SERVICE: what each month is made of.
+ *
+ * The order is the year's, largest to smallest, and it comes out of `byService` rather than from a
+ * second sort of its own — the breakdown card orders by the same rule, and two orders that can drift
+ * would paint one service two colours on the same screen.
+ *
+ * The coverage rule survives the opening up, and that is the only thing here that can be wrong: an
+ * absent month is `null` in EVERY service —nobody said anything about that month—, while a loaded
+ * month a service did not touch is a `0`, because the file did arrive and it did not bring it. A
+ * service the year does not declare produces no series at all, instead of twelve empty columns.
+ */
+export function monthlyServiceSeries(
+  months: readonly SalesMonth[],
+  year: number,
+  codes: readonly string[] = [],
+): ServiceMonthSeries[] {
+  const ofYear = months.filter((month) => month.year === year);
+  const covered = new Set(ofYear.map((month) => month.monthIndex));
+  const amounts = new Map<string, Map<number, number>>();
+  for (const month of ofYear) {
+    for (const line of narrow(month.lines, codes)) {
+      const perMonth = amounts.get(line.serviceCode) ?? new Map<number, number>();
+      perMonth.set(month.monthIndex, (perMonth.get(month.monthIndex) ?? 0) + line.amount);
+      amounts.set(line.serviceCode, perMonth);
+    }
+  }
+  return byService(ofYear.flatMap((month) => narrow(month.lines, codes))).map((service) => ({
+    code: service.code,
+    name: service.name,
+    points: Array.from({ length: 12 }, (_unused, monthIndex) => ({
+      monthIndex,
+      amount: covered.has(monthIndex) ? (amounts.get(service.code)?.get(monthIndex) ?? 0) : null,
+    })),
+  }));
+}
+
+/** The lines of the marked services. No marks is ALL of them, never none. */
+function narrow(lines: readonly SalesLine[], codes: readonly string[]): SalesLine[] {
+  if (codes.length === 0) {
+    return [...lines];
+  }
+  const wanted = new Set(codes);
+  return lines.filter((line) => wanted.has(line.serviceCode));
 }
 
 /** The years the client has loaded, ascending. */

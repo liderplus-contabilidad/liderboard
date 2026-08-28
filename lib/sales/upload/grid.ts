@@ -144,6 +144,7 @@ export interface SalesRow {
   /** Verbatim, with its backslash (`\\01`) — it is what the accountant checks. */
   serviceCode: string;
   serviceName: string;
+  /** Verbatim too, and EMPTY when the report declares none — see `payerLabel`. */
   payer: string;
   quantity: number;
   amount: number;
@@ -161,22 +162,35 @@ export interface SalesRow {
  * rule `microplus-grid.ts` already applies in this same family of reports: the value is the next cell
  * with something in it, not cell number N.
  *
- * `null` when the row is not a line — the preamble, the header, the close —, and it is `null` with no
- * exceptions: all FIVE cells are required and the last two must be numbers, so a row of labels cannot
- * slip in as a payer called «NOMBRE».
+ * `null` when the row is not a line — the preamble, the header, the close. The service, the quantity
+ * and the amount are all required and the last two must be numbers, so a row of labels cannot slip in
+ * as a line. The PAYER is the one cell allowed to be missing: the report leaves it empty when it does
+ * not know who is being billed, and that line is still a sale of the month.
  */
 export function readSalesRow(row: readonly Cell[]): SalesRow | null {
   const columns = filledColumns(row);
   const at = columns.findIndex((col) => SERVICE_CODE.test(text(row[col])));
-  if (at === -1 || columns.length - at < 5) {
+  const rest = at === -1 ? [] : columns.slice(at);
+  // FOUR cells are the minimum —code, service, quantity and amount—, because the PAYER may be
+  // missing: reading by relative position, an empty cell is not an empty string but one cell fewer
+  // in the row, and demanding five dropped that line whole. Its dollars then left the report and
+  // only the balance against the declared total said anything, naming a difference with no cause in
+  // sight.
+  if (rest.length < 4) {
     return null;
   }
-  const [codeCol, nameCol, payerCol, quantityCol, amountCol] = columns.slice(at, at + 5);
+  const [codeCol, nameCol] = rest;
+  // What tells the two cases apart is that quantity and amount are NUMBERS and a payer is not: with
+  // a payer, the third cell is its name; without one, it is already the quantity. Judging it by the
+  // cell and not by how many the row has is what keeps a trailing stray cell from putting the payer
+  // back where there is none.
+  const named = rest.length >= 5 && toSalesNumber(row[rest[2]]) === null;
+  const [quantityCol, amountCol] = named ? rest.slice(3, 5) : rest.slice(2, 4);
   const serviceName = text(row[nameCol]);
-  const payer = text(row[payerCol]);
+  const payer = named ? text(row[rest[2]]) : "";
   const quantity = toSalesNumber(row[quantityCol]);
   const amount = toSalesNumber(row[amountCol]);
-  if (serviceName === "" || payer === "" || quantity === null || amount === null) {
+  if (serviceName === "" || quantity === null || amount === null) {
     return null;
   }
   return { serviceCode: text(row[codeCol]), serviceName, payer, quantity, amount, amountCol };

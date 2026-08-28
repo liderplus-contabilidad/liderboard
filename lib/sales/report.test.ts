@@ -78,10 +78,9 @@ describe("buildSalesReport", () => {
     expect(header.generatedAt).toBe("18 de agosto de 2026, 14:05");
   });
 
-  it("los particulares siguen sin nombre en el papel", () => {
+  it("el papel dice lo MISMO que la pantalla: cada pagador con su nombre", () => {
     const report = buildSalesReport(input());
-    expect(JSON.stringify(report)).not.toContain("MENDOZA");
-    expect(JSON.stringify(report)).toContain("Particular · 1");
+    expect(JSON.stringify(report)).toContain("MENDOZA");
   });
 
   it("ninguna sección se omite por estar vacía: la tarjeta ya se explica sola", () => {
@@ -155,5 +154,17 @@ describe("la cola de pagadores en el papel", () => {
       .table;
     expect(table.rows).toHaveLength(PAYER_TABLE_PRINT_LIMIT + 12 + 1);
     expect(table.rows.some((row) => row.id === "otros")).toBe(false);
+  });
+});
+
+describe("el informe nombra el tramo marcado", () => {
+  it("la cabecera dice qué servicio se está mirando", () => {
+    // On paper the bar is not there: if the header does not say it, nothing does.
+    const report = buildSalesReport(input({ scope: "MEDICINAS" }));
+    expect(report.header.periodLabel).toBe("MEDICINAS · Abril 2026");
+  });
+
+  it("sin marca de servicio la cabecera es la de siempre", () => {
+    expect(buildSalesReport(input()).header.periodLabel).toBe("Abril 2026");
   });
 });

@@ -23,10 +23,11 @@ import {
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
+  CHART_MAX_SERIES,
   CHART_NEUTRAL,
-  CHART_PALETTE,
   CHART_SURFACE,
   colorForEntity,
+  colorForSliceSlot,
 } from "@/lib/charts/palette";
 import type {
   ChartAxis,
@@ -40,8 +41,16 @@ import type {
   ChartTooltip,
 } from "@/lib/charts/types";
 import { MONTHS_SHORT_ES } from "@/lib/date";
+import { scopedPeriodLabel } from "./filters";
 import { formatCurrency, formatNumber, formatPercent, pluralize } from "@/lib/format";
-import { shareOf, type MonthPoint, type PayerTotal, type SalesReading } from "./derive";
+import {
+  shareOf,
+  type MonthPoint,
+  type PayerTotal,
+  type SalesReading,
+  type ServiceMonthSeries,
+  type ServiceTotal,
+} from "./derive";
 import { GUIDE_SALES_EVOLUTION, GUIDE_SALES_PAYERS, GUIDE_SALES_SERVICES } from "./guides";
 
 /**
@@ -58,7 +67,7 @@ export const PAYER_SLICES = 10;
  * On screen the table does not cut, and that is its job: it is the place where a payer that was not
  * drawn keeps its figure, and finding it costs a scroll. On paper that justification collapses — the
  * real file brings 956 payers, which is over twenty pages of names behind a two-page report, and most
- * of them are «Particular · 731 · $12.40» rows, anonymous by design: a twenty-page appendix nobody can
+ * of them are one-off rows of a few dollars: a twenty-page appendix nobody can
  * use for anything. It is the same kind of rule PyG's report already applies by pruning per TABLE
  * while its Excel prunes per WORKBOOK: each medium prunes the way it is read.
  *
@@ -69,18 +78,34 @@ export const PAYER_SLICES = 10;
 export const PAYER_TABLE_PRINT_LIMIT = 30;
 
 /**
- * The colour of a PAYER bar says its CLASS, not its identity — the fourth time colour stops following
- * the entity in this app, and here for two reasons that add up: ten entities do not fit in the
- * palette's eight slots (the ninth would come out neutral and would look like a separate category),
- * and what a reader asks of this card is how much of their billing depends on INSURERS as against
- * what comes in over the counter. Each bar carries its label and its figure, so the colour is not
- * distinguishing anything the row does not already say.
+ * A payer's fill: its PLACE in the ranking, taken from the sequence that OPENS WITH THE WARM
+ * composition hues.
+ *
+ * The ten bars went first in one single blue and then in the DECORATIVE set, and both read the same
+ * way against the firm's own workbook: ten bars of one texture, muted, exactly where a ranking has to
+ * be walked down. They take a saturated tone each, like «Composición por servicio» right above.
+ *
+ * What they must NOT take is that card's own set, and the reason is on this very screen: there the
+ * colour is IDENTITY —`movingServices` is the one list a service's hue comes from, so «HONORARIOS» is
+ * the same blue in the composition and in the evolution's stack, where a LEGEND names it—. A first
+ * payer bar out of that same blue would say that payer and that service go together. So the ranking
+ * takes the other saturated set the app already measured: `CHART_SLICE_SEQUENCE` opens with the six
+ * warm hues of PyG's composition —none of which is an identity slot— and continues into the
+ * decorative ones, which is the shape of this card: the head of the ranking, which is what gets read,
+ * comes out vivid, and the tail pays for the decorative set with the same relief the annex's doughnut
+ * pays it with — every bar carries its name and its figure, and the table twin lists them all.
+ *
+ * What the validator says about the ten slots drawn here, so nobody re-derives it: lightness band
+ * PASS, chroma floor PASS, normal-vision floor PASS —worst adjacent pair verde↔teal ΔE 16.2— and CVD
+ * separation inside the 6–8 band —worst pair teal↔magenta ΔE 6.8 deutan, the ninth and tenth bars—,
+ * which is legal only with that secondary encoding, and this card has it.
  *
  * **Only in the ONE-year shape.** Comparing several, the series is the YEAR and the colour goes back
- * to being identity: tinting by class would paint the three years of one same payer in the same hue,
- * which is precisely what the comparison needs to tell apart.
+ * to being identity, which is what the comparison needs to tell apart.
  */
-const PAYER_FILL = { empresa: CHART_PALETTE[0], particular: CHART_NEUTRAL } as const;
+function payerColor(index: number): string {
+  return colorForSliceSlot(index);
+}
 
 /** The fill of a month that NEVER arrived — see `absenceMarks`. */
 const ABSENT_FILL = CHART_LINES.grid;
@@ -111,6 +136,20 @@ export interface SalesCardsInput {
   period: string;
   /** The twelve months of each marked year. */
   monthlyByYear: readonly YearMonths[];
+  /**
+   * The marked year's months opened up BY SERVICE — what the evolution stacks. Empty or absent, the
+   * evolution falls back to one bar per year, which is also what a year with no coverage draws.
+   *
+   * It is only read with ONE year marked: stacking services and comparing years on the same axis asks
+   * for grouped stacks and takes the colour away from the year, which is the only thing telling those
+   * series apart. The year-on-year reading of one service is asked for by MARKING it.
+   */
+  serviceMonthly?: readonly ServiceMonthSeries[];
+  /**
+   * How the marked services are called — «MEDICINAS», «2 de 5 servicios». It is composed ONCE
+   * (`describeServiceScope`) and only placed here, so no two cards name different slices.
+   */
+  scope?: string;
   /**
    * How many payers the table lists before folding the tail. `undefined` —the screen— lists them ALL;
    * the report passes `PAYER_TABLE_PRINT_LIMIT`. It is the ONLY thing in which the paper and the
@@ -152,6 +191,23 @@ export function buildSalesCards(
     evolution: buildEvolutionCard(input, options),
     emptyMonths: emptyMonths(input.monthlyByYear).length,
   };
+}
+
+/** The period as the subtitles say it. The wording lives in `filters.ts`, next to the one that
+ *  composes the slice, so the screen and the paper cannot name the same reading two ways. */
+export function scopedPeriod({ scope, period }: SalesCardsInput): string {
+  return scopedPeriodLabel(scope ?? null, period);
+}
+
+/**
+ * The services the breakdown DRAWS, in its order — the ONE list a service's colour comes from.
+ *
+ * An idle service goes and is counted: the report declares the catalogue's five whether or not they
+ * have movement, and an invisible bar buries the one that matters. It is judged over the AGGREGATE,
+ * so a service that moved in any of the marked years stays.
+ */
+function movingServices(reading: SalesReading): ServiceTotal[] {
+  return reading.services.filter((service) => service.amount !== 0);
 }
 
 function emptyMonths(monthlyByYear: readonly YearMonths[]): number[] {
@@ -209,8 +265,14 @@ function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }
 
 /** The YEARS' legend. With just one it is superfluous: the card's subtitle already names it. */
 function yearLegend(years: number): ChartLegend {
+  return legendFor(years > 1);
+}
+
+/** The house legend. `data` names WHICH series it lists — see `ChartLegend.data`. */
+function legendFor(show: boolean, data?: readonly string[]): ChartLegend {
   return {
-    show: years > 1,
+    show,
+    ...(data ? { data: [...data] } : {}),
     type: "scroll",
     bottom: 0,
     icon: "roundRect",
@@ -283,10 +345,7 @@ const ROUND_TOP = [CHART_MARK.radius, CHART_MARK.radius, 0, 0] as [number, numbe
 function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
   const { reading, byYear, period } = input;
   const total = reading.totals.amount;
-  // An idle service goes and is counted: the report declares the catalogue's five whether or not they
-  // have movement, and an invisible bar buries the one that matters. It is judged over the AGGREGATE,
-  // so a service that moved in any of the marked years stays.
-  const moving = reading.services.filter((service) => service.amount !== 0);
+  const moving = movingServices(reading);
   const idle = reading.services.length - moving.length;
   const years = byYear.map((entry) => entry.year);
   const comparing = years.length > 1;
@@ -430,7 +489,9 @@ function buildServicesCard(input: SalesCardsInput): ChartCardSpec {
   return {
     id: "sales-services",
     title: "Composición por servicio",
-    subtitle: `${pluralize(moving.length, "servicio")} · ${period}`,
+    // With services marked, WHICH ones is worth more than HOW MANY: the count is already the length
+    // of the list underneath.
+    subtitle: `${input.scope ?? pluralize(moving.length, "servicio")} · ${period}`,
     option,
     table,
     note: servicesNote(total, idle, comparing),
@@ -456,13 +517,13 @@ function servicesNote(total: number, idle: number, comparing: boolean): string {
 // ---------------------------------------------------------------------------
 
 function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
-  const { reading, byYear, period, payerTableLimit } = input;
+  const { reading, byYear, payerTableLimit } = input;
   const total = reading.totals.amount;
   const years = byYear.map((entry) => entry.year);
   const comparing = years.length > 1;
   // The largest ones are chosen over the AGGREGATE, not over one year: if the cast changed with the
   // marks, the card could not be compared with itself. And a particular's ORDINAL comes from the same
-  // place, so «Particular · 1» means the same person across the three series.
+  // place, so a row means the same payer across the three series.
   const drawn = reading.payers.slice(0, PAYER_SLICES);
   const rest = reading.payers.slice(PAYER_SLICES);
   const restAmount = rest.reduce((sum, payer) => sum + payer.amount, 0);
@@ -485,9 +546,9 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
         {
           id: "pagadores",
           type: "bar" as const,
-          data: drawn.map((payer) => ({
+          data: drawn.map((payer, index) => ({
             value: payer.amount,
-            itemStyle: { color: PAYER_FILL[payer.kind], borderRadius: ROUND_RIGHT },
+            itemStyle: { color: payerColor(index), borderRadius: ROUND_RIGHT },
           })),
           barMaxWidth: 22,
           label: {
@@ -579,12 +640,14 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
         columns: ["Venta", "% del periodo", "Líneas"],
         rows: [
           ...listed.map<ChartTableRow>((payer, index) => ({
-            // The id is the POSITION and never the name: it is React's key and it travels to the
-            // report, and a patient's name cannot slip into a structure just because it is not
-            // rendered there.
+            // The id is the POSITION and never the name: it is React's key, and a name is neither
+            // unique nor stable enough to key a row by — the same payer can be written two ways
+            // across two months.
             id: `payer-${index}`,
             label: payer.label,
-            color: index < PAYER_SLICES ? PAYER_FILL[payer.kind] : undefined,
+            // Only the drawn ones carry a dot: one on a row that is not in the chart promises a bar
+            // the reader will not find.
+            color: index < PAYER_SLICES ? payerColor(index) : undefined,
             values: [
               formatCurrency(payer.amount, { cents: true }),
               formatShare(shareOf(payer.amount, total)),
@@ -608,7 +671,7 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
   return {
     id: "sales-payers",
     title: "Concentración por pagador",
-    subtitle: subtitleForPayers(drawn.length, reading.payers.length, period),
+    subtitle: subtitleForPayers(drawn.length, reading.payers.length, scopedPeriod(input)),
     option,
     table,
     note: payersNote(
@@ -667,9 +730,7 @@ function payersNote(
   const ranking = comparing
     ? " Los mayores se eligen por el total del periodo, no por un año, para que el elenco no cambie al mover las marcas."
     : "";
-  // The anonymity rule is DECLARED where it is applied: a row saying «Particular · 4» without this
-  // line reads as a payer called that.
-  return `${head} ${rest}${where}${ranking} Los pacientes particulares van sin nombre; las aseguradoras, con el suyo.`;
+  return `${head} ${rest}${where}${ranking}`;
 }
 
 /**
@@ -722,14 +783,51 @@ function foldedRow(
 // 3 · Evolution
 // ---------------------------------------------------------------------------
 
+/** Every bar of this card lives in ONE stack, absence marks included: that is what makes a column a
+ *  column. */
+const STACK_ID = "mes";
+
+/**
+ * Segments the stack draws before folding its tail — the identity palette's slots.
+ *
+ * It is a limit of COLOUR and not of reading: past the eighth, `colorForEntity` hands out the neutral,
+ * and two neutral segments touching inside the same column are indistinguishable from one. The table
+ * twin does not fold, which is where a grouped service keeps its figure.
+ */
+const STACK_SLICES = CHART_MAX_SERIES;
+
+/** One band of the stack: a service, or the «Otros» its tail folds into. */
+interface StackSegment {
+  id: string;
+  name: string;
+  color: string;
+  points: MonthPoint[];
+}
+
+/**
+ * 3 · Evolution — how the billing moves month by month, and what each month is made of.
+ *
+ * **With ONE year the column is the BREAKDOWN by service**, plus the line of its total: the figure
+ * «Distribución» already draws in PyG, and for its same reason — the line prints the amount once per
+ * column and the stack says what part of it each service is, which is the work reading it by
+ * subtracting bars by eye costs.
+ *
+ * **With SEVERAL years it goes back to one series per year, without a stack.** Stacking services and
+ * comparing years on the same axis asks for grouped stacks and spends the colour channel on the
+ * service, when the year is the only thing telling those series apart. The year-on-year reading of a
+ * service is asked for by MARKING it, which narrows this card to that service in every year.
+ */
 function buildEvolutionCard(
-  { monthlyByYear: full, period }: SalesCardsInput,
+  input: SalesCardsInput,
   { hideEmptyMonths = false }: SalesCardsOptions = {},
 ): ChartCardSpec {
+  const { monthlyByYear: full, reading, serviceMonthly = [] } = input;
   const hidden = hideEmptyMonths ? emptyMonths(full) : [];
+  const kept = (points: readonly MonthPoint[]): MonthPoint[] =>
+    points.filter((point) => !hidden.includes(point.monthIndex));
   const monthlyByYear: YearMonths[] = full.map((entry) => ({
     year: entry.year,
-    points: entry.points.filter((point) => !hidden.includes(point.monthIndex)),
+    points: kept(entry.points),
   }));
   const years = monthlyByYear.map((entry) => entry.year);
   const comparing = years.length > 1;
@@ -742,59 +840,35 @@ function buildEvolutionCard(
   );
 
   // **Bars WITH a line above**: the bar says how much —which is what is compared against the one of
-  // the year next to it— and the line says which way, which is what a row of grouped bars forces you
-  // to reconstruct by jumping from the first of each group to the next. They are the two halves of
-  // «evolution» and neither is superfluous.
+  // the year next to it, and what the stack breaks down— and the line says which way, which is what a
+  // row of grouped bars forces you to reconstruct by jumping from the first of each group to the next.
   //
-  // It falls back to bars ALONE with a single column, where a line is a loose point. The combo
-  // precedent in this app is the total's line over «Distribución»'s stack in PyG.
+  // It falls back to bars ALONE with a single column, where a line is a loose point.
   const withLine = labels.length > 1;
 
-  const legend = yearLegend(years.length);
-  // A year's TWO series share a `name`, which is why the legend dedupes: one item comes out per year
-  // and switching it off takes its bar and its line at once.
-  const series: ChartSeries[] = monthlyByYear.flatMap((entry) => {
-    const color = yearColor(entry.year, years);
-    const data = entry.points.map((point) => point.amount);
-    const bar: ChartSeries = {
-      id: `year-${entry.year}`,
-      name: String(entry.year),
-      type: "bar",
-      data,
-      itemStyle: { color, borderRadius: ROUND_TOP },
-      barMaxWidth: comparing ? 18 : CHART_MARK.barMaxWidth,
-      label: {
-        // A figure per mark stops being readable past a few: with several years there are 24 or 36.
-        show: !comparing && covered.length <= 6,
-        position: "top",
-        color: CHART_INK.muted,
-        fontSize: 11,
-        formatter: (param: ChartParam) =>
-          param.value === null ? "" : formatCurrency(Number(param.value)),
-      },
-      labelLayout: { hideOverlap: true },
-    };
-    if (!withLine) {
-      return [bar];
-    }
-    const line: ChartSeries = {
-      id: `year-${entry.year}-linea`,
-      name: String(entry.year),
-      type: "line",
-      data,
-      itemStyle: { color },
-      lineStyle: { color, width: CHART_MARK.lineWidth },
-      symbol: "circle",
-      symbolSize: CHART_MARK.symbolSize,
-      // Straight and not `smooth`: a curve invents values between two months nobody measured. And a
-      // gap BREAKS the line —ECharts does not join `null` by default—, which is right: joining January
-      // with March would draw a February that never arrived.
-      smooth: false,
-      // Above the bars, which is where it has to be read.
-      z: 3,
-    };
-    return [bar, line];
-  });
+  // The colour of a service comes from the SAME list the breakdown card orders by, so the two cards on
+  // the screen cannot paint one service two ways.
+  const order = movingServices(reading).map((service) => service.code);
+  const opened = comparing
+    ? []
+    : serviceMonthly.map((entry) => ({ ...entry, points: kept(entry.points) }));
+  const ranked = [...opened].sort((a, b) => rankOf(a.code, order) - rankOf(b.code, order));
+  const segments = stackSegments(ranked, order);
+  const foldedServices = Math.max(ranked.length - STACK_SLICES, 0);
+  const stacked = segments.length > 0;
+
+  const legend = stacked
+    ? legendFor(
+        true,
+        segments.map((segment) => segment.name),
+      )
+    : yearLegend(years.length);
+
+  const series: ChartSeries[] = stacked
+    ? stackSeries(segments, axis, covered.length, withLine)
+    : monthlyByYear.flatMap((entry) =>
+        yearSeries(entry, years, comparing, covered.length, withLine),
+      );
 
   const option: ChartOption | null =
     covered.length === 0
@@ -820,28 +894,216 @@ function buildEvolutionCard(
           series: [...series, ...absenceMarks(monthlyByYear)],
         };
 
-  const table: ChartTable = {
-    columns: labels,
-    rows: monthlyByYear.map((entry) => ({
-      id: `year-${entry.year}`,
-      label: String(entry.year),
-      color: yearColor(entry.year, years),
-      // The DASH, not a blank cell nor a `$0.00`: it is what says «this month never arrived», as
-      // against the zero a loaded month does assert.
-      values: entry.points.map((point) => currencyOrDash(point.amount)),
-    })),
-  };
+  const table: ChartTable = stacked
+    ? {
+        columns: labels,
+        rows: [
+          ...ranked.map<ChartTableRow>((entry, index) => ({
+            id: `servicio-${entry.code}`,
+            label: entry.name,
+            sublabel: entry.code,
+            // Only what is DRAWN carries a dot: one on a folded row would promise a band the reader
+            // cannot find in the chart.
+            ...(index < STACK_SLICES ? { color: colorForEntity(entry.code, order) } : {}),
+            values: entry.points.map((point) => currencyOrDash(point.amount)),
+          })),
+          {
+            id: "total",
+            label: "TOTAL",
+            emphasis: true,
+            values: axis.map((point) => currencyOrDash(point.amount)),
+          },
+        ],
+      }
+    : {
+        columns: labels,
+        rows: monthlyByYear.map((entry) => ({
+          id: `year-${entry.year}`,
+          label: String(entry.year),
+          color: yearColor(entry.year, years),
+          // The DASH, not a blank cell nor a `$0.00`: it is what says «this month never arrived», as
+          // against the zero a loaded month does assert.
+          values: entry.points.map((point) => currencyOrDash(point.amount)),
+        })),
+      };
 
   return {
     id: "sales-evolution",
     title: "Evolución",
-    subtitle: `Venta total · ${period}`,
+    subtitle: `Venta total · ${scopedPeriod(input)}`,
     option,
     table,
-    note: evolutionNote(monthlyByYear, comparing, hidden.length),
+    // The breakdown is explained only when there is one to see: with a single service marked the
+    // column IS that service, and a sentence about a stack would describe something that is not there.
+    note: evolutionNote(
+      monthlyByYear,
+      comparing,
+      hidden.length,
+      segments.length > 1,
+      foldedServices,
+    ),
     guide: GUIDE_SALES_EVOLUTION,
     height: EVOLUTION_HEIGHT,
   };
+}
+
+/** A service's place in the breakdown's order. One it does not declare —netted to zero over the
+ *  period— goes last instead of stealing a slot. */
+function rankOf(code: string, order: readonly string[]): number {
+  const slot = order.indexOf(code);
+  return slot < 0 ? order.length : slot;
+}
+
+/** The stack's bands: the services the palette can tell apart, and the tail folded into one «Otros».
+ *  Folding is not truncating — the sum stays, and the table twin still lists them one by one. */
+function stackSegments(
+  ranked: readonly ServiceMonthSeries[],
+  order: readonly string[],
+): StackSegment[] {
+  const drawn = ranked.slice(0, STACK_SLICES).map<StackSegment>((entry) => ({
+    id: `servicio-${entry.code}`,
+    name: entry.name,
+    color: colorForEntity(entry.code, order),
+    points: entry.points,
+  }));
+  const rest = ranked.slice(STACK_SLICES);
+  if (rest.length === 0) {
+    return drawn;
+  }
+  return [
+    ...drawn,
+    {
+      id: "servicio-otros",
+      name: "Otros",
+      // Not a slot of the scale: it is what is left over, and `CHART_NEUTRAL` is how this app says so.
+      color: CHART_NEUTRAL,
+      points: sumPoints(rest.map((entry) => entry.points)),
+    },
+  ];
+}
+
+/** The tail added up, column by column, WITHOUT turning a gap into a zero: a month nobody loaded is
+ *  `null` in every service, so it stays `null` in their sum. */
+function sumPoints(points: readonly MonthPoint[][]): MonthPoint[] {
+  const first = points[0] ?? [];
+  return first.map((point, index) => {
+    const values = points.map((entry) => entry[index]?.amount ?? null);
+    const present = values.filter((value): value is number => value !== null);
+    return {
+      monthIndex: point.monthIndex,
+      amount: present.length === 0 ? null : present.reduce((sum, value) => sum + value, 0),
+    };
+  });
+}
+
+/**
+ * The stack and the line of its total.
+ *
+ * The bands go WITHOUT the rounding a lone bar carries: which service is on top changes from column to
+ * column, so a rounded segment would be a cap in the middle of a stack. And the line takes a shade of
+ * INK and not a step of the palette, the rule the combo in PyG already follows: it is a reading of the
+ * same figure the bands break down, not one more entity.
+ */
+function stackSeries(
+  segments: readonly StackSegment[],
+  axis: readonly MonthPoint[],
+  coveredCount: number,
+  withLine: boolean,
+): ChartSeries[] {
+  const bands = segments.map<ChartSeries>((segment) => ({
+    id: segment.id,
+    name: segment.name,
+    type: "bar",
+    stack: STACK_ID,
+    data: segment.points.map((point) => point.amount),
+    itemStyle: { color: segment.color },
+    barMaxWidth: CHART_MARK.barMaxWidth,
+  }));
+  if (!withLine) {
+    return bands;
+  }
+  return [
+    ...bands,
+    {
+      id: "total",
+      name: "Total",
+      type: "line",
+      data: axis.map((point) => point.amount),
+      itemStyle: { color: CHART_INK.strong },
+      lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth },
+      symbol: "circle",
+      symbolSize: CHART_MARK.symbolSize,
+      // Straight and not `smooth`: a curve invents values between two months nobody measured. And a
+      // gap BREAKS the line, which is right: joining January with March would draw a February that
+      // never arrived.
+      smooth: false,
+      label: {
+        // It is measured as ONE series and not as the ninth: it is the only one carrying a figure, so
+        // what decides whether it fits is its own mark count and not that of the stack below.
+        show: coveredCount <= 6,
+        position: "top",
+        color: CHART_INK.muted,
+        fontSize: 11,
+        formatter: (param: ChartParam) =>
+          param.value === null ? "" : formatCurrency(Number(param.value)),
+      },
+      labelLayout: { hideOverlap: true },
+      // Above the bars, which is where it has to be read.
+      z: 3,
+    },
+  ];
+}
+
+/**
+ * A year's bar and its line — the comparative shape, and the one a year with no breakdown falls back
+ * to. The TWO series share a `name`, which is why the legend dedupes: one item per year, and
+ * switching it off takes its bar and its line at once.
+ */
+function yearSeries(
+  entry: YearMonths,
+  years: readonly number[],
+  comparing: boolean,
+  coveredCount: number,
+  withLine: boolean,
+): ChartSeries[] {
+  const color = yearColor(entry.year, years);
+  const data = entry.points.map((point) => point.amount);
+  const bar: ChartSeries = {
+    id: `year-${entry.year}`,
+    name: String(entry.year),
+    type: "bar",
+    data,
+    itemStyle: { color, borderRadius: ROUND_TOP },
+    barMaxWidth: comparing ? 18 : CHART_MARK.barMaxWidth,
+    label: {
+      // A figure per mark stops being readable past a few: with several years there are 24 or 36.
+      show: !comparing && coveredCount <= 6,
+      position: "top",
+      color: CHART_INK.muted,
+      fontSize: 11,
+      formatter: (param: ChartParam) =>
+        param.value === null ? "" : formatCurrency(Number(param.value)),
+    },
+    labelLayout: { hideOverlap: true },
+  };
+  if (!withLine) {
+    return [bar];
+  }
+  return [
+    bar,
+    {
+      id: `year-${entry.year}-linea`,
+      name: String(entry.year),
+      type: "line",
+      data,
+      itemStyle: { color },
+      lineStyle: { color, width: CHART_MARK.lineWidth },
+      symbol: "circle",
+      symbolSize: CHART_MARK.symbolSize,
+      smooth: false,
+      z: 3,
+    },
+  ];
 }
 
 /**
@@ -890,8 +1152,19 @@ function evolutionNote(
   monthlyByYear: readonly YearMonths[],
   comparing: boolean,
   hidden: number,
+  brokenDown: boolean,
+  foldedServices: number,
 ): string {
   const axisLength = monthlyByYear[0]?.points.length ?? 0;
+  // What the stack IS, said once: a column that adds up to the line above it. And what it folded, if
+  // it folded anything — a band grouping three services otherwise reads as one more service.
+  const breakdown = !brokenDown
+    ? ""
+    : ` Cada columna es el desglose por servicio del mes y la línea, su total.${
+        foldedServices === 0
+          ? ""
+          : ` ${pluralize(foldedServices, "servicio")} más quedan agrupados en «Otros»; la tabla los lista uno a uno.`
+      }`;
   const pruned =
     hidden === 0
       ? ""
@@ -910,7 +1183,9 @@ function evolutionNote(
     return (
       (comparing
         ? `Todos los años comparados tienen ${what} del eje cargados.`
-        : `Sin huecos: ${what} del eje tienen su archivo cargado.`) + pruned
+        : `Sin huecos: ${what} del eje tienen su archivo cargado.`) +
+      breakdown +
+      pruned
     );
   }
   // The gaps are said PER YEAR, never one per month: with three half-loaded years, one line per month
@@ -923,7 +1198,7 @@ function evolutionNote(
     )
     .join(" · ");
   const head = comparing ? `Meses sin cargar — ${detail}.` : `${detail}.`;
-  return `${head} Un mes que nunca llegó no es un mes en cero — la misma regla de cobertura de PyG.${pruned}`;
+  return `${head} Un mes que nunca llegó no es un mes en cero — la misma regla de cobertura de PyG.${breakdown}${pruned}`;
 }
 
 /** A table amount, with the DASH of «this period never arrived». */

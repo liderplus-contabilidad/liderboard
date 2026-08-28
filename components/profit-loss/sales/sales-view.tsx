@@ -7,7 +7,6 @@ import {
   Eye,
   EyeOff,
   FileSpreadsheet,
-  Info,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -46,7 +45,7 @@ function SalesContent() {
     months,
     reading,
     cards,
-    periodName,
+    scopedPeriodName,
     universe,
     hideEmptyMonths,
     toggleEmptyMonths,
@@ -87,150 +86,123 @@ function SalesContent() {
   const empty = months.length === 0;
 
   return (
-    <div className="px-7 py-5">
-      <div className="mb-4 flex items-start justify-between gap-4 rounded-[13px] border border-border bg-surface px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-bold tracking-[-0.2px] text-ink">Ventas por servicio</h2>
-          <p className="mt-0.5 text-[12.5px] text-faint">
-            Lo que el sistema contable facturó, repartido por servicio y por quién lo paga.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2.5">
-          <SalesExcelActions open={uploadOpen} onOpenChange={setUploadOpen} />
-          <SalesReportButton />
-        </div>
+    <div className="pb-5">
+      {/* ONE bar with the marks and the actions, EDGE TO EDGE and flush against the header, and it
+          STAYS: the three cards are tall, and what is changed while looking at the bottom one is
+          precisely what is marked up here. */}
+      <div className="sticky top-0 z-20">
+        <SalesToolbar
+          actions={
+            <>
+              <SalesExcelActions open={uploadOpen} onOpenChange={setUploadOpen} />
+              <SalesReportButton />
+            </>
+          }
+        />
       </div>
 
-      {empty ? (
-        <div className="rounded-[13px] border border-border bg-surface">
-          <EmptyState icon={<FileSpreadsheet size={22} />} className="py-16">
-            Este cliente no tiene ningún mes de ventas cargado. Sube el Excel «Venta de Servicios
-            por FACTURA» del mes con «Cargar Excel».
-          </EmptyState>
-        </div>
-      ) : (
-        <>
-          <div className="mb-4">
-            <SalesToolbar />
+      <div className="px-7 pt-5">
+        {empty ? (
+          <div className="rounded-[13px] border border-border bg-surface">
+            <EmptyState icon={<FileSpreadsheet size={22} />} className="py-16">
+              Este cliente no tiene ningún mes de ventas cargado. Sube el Excel «Venta de Servicios
+              por FACTURA» del mes con «Cargar Excel».
+            </EmptyState>
           </div>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-4 gap-4">
+              <StatTile
+                label="Venta total"
+                value={formatCurrency(reading.totals.amount, { cents: true })}
+                hint={scopedPeriodName}
+                mono
+              />
+              <StatTile
+                label="Líneas facturadas"
+                value={formatNumber(reading.totals.lineCount)}
+                hint={scopedPeriodName}
+                mono
+              />
+              <StatTile
+                label="Ticket promedio"
+                value={
+                  reading.totals.averageTicket === null
+                    ? null
+                    : formatCurrency(reading.totals.averageTicket, { cents: true })
+                }
+                hint="Por línea de factura"
+                mono
+              />
+              <StatTile
+                label="Pagadores"
+                value={formatNumber(reading.totals.payerCount)}
+                hint="Aseguradoras y particulares"
+                mono
+              />
+            </div>
 
-          <div className="mb-4 grid grid-cols-4 gap-4">
-            <StatTile
-              label="Venta total"
-              value={formatCurrency(reading.totals.amount, { cents: true })}
-              hint={periodName}
-              mono
-            />
-            <StatTile
-              label="Líneas facturadas"
-              value={formatNumber(reading.totals.lineCount)}
-              hint={periodName}
-              mono
-            />
-            <StatTile
-              label="Ticket promedio"
-              value={
-                reading.totals.averageTicket === null
-                  ? null
-                  : formatCurrency(reading.totals.averageTicket, { cents: true })
-              }
-              hint="Por línea de factura"
-              mono
-            />
-            <StatTile
-              label="Pagadores"
-              value={formatNumber(reading.totals.payerCount)}
-              hint="Aseguradoras y particulares"
-              mono
-            />
-          </div>
+            <div className="mb-4 flex items-center">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={toggleAll}
+                icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+                className="font-medium"
+              >
+                {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
+              </Button>
+            </div>
 
-          <div className="mb-4 flex items-center">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={toggleAll}
-              icon={allCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
-              className="font-medium"
-            >
-              {allCollapsed ? "Desplegar todos" : "Cerrar todos"}
-            </Button>
-          </div>
+            <div className="flex flex-col gap-4">
+              <ChartCard
+                {...cards.services}
+                collapsed={isCollapsed(cards.services.id)}
+                onToggleCollapsed={() => toggle(cards.services.id)}
+              />
+              <ChartCard
+                {...cards.payers}
+                collapsed={isCollapsed(cards.payers.id)}
+                onToggleCollapsed={() => toggle(cards.payers.id)}
+              />
+              <ChartCard
+                {...cards.evolution}
+                collapsed={isCollapsed(cards.evolution.id)}
+                onToggleCollapsed={() => toggle(cards.evolution.id)}
+                {...(cards.emptyMonths > 0
+                  ? {
+                      headerSlot: (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          aria-pressed={hideEmptyMonths}
+                          onClick={toggleEmptyMonths}
+                          icon={hideEmptyMonths ? <Eye size={14} /> : <EyeOff size={14} />}
+                          className={cn(
+                            "font-medium",
+                            hideEmptyMonths &&
+                              "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
+                          )}
+                        >
+                          {hideEmptyMonths
+                            ? `Mostrar ${cards.emptyMonths} ${cards.emptyMonths === 1 ? "mes" : "meses"} en 0`
+                            : "Ocultar meses en 0"}
+                        </Button>
+                      ),
+                    }
+                  : {})}
+              />
+            </div>
 
-          <div className="flex flex-col gap-4">
-            <ChartCard
-              {...cards.services}
-              collapsed={isCollapsed(cards.services.id)}
-              onToggleCollapsed={() => toggle(cards.services.id)}
-            />
-            <ChartCard
-              {...cards.payers}
-              collapsed={isCollapsed(cards.payers.id)}
-              onToggleCollapsed={() => toggle(cards.payers.id)}
-            />
-            <ChartCard
-              {...cards.evolution}
-              collapsed={isCollapsed(cards.evolution.id)}
-              onToggleCollapsed={() => toggle(cards.evolution.id)}
-              {...(cards.emptyMonths > 0
-                ? {
-                    headerSlot: (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        aria-pressed={hideEmptyMonths}
-                        onClick={toggleEmptyMonths}
-                        icon={hideEmptyMonths ? <Eye size={14} /> : <EyeOff size={14} />}
-                        className={cn(
-                          "font-medium",
-                          hideEmptyMonths &&
-                            "border-brand/40 bg-brand-soft text-brand hover:bg-brand-soft",
-                        )}
-                      >
-                        {hideEmptyMonths
-                          ? `Mostrar ${cards.emptyMonths} ${cards.emptyMonths === 1 ? "mes" : "meses"} en 0`
-                          : "Ocultar meses en 0"}
-                      </Button>
-                    ),
-                  }
-                : {})}
-            />
-          </div>
-
-          <BillingDisclaimer />
-
-          {universe.months.length === 0 && (
-            <p className="mt-3 text-[12px] text-faint">
-              Los años marcados no tienen ningún mes cargado. Marca otro en «Año», o sube su Excel.
-            </p>
-          )}
-        </>
-      )}
+            {universe.months.length === 0 && (
+              <p className="mt-3 text-[12px] text-faint">
+                Los años marcados no tienen ningún mes cargado. Marca otro en «Año», o sube su
+                Excel.
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
-  );
-}
-
-/**
- * **What is billed is NOT what is booked**, and the screen says so.
- *
- * The $229,616 of a billed April are not April's accounting revenue: there are recognition timings,
- * credit notes and VAT in between. Two revenue figures that do not square inside the same app do not
- * read as two sources, they read as an error — so these sales go into no reading of PyG, and that
- * silence has to be declared where it is produced. Reconciling the two is a legitimate reading, and
- * it goes separately.
- */
-function BillingDisclaimer() {
-  return (
-    <p className="mt-4 flex items-start gap-2 rounded-[10px] border border-border-soft bg-surface-sunken px-3.5 py-2.5 text-[11.5px] leading-snug text-muted">
-      <Info size={14} className="mt-px shrink-0 text-faint" aria-hidden />
-      <span>
-        Lo facturado no es lo contabilizado. Estas cifras salen del reporte de facturación y{" "}
-        <strong className="font-semibold text-ink-soft">
-          no entran en el estado de resultados
-        </strong>
-        : el ingreso contable del mes difiere por tiempos de reconocimiento, notas de crédito e IVA.
-        Pérdidas y Ganancias dibuja exactamente lo mismo con ventas cargadas y sin ellas.
-      </span>
-    </p>
   );
 }
