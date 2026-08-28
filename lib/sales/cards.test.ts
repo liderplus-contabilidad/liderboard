@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSalesCards, PAYER_SLICES, type SalesCardsInput } from "./cards";
 import { monthlySeries, readSales, type MonthPoint } from "./derive";
+import { UNIDENTIFIED_PAYER } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
 function line(overrides: Partial<SalesLine>): SalesLine {
@@ -110,13 +111,25 @@ describe("concentración por pagador", () => {
     expect(payers.note).toMatch(/Estos 10 son el \d+\.\d %/);
   });
 
-  it("un particular no llega con su nombre ni al gráfico ni a la tabla", () => {
+  it("un pagador llega con su nombre al gráfico y a la tabla", () => {
     const { payers } = buildSalesCards(
       input([line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 10 })]),
     );
     const axis = payers.option?.yAxis?.data ?? [];
-    expect(axis).toEqual(["Particular · 1"]);
-    expect(JSON.stringify(payers.table.rows)).not.toContain("SANDOVAL");
+    expect(axis).toEqual(["SANDOVAL MORALES JUAN CARLOS"]);
+    expect(JSON.stringify(payers.table.rows)).toContain("SANDOVAL MORALES JUAN CARLOS");
+  });
+
+  it("las líneas sin pagador son UNA fila rotulada, no una por línea", () => {
+    const { payers } = buildSalesCards(
+      input([
+        line({ payer: "", amount: 10 }),
+        line({ payer: "", amount: 20 }),
+        line({ payer: "SALUDSA", amount: 5 }),
+      ]),
+    );
+
+    expect(payers.option?.yAxis?.data).toEqual([UNIDENTIFIED_PAYER, "SALUDSA"]);
   });
 });
 

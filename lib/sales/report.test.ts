@@ -78,10 +78,9 @@ describe("buildSalesReport", () => {
     expect(header.generatedAt).toBe("18 de agosto de 2026, 14:05");
   });
 
-  it("los particulares siguen sin nombre en el papel", () => {
+  it("el papel dice lo MISMO que la pantalla: cada pagador con su nombre", () => {
     const report = buildSalesReport(input());
-    expect(JSON.stringify(report)).not.toContain("MENDOZA");
-    expect(JSON.stringify(report)).toContain("Particular · 1");
+    expect(JSON.stringify(report)).toContain("MENDOZA");
   });
 
   it("ninguna sección se omite por estar vacía: la tarjeta ya se explica sola", () => {

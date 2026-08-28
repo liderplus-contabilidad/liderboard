@@ -125,6 +125,26 @@ describe("readSalesRow", () => {
     expect(readSalesRow([null, "\\01", "HONORARIOS", "UN PAGADOR"])).toBeNull();
   });
 
+  it("lee la línea sin pagador: la celda vacía es UNA CELDA MENOS, no una cadena vacía", () => {
+    expect(readSalesRow([null, "\\01", "HONORARIOS", 3, 450.75])).toEqual({
+      serviceCode: "\\01",
+      serviceName: "HONORARIOS",
+      payer: "",
+      quantity: 3,
+      amount: 450.75,
+      amountCol: 4,
+    });
+  });
+
+  it("una celda suelta a la derecha no le devuelve el pagador a quien no lo trae", () => {
+    // Five filled cells, but the third is a NUMBER: what tells the two shapes apart is the cell and
+    // not how many the row has.
+    const row = readSalesRow([null, "\\02", "LABORATORIO", 2, 80, "x"]);
+    expect(row?.payer).toBe("");
+    expect(row?.quantity).toBe(2);
+    expect(row?.amount).toBe(80);
+  });
+
   it("null cuando las dos últimas no son números, para que un rótulo no pase por línea", () => {
     expect(
       readSalesRow([null, "\\01", "HONORARIOS", "UN PAGADOR", "CANTIDAD", "VENTA"]),

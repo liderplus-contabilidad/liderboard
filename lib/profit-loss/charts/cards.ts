@@ -54,6 +54,7 @@ import {
   annexPlanOf,
   buildExpenseDistribution,
   describeExpenseDistribution,
+  residualCodes,
   shareOf,
   type ExpenseDistribution,
 } from "./expense-distribution";
@@ -182,6 +183,16 @@ export interface GraficosCards {
    * lists are ordered largest to smallest through the same place.
    */
   annex: ExpenseDistribution | null;
+  /**
+   * The accounts «Otros» stands for, and empty whenever that bar is not drawn.
+   *
+   * They come out next to the breakdown because the breakdown cannot carry them: it computes the
+   * residual by SUBTRACTION and never looks at what makes it up, so the sentinel `OTHERS_CODE` has
+   * no children to open. Resolving them here, off the same `annexPlan` that drew the bars, is what
+   * keeps a second definition of «what the annex leaves out» from appearing in the view and
+   * drifting from this one.
+   */
+  annexResidualCodes: string[];
   /**
    * The ids of the annex's TWO cards, or `null` outside that view.
    *
@@ -948,6 +959,9 @@ export function buildGraficosCards(
     periodName,
     emptyPeriods,
     annex,
+    // Only when «Otros» is actually on screen: with marked accounts the breakdown is a slice on
+    // purpose and there is no residual bar to open.
+    annexResidualCodes: annexPlan && annex?.residual ? residualCodes(source, annexPlan) : [],
     annexShapes: annexBars && annexPie ? { barras: annexBars.id, pastel: annexPie.id } : null,
     lines: lineLegend,
     tiles: [

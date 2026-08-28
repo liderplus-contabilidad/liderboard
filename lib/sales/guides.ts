@@ -21,7 +21,7 @@ export const GUIDE_SALES_PAYERS: ChartGuide = {
   purpose: "Quién paga: si la venta se concentra en pocas aseguradoras o está repartida.",
   actions: [YEAR, MONTH, { control: "Ver como tabla", effect: "la lista entera de pagadores." }],
   reading:
-    "Se dibujan los diez mayores del periodo y la nota dice qué parte de la venta son. Los pacientes particulares salen sin nombre; las aseguradoras, con el suyo.",
+    "Se dibujan los diez mayores del periodo y la nota dice qué parte de la venta son. Cada pagador sale con el nombre que trae el reporte; las líneas que no declaran ninguno se agrupan en «Sin identificación».",
 };
 
 /** Month-by-month evolution. */

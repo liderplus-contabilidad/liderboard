@@ -23,7 +23,6 @@ import {
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
-  CHART_NEUTRAL,
   CHART_PALETTE,
   CHART_SURFACE,
   colorForEntity,
@@ -58,7 +57,7 @@ export const PAYER_SLICES = 10;
  * On screen the table does not cut, and that is its job: it is the place where a payer that was not
  * drawn keeps its figure, and finding it costs a scroll. On paper that justification collapses — the
  * real file brings 956 payers, which is over twenty pages of names behind a two-page report, and most
- * of them are «Particular · 731 · $12.40» rows, anonymous by design: a twenty-page appendix nobody can
+ * of them are one-off rows of a few dollars: a twenty-page appendix nobody can
  * use for anything. It is the same kind of rule PyG's report already applies by pruning per TABLE
  * while its Excel prunes per WORKBOOK: each medium prunes the way it is read.
  *
@@ -69,18 +68,18 @@ export const PAYER_SLICES = 10;
 export const PAYER_TABLE_PRINT_LIMIT = 30;
 
 /**
- * The colour of a PAYER bar says its CLASS, not its identity — the fourth time colour stops following
- * the entity in this app, and here for two reasons that add up: ten entities do not fit in the
- * palette's eight slots (the ninth would come out neutral and would look like a separate category),
- * and what a reader asks of this card is how much of their billing depends on INSURERS as against
- * what comes in over the counter. Each bar carries its label and its figure, so the colour is not
- * distinguishing anything the row does not already say.
+ * ONE fill for every PAYER bar, and that is the whole rule.
+ *
+ * It used to say the payer's CLASS —insurer against walk-in patient— back when a heuristic decided
+ * who was which. With the heuristic gone there is no class left to say, and re-spending the channel
+ * on identity is not an option either: ten entities do not fit in the palette's eight slots, and the
+ * ninth would come out neutral and read as a separate category. Each bar already carries its label
+ * and its figure, so the colour is not distinguishing anything the row does not say.
  *
  * **Only in the ONE-year shape.** Comparing several, the series is the YEAR and the colour goes back
- * to being identity: tinting by class would paint the three years of one same payer in the same hue,
- * which is precisely what the comparison needs to tell apart.
+ * to being identity, which is what the comparison needs to tell apart.
  */
-const PAYER_FILL = { empresa: CHART_PALETTE[0], particular: CHART_NEUTRAL } as const;
+const PAYER_FILL = CHART_PALETTE[0];
 
 /** The fill of a month that NEVER arrived — see `absenceMarks`. */
 const ABSENT_FILL = CHART_LINES.grid;
@@ -462,7 +461,7 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
   const comparing = years.length > 1;
   // The largest ones are chosen over the AGGREGATE, not over one year: if the cast changed with the
   // marks, the card could not be compared with itself. And a particular's ORDINAL comes from the same
-  // place, so «Particular · 1» means the same person across the three series.
+  // place, so a row means the same payer across the three series.
   const drawn = reading.payers.slice(0, PAYER_SLICES);
   const rest = reading.payers.slice(PAYER_SLICES);
   const restAmount = rest.reduce((sum, payer) => sum + payer.amount, 0);
@@ -487,7 +486,7 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
           type: "bar" as const,
           data: drawn.map((payer) => ({
             value: payer.amount,
-            itemStyle: { color: PAYER_FILL[payer.kind], borderRadius: ROUND_RIGHT },
+            itemStyle: { color: PAYER_FILL, borderRadius: ROUND_RIGHT },
           })),
           barMaxWidth: 22,
           label: {
@@ -579,12 +578,12 @@ function buildPayersCard(input: SalesCardsInput): ChartCardSpec {
         columns: ["Venta", "% del periodo", "Líneas"],
         rows: [
           ...listed.map<ChartTableRow>((payer, index) => ({
-            // The id is the POSITION and never the name: it is React's key and it travels to the
-            // report, and a patient's name cannot slip into a structure just because it is not
-            // rendered there.
+            // The id is the POSITION and never the name: it is React's key, and a name is neither
+            // unique nor stable enough to key a row by — the same payer can be written two ways
+            // across two months.
             id: `payer-${index}`,
             label: payer.label,
-            color: index < PAYER_SLICES ? PAYER_FILL[payer.kind] : undefined,
+            color: index < PAYER_SLICES ? PAYER_FILL : undefined,
             values: [
               formatCurrency(payer.amount, { cents: true }),
               formatShare(shareOf(payer.amount, total)),
@@ -667,9 +666,7 @@ function payersNote(
   const ranking = comparing
     ? " Los mayores se eligen por el total del periodo, no por un año, para que el elenco no cambie al mover las marcas."
     : "";
-  // The anonymity rule is DECLARED where it is applied: a row saying «Particular · 4» without this
-  // line reads as a payer called that.
-  return `${head} ${rest}${where}${ranking} Los pacientes particulares van sin nombre; las aseguradoras, con el suyo.`;
+  return `${head} ${rest}${where}${ranking}`;
 }
 
 /**

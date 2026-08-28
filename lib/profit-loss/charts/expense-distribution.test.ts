@@ -7,6 +7,7 @@ import {
   buildExpenseDistribution,
   DECLARED_ANNEX_ROWS,
   describeExpenseDistribution,
+  residualCodes,
   shareOf,
 } from "./expense-distribution";
 
@@ -471,5 +472,63 @@ describe("cómo se dibuja el anexo declarado", () => {
     expect(reparto.maxSlices).toBe(ANNEX_MAX_SLICES);
     expect(reparto.residual).toBe(false);
     expect(reparto.categories).toHaveLength(17);
+  });
+});
+
+describe("lo que «Otros» agrupa", () => {
+  const planOf = (rows: Array<[string, string]>) => {
+    const source = planSource(rows);
+    const plan = annexPlanOf(source);
+    if (!plan) {
+      throw new Error("El plan no abre el anexo");
+    }
+    return { source, plan };
+  };
+
+  it("para en el nivel más alto que el anexo no nombra, no en las hojas", () => {
+    const { source, plan } = planOf(CLINICA);
+
+    expect(residualCodes(source, plan)).toEqual(["5.2.03", "5.2.04", "5.3.03.02"]);
+  });
+
+  it("un rubro declarado se salta con toda su rama", () => {
+    const { source, plan } = planOf(CLINICA);
+    const fuera = residualCodes(source, plan);
+
+    // `5.2.02` is declared and hangs sections with accounts of their own: neither it nor anything
+    // under it may show up, or the residual would count the same dollar twice.
+    expect(fuera).not.toContain("5.2.02");
+    expect(fuera.some((code) => code.startsWith("5.2.02."))).toBe(false);
+  });
+
+  it("una raíz de gasto sin ningún rubro declarado sale entera", () => {
+    const { source, plan } = planOf([
+      ...CLINICA,
+      ["6", "GASTOS NO OPERACIONALES"],
+      ["6.1", "GASTOS NO OPERACIONALES"],
+      ["6.1.01", "Intereses"],
+    ]);
+
+    expect(residualCodes(source, plan)).toEqual(["5.2.03", "5.2.04", "5.3.03.02", "6"]);
+  });
+
+  it("lo enumerado suma exactamente el residuo que el anexo resta", () => {
+    const { source, plan } = planOf(CLINICA);
+    const fuera = residualCodes(source, plan).map((code, index) => ({
+      code,
+      label: code,
+      value: 1_000 * (index + 1),
+    }));
+    const residuo = fuera.reduce((total, entry) => total + entry.value, 0);
+    const reparto = buildExpenseDistribution(
+      [...ANEXO, ...fuera],
+      { expenses: GASTO_TOTAL + residuo, revenue: INGRESO_TOTAL },
+      { annex: plan },
+    );
+
+    expect(reparto.categories.find((entry) => entry.label === "Otros")?.value).toBeCloseTo(
+      residuo,
+      2,
+    );
   });
 });

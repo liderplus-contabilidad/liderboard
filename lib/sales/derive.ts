@@ -9,7 +9,7 @@
  * Pure and tested, like the rest of `lib/`: these are the rules that can be wrong —what is summed,
  * what is ordered and what is a gap as against a zero—, and none of them needs a browser.
  */
-import { classifyPayer, payerLabel, type PayerKind } from "./payer";
+import { payerLabel } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
 /** A period's close: the four figures that head the screen. */
@@ -31,11 +31,10 @@ export interface ServiceTotal {
 }
 
 export interface PayerTotal {
-  /** The raw name, normalized only in whitespace: the key it was grouped by. */
+  /** The raw name, normalized only in whitespace: the key it was grouped by. Empty when none. */
   id: string;
-  /** What is WRITTEN. A person never reaches here with their name. */
+  /** What is WRITTEN — the file's own name, or the group for the ones it leaves blank. */
   label: string;
-  kind: PayerKind;
   amount: number;
   lineCount: number;
 }
@@ -99,16 +98,15 @@ export function byService(lines: readonly SalesLine[]): ServiceTotal[] {
 }
 
 /**
- * By payer, largest to smallest — and with the individuals' ORDINAL assigned over THAT order, which is
- * what makes «Particular · 1» always the largest of them and not the first the file wrote. The ordinal
- * counts only among individuals: with the companies inside, the numbering would skip gaps and would
- * look as though rows were missing.
+ * By payer, largest to smallest, each one under the name the report gives it.
+ *
+ * The lines the report leaves with NO payer group themselves: `payerKey` reduces every one of them to
+ * the same empty key, so they arrive as a single row that `payerLabel` names. There is no branch for
+ * it here on purpose — a special case would be a second place able to decide what counts as «no
+ * payer», and it would drift from the first.
  */
 export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
-  const totals = new Map<
-    string,
-    { id: string; kind: PayerKind; amount: number; lineCount: number }
-  >();
+  const totals = new Map<string, PayerTotal>();
   for (const line of lines) {
     const id = payerKey(line.payer);
     const existing = totals.get(id);
@@ -117,14 +115,9 @@ export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
       existing.lineCount += 1;
       continue;
     }
-    totals.set(id, { id, kind: classifyPayer(id), amount: line.amount, lineCount: 1 });
+    totals.set(id, { id, label: payerLabel(id), amount: line.amount, lineCount: 1 });
   }
-  const ranked = [...totals.values()].sort(byAmountDesc);
-  let particulars = 0;
-  return ranked.map((entry) => {
-    const ordinal = entry.kind === "particular" ? ++particulars : 0;
-    return { ...entry, label: payerLabel(entry.id, entry.kind, ordinal) };
-  });
+  return [...totals.values()].sort(byAmountDesc);
 }
 
 function byAmountDesc(a: { amount: number }, b: { amount: number }): number {

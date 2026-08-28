@@ -7,6 +7,7 @@ import {
   monthlySeries,
   salesTotals,
 } from "./derive";
+import { UNIDENTIFIED_PAYER } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
 function line(overrides: Partial<SalesLine>): SalesLine {
@@ -94,36 +95,39 @@ describe("byPayer", () => {
     expect(payers[0].lineCount).toBe(2);
   });
 
-  it("el ordinal de un particular sigue al MONTO, no al orden del archivo", () => {
+  it("cada pagador sale con el nombre del reporte, empresa o persona", () => {
     const payers = byPayer([
       line({ payer: "PEREZ LOPEZ ANA MARIA", amount: 10 }),
-      line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 90 }),
+      line({ payer: "SALUDSA", amount: 90 }),
     ]);
-    expect(payers[0].label).toBe("Particular · 1");
+    expect(payers.map((payer) => payer.label)).toEqual(["SALUDSA", "PEREZ LOPEZ ANA MARIA"]);
     expect(payers[0].amount).toBe(90);
-    expect(payers[1].label).toBe("Particular · 2");
   });
 
-  it("el ordinal cuenta solo entre particulares, sin saltar por las empresas", () => {
+  it("las líneas sin pagador se agrupan en UNA sola fila", () => {
     const payers = byPayer([
-      line({ payer: "SALUDSA", amount: 100 }),
-      line({ payer: "PEREZ LOPEZ ANA MARIA", amount: 90 }),
-      line({ payer: "CONFIAMED", amount: 80 }),
-      line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 70 }),
+      line({ payer: "", amount: 10 }),
+      line({ payer: "SALUDSA", amount: 90 }),
+      line({ payer: "   ", amount: 5 }),
     ]);
-    expect(payers.map((payer) => payer.label)).toEqual([
-      "SALUDSA",
-      "Particular · 1",
-      "CONFIAMED",
-      "Particular · 2",
-    ]);
+    expect(payers.map((payer) => payer.label)).toEqual(["SALUDSA", UNIDENTIFIED_PAYER]);
+    expect(payers[1].amount).toBe(15);
+    expect(payers[1].lineCount).toBe(2);
   });
 
-  it("ninguna etiqueta de particular deja escapar el nombre", () => {
-    const payers = byPayer([line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 10 })]);
-    expect(payers[0].label).not.toContain("SANDOVAL");
-    // …but the name is STILL stored, which is what keeps the figure traceable.
+  it("el grupo sin identificar compite por monto como cualquier otra fila", () => {
+    const payers = byPayer([
+      line({ payer: "", amount: 90 }),
+      line({ payer: "SALUDSA", amount: 10 }),
+    ]);
+
+    expect(payers[0].label).toBe(UNIDENTIFIED_PAYER);
+  });
+
+  it("el nombre se conserva entero en el id, que es lo que lo hace trazable", () => {
+    const payers = byPayer([line({ payer: "  SANDOVAL MORALES JUAN CARLOS  ", amount: 10 })]);
     expect(payers[0].id).toBe("SANDOVAL MORALES JUAN CARLOS");
+    expect(payers[0].label).toBe("SANDOVAL MORALES JUAN CARLOS");
   });
 });
 
