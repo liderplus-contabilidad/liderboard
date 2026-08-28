@@ -1632,7 +1632,7 @@ identidad —aseguradora contra particular—, la cuarta vez que el color deja d
 diez entidades no caben en las ocho ranuras de la paleta, y cada barra ya lleva su rótulo y su cifra.
 Ninguna vista recorre líneas sueltas: `derive.ts` agrega antes por servicio, por pagador y por mes.
 
-**La barra son DOS controles, Año · Mes, y los dos admiten VARIAS marcas.** El año nació de elección
+**La barra son TRES controles, Año · Mes · Servicio, y los tres admiten VARIAS marcas.** El año nació de elección
 única con el argumento de que dos años no tendrían eje sobre el que dibujarse, y eso era falso: el
 eje son los doce meses y cada AÑO es una SERIE, la figura que Ocupaciones y PyG ya usan. Lo que ese
 error costaba era la pregunta más útil de un informe de ventas —«abril de 2026 contra abril de
@@ -1651,6 +1651,55 @@ en PyG— y con varios años escribe los meses UNA vez y los años detrás («Ab
 repetir «abril» por cada año es lo que hace ilegible un rótulo de comparación. El estado vive en un
 proveedor montado DENTRO de la vista y no en el layout, porque de este subitem la cabecera no lee
 nada: el cliente lo da `PygDataProvider`, que ya está arriba.
+
+**«SERVICIO» es la tercera marca y acota TODA la pantalla, no una tarjeta.** Pudo vivir en la
+cabecera de la evolución —la lee una tarjeta, como el «Ver por» de Ocupaciones— y se descartó por lo
+que se quiere preguntar: «las ventas de Farmacia: cuánto, quién las paga y cómo evolucionan», que lo
+tienen que oír los tiles y las tres tarjetas a la vez. En la barra, acotar significa aquí lo mismo
+que en PyG y en Ocupaciones, deja chip, se quita donde el usuario ya sabe quitarlas, y el informe la
+hereda sin una línea nueva porque construye las mismas tarjetas con la misma entrada. Guarda los
+CÓDIGOS verbatim (`\01`), que son la identidad estable, y su universo se lee de los AÑOS marcados y
+no del tramo que deja «Mes»: marcar un mes en el que un servicio no vendió no puede borrarlo de la
+lista desde la que se desmarca. El precio aceptado es que la composición por servicio con uno
+marcado queda con una sola barra — que es exactamente lo que una marca hace en todas partes, y lo
+que dice que se está mirando un trozo. Los denominadores pasan a ser esa porción y `scopedPeriodLabel`
+—en `filters.ts`, junto a `describeServiceScope`— es la ÚNICA composición del rótulo: los tiles, los
+tres subtítulos y la cabecera del informe la leen de ahí, porque en el papel la barra ya no está y
+una cifra acotada que no diga de qué es se lee como el total del periodo.
+
+**La EVOLUCIÓN se lee desglosada por servicio, y quién apila lo decide el número de años marcados.**
+Respondía «cuánto se facturó cada mes» y no «de qué estaba hecho ese mes», que es la pregunta
+siguiente y la única que el reporte permite contestar. Con UN año la columna es la PILA de sus
+servicios más la línea de su total: la figura de «Distribución» en PyG y por su mismo motivo — la
+línea imprime el monto una vez por columna y la pila dice qué parte de él es cada quién. Con VARIOS
+años NO se apila, y no es una omisión: apilar servicios y comparar años en el mismo eje pide pilas
+agrupadas y le quita el color al año, que es lo único que separa esas series; la comparación
+interanual de un servicio se pide MARCÁNDOLO. Los tonos de la pila son los de la composición
+—`movingServices` es la única lista de la que sale el color de un servicio—, porque dos tarjetas de
+la misma pantalla pintando «Farmacia» de dos maneras es un error que nadie lee como error; pasadas
+las ocho ranuras de identidad la cola se pliega en un «Otros» neutro, ya que el noveno y el décimo
+saldrían del mismo gris y se leerían como uno. La tabla gemela NO pliega —es donde un servicio
+agrupado conserva su cifra— y cierra con su fila de TOTAL. La leyenda nombra los servicios y no la
+línea (`ChartLegend.data`), que es lo que la deja ser una lista para filtrar en vez de un inventario
+de series.
+
+**El color de una barra de PAGADOR es su PUESTO, del set decorativo.** Las diez iban de un solo azul,
+con el argumento de que el color no distinguía nada que la fila no dijera: es cierto y aun así se lee
+mal, porque diez barras iguales son una mancha justo donde hay que recorrer un ranking. Toman un tono
+cada una de `CHART_PERIOD_PALETTE`, la misma excepción que el ranking de gastos de PyG paga con el
+mismo relieve —cada barra lleva su rótulo y su cifra—. Lo que NO pueden tomar es el set de identidad:
+«Composición por servicio» está justo encima gastando esas ranuras también por puesto, y el primer
+servicio y el primer pagador saldrían del mismo azul y se leerían como emparejados. El punto de la
+tabla lo llevan solo las filas DIBUJADAS, porque uno en una fila que no está en el gráfico promete
+una barra que el lector no va a encontrar.
+
+**Y la pantalla abre con UNA barra, fija.** El título estaba escrito dos veces —en la cabecera del
+dashboard y en una tarjeta debajo—, y los filtros vivían en una segunda tarjeta pegada a la primera;
+se funden en una, con los filtros a la izquierda y `Cargar Excel · ⓘ · Informe PDF` a la derecha. Va
+`sticky` porque las tres tarjetas son altas y las marcas se cambian mirando la de abajo, dentro de una
+banda de `bg-canvas` a sangre para que el contenido no asome por sus esquinas redondeadas al pasar por
+debajo. La línea descriptiva se queda FUERA de lo fijo: es lo que se lee una vez, y arrastrarla en
+cada scroll costaría el doble de alto justo donde estorba.
 
 **Cada tarjeta tiene DOS formas y las elige el NÚMERO DE AÑOS MARCADOS, no un control.** Con uno
 dibuja el reparto del periodo; con varios pone un año por serie sobre el mismo eje. No es una cuarta

@@ -156,3 +156,15 @@ describe("la cola de pagadores en el papel", () => {
     expect(table.rows.some((row) => row.id === "otros")).toBe(false);
   });
 });
+
+describe("el informe nombra el tramo marcado", () => {
+  it("la cabecera dice qué servicio se está mirando", () => {
+    // On paper the bar is not there: if the header does not say it, nothing does.
+    const report = buildSalesReport(input({ scope: "MEDICINAS" }));
+    expect(report.header.periodLabel).toBe("MEDICINAS · Abril 2026");
+  });
+
+  it("sin marca de servicio la cabecera es la de siempre", () => {
+    expect(buildSalesReport(input()).header.periodLabel).toBe("Abril 2026");
+  });
+});

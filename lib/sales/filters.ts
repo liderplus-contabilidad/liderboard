@@ -24,6 +24,21 @@ export interface SalesFilters {
   years: number[];
   /** Indices 0–11, in order. Empty = every LOADED month of the marked years. */
   months: number[];
+  /**
+   * Marked service CODES, verbatim (`\\01`) and in the universe's order. Empty is ALL of them — the
+   * house rule the year is the only exception to.
+   *
+   * It narrows the WHOLE screen and not one card, which is why it is a mark of the bar and not a
+   * control in a header: the question it answers is «Farmacia: cuánto, quién la paga y cómo
+   * evoluciona», and that has to be heard by the tiles and the three readings at once.
+   */
+  services: string[];
+}
+
+/** A service of the universe: its code is the identity, its name is what the dropdown shows. */
+export interface SalesServiceRef {
+  code: string;
+  name: string;
 }
 
 /** What the client has, and what the marked years allow choosing. */
@@ -34,10 +49,17 @@ export interface SalesUniverse {
    *  years has is still a month that can be looked at, and the comparison will say the other one is
    *  missing it. */
   months: number[];
+  /**
+   * The services of the MARKED YEARS, largest to smallest, and deliberately not those of the span
+   * «Mes» narrows to: marking a month a service did not sell must not erase it from the list you
+   * unmark it from. It is the same rule by which PyG reads its years off the universe and not off the
+   * narrowed sum.
+   */
+  services: SalesServiceRef[];
 }
 
 export function emptyFilters(): SalesFilters {
-  return { years: [], months: [] };
+  return { years: [], months: [], services: [] };
 }
 
 /**
@@ -53,6 +75,9 @@ export function sanitizeFilters(filters: SalesFilters, universe: SalesUniverse):
     months: universe.months.filter(
       (month) => available.has(month) && filters.months.includes(month),
     ),
+    services: universe.services
+      .map((service) => service.code)
+      .filter((code) => filters.services.includes(code)),
   };
 }
 
@@ -95,6 +120,46 @@ export function withMonthToggled(
 
 export function withMonthsCleared(filters: SalesFilters): SalesFilters {
   return { ...filters, months: [] };
+}
+
+export function withServiceToggled(
+  filters: SalesFilters,
+  code: string,
+  universe: readonly string[],
+): SalesFilters {
+  const marked = new Set(filters.services);
+  if (marked.has(code)) {
+    marked.delete(code);
+  } else {
+    marked.add(code);
+  }
+  return { ...filters, services: universe.filter((entry) => marked.has(entry)) };
+}
+
+export function withServicesCleared(filters: SalesFilters): SalesFilters {
+  return { ...filters, services: [] };
+}
+
+/**
+ * What the marked services are CALLED — the one wording of the narrowing, which the subtitles and the
+ * notes of the three cards read so none of them names a different slice from the one beside it.
+ *
+ * With one it is its NAME, which is what the reader recognises against their own report; with several
+ * it says how many of how many, because four service names do not fit in a subtitle. An orphan mark
+ * —one this client does not have— is worth none: emptying the wording would be worse than not
+ * narrowing, the same defence `sanitizeFilters` mounts.
+ */
+export function describeServiceScope(
+  filters: SalesFilters,
+  universe: SalesUniverse,
+): string | null {
+  const marked = universe.services.filter((service) => filters.services.includes(service.code));
+  if (marked.length === 0) {
+    return null;
+  }
+  return marked.length === 1
+    ? marked[0].name
+    : `${marked.length} de ${universe.services.length} servicios`;
 }
 
 /**
@@ -140,10 +205,19 @@ export function periodLabel(months: readonly number[], years: readonly number[])
 }
 
 /**
- * How many marks are set — what decides whether the chip strip is drawn. It counts only the MONTHS:
- * `years` is never empty, so a year chip could not always be removed, and the dropdown already shows
- * the whole selection in its label.
+ * How many marks are set — what decides whether the chip strip is drawn. It counts the MONTHS and the
+ * SERVICES, never the years: `years` is never empty, so a year chip could not always be removed, and
+ * its dropdown already shows the whole selection in its label.
  */
+/**
+ * The period with the marked slice IN FRONT — the one composition of the two, read by the tiles, by
+ * the three cards' subtitles and by the report's header. Two of them would let the screen and the
+ * paper name the same reading differently.
+ */
+export function scopedPeriodLabel(scope: string | null, period: string): string {
+  return scope ? `${scope} · ${period}` : period;
+}
+
 export function activeMarkCount(filters: SalesFilters): number {
-  return filters.months.length;
+  return filters.months.length + filters.services.length;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSalesCards, PAYER_SLICES, type SalesCardsInput } from "./cards";
-import { monthlySeries, readSales, type MonthPoint } from "./derive";
+import { monthlySeries, monthlyServiceSeries, readSales, type MonthPoint } from "./derive";
 import { UNIDENTIFIED_PAYER } from "./payer";
 import type { SalesLine, SalesMonth } from "./types";
 
@@ -472,6 +472,160 @@ describe("la guía del ⓘ", () => {
     const controls = [cards.services, cards.payers, cards.evolution].flatMap((card) =>
       (card.guide?.actions ?? []).map((action) => action.control),
     );
-    expect(new Set(controls)).toEqual(new Set(["Año", "Mes", "Ver como tabla"]));
+    expect(new Set(controls)).toEqual(new Set(["Año", "Mes", "Servicio", "Ver como tabla"]));
+  });
+});
+
+/** The color of a bar whose datum carries its own `itemStyle` — how the two one-year cards paint. */
+function datumColor(series: { data: unknown[] } | undefined, index: number): string | undefined {
+  const datum = series?.data[index] as { itemStyle?: { color?: string } } | undefined;
+  return datum?.itemStyle?.color;
+}
+
+describe("la evolución se desglosa por servicio", () => {
+  const LINES = [
+    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 160 }),
+    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+  ];
+  const MONTHS = [
+    month(0, [
+      line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
+      line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+    ]),
+    month(1, [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 60 })]),
+  ];
+
+  function stacked(lines = LINES, months = MONTHS): SalesCardsInput {
+    const reading = readSales(lines);
+    return {
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Ene–Feb 2026",
+      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026),
+    };
+  }
+
+  it("cada servicio es un segmento del MISMO apilado", () => {
+    const series = buildSalesCards(stacked()).evolution.option?.series ?? [];
+    const bars = series.filter((entry) => entry.type === "bar" && entry.id !== "sin-cargar");
+    expect(bars.map((entry) => entry.name)).toEqual(["HONORARIOS", "MEDICINAS"]);
+    expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
+  });
+
+  it("un servicio lleva el MISMO color que en la composición", () => {
+    const cards = buildSalesCards(stacked());
+    const segment = cards.evolution.option?.series.find((entry) => entry.name === "HONORARIOS");
+    expect(segment?.itemStyle?.color).toBe(datumColor(cards.services.option?.series[0], 0));
+  });
+
+  it("la línea del total es de TINTA, no un paso de la paleta de servicios", () => {
+    const series = buildSalesCards(stacked()).evolution.option?.series ?? [];
+    const total = series.find((entry) => entry.type === "line");
+    const colors = series
+      .filter((entry) => entry.type === "bar")
+      .map((entry) => entry.itemStyle?.color);
+    expect(total?.itemStyle?.color).not.toBeUndefined();
+    expect(colors).not.toContain(total?.itemStyle?.color);
+    expect(total?.z).toBe(3);
+  });
+
+  it("la leyenda nombra los servicios, no la línea", () => {
+    const option = buildSalesCards(stacked()).evolution.option;
+    expect(option?.legend?.show).toBe(true);
+    expect(option?.legend?.data).toEqual(["HONORARIOS", "MEDICINAS"]);
+  });
+
+  it("la tabla gemela es una fila por servicio y cierra con el TOTAL", () => {
+    const { table } = buildSalesCards(stacked()).evolution;
+    expect(table.rows.map((row) => row.label)).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
+    expect(table.rows.at(-1)?.emphasis).toBe(true);
+    // Enero: 100 + 60 = 160, y febrero solo honorarios.
+    expect(table.rows[0].values[0]).toBe("$100.00");
+    expect(table.rows[1].values[1]).toBe("$0.00");
+    expect(table.rows[2].values[0]).toBe("$160.00");
+  });
+
+  it("un mes que nunca llegó no da segmento a NINGÚN servicio", () => {
+    const bars = (buildSalesCards(stacked()).evolution.option?.series ?? []).filter(
+      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
+    );
+    expect(bars.every((entry) => entry.data[5] === null)).toBe(true);
+  });
+
+  it("pasadas las ranuras de identidad, la cola se pliega en «Otros» y la nota lo dice", () => {
+    const lines = Array.from({ length: 11 }, (_unused, index) =>
+      line({
+        serviceCode: `\\${index}`,
+        serviceName: `SERVICIO ${index}`,
+        amount: 100 - index,
+      }),
+    );
+    const { evolution } = buildSalesCards(stacked(lines, [month(0, lines)]));
+    const bars = (evolution.option?.series ?? []).filter(
+      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
+    );
+    expect(bars).toHaveLength(9);
+    expect(bars.at(-1)?.name).toBe("Otros");
+    expect(evolution.note).toContain("3 servicios");
+    // La tabla NO pliega: es donde un servicio agrupado conserva su cifra.
+    expect(evolution.table.rows).toHaveLength(12);
+  });
+
+  it("con UN solo servicio la nota no habla de un desglose que no se ve", () => {
+    const only = [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 })];
+    const { evolution } = buildSalesCards(stacked(only, [month(0, only)]));
+    expect(evolution.note).not.toContain("desglose");
+  });
+
+  it("comparando años NO se apila: el color ahí es la identidad del año", () => {
+    const spec = comparing([
+      { year: 2025, lines: LINES, months: [month(0, LINES, 2025)] },
+      { year: 2026, lines: LINES, months: [month(0, LINES)] },
+    ]);
+    const series = buildSalesCards({ ...spec, serviceMonthly: monthlyServiceSeries(MONTHS, 2026) })
+      .evolution.option?.series;
+    expect(series?.every((entry) => entry.stack === undefined)).toBe(true);
+  });
+});
+
+describe("el color de una barra de pagador", () => {
+  const many = Array.from({ length: 10 }, (_unused, index) =>
+    line({ payer: `PAGADOR${index}`, amount: 100 - index }),
+  );
+
+  it("las diez barras llevan tonos DISTINTOS: diez iguales son una mancha", () => {
+    const { payers } = buildSalesCards(input(many));
+    const colors = Array.from({ length: PAYER_SLICES }, (_unused, index) =>
+      datumColor(payers.option?.series[0], index),
+    );
+    expect(new Set(colors).size).toBe(PAYER_SLICES);
+  });
+
+  it("no choca con el color del primer servicio, que está justo encima", () => {
+    const cards = buildSalesCards(input(many));
+    expect(datumColor(cards.payers.option?.series[0], 0)).not.toBe(
+      datumColor(cards.services.option?.series[0], 0),
+    );
+  });
+
+  it("la fila de la tabla lleva el tono de SU barra", () => {
+    const { payers } = buildSalesCards(input(many));
+    expect(payers.table.rows[3].color).toBe(datumColor(payers.option?.series[0], 3));
+  });
+});
+
+describe("el tramo marcado se nombra en el subtítulo", () => {
+  it("con un servicio marcado, las tres tarjetas lo dicen", () => {
+    const cards = buildSalesCards({ ...input([line({ amount: 10 })]), scope: "MEDICINAS" });
+    for (const card of [cards.services, cards.payers, cards.evolution]) {
+      expect(card.subtitle).toContain("MEDICINAS");
+      expect(card.subtitle).toContain("Abril 2026");
+    }
+  });
+
+  it("sin marca de servicio el subtítulo es el de siempre", () => {
+    const cards = buildSalesCards(input([line({ amount: 10 })]));
+    expect(cards.evolution.subtitle).toBe("Venta total · Abril 2026");
   });
 });

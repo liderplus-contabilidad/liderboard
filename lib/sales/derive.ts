@@ -134,18 +134,79 @@ export function readSales(lines: readonly SalesLine[]): SalesReading {
  * A month that was never loaded is worth `null` and NOT `0`, which is the distinction the whole module
  * rests on: a zero claims nothing was sold, and only a file that arrived can say that. A loaded month
  * whose lines add up to zero is a zero, and it is drawn as such.
+ *
+ * `codes` NARROWS to those services, and an empty list is «all of them» and not «none» — the meaning a
+ * mark with nothing marked has everywhere in the app. Narrowing does not touch the coverage rule: a
+ * loaded month where the marked service did not sell is a real `0`, and only an absent month is `null`.
  */
-export function monthlySeries(months: readonly SalesMonth[], year: number): MonthPoint[] {
+export function monthlySeries(
+  months: readonly SalesMonth[],
+  year: number,
+  codes: readonly string[] = [],
+): MonthPoint[] {
   const loaded = new Map<number, number>();
   for (const month of months) {
     if (month.year === year) {
-      loaded.set(month.monthIndex, sum(month.lines.map((line) => line.amount)));
+      loaded.set(month.monthIndex, sum(narrow(month.lines, codes).map((line) => line.amount)));
     }
   }
   return Array.from({ length: 12 }, (_unused, monthIndex) => ({
     monthIndex,
     amount: loaded.has(monthIndex) ? (loaded.get(monthIndex) as number) : null,
   }));
+}
+
+/** A service's twelve months — what one segment of the stacked evolution draws. */
+export interface ServiceMonthSeries {
+  code: string;
+  name: string;
+  points: MonthPoint[];
+}
+
+/**
+ * The same axis, opened up BY SERVICE: what each month is made of.
+ *
+ * The order is the year's, largest to smallest, and it comes out of `byService` rather than from a
+ * second sort of its own — the breakdown card orders by the same rule, and two orders that can drift
+ * would paint one service two colours on the same screen.
+ *
+ * The coverage rule survives the opening up, and that is the only thing here that can be wrong: an
+ * absent month is `null` in EVERY service —nobody said anything about that month—, while a loaded
+ * month a service did not touch is a `0`, because the file did arrive and it did not bring it. A
+ * service the year does not declare produces no series at all, instead of twelve empty columns.
+ */
+export function monthlyServiceSeries(
+  months: readonly SalesMonth[],
+  year: number,
+  codes: readonly string[] = [],
+): ServiceMonthSeries[] {
+  const ofYear = months.filter((month) => month.year === year);
+  const covered = new Set(ofYear.map((month) => month.monthIndex));
+  const amounts = new Map<string, Map<number, number>>();
+  for (const month of ofYear) {
+    for (const line of narrow(month.lines, codes)) {
+      const perMonth = amounts.get(line.serviceCode) ?? new Map<number, number>();
+      perMonth.set(month.monthIndex, (perMonth.get(month.monthIndex) ?? 0) + line.amount);
+      amounts.set(line.serviceCode, perMonth);
+    }
+  }
+  return byService(ofYear.flatMap((month) => narrow(month.lines, codes))).map((service) => ({
+    code: service.code,
+    name: service.name,
+    points: Array.from({ length: 12 }, (_unused, monthIndex) => ({
+      monthIndex,
+      amount: covered.has(monthIndex) ? (amounts.get(service.code)?.get(monthIndex) ?? 0) : null,
+    })),
+  }));
+}
+
+/** The lines of the marked services. No marks is ALL of them, never none. */
+function narrow(lines: readonly SalesLine[], codes: readonly string[]): SalesLine[] {
+  if (codes.length === 0) {
+    return [...lines];
+  }
+  const wanted = new Set(codes);
+  return lines.filter((line) => wanted.has(line.serviceCode));
 }
 
 /** The years the client has loaded, ascending. */

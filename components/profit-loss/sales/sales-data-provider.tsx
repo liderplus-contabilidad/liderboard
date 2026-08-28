@@ -11,20 +11,27 @@ import {
 } from "@/lib/sales/cards";
 import { monthsForClient, saveMonths } from "@/lib/sales/db";
 import {
+  byService,
   loadedMonths,
   loadedYears,
   monthlySeries,
+  monthlyServiceSeries,
   readSales,
+  type MonthPoint,
   type SalesReading,
 } from "@/lib/sales/derive";
 import {
+  describeServiceScope,
   emptyFilters,
   periodLabel,
   sanitizeFilters,
+  scopedPeriodLabel,
   selectedMonths,
   withAllYears,
   withMonthsCleared,
   withMonthToggled,
+  withServicesCleared,
+  withServiceToggled,
   withYearToggled,
   type SalesFilters,
   type SalesUniverse,
@@ -64,8 +71,11 @@ interface SalesDataValue {
   filters: SalesFilters;
   /** The months the reading sums: the marked ones, or every one loaded for the year. */
   period: number[];
-  /** What that period is called — what the tiles, the subtitles and the report say. */
+  /** What that period is called — what the subtitles and the report say. */
   periodName: string;
+  /** The same, with the marked services in front: what the TILES say, so a narrowed total is not
+   *  read as the period's whole billing. */
+  scopedPeriodName: string;
   reading: SalesReading;
   /**
    * EXACTLY the input `cards` were built with. The provider exposes it so the printable report asks
@@ -81,6 +91,8 @@ interface SalesDataValue {
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
   clearMonths: () => void;
+  toggleService: (code: string) => void;
+  clearServices: () => void;
   /** Writes the already parsed months into the open client, replacing the ones it repeats. */
   importMonths: (parsed: readonly ParsedSalesMonth[]) => Promise<void>;
 }
@@ -105,7 +117,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   // The YEARS are resolved first, because the universe of months is that of the marked years: without
   // that order, marking a year could not open the months only it brings.
   const yearsOnly = useMemo(
-    () => sanitizeFilters(rawFilters, { years, months: [] }),
+    () => sanitizeFilters(rawFilters, { years, months: [], services: [] }),
     [rawFilters, years],
   );
   const universe = useMemo<SalesUniverse>(
@@ -116,6 +128,13 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       months: [...new Set(yearsOnly.years.flatMap((year) => loadedMonths(months, year)))].sort(
         (a, b) => a - b,
       ),
+      // Read off ALL the loaded months of the marked years, never off the span «Mes» narrows to:
+      // marking a month a service did not sell must not erase it from the list you unmark it from.
+      services: byService(
+        months
+          .filter((month) => yearsOnly.years.includes(month.year))
+          .flatMap((month) => month.lines),
+      ).map((service) => ({ code: service.code, name: service.name })),
     }),
     [years, yearsOnly.years, months],
   );
@@ -125,16 +144,23 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
 
   const period = useMemo(() => selectedMonths(filters, universe), [filters, universe]);
   const periodName = useMemo(() => periodLabel(period, filters.years), [period, filters.years]);
+  // The ONE wording of the service narrowing: the subtitles and the notes of the three cards read it
+  // from here, so none of them names a different slice from the one beside it.
+  const scope = useMemo(() => describeServiceScope(filters, universe), [filters, universe]);
+  const scopedPeriodName = useMemo(() => scopedPeriodLabel(scope, periodName), [scope, periodName]);
 
-  /** One year's lines, bounded by the period's months. */
+  /** One year's lines, bounded by the period's months AND by the marked services: a mark narrows the
+   *  whole screen —the tiles, the three cards and their denominators—, not one card. */
   const linesOf = useCallback(
     (year: number) => {
       const inPeriod = new Set(period);
+      const marked = new Set(filters.services);
       return months
         .filter((month) => month.year === year && inPeriod.has(month.monthIndex))
-        .flatMap((month) => month.lines);
+        .flatMap((month) => month.lines)
+        .filter((line) => marked.size === 0 || marked.has(line.serviceCode));
     },
-    [months, period],
+    [months, period, filters.services],
   );
 
   // A single aggregation for everything the screen says: the tiles, the cards and the report read
@@ -159,22 +185,38 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
    */
   const monthlyByYear = useMemo<YearMonths[]>(
     () =>
-      filters.years.map((year) => {
-        const points = monthlySeries(months, year);
-        return {
-          year,
-          points:
-            filters.months.length === 0
-              ? points
-              : points.filter((point) => filters.months.includes(point.monthIndex)),
-        };
-      }),
-    [filters.years, filters.months, months],
+      filters.years.map((year) => ({
+        year,
+        points: onAxis(monthlySeries(months, year, filters.services), filters.months),
+      })),
+    [filters.years, filters.months, filters.services, months],
+  );
+
+  /**
+   * The marked year opened up BY SERVICE — the stack the evolution draws. Only with ONE year marked:
+   * comparing several, the reading is a series per year and the colour belongs to the year.
+   */
+  const serviceMonthly = useMemo(
+    () =>
+      filters.years.length === 1
+        ? monthlyServiceSeries(months, filters.years[0], filters.services).map((entry) => ({
+            ...entry,
+            points: onAxis(entry.points, filters.months),
+          }))
+        : [],
+    [filters.years, filters.months, filters.services, months],
   );
 
   const cardsInput = useMemo<SalesCardsInput>(
-    () => ({ reading, byYear, period: periodName, monthlyByYear }),
-    [reading, byYear, periodName, monthlyByYear],
+    () => ({
+      reading,
+      byYear,
+      period: periodName,
+      monthlyByYear,
+      serviceMonthly,
+      ...(scope ? { scope } : {}),
+    }),
+    [reading, byYear, periodName, monthlyByYear, serviceMonthly, scope],
   );
 
   const cards = useMemo(
@@ -197,6 +239,15 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
     [universe.months],
   );
   const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
+  const serviceCodes = useMemo(
+    () => universe.services.map((service) => service.code),
+    [universe.services],
+  );
+  const toggleService = useCallback(
+    (code: string) => setRawFilters((current) => withServiceToggled(current, code, serviceCodes)),
+    [serviceCodes],
+  );
+  const clearServices = useCallback(() => setRawFilters(withServicesCleared), []);
 
   const importMonths = useCallback(
     async (parsed: readonly ParsedSalesMonth[]) => {
@@ -208,7 +259,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       // month of another year would be stored without the screen moving.
       const last = [...parsed].sort(byPeriod).at(-1);
       if (last) {
-        setRawFilters({ years: [last.year], months: [] });
+        setRawFilters({ years: [last.year], months: [], services: [] });
       }
     },
     [clientId],
@@ -225,6 +276,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       filters,
       period,
       periodName,
+      scopedPeriodName,
       reading,
       cardsInput,
       cards,
@@ -234,6 +286,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       selectAllYears,
       toggleMonth,
       clearMonths,
+      toggleService,
+      clearServices,
       importMonths,
     }),
     [
@@ -246,6 +300,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       filters,
       period,
       periodName,
+      scopedPeriodName,
       reading,
       cardsInput,
       cards,
@@ -255,11 +310,19 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       selectAllYears,
       toggleMonth,
       clearMonths,
+      toggleService,
+      clearServices,
       importMonths,
     ],
   );
 
   return <SalesDataContext.Provider value={value}>{children}</SalesDataContext.Provider>;
+}
+
+/** The axis a mark of «Mes» leaves: exactly what is marked, or the twelve of the exercise. It is
+ *  applied to the total and to every service alike, so the stack and its line share columns. */
+function onAxis(points: MonthPoint[], marked: readonly number[]): MonthPoint[] {
+  return marked.length === 0 ? points : points.filter((point) => marked.includes(point.monthIndex));
 }
 
 function byPeriod(a: ParsedSalesMonth, b: ParsedSalesMonth): number {
