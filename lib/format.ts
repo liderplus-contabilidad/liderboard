@@ -47,12 +47,23 @@ export function formatCurrency(value: number, options?: { cents?: boolean }): st
  */
 export const AMOUNT_PATTERN = String.raw`(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?`;
 
-const AMOUNT_SHAPE = new RegExp(`^-?${AMOUNT_PATTERN}$`);
+/**
+ * What the parser accepts, which is anything the app's own formatters EMIT.
+ *
+ * The optional `$` is what makes `parseCurrency` the real inverse of `formatCurrency` and not only of
+ * `formatNumber`/`formatAmount`: an editable cell that shows «$4,521.00» has to be able to read its
+ * own seed back, and without this it would reject it and silently revert every edit. It goes AFTER
+ * the sign because that is the order `formatCurrency` writes («-$1,234.00»).
+ *
+ * `AMOUNT_PATTERN` itself is deliberately NOT widened: `calc.ts` anchors it to find a number at the
+ * start of an expression, and a `$` is not part of one.
+ */
+const AMOUNT_SHAPE = new RegExp(`^-?\\$?${AMOUNT_PATTERN}$`);
 
 /**
  * Inverse of the Ecuadorian formatters for editable numeric inputs: parses an amount
  * written with `,` as the thousands separator and `.` as the decimal ("17,338.85" →
- * 17338.85). Returns `null` for blank or unparseable input so callers can tell a cleared
+ * 17338.85), with or without the currency symbol ("$17,338.85" parses too). Returns `null` for blank or unparseable input so callers can tell a cleared
  * field from an unchanged one. Pair the editor's seed with `formatNumber` so the value
  * round-trips.
  */
@@ -61,7 +72,7 @@ export function parseCurrency(input: string): number | null {
   if (!AMOUNT_SHAPE.test(trimmed)) {
     return null;
   }
-  const parsed = Number(trimmed.replace(/,/g, ""));
+  const parsed = Number(trimmed.replace(/[,$]/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
 }
 

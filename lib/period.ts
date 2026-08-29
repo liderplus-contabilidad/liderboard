@@ -129,3 +129,70 @@ export function bucketLabel(frequency: Frequency, bucket: MonthBucket): string {
   }
   return bucket.months.map((month) => MONTHS_SHORT_ES[month]).join(" · ");
 }
+
+// ---------------------------------------------------------------------------
+// Tramos con nombre
+// ---------------------------------------------------------------------------
+
+/**
+ * A NAMED SPAN —«S1», «Q3»— which is deliberately NOT a `Frequency`, and the distinction is
+ * load-bearing.
+ *
+ * A `Frequency` AGGREGATES: `sumByPeriod` folds twelve months into `12 / MONTHS_PER_PERIOD` buckets,
+ * so every member of that union has to DIVIDE twelve. A quimestre is five months and `12 / 5` is
+ * `2.4`: `Array.from({ length: 2.4 })` builds TWO buckets and noviembre y diciembre desaparecerían
+ * del grid de Datos sin que nada lo diga. Adding it to the union would also drop «Quimestral» into
+ * PyG's «Ver por» through `FREQUENCY_ORDER`, where nothing reads it.
+ *
+ * So a span is not a granularity: it is a NAMED SET OF MONTHS, and whoever consumes it marks those
+ * months. The semestres are read off `monthsInPeriod` rather than written again — there is one
+ * definition of what a semester is, and it is the one PyG already aggregates by.
+ */
+export type SpanKind = "semestre" | "quimestre";
+
+export const SPAN_KINDS: readonly SpanKind[] = ["semestre", "quimestre"];
+
+export interface NamedSpan {
+  kind: SpanKind;
+  /** Position in the year, 0-based. */
+  index: number;
+  /** «S1», «Q3» — the span's proper name, and what a test names. */
+  code: string;
+  /** The months it covers. Q3 holds TWO of them and says so HERE: nothing infers a length from the
+   *  name, which is the same precaution `bucketLabel` takes when it refuses to call two months «T1». */
+  months: number[];
+}
+
+/**
+ * The quimestre is Ecuador's own five-month bucket, and five does not divide twelve: Ene–May and
+ * Jun–Oct leave noviembre y diciembre over. That remainder is a THIRD span rather than an omission —
+ * a year has to be reachable whole — and it carries its two months explicitly.
+ */
+const QUIMESTRE_MONTHS: readonly (readonly number[])[] = [
+  [0, 1, 2, 3, 4],
+  [5, 6, 7, 8, 9],
+  [10, 11],
+];
+
+/** The spans of one kind, in calendar order. */
+export function namedSpans(kind: SpanKind): NamedSpan[] {
+  if (kind === "semestre") {
+    return [0, 1].map((index) => ({
+      kind,
+      index,
+      code: `S${index + 1}`,
+      months: monthsInPeriod("semestral", index),
+    }));
+  }
+  return QUIMESTRE_MONTHS.map((months, index) => ({
+    kind,
+    index,
+    code: `Q${index + 1}`,
+    months: [...months],
+  }));
+}
+
+/** How a span kind is NAMED in a control: «Semestre», «Quimestre». */
+export function spanKindLabel(kind: SpanKind): string {
+  return kind === "semestre" ? "Semestre" : "Quimestre";
+}

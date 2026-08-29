@@ -6,6 +6,7 @@ import {
   Receipt,
   ShoppingBag,
   Table2,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -79,6 +80,16 @@ export const MODULES: DashboardModule[] = [
         label: "Ventas por servicio",
         title: "Ventas por servicio",
         icon: ShoppingBag,
+      },
+      // Reportería de ingresos hangs off here for the same reason: what it reads is the raíz 4 of
+      // this module's ACTIVE CLIENT, so it needs the selector the parent already mounts in the
+      // header. It is ALWAYS visible too — what the workspace's system decides is who can CAPTURE
+      // the external figures, never who sees the menu (`lib/revenue/availability.ts`).
+      {
+        slug: "revenue-report",
+        label: "Reportería de ingresos",
+        title: "Reportería de ingresos",
+        icon: TrendingUp,
       },
     ],
   },

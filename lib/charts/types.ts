@@ -40,7 +40,13 @@ export interface ChartParam {
 
 export interface ChartLabel extends ChartTextStyle {
   show: boolean;
-  position?: "top" | "inside" | "right" | "left" | "outside" | "insideRight";
+  /**
+   * `"bottom"` is what a NEGATIVE bar needs. In a cartesian grid `"top"` is the top EDGE of the
+   * datum's rect, and a falling bar's rect runs from zero downwards — so its top edge IS the zero
+   * line, and every falling bar in the chart parks its label at the same height. Placing by sign is
+   * only reachable per DATUM (`ChartBarDatum.label`): `position` takes no function.
+   */
+  position?: "top" | "bottom" | "inside" | "right" | "left" | "outside" | "insideRight";
   distance?: number;
   formatter?: (param: ChartParam) => string;
   /**
@@ -133,6 +139,12 @@ export interface ChartPieDatum {
 export interface ChartBarDatum {
   value: ChartValue;
   itemStyle?: ChartItemStyle;
+  /**
+   * Per-datum label overrides, merged over the series'. Only `position` lives here, and it is the
+   * ONE reason the field exists: placing a label by the datum's SIGN is impossible at series level,
+   * where `position` is a single value for every bar.
+   */
+  label?: { position?: ChartLabel["position"] };
 }
 
 export type ChartDatum = ChartValue | ChartPieDatum | ChartBarDatum;
