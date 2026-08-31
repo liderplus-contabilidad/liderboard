@@ -24,8 +24,22 @@
  * is the correction this module makes over the source workbook, whose TOTAL row compares seven months
  * of one year against twelve of another.
  */
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
-import { namedSpans, SPAN_KINDS, type NamedSpan, type SpanKind } from "@/lib/period";
+import {
+  monthSpanLabel,
+  namedSpans,
+  periodLabel,
+  scopedPeriodLabel,
+  SPAN_KINDS,
+  type NamedSpan,
+  type SpanKind,
+} from "@/lib/period";
+
+/**
+ * The three rótulos this module composes with. They were BORN here and now live in `lib/period.ts`,
+ * because «Análisis costo personal» reads the same figure and two rules for one rótulo drift apart.
+ * They stay re-exported so every caller and every test of this module keeps its import.
+ */
+export { monthSpanLabel, periodLabel, scopedPeriodLabel };
 
 export interface RevenueFilters {
   /** Marked years, ascending. Empty resolves to ALL of them on read, never to none. */
@@ -115,66 +129,6 @@ export function withMonthsCleared(filters: RevenueFilters): RevenueFilters {
  */
 export function selectedMonths(filters: RevenueFilters, universe: RevenueUniverse): number[] {
   return filters.months.length > 0 ? filters.months : universe.months;
-}
-
-/**
- * **THE rótulo of a set of months**, and the only one in the module: «Abril», «Ene–Jul», «Ene, Mar,
- * Abr». Every subtitle, tile, note, chip and report header composes on top of it.
- *
- * A set with gaps is ENUMERATED instead of asserting a range: «Ene–Abr» would claim February is
- * included. `null` for the empty set, so whoever composes has to say out loud what «no months» reads
- * as — a shared «Sin meses» is exactly how a subtitle ended up saying «Sin meses 2026».
- *
- * It was two functions —this one and the cards' own `periodOfMonths`— with two different rules for
- * the same figure, which is the class of debt this module was built not to have.
- */
-export function monthSpanLabel(months: readonly number[]): string | null {
-  if (months.length === 0) {
-    return null;
-  }
-  const sorted = [...new Set(months)].sort((a, b) => a - b);
-  const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  if (first === last) {
-    return MONTHS_FULL_ES[first];
-  }
-  const contiguous = last - first === sorted.length - 1;
-  return contiguous
-    ? `${MONTHS_SHORT_ES[first]}–${MONTHS_SHORT_ES[last]}`
-    : sorted.map((month) => MONTHS_SHORT_ES[month]).join(", ");
-}
-
-/**
- * The period in plain Spanish — what the tiles, each card's subtitle and the report's header say, so
- * nothing on the screen names a different span from the one beside it.
- *
- * The months come from `monthSpanLabel`; with SEVERAL years they are written once and the years
- * behind them («Abr · 2025, 2026»), because repeating «abril» per year is what makes a comparison
- * label illegible.
- *
- * It receives the RESOLVED span and not the marks: with no month marked the reading still covers a
- * tramo —every loaded month of the marked years— and a header that wrote only «2024, 2025, 2026»
- * left the reader to guess which months the figures under it were measured over.
- */
-export function periodLabel(months: readonly number[], years: readonly number[]): string {
-  if (years.length === 0) {
-    return "Sin datos";
-  }
-  const yearsLabel = [...years].sort((a, b) => a - b).join(", ");
-  const monthsLabel = monthSpanLabel(months);
-  if (monthsLabel === null) {
-    return yearsLabel;
-  }
-  return years.length === 1 ? `${monthsLabel} ${yearsLabel}` : `${monthsLabel} · ${yearsLabel}`;
-}
-
-/**
- * The period with a card's own narrowing IN FRONT — the one composition of the two, read by the
- * subtitles and by the report's header. Two of them would let the screen and the paper name the same
- * reading differently.
- */
-export function scopedPeriodLabel(scope: string | null, period: string): string {
-  return scope ? `${scope} · ${period}` : period;
 }
 
 /**
