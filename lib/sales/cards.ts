@@ -217,9 +217,11 @@ export interface SalesCards {
    * Whether choosing a shape means anything at all — decided HERE and not by the component, which
    * would have to reconstruct «is there a breakdown» out of the filters to guess it.
    *
-   * It is false exactly when there is no breakdown: several years marked (the series is the year and
-   * the colour belongs to it) or a year with no service opened up. A control that means nothing for
-   * the open data renders NOTHING rather than sitting disabled.
+   * It is false when there is no breakdown —several years marked (the series is the year and the
+   * colour belongs to it) or a year with no service opened up— and ALSO when the axis is down to a
+   * single month: the skyline exists to follow a service across its months, and with one there are
+   * none to follow. A control that means nothing for the open data renders NOTHING rather than
+   * sitting disabled.
    */
   skylineAvailable: boolean;
 }
@@ -234,7 +236,7 @@ export function buildSalesCards(
     payers: buildPayersCard(input),
     evolution: evolution.card,
     emptyMonths: emptyMonths(input.monthlyByYear).length,
-    skylineAvailable: evolution.brokenDown,
+    skylineAvailable: evolution.skylineAvailable,
   };
 }
 
@@ -841,6 +843,12 @@ const STACK_ID = "mes";
  */
 const STACK_SLICES = CHART_MAX_SERIES;
 
+/**
+ * WHAT the card ended up drawing, which is the one thing its note cannot guess: the three shapes read
+ * the same `segments` and say three different things about them.
+ */
+type EvolutionShape = "stacked" | "skyline" | "services";
+
 /** One band of the stack: a service, or the «Otros» its tail folds into. */
 interface StackSegment {
   id: string;
@@ -850,33 +858,22 @@ interface StackSegment {
 }
 
 /**
- * 3 · Evolution — how the billing moves month by month, and what each month is made of.
+ * 3 · Evolution — billing trends month by month and their composition.
  *
- * **With ONE year the column is the BREAKDOWN by service**, and that breakdown has two shapes the
- * reader chooses between (`EvolutionView`), because there are two questions and no single drawing
- * answers both:
+ * **With ONE year**, the column shows the BREAKDOWN by service, offering two shapes (`EvolutionView`):
+ * - `skyline` (default): Each service has its own AXIS, starting at zero, enabling month-to-month tracking.
+ * - `stacked`: Displays the total per month with a breakdown, emphasizing the distribution.
  *
- * - `skyline` — the default. The service gets its own AXIS, so every service starts at zero and its
- *   twelve months can be followed as a row of its own. It is what the stack cannot do: piled up,
- *   only the bottom band rests on zero and the ones above it float on a floor that moves month to
- *   month, so a small service is visible but not trackable.
- * - `stacked` — the figure «Distribución» already draws in PyG, and for its same reason: the line
- *   prints the amount once per column and the stack says what part of it each service is, which is
- *   the work reading it by subtracting bars by eye costs. It stays because the total of the month is
- *   what it reads at a glance, and that is the one thing the skyline gives up.
+ * Both share the same `segments` and table, providing two views of one dataset.
  *
- * Both are built from the SAME `segments` and share the table twin — two shapes of one reading, not
- * two readings.
+ * **With ONE month**, the stack spreads into one bar per SERVICE, provided there are at least two segments.
  *
- * **With SEVERAL years it goes back to one series per year, without a stack.** Stacking services and
- * comparing years on the same axis asks for grouped stacks and spends the colour channel on the
- * service, when the year is the only thing telling those series apart. The year-on-year reading of a
- * service is asked for by MARKING it, which narrows this card to that service in every year.
+ * **With MULTIPLE years**, it defaults to one series per year, avoiding stacks to maintain year differentiation.
  */
 function buildEvolutionCard(
   input: SalesCardsInput,
   { hideEmptyMonths = false, evolutionView = "stacked" }: SalesCardsOptions = {},
-): { card: ChartCardSpec<ChartOption | Chart3DOption>; brokenDown: boolean } {
+): { card: ChartCardSpec<ChartOption | Chart3DOption>; skylineAvailable: boolean } {
   const { monthlyByYear: full, reading, serviceMonthly = [] } = input;
   const hidden = hideEmptyMonths ? emptyMonths(full) : [];
   const kept = (points: readonly MonthPoint[]): MonthPoint[] =>
@@ -913,22 +910,33 @@ function buildEvolutionCard(
   const foldedServices = Math.max(ranked.length - STACK_SLICES, 0);
   const stacked = segments.length > 0;
 
-  const legend = stacked
-    ? legendFor(
-        true,
-        segments.map((segment) => segment.name),
-      )
-    : yearLegend(years.length);
+  // A single column: the stack has nothing to be a stack OF, and the axis is spending its width
+  // repeating the month the subtitle already names.
+  const spread = segments.length > 1 && axis.length === 1;
+  // The skyline is offered exactly when there IS a breakdown AND months to follow; with several years
+  // the series is the year, and giving the service an axis would leave the year with nothing to be
+  // drawn as.
+  const skylineAvailable = stacked && axis.length > 1;
+  const skyline = skylineAvailable && evolutionView === "skyline";
+  const shape: EvolutionShape = spread ? "services" : skyline ? "skyline" : "stacked";
 
-  // The skyline is offered exactly when there IS a breakdown; with several years the series is the
-  // year, and giving the service an axis would leave the year with nothing to be drawn as.
-  const skyline = stacked && evolutionView === "skyline";
+  // Spread over the services, the legend would list exactly what the axis already labels.
+  const legend = spread
+    ? legendFor(false)
+    : stacked
+      ? legendFor(
+          true,
+          segments.map((segment) => segment.name),
+        )
+      : yearLegend(years.length);
 
-  const series: ChartSeries[] = stacked
-    ? stackSeries(segments, axis, covered.length, withLine)
-    : monthlyByYear.flatMap((entry) =>
-        yearSeries(entry, years, comparing, covered.length, withLine),
-      );
+  const series: ChartSeries[] = spread
+    ? serviceBars(segments)
+    : stacked
+      ? stackSeries(segments, axis, covered.length, withLine)
+      : monthlyByYear.flatMap((entry) =>
+          yearSeries(entry, years, comparing, covered.length, withLine),
+        );
 
   const option: ChartOption | Chart3DOption | null =
     covered.length === 0
@@ -950,10 +958,27 @@ function buildEvolutionCard(
             // The band is ALWAYS RESERVED —explicitly, not by ECharts' default— because there are
             // always bars: the line runs through the centre of each band, which is where the group of
             // bars is centred.
-            xAxis: { ...categoryAxis(labels), boundaryGap: true },
+            xAxis: {
+              ...categoryAxis(spread ? segments.map((segment) => segment.name) : labels),
+              boundaryGap: true,
+            },
             yAxis: valueAxis(),
-            tooltip: axisTooltip((value) => formatCurrency(value, { cents: true })),
-            series: [...series, ...absenceMarks(monthlyByYear)],
+            tooltip: spread
+              ? itemTooltip((param) => {
+                  const segment = segments[param.dataIndex];
+                  const share = shareOf(Number(param.value), axis[0]?.amount ?? 0);
+                  return [
+                    `<div style="font-weight:600;margin-bottom:4px">${segment.name}</div>`,
+                    `<div>${formatCurrency(Number(param.value), { cents: true })}</div>`,
+                    share === null
+                      ? ""
+                      : `<div style="color:${CHART_INK.muted}">${formatPercent(share)} del mes</div>`,
+                  ].join("");
+                })
+              : axisTooltip((value) => formatCurrency(value, { cents: true })),
+            // The absence mark is one bar per MONTH, so it has nothing to sit under on an axis of
+            // services — and with a single column that never arrived there is no option to draw at all.
+            series: spread ? series : [...series, ...absenceMarks(monthlyByYear)],
           };
 
   const table: ChartTable = stacked
@@ -990,7 +1015,7 @@ function buildEvolutionCard(
       };
 
   return {
-    brokenDown: stacked,
+    skylineAvailable,
     card: {
       id: "sales-evolution",
       title: "Evolución",
@@ -1006,7 +1031,7 @@ function buildEvolutionCard(
         hidden.length,
         segments.length > 1,
         foldedServices,
-        skyline,
+        shape,
       ),
       guide: GUIDE_SALES_EVOLUTION,
       // The 3D box needs the room its perspective costs: at the flat card's height the far row of
@@ -1292,6 +1317,35 @@ function stackSeries(
 }
 
 /**
+ * Single month breakdown: stack bands side by side on a service axis.
+ *
+ * Colors match `colorForEntity`, ensuring consistency across cards. Bars have rounded tops since
+ * each is standalone. No line or absence mark is included as they are irrelevant here.
+ */
+function serviceBars(segments: readonly StackSegment[]): ChartSeries[] {
+  return [
+    {
+      id: "servicios",
+      type: "bar",
+      data: segments.map((segment) => ({
+        value: segment.points[0]?.amount ?? null,
+        itemStyle: { color: segment.color, borderRadius: ROUND_TOP },
+      })),
+      barMaxWidth: CHART_MARK.barMaxWidth,
+      label: {
+        show: segments.length <= 6,
+        position: "top",
+        color: CHART_INK.muted,
+        fontSize: 11,
+        formatter: (param: ChartParam) =>
+          param.value === null ? "" : formatCurrency(Number(param.value)),
+      },
+      labelLayout: { hideOverlap: true },
+    },
+  ];
+}
+
+/**
  * A year's bar and its line — the comparative shape, and the one a year with no breakdown falls back
  * to. The TWO series share a `name`, which is why the legend dedupes: one item per year, and
  * switching it off takes its bar and its line at once.
@@ -1391,7 +1445,7 @@ function evolutionNote(
   hidden: number,
   brokenDown: boolean,
   foldedServices: number,
-  skyline: boolean,
+  shape: EvolutionShape,
 ): string {
   const axisLength = monthlyByYear[0]?.points.length ?? 0;
   // What the shape on screen IS, said once — and it is not the same sentence for the two: the stack
@@ -1400,9 +1454,13 @@ function evolutionNote(
   const breakdown = !brokenDown
     ? ""
     : ` ${
-        skyline
-          ? "Cada fila del fondo es un servicio y cada una arranca en cero, así que su altura se compara mes a mes. Arrastra para girar la vista."
-          : "Cada columna es el desglose por servicio del mes y la línea, su total."
+        {
+          skyline:
+            "Cada fila del fondo es un servicio y cada una arranca en cero, así que su altura se compara mes a mes. Arrastra para girar la vista.",
+          services:
+            "Un solo mes en el eje: cada barra es un servicio de ese mes, no un mes. Marca otro mes y vuelven a ser columnas.",
+          stacked: "Cada columna es el desglose por servicio del mes y la línea, su total.",
+        }[shape]
       }${
         foldedServices === 0
           ? ""

@@ -633,6 +633,97 @@ describe("la evolución se desglosa por servicio", () => {
   });
 });
 
+describe("con un solo mes la evolución se abre en barras por servicio", () => {
+  const LINES = [
+    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
+    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+  ];
+
+  /** El eje acotado a UN mes, que es lo que deja marcar «Ene» en la barra de filtros. */
+  function january(lines = LINES): SalesCardsInput {
+    const reading = readSales(lines);
+    const months = [month(0, lines)];
+    const onlyJanuary = (points: readonly MonthPoint[]) =>
+      points.filter((point) => point.monthIndex === 0);
+    return {
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Enero 2026",
+      monthlyByYear: [{ year: 2026, points: onlyJanuary(monthlySeries(months, 2026)) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026).map((entry) => ({
+        ...entry,
+        points: onlyJanuary(entry.points),
+      })),
+    };
+  }
+
+  it("el eje son los SERVICIOS y cada uno trae su barra, sin apilar", () => {
+    const option = buildSalesCards(january()).evolution.option;
+    expect(option?.xAxis?.data).toEqual(["HONORARIOS", "MEDICINAS"]);
+    expect(option?.series).toHaveLength(1);
+    expect(option?.series[0].type).toBe("bar");
+    expect(option?.series[0].stack).toBeUndefined();
+    expect(option?.series[0].data.map((datum) => (datum as { value: unknown }).value)).toEqual([
+      100, 60,
+    ]);
+  });
+
+  it("un servicio conserva el color que lleva en la composición", () => {
+    const cards = buildSalesCards(january());
+    expect(datumColor(cards.evolution.option?.series[0], 0)).toBe(
+      datumColor(cards.services.option?.series[0], 0),
+    );
+  });
+
+  it("sin línea de total y sin leyenda: una y otra repetirían lo que ya está en el eje", () => {
+    const option = buildSalesCards(january()).evolution.option;
+    expect(option?.series.some((entry) => entry.type === "line")).toBe(false);
+    expect(option?.legend?.show).toBe(false);
+  });
+
+  it("la tabla gemela no cambia: una columna, una fila por servicio y el TOTAL", () => {
+    const { table } = buildSalesCards(january()).evolution;
+    expect(table.columns).toEqual(["Ene"]);
+    expect(table.rows.map((row) => row.label)).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
+    expect(table.rows.at(-1)?.values).toEqual(["$160.00"]);
+  });
+
+  it("la nota dice que cada barra es un servicio, no un mes", () => {
+    expect(buildSalesCards(january()).evolution.note).toContain("cada barra es un servicio");
+  });
+
+  it("con UN solo servicio la barra se conserva sola, en el eje del mes", () => {
+    // No hay nada que repartir: el eje sigue siendo el mes y la columna, ese servicio.
+    const only = [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 })];
+    const option = buildSalesCards(january(only)).evolution.option;
+    expect(option?.xAxis?.data).toEqual(["Ene"]);
+  });
+
+  it("no se ofrece skyline con una sola columna: no hay meses que seguir", () => {
+    const cards = buildCards(january(), { evolutionView: "skyline" });
+    expect(cards.skylineAvailable).toBe(false);
+    expect(cards.evolution.option !== null && is3DOption(cards.evolution.option)).toBe(false);
+  });
+
+  it("con dos meses vuelve a ser la pila de siempre", () => {
+    const lines = LINES;
+    const reading = readSales(lines);
+    const months = [month(0, lines), month(1, lines)];
+    const cards = buildSalesCards({
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Ene–Feb 2026",
+      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026),
+    });
+    const bars = (cards.evolution.option?.series ?? []).filter(
+      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
+    );
+    expect(bars).toHaveLength(2);
+    expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
+  });
+});
+
 describe("el color de una barra de pagador", () => {
   const many = Array.from({ length: 10 }, (_unused, index) =>
     line({ payer: `PAGADOR${index}`, amount: 100 - index }),

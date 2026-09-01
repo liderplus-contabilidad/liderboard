@@ -96,8 +96,10 @@ function SalesContent() {
   const empty = months.length === 0;
 
   // The evolution's header controls, and BOTH are conditional on there being something for them to
-  // do: «Ver como» exists only where there is a breakdown to shape —comparing years the series is
-  // the year, and a skyline would have nothing to put on its depth axis— and «Ocultar meses en 0»
+  // do: «Ver como» exists only where there is a breakdown to shape AND months to follow —comparing
+  // years the series is the year, and a skyline would have nothing to put on its depth axis; with a
+  // single month the card opens into one bar per service and there is no shape to choose— and
+  // «Ocultar meses en 0»
   // only where there is an empty month to hide. Neither one sits disabled: with nothing to offer the
   // card gets no header slot at all.
   const evolutionControls =
