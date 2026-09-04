@@ -34,7 +34,13 @@ export interface ExcelDownloadOption {
 }
 
 interface ExcelActionsProps {
-  upload: {
+  /**
+   * OPTIONAL, because a module that only DOWNLOADS is a real case: «Reportería de ingresos» derives
+   * its figures from PyG and types the rest into a drawer, so it has nothing to upload. Left out, no
+   * upload button is drawn at all — a permanently disabled control is precisely what the house rule
+   * forbids: what means nothing for the open data does not render.
+   */
+  upload?: {
     label?: string;
     onClick: () => void;
     disabled?: boolean;
@@ -59,17 +65,21 @@ export function ExcelActions({
 }: ExcelActionsProps) {
   return (
     <div className="flex items-center gap-2.5">
-      {upload.disabled && upload.disabledReason && (
-        <DisabledReasonPill>{upload.disabledReason}</DisabledReasonPill>
+      {upload && (
+        <>
+          {upload.disabled && upload.disabledReason && (
+            <DisabledReasonPill>{upload.disabledReason}</DisabledReasonPill>
+          )}
+          <Button
+            size="toolbar"
+            icon={<Upload size={14} />}
+            onClick={upload.onClick}
+            disabled={upload.disabled}
+          >
+            {upload.label ?? "Cargar Excel"}
+          </Button>
+        </>
       )}
-      <Button
-        size="toolbar"
-        icon={<Upload size={14} />}
-        onClick={upload.onClick}
-        disabled={upload.disabled}
-      >
-        {upload.label ?? "Cargar Excel"}
-      </Button>
 
       {downloads.length > 0 && <DownloadControl options={downloads} label={downloadLabel} />}
 

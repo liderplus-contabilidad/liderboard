@@ -46,6 +46,18 @@ describe("parseCurrency", () => {
     expect(parseCurrency("abc")).toBeNull();
   });
 
+  it("parses what `formatCurrency` writes, symbol included", () => {
+    expect(parseCurrency("$17,338.85")).toBe(17338.85);
+    expect(parseCurrency("-$20.40")).toBe(-20.4);
+    expect(parseCurrency("$0.00")).toBe(0);
+  });
+
+  it("round-trips values rendered by formatCurrency (a currency editor's seed)", () => {
+    for (const value of [17338.85, 1234.56, 80.75, -20.4, 0, 1234]) {
+      expect(parseCurrency(formatCurrency(value, { cents: true }))).toBeCloseTo(value, 2);
+    }
+  });
+
   it("rejects the inverted convention instead of silently inflating the value", () => {
     expect(parseCurrency("17.338,85")).toBeNull();
   });

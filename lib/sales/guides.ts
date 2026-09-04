@@ -41,8 +41,9 @@ export const GUIDE_SALES_EVOLUTION: ChartGuide = {
     { control: "Año", effect: "marca varios para comparar ejercicios." },
     { control: "Mes", effect: "acota el eje a los meses marcados." },
     { control: "Servicio", effect: "deja en la columna solo lo marcado." },
+    { control: "Ver como", effect: "el mismo desglose en 3D o apilado." },
     AS_TABLE,
   ],
   reading:
-    "Con un año, cada columna se parte por servicio y la línea es el total del mes; comparando años vuelve a una barra por año. Un mes que nunca cargaste lleva una marca gris y una raya en la tabla — no es un mes en cero.",
+    "Con un año el mes se parte por servicio, y eso se puede ver de dos formas: en «Skyline 3D» cada servicio es una fila que arranca en cero, para seguir hacia dónde va; en «Apilado» la columna se lee entera contra la línea de su total. Comparando años vuelve a una barra por año. Un mes que nunca cargaste no dibuja nada y lleva una raya en la tabla — no es un mes en cero.",
 };

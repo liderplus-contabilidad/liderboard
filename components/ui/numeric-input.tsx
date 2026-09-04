@@ -3,7 +3,7 @@
 import type { KeyboardEvent } from "react";
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/cn";
-import { formatAmount, formatNumber, parseCurrency } from "@/lib/format";
+import { formatAmount, formatCurrency, formatNumber, parseCurrency } from "@/lib/format";
 
 interface NumericInputProps {
   /** `null` is painted EMPTY, never as zero — the distinction `PAGADO` needs so an unreconciled
@@ -11,9 +11,13 @@ interface NumericInputProps {
   value: number | null;
   /** Only called when the value CHANGES. It emits `null` only with `nullable`. */
   onCommit: (value: number | null) => void;
-  /** `amount` = always two decimals («1,234.00»), which is what gets compared against a spreadsheet
-   *  cell by cell; `plain` = a grouped number with no padding («30»), for a quantity. */
-  format?: "amount" | "plain";
+  /**
+   * `amount` = always two decimals and NO symbol («1,234.00»), for a column that already names its
+   * unit — it is what gets compared against a spreadsheet cell by cell; `currency` = the same, with
+   * the symbol («$1,234.00»), for a column whose header names a CONCEPT and not a unit; `plain` = a
+   * grouped number with no padding («30»), for a quantity.
+   */
+  format?: "amount" | "currency" | "plain";
   /** With `true`, emptying the field emits `null`; without it, emptying reverts to the previous value
    *  instead of inventing a zero. */
   nullable?: boolean;
@@ -50,8 +54,16 @@ export function NumericInput({
 }: NumericInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
 
+  // The seed has to round-trip through `parseCurrency`, which is why every branch here writes a shape
+  // that parser accepts — the symbol included.
   const seed =
-    value === null ? "" : format === "amount" ? formatAmount(value) : formatNumber(value);
+    value === null
+      ? ""
+      : format === "amount"
+        ? formatAmount(value)
+        : format === "currency"
+          ? formatCurrency(value, { cents: true })
+          : formatNumber(value);
 
   const commit = useCallback(
     (text: string) => {

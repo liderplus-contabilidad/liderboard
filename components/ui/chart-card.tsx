@@ -5,7 +5,7 @@ import { memo, useId, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
-import type { ChartCardSpec, ChartOption, ChartTable } from "@/lib/charts/types";
+import type { Chart3DOption, ChartCardSpec, ChartOption, ChartTable } from "@/lib/charts/types";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { ChartGuideTip } from "@/components/ui/chart-guide-tip";
 
@@ -17,7 +17,10 @@ import { ChartGuideTip } from "@/components/ui/chart-guide-tip";
  * `id` is dropped (it is the key of the list, not a prop) and `height` goes back to optional,
  * so every existing caller keeps its default.
  */
-export interface ChartCardProps extends Omit<ChartCardSpec, "id" | "height"> {
+export interface ChartCardProps extends Omit<
+  ChartCardSpec<ChartOption | Chart3DOption>,
+  "id" | "height"
+> {
   height?: number;
   /** No workspace loaded at all — the tab-wide empty state rather than a card-level one. */
   empty?: boolean;
@@ -175,16 +178,11 @@ export const ChartCard = memo(function ChartCard({
               </NoticeBanner>
             )}
 
-            {hasSeries ? (
+            {hasSeries && option ? (
               asTable ? (
                 <TableTwin table={table} maxHeight={height} />
               ) : (
-                <Chart
-                  option={option as ChartOption}
-                  onSelect={onSelect}
-                  height={height}
-                  ariaLabel={title}
-                />
+                <Chart option={option} onSelect={onSelect} height={height} ariaLabel={title} />
               )
             ) : (
               // Never an empty plot: the warnings above say why, and when there are none this
