@@ -109,7 +109,7 @@ export async function buildRevenueWorkbook(
 
   if (input.canCapture) {
     for (const descriptor of RATIO_DESCRIPTORS) {
-      writeCardSheet(wb, buildRatioCard(descriptor, input, "montos"), header, descriptor.title);
+      writeCardSheet(wb, buildRatioCard(descriptor, input), header, descriptor.title);
     }
   }
 

@@ -46,6 +46,12 @@ import type {
 } from "@/lib/charts/types";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { scopedPeriodLabel } from "./filters";
+import {
+  fitDirectLabel,
+  labelDistance,
+  labelHeadroom,
+  type LabelFit,
+} from "@/lib/charts/label-fit";
 import { formatCurrency, formatNumber, formatPercent, pluralize } from "@/lib/format";
 import {
   shareOf,
@@ -849,6 +855,33 @@ const STACK_SLICES = CHART_MAX_SERIES;
  */
 type EvolutionShape = "stacked" | "skyline" | "services";
 
+/**
+ * The figure written over a bar of this card — the one composition of it, so the stack, the year and
+ * the service axis cannot end up writing their amount three different ways.
+ *
+ * It is always the COLUMN's total and it is always written: `lib/charts/label-fit` answers a cramped
+ * axis with a smaller body and, past twenty columns, with the cents —which the tooltip and the table
+ * twin keep— instead of with the silence this card used past six months. Flat at every density: the
+ * card is read at a glance, and a turned amount is read by tilting the head.
+ *
+ * `hideOverlap` still drops what collides INSIDE a row, which is two adjacent months on an axis
+ * narrower than the fit assumed; between rows there is nothing left to collide.
+ */
+function totalLabel(fit: LabelFit, row = 0): Pick<ChartSeries, "label" | "labelLayout"> {
+  return {
+    label: {
+      show: true,
+      position: "top",
+      distance: labelDistance(row, fit),
+      color: CHART_INK.muted,
+      fontSize: fit.fontSize,
+      formatter: (param: ChartParam) =>
+        param.value === null ? "" : formatCurrency(Number(param.value), { cents: fit.cents }),
+    },
+    labelLayout: { hideOverlap: true },
+  };
+}
+
 /** One band of the stack: a service, or the «Otros» its tail folds into. */
 interface StackSegment {
   id: string;
@@ -930,12 +963,24 @@ function buildEvolutionCard(
         )
       : yearLegend(years.length);
 
+  // The figure over each bar. What it says is always the COLUMN's total —the month's billing, or the
+  // service's when the axis is the services— and never the band it happens to sit on: a stack's bands
+  // are already told apart by colour and read one by one in the tooltip, and writing five figures up
+  // a column is how a column stops being read as one amount.
+  //
+  // The shape comes from `lib/charts/label-fit`, the same rule PyG's evolution card reads, so the two
+  // cards of the app that draw months side by side write their amounts alike. Only the number of
+  // COLUMNS is measured: there is one row of figures per series, and here that is one row —the total
+  // line, or the bar of each year when several are compared.
+  const labelFit = fitDirectLabel(spread ? segments.length : axis.length);
+  const labelRows = spread || stacked ? 1 : monthlyByYear.length;
+
   const series: ChartSeries[] = spread
-    ? serviceBars(segments)
+    ? serviceBars(segments, labelFit)
     : stacked
-      ? stackSeries(segments, axis, covered.length, withLine)
-      : monthlyByYear.flatMap((entry) =>
-          yearSeries(entry, years, comparing, covered.length, withLine),
+      ? stackSeries(segments, axis, withLine, labelFit)
+      : monthlyByYear.flatMap((entry, index) =>
+          yearSeries(entry, years, comparing, withLine, labelFit, index),
         );
 
   const option: ChartOption | Chart3DOption | null =
@@ -949,7 +994,9 @@ function buildEvolutionCard(
             grid: {
               left: 8,
               right: 16,
-              top: 24,
+              // The room the top row of figures asks for; `outerBoundsContain` only reserves for the
+              // axis' labels, so without this the amount over the tallest column is cropped.
+              top: labelHeadroom(labelRows, labelFit, 24),
               bottom: legend.show ? 28 : 8,
               outerBoundsMode: "same",
               outerBoundsContain: "axisLabel",
@@ -1098,7 +1145,27 @@ function skylineOption(
     // apart from the empty floor of a month that never arrived.
     minHeight: 1.2,
     barSize,
-    emphasis: { itemStyle: { borderColor: CHART_INK.strong, borderWidth: 1 } },
+    emphasis: {
+      itemStyle: { borderColor: CHART_INK.strong, borderWidth: 1 },
+      // `echarts-gl` writes the RAW datum on the hovered bar unless told otherwise, so the one
+      // figure of this app that reached the screen as «39684.6195…» was this one. It goes through
+      // the same formatter as every other amount —comma thousands, two decimals— and it is drawn on
+      // the card's own surface, which is the tooltip's chrome and not gl's default box.
+      label: {
+        show: true,
+        formatter: (param) => formatCurrency(param.value[2], { cents: true }),
+        textStyle: {
+          color: CHART_INK.strong,
+          fontSize: 11.5,
+          fontFamily: CHART_FONT,
+          backgroundColor: CHART_SURFACE,
+          borderColor: CHART_LINES.axis,
+          borderWidth: 1,
+          borderRadius: 4,
+          padding: [4, 6],
+        },
+      },
+    },
     data: segment.points.flatMap((point, month) =>
       point.amount === null
         ? []
@@ -1269,8 +1336,8 @@ function sumPoints(points: readonly MonthPoint[][]): MonthPoint[] {
 function stackSeries(
   segments: readonly StackSegment[],
   axis: readonly MonthPoint[],
-  coveredCount: number,
   withLine: boolean,
+  fit: LabelFit,
 ): ChartSeries[] {
   const bands = segments.map<ChartSeries>((segment) => ({
     id: segment.id,
@@ -1282,7 +1349,11 @@ function stackSeries(
     barMaxWidth: CHART_MARK.barMaxWidth,
   }));
   if (!withLine) {
-    return bands;
+    // With no line there is a single column and a single band —several bands over one month spread
+    // out into `serviceBars` instead— so the band IS the total, and it is what carries the figure.
+    // Nothing changes for the reader: the amount is still written once, over the column.
+    const last = bands.at(-1);
+    return last ? [...bands.slice(0, -1), { ...last, ...totalLabel(fit) }] : bands;
   }
   return [
     ...bands,
@@ -1299,17 +1370,9 @@ function stackSeries(
       // gap BREAKS the line, which is right: joining January with March would draw a February that
       // never arrived.
       smooth: false,
-      label: {
-        // It is measured as ONE series and not as the ninth: it is the only one carrying a figure, so
-        // what decides whether it fits is its own mark count and not that of the stack below.
-        show: coveredCount <= 6,
-        position: "top",
-        color: CHART_INK.muted,
-        fontSize: 11,
-        formatter: (param: ChartParam) =>
-          param.value === null ? "" : formatCurrency(Number(param.value)),
-      },
-      labelLayout: { hideOverlap: true },
+      // It is measured as ONE series and not as the ninth: it is the only one carrying a figure, so
+      // what decides its shape is its own row over the columns and not the stack below.
+      ...totalLabel(fit),
       // Above the bars, which is where it has to be read.
       z: 3,
     },
@@ -1322,7 +1385,7 @@ function stackSeries(
  * Colors match `colorForEntity`, ensuring consistency across cards. Bars have rounded tops since
  * each is standalone. No line or absence mark is included as they are irrelevant here.
  */
-function serviceBars(segments: readonly StackSegment[]): ChartSeries[] {
+function serviceBars(segments: readonly StackSegment[], fit: LabelFit): ChartSeries[] {
   return [
     {
       id: "servicios",
@@ -1332,15 +1395,8 @@ function serviceBars(segments: readonly StackSegment[]): ChartSeries[] {
         itemStyle: { color: segment.color, borderRadius: ROUND_TOP },
       })),
       barMaxWidth: CHART_MARK.barMaxWidth,
-      label: {
-        show: segments.length <= 6,
-        position: "top",
-        color: CHART_INK.muted,
-        fontSize: 11,
-        formatter: (param: ChartParam) =>
-          param.value === null ? "" : formatCurrency(Number(param.value)),
-      },
-      labelLayout: { hideOverlap: true },
+      // Here the column IS the service, so its own amount is what the total label writes.
+      ...totalLabel(fit),
     },
   ];
 }
@@ -1354,8 +1410,9 @@ function yearSeries(
   entry: YearMonths,
   years: readonly number[],
   comparing: boolean,
-  coveredCount: number,
   withLine: boolean,
+  fit: LabelFit,
+  row: number,
 ): ChartSeries[] {
   const color = yearColor(entry.year, years);
   const data = entry.points.map((point) => point.amount);
@@ -1366,16 +1423,10 @@ function yearSeries(
     data,
     itemStyle: { color, borderRadius: ROUND_TOP },
     barMaxWidth: comparing ? 18 : CHART_MARK.barMaxWidth,
-    label: {
-      // A figure per mark stops being readable past a few: with several years there are 24 or 36.
-      show: !comparing && coveredCount <= 6,
-      position: "top",
-      color: CHART_INK.muted,
-      fontSize: 11,
-      formatter: (param: ChartParam) =>
-        param.value === null ? "" : formatCurrency(Number(param.value)),
-    },
-    labelLayout: { hideOverlap: true },
+    // Comparing several years, each one writes on its OWN row: that is what keeps 24 or 36 amounts
+    // from disputing one strip, and what tells the reader whose figure is whose — they come down the
+    // column in the legend's order.
+    ...totalLabel(fit, comparing ? row : 0),
   };
   if (!withLine) {
     return [bar];

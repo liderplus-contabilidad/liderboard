@@ -36,6 +36,12 @@ import type {
   ChartSeries,
   ChartTooltip,
 } from "@/lib/charts/types";
+import {
+  fitDirectLabel,
+  labelDistance,
+  labelHeadroom,
+  type LabelFit,
+} from "@/lib/charts/label-fit";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { periodLabel } from "../analytics/period";
 import {
@@ -61,8 +67,12 @@ const MAX_DIRECT_LABELS = 4;
  * And beyond this many MARKS — series × periods — the same thing happens for a different reason:
  * the count is fine but the room is not. Two series over twelve months is twenty-four amounts on
  * one axis, which at «$144,844» wide leaves them abutting rather than overlapping, so
- * `labelLayout.hideOverlap` never fires and the row prints as one run of digits. The shape is
- * what a chart is for; the figure to the cent is two pages away in the statement.
+ * `labelLayout.hideOverlap` never fires and the row prints as one run of digits.
+ *
+ * It no longer rules the GROUPED BAR, which answers that width with `lib/charts/label-fit`'s rows
+ * instead of with silence. What is left under it is what has no rows to spread into: the percentage
+ * of a marked account (`sharesFit`) and the line over a stack, both of which ride on bars that are
+ * already carrying something else.
  */
 const MAX_DIRECT_LABEL_MARKS = 14;
 
@@ -141,9 +151,9 @@ export interface SeriesOptionContext {
   multiYear?: boolean;
   unit?: ChartUnit;
   /**
-   * Draw the value on top of each mark. Default true. Set false for a dense single-series
-   * evolution — twelve monthly labels overlap into texture, and the tooltip already reads a
-   * bar on hover.
+   * Draw the value over each mark. Default true, and what a grouped bar chart does at any density
+   * (`fitGroupedLabel`). Set false where the card is not the place to read the figure: the account's
+   * ficha in the side panel, whose whole table of amounts is right under the chart.
    */
   labels?: boolean;
   /**
@@ -195,12 +205,31 @@ export function formatAxisValue(value: number, unit: ChartUnit = "moneda"): stri
 /** Vertical bars — one series is an evolution, several are a grouped comparison. */
 export function barOption(series: Series[], context: SeriesOptionContext): ChartOption {
   const sharedCount = sharedCountOf(series, context);
+  const base = chrome(series.length);
+  // Every bar carries its amount, written flat: the only cap left is the one on the SERIES —beyond
+  // four, a figure per point stops being read and becomes texture— because the rows are what absorb
+  // the density of the axis, however many periods it draws.
+  const rows = (context.labels ?? true) && series.length > 0 && series.length <= MAX_DIRECT_LABELS;
+  const fit = fitDirectLabel(series[0]?.points.length ?? 0);
   return {
-    ...chrome(series.length),
+    ...base,
+    ...(rows
+      ? {
+          grid: {
+            ...base.grid,
+            top: labelHeadroom(series.length, fit, Number(base.grid?.top ?? 16)),
+          },
+        }
+      : {}),
     xAxis: periodAxis(context),
     yAxis: valueAxis(context.unit),
     tooltip: axisTooltip("shadow", context.unit, context, tooltipCodes(seriesCodes(series))),
-    series: series.map((entry) => barSeries(entry, series.length, context, { sharedCount })),
+    series: series.map((entry, index) =>
+      barSeries(entry, series.length, context, {
+        sharedCount,
+        ...(rows ? { row: { index, fit } } : {}),
+      }),
+    ),
   };
 }
 
@@ -1625,6 +1654,11 @@ function barSeries(
      * total passes them, whose budget is each segment's height and not the axis' cast.
      */
     shares?: readonly (number | null)[];
+    /**
+     * The row of figures this series writes on, when the caller decided that every bar carries its
+     * amount (`barOption`). Absent — a stack, a 100 % stack — the old density budget still rules.
+     */
+    row?: { index: number; fit: LabelFit };
   } = {},
 ): ChartSeries {
   const stacked = options.stacked ?? false;
@@ -1652,11 +1686,21 @@ function barSeries(
     barMaxWidth: CHART_MARK.barMaxWidth,
     emphasis: { focus: "series" },
     label: directLabel(
-      labelsFit(seriesCount, series.points.length, context),
+      options.row ? true : labelsFit(seriesCount, series.points.length, context),
       context.unit,
       stacked ? "inside" : "top",
       options.shares ?? shareLabelFor(series, context, options.sharedCount ?? 0),
+      options.row
+        ? {
+            fontSize: options.row.fit.fontSize,
+            distance: labelDistance(options.row.index, options.row.fit),
+            cents: options.row.fit.cents,
+          }
+        : {},
     ),
+    // The rows already keep one series' figures off the next one's; what `hideOverlap` still drops is
+    // a collision INSIDE a row, which is two adjacent columns of an axis narrower than the fit
+    // assumed. Dropping one there is better than printing the two as a single run of digits.
     labelLayout: { hideOverlap: true },
   };
 }
@@ -1717,6 +1761,11 @@ function directLabel(
   unit: ChartUnit = "moneda",
   position: ChartLabel["position"] = "top",
   shares?: readonly (number | null)[],
+  /**
+   * What the fit decided, when the caller has one (`fitGroupedLabel`): the body, the row it is
+   * written on and whether the cents still fit. Empty is the label as it has always been.
+   */
+  fit: { fontSize?: number; distance?: number; cents?: boolean } = {},
 ): ChartLabel {
   const inside = position === "inside";
   return {
@@ -1724,7 +1773,8 @@ function directLabel(
     position,
     // Ink, never the series color — an inside label sits on a saturated fill, hence `onFill`.
     color: inside ? CHART_INK.onFill : CHART_INK.strong,
-    fontSize: 10.5,
+    fontSize: fit.fontSize ?? 10.5,
+    ...(fit.distance === undefined ? {} : { distance: fit.distance }),
     ...(shares
       ? {
           rich: {
@@ -1741,7 +1791,9 @@ function directLabel(
     formatter: (param) => {
       const amount =
         show && param.value !== null && param.value !== undefined
-          ? formatChartValue(param.value, unit)
+          ? // Without cents it is the AXIS' rounding and not a second one: rounding an amount twice
+            // in the app is how two figures that should be the same end up differing by a cent.
+            (fit.cents === false ? formatAxisValue : formatChartValue)(param.value, unit)
           : "";
       const share = shares?.[param.dataIndex];
       if (share === null || share === undefined) {

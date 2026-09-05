@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHART_MAX_SERIES, CHART_SIGN } from "@/lib/charts/palette";
+import { CHART_MAX_SERIES } from "@/lib/charts/palette";
 import { is3DOption } from "@/lib/charts/types";
 import {
   buildAnnualCard,
@@ -15,7 +15,6 @@ import {
   ALL_MONTHS,
   loadedYears,
   REVENUE_2022,
-  REVENUE_2023,
   REVENUE_2024,
   REVENUE_2026,
   yearInput,
@@ -134,8 +133,9 @@ describe("buildGrowthCard", () => {
     const dollars = buildGrowthCard(input(loadedYears()), "dolares");
     const percent = buildGrowthCard(input(loadedYears()), "porcentaje");
 
-    expect(dollars.option?.series[2].data[0]?.value).toBeCloseTo(155079.71, 2);
-    expect(percent.option?.series[2].data[0]?.value).toBeCloseTo(168.61, 1);
+    // El dato es el valor a secas: sin etiqueta encima, ya no hay nada que colgarle a la marca.
+    expect(dollars.option?.series[2].data[0]).toBeCloseTo(155079.71, 2);
+    expect(percent.option?.series[2].data[0]).toBeCloseTo(168.61, 1);
     // La tabla trae SIEMPRE las dos, con independencia de la unidad del gráfico.
     expect(dollars.table.columns).toEqual(percent.table.columns);
     expect(dollars.table.rows).toEqual(percent.table.rows);
@@ -174,27 +174,98 @@ describe("buildGrowthCard", () => {
   });
 });
 
+describe("cada gráfica del módulo escribe su cifra sobre la marca, tumbada", () => {
+  function wrote(series: { label?: { show: boolean; formatter?: (p: never) => string } }) {
+    const label = series.label;
+    const param = { value: 100_000, name: "Ene", dataIndex: 0 } as never;
+    return label?.show ? (label.formatter?.(param) ?? "") : "";
+  }
+
+  it("«Ventas por año» escribe el total de cada año sobre su barra", () => {
+    const card = buildAnnualCard(input(loadedYears()), "total");
+
+    expect(wrote(card.option?.series[0] ?? {})).toBe("$100,000.00");
+  });
+
+  it("el comparativo NO escribe ninguna: doce cifras tapan la trayectoria que se va a leer", () => {
+    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+    const several = flatComparisonCard(input(loadedYears()));
+
+    expect(one.option?.series.every((serie) => !serie.label?.show)).toBe(true);
+    expect(several.option?.series.every((serie) => !serie.label?.show)).toBe(true);
+    // Y sin cifras arriba la rejilla no gasta margen en alojarlas.
+    expect(one.option?.grid?.top).toBe(16);
+  });
+
+  it("la rejilla abre arriba lo que la fila más alta necesita", () => {
+    // `outerBoundsContain` solo reserva para las etiquetas del EJE: sin esto la cifra de la columna
+    // más alta se recorta contra el borde de la tarjeta.
+    const [ratio] = buildRevenueCards(input(loadedYears())).ratios;
+
+    expect(Number(ratio.option?.grid?.top)).toBeGreaterThan(
+      Number(flatComparisonCard(input(loadedYears())).option?.grid?.top),
+    );
+  });
+
+  it("en las «vs» la cifra del numerador crece HACIA LA DERECHA, no sobre la barra de al lado", () => {
+    // Centrada sobre su barra corta, sus primeros dígitos se imprimían encima de la barra del
+    // denominador, diez veces más alta y justo a su izquierda. Anclar el borde izquierdo es lo que
+    // deja todo lo que ocupa a la derecha de ese relleno; empujarla solo cambiaba de vecino.
+    const [ratio] = buildRevenueCards(input(loadedYears())).ratios;
+    const [denominator, numerator] = ratio.option?.series ?? [];
+
+    expect(numerator.label?.align).toBe("left");
+    expect(numerator.label?.offset?.[1]).toBe(0);
+    // Empieza a la altura del borde izquierdo de su propia barra, no más allá.
+    expect(numerator.label?.offset?.[0]).toBe(-(numerator.barMaxWidth ?? 0) / 2);
+    // La del denominador corona la barra más alta de la tarjeta: nada hay a su lado a esa altura.
+    expect(denominator.label?.align).toBeUndefined();
+  });
+
+  it("el skyline no entra en el trato: una cifra por teja tapa las de detrás", () => {
+    const card = buildComparisonCard(input(loadedYears()), "skyline");
+
+    expect(is3DOption(card.option)).toBe(true);
+  });
+});
+
 describe("buildRatioCard · un solo constructor", () => {
   const descriptor = RATIO_DESCRIPTORS[0];
 
-  it("«Montos» pone las dos series en el MISMO eje de dólares", () => {
-    const card = buildRatioCard(descriptor, input(loadedYears()), "montos");
+  it("las dos series van en el MISMO eje de dólares", () => {
+    const card = buildRatioCard(descriptor, input(loadedYears()));
 
     expect(card.option?.series).toHaveLength(2);
     expect(Array.isArray(card.option?.yAxis)).toBe(false);
     expect(card.option?.yAxis?.type).toBe("value");
   });
 
-  it("«Participación» dibuja una sola serie con el porcentaje", () => {
-    const card = buildRatioCard(descriptor, input(loadedYears()), "participacion");
+  it("la participación se escribe BAJO la cifra del numerador, no en otra gráfica", () => {
+    // Era «Ver como»: el monto o el porcentaje, nunca los dos. Son una sola lectura —«esto es tanto,
+    // y es tanto por ciento de aquello»— y partirla obligaba a sostener una mitad de memoria.
+    const card = buildRatioCard(descriptor, input(loadedYears()));
+    const [denominator, numerator] = card.option?.series ?? [];
 
-    expect(card.option?.series).toHaveLength(1);
-    expect(card.option?.series[0].data[0]).toBeCloseTo(12.89, 1);
+    const written =
+      numerator.label?.formatter?.({ value: 34_558, name: "Ene", dataIndex: 0 }) ?? "";
+    expect(written).toContain("$34,558.00");
+    expect(written).toMatch(/\{share\|12\.9 %\}/);
+    // Y el denominador escribe su monto y nada más: el porcentaje es del numerador.
+    expect(denominator.label?.formatter?.({ value: 268_100, name: "Ene", dataIndex: 0 })).toBe(
+      "$268,100.00",
+    );
+  });
+
+  it("cada serie escribe en SU fila, así que las dos cifras del mes no se disputan una franja", () => {
+    const card = buildRatioCard(descriptor, input(loadedYears()));
+    const [denominator, numerator] = card.option?.series ?? [];
+
+    expect(numerator.label?.distance).toBeGreaterThan(denominator.label?.distance ?? 0);
   });
 
   it("el color sigue a la ENTIDAD: los cobros TC son el mismo en la 3 y en la 4", () => {
-    const asNumerator = buildRatioCard(RATIO_DESCRIPTORS[0], input(loadedYears()), "montos");
-    const asDenominator = buildRatioCard(RATIO_DESCRIPTORS[1], input(loadedYears()), "montos");
+    const asNumerator = buildRatioCard(RATIO_DESCRIPTORS[0], input(loadedYears()));
+    const asDenominator = buildRatioCard(RATIO_DESCRIPTORS[1], input(loadedYears()));
 
     const inCard3 = asNumerator.option?.series.find((serie) => serie.id === "cobros-tc");
     const inCard4 = asDenominator.option?.series.find((serie) => serie.id === "cobros-tc");
@@ -202,7 +273,7 @@ describe("buildRatioCard · un solo constructor", () => {
   });
 
   it("el total de la tabla es el del tramo compartido, no el de la venta entera", () => {
-    const card = buildRatioCard(descriptor, input(loadedYears()), "montos");
+    const card = buildRatioCard(descriptor, input(loadedYears()));
     const total = card.table.rows[card.table.rows.length - 1];
 
     expect(total.label).toBe("Ene–Jun");
@@ -212,7 +283,7 @@ describe("buildRatioCard · un solo constructor", () => {
   });
 
   it("la nota nombra el mes que falta y lo que daría la división ingenua", () => {
-    const card = buildRatioCard(descriptor, input(loadedYears()), "montos");
+    const card = buildRatioCard(descriptor, input(loadedYears()));
 
     expect(card.note).toContain("Julio");
     expect(card.note).toContain("18.0 %");
@@ -222,11 +293,7 @@ describe("buildRatioCard · un solo constructor", () => {
 
   it("sin meses que falten ni años vacíos no hay nota que dar", () => {
     // Comisión sobre cobros, con solo 2026 marcado: sus dos términos cubren los mismos seis meses.
-    const card = buildRatioCard(
-      RATIO_DESCRIPTORS[1],
-      input([yearInput(2026, REVENUE_2026)]),
-      "montos",
-    );
+    const card = buildRatioCard(RATIO_DESCRIPTORS[1], input([yearInput(2026, REVENUE_2026)]));
 
     expect(card.note).toBeUndefined();
   });
@@ -234,23 +301,21 @@ describe("buildRatioCard · un solo constructor", () => {
   it("un año marcado SIN captura se nombra en la nota en vez de ignorarse", () => {
     // Es el caso real: se marcan cuatro años y solo 2026 tiene cifras registradas. Una tarjeta que
     // callara sería indistinguible de una que ignora el filtro de «Año».
-    const card = buildRatioCard(RATIO_DESCRIPTORS[0], input(loadedYears()), "montos");
+    const card = buildRatioCard(RATIO_DESCRIPTORS[0], input(loadedYears()));
 
     expect(card.note).toContain("2022, 2023, 2024");
     expect(card.note).toContain("Registrar datos");
   });
 
   it("cada descriptor produce su tarjeta sin tocar el constructor", () => {
-    const cards = RATIO_DESCRIPTORS.map((entry) =>
-      buildRatioCard(entry, input(loadedYears()), "participacion"),
-    );
+    const cards = RATIO_DESCRIPTORS.map((entry) => buildRatioCard(entry, input(loadedYears())));
 
     expect(cards.map((card) => card.id)).toEqual([
       "cobros-tc-vs-ventas",
       "comision-tc-vs-cobros-tc",
       "facebook-vs-ventas",
     ]);
-    expect(cards.every((card) => card.option?.series.length === 1)).toBe(true);
+    expect(cards.every((card) => card.option?.series.length === 2)).toBe(true);
   });
 });
 
@@ -301,13 +366,9 @@ describe("buildRevenueCards", () => {
   it("sin leyenda el grid recupera el espacio", () => {
     // Un año marcado: no hay nada que separar por color, así que no hay leyenda que alojar.
     const single = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
-    // «Participación» es una sola serie, y su etiqueta ya está en el eje.
-    const share = buildRatioCard(RATIO_DESCRIPTORS[0], input(loadedYears()), "participacion");
 
     expect(single.option?.legend?.show).toBe(false);
     expect(single.option?.grid?.bottom).toBe(8);
-    expect(share.option?.legend?.show).toBe(false);
-    expect(share.option?.grid?.bottom).toBe(8);
   });
 
   it("el grid reserva la altura de las etiquetas del eje", () => {
@@ -368,14 +429,14 @@ describe("buildRatioCard · varios años con datos", () => {
   ];
 
   it("el eje pasa a ser el AÑO cuando varios tienen datos", () => {
-    const card = buildRatioCard(descriptor, input(twoYears), "montos");
+    const card = buildRatioCard(descriptor, input(twoYears));
 
     expect(card.option?.xAxis).toMatchObject({ data: ["2025", "2026"] });
     expect(card.table.rows.map((row) => row.label)).toEqual(["2025", "2026"]);
   });
 
   it("todos los años se miden sobre el tramo que COMPARTEN", () => {
-    const card = buildRatioCard(descriptor, input(twoYears), "montos");
+    const card = buildRatioCard(descriptor, input(twoYears));
 
     // 2025 llega a mayo y 2026 a junio: el tramo común es Ene–May, no Ene–Jun.
     expect(card.subtitle).toContain("Ene–May");
@@ -387,7 +448,7 @@ describe("buildRatioCard · varios años con datos", () => {
   it("el tooltip nombra el tramo, no solo el año", () => {
     // Es donde nace la confusión: la columna dice «2024» pero lleva la cifra de un TRAMO, y el total
     // anual del cajón de captura es otro número.
-    const card = buildRatioCard(descriptor, input(twoYears), "montos");
+    const card = buildRatioCard(descriptor, input(twoYears));
     const head = card.option?.tooltip?.formatter?.([
       { name: "2025", value: 100, dataIndex: 0, seriesName: "Ventas" },
     ]);
@@ -395,15 +456,19 @@ describe("buildRatioCard · varios años con datos", () => {
     expect(head).toContain("2025 · Ene–May");
   });
 
-  it("«Participación» compara el porcentaje de cada año", () => {
-    const card = buildRatioCard(descriptor, input(twoYears), "participacion");
+  it("en el eje de años cada columna trae sus dos montos y su porcentaje", () => {
+    const card = buildRatioCard(descriptor, input(twoYears));
+    const [denominator, numerator] = card.option?.series ?? [];
 
-    expect(card.option?.series).toHaveLength(1);
-    expect(card.option?.series[0].data).toHaveLength(2);
+    expect(denominator.data).toHaveLength(2);
+    expect(numerator.data).toHaveLength(2);
+    expect(numerator.label?.formatter?.({ value: 1, name: "2025", dataIndex: 0 })).toContain(
+      "{share|",
+    );
   });
 
   it("un solo año con datos vuelve al eje de meses", () => {
-    const card = buildRatioCard(descriptor, input(loadedYears()), "montos");
+    const card = buildRatioCard(descriptor, input(loadedYears()));
 
     expect(card.option?.xAxis).toMatchObject({
       data: ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"],
@@ -411,8 +476,8 @@ describe("buildRatioCard · varios años con datos", () => {
   });
 
   it("el color sigue a la entidad también en el eje de años", () => {
-    const months = buildRatioCard(descriptor, input(loadedYears()), "montos");
-    const years = buildRatioCard(descriptor, input(twoYears), "montos");
+    const months = buildRatioCard(descriptor, input(loadedYears()));
+    const years = buildRatioCard(descriptor, input(twoYears));
 
     const inMonths = months.option?.series.find((serie) => serie.id === "cobros-tc");
     const inYears = years.option?.series.find((serie) => serie.id === "cobros-tc");
@@ -445,6 +510,20 @@ describe("el comparativo en tres dimensiones", () => {
     const y2026 = option.series.find((serie) => serie.name === "2026");
     // 2026 llega hasta julio: siete datos, no doce con cinco ceros.
     expect(y2026?.data).toHaveLength(7);
+  });
+
+  it("la cifra de la barra bajo el cursor sale como dinero, no como el dato en crudo", () => {
+    // `echarts-gl` escribe el dato TAL CUAL sobre la barra a la que se apunta si no se le dice otra
+    // cosa: era el único importe de la app que llegaba a pantalla como «39684.6195…».
+    const card = buildComparisonCard(input(loadedYears()), "skyline");
+    const option = card.option;
+    if (option === null || !is3DOption(option)) {
+      throw new Error("se esperaba la forma 3D");
+    }
+    const label = option.series[0].emphasis?.label;
+
+    expect(label?.show).toBe(true);
+    expect(label?.formatter?.({ name: "2022", value: [0, 0, 39_684.6195] })).toBe("$39,684.62");
   });
 
   it("al fondo va el año de la barra MÁS ALTA, no el del total más alto", () => {
@@ -531,29 +610,31 @@ describe("el comparativo en tres dimensiones", () => {
   });
 });
 
-describe("el crecimiento hace explícitas utilidades y pérdidas", () => {
-  it("cada barra lleva glifo, signo y valor cuando caben", () => {
-    const card = buildGrowthCard(
+describe("el crecimiento se lee contra la LÍNEA DE CERO, sin cifras encima", () => {
+  it("ninguna barra escribe su variación: es la línea de cero la que la dice", () => {
+    // Un mes mete una barra por año base en una sola ranura, así que una cifra con signo de unos 90px
+    // o se imprime sobre los rellenos de al lado o se aparta en escalera. Ninguna de las dos se lee
+    // más rápido que la forma que tapan.
+    const one = buildGrowthCard(
       input([yearInput(2026, REVENUE_2026), yearInput(2024, REVENUE_2024)]),
       "dolares",
     );
-    const label = card.option?.series[0].label;
+    const several = buildGrowthCard(input(loadedYears()), "dolares");
 
-    expect(label?.show).toBe(true);
-    // Enero de 2026 contra 2024: +$155,079.71.
-    expect(label?.formatter?.({ name: "Ene", value: 155079.71, dataIndex: 0 })).toContain("▲");
-    expect(label?.formatter?.({ name: "Ene", value: -35288.48, dataIndex: 0 })).toContain("▼");
+    expect(one.option?.series.every((serie) => serie.label === undefined)).toBe(true);
+    expect(several.option?.series.every((serie) => serie.label === undefined)).toBe(true);
+    // Y sin cifras arriba la rejilla no gasta margen en alojarlas.
+    expect(one.option?.grid?.top).toBe(16);
   });
 
-  it("el signo lleva su propia tinta, y la BARRA conserva la del año base", () => {
+  it("las cifras con signo siguen enteras en la tabla, en las DOS unidades", () => {
     const card = buildGrowthCard(input(loadedYears()), "dolares");
-    const serie = card.option?.series[0];
 
-    // La regla de la casa: `positive`/`negative` son el signo de un valor, nunca el color de una serie.
-    expect(serie?.label?.rich?.pos?.color).toBe(CHART_SIGN.positive);
-    expect(serie?.label?.rich?.neg?.color).toBe(CHART_SIGN.negative);
-    expect(serie?.itemStyle?.color).not.toBe(CHART_SIGN.positive);
-    expect(serie?.itemStyle?.color).not.toBe(CHART_SIGN.negative);
+    expect(card.table.columns).toContain("vs 2024 · Δ $");
+    expect(card.table.columns).toContain("vs 2024 · Δ %");
+    expect(card.table.rows.at(-1)?.values.some((value) => String(value).startsWith("+"))).toBe(
+      true,
+    );
   });
 
   it("la línea de cero se dibuja UNA vez, no una por serie", () => {
@@ -572,58 +653,13 @@ describe("el crecimiento hace explícitas utilidades y pérdidas", () => {
     expect(wide.option?.series[0].barMaxWidth).toBe(18);
   });
 
-  it("con UN año base la cifra se dibuja: hay una barra por mes y le pertenece sin ambigüedad", () => {
-    const card = buildGrowthCard(
-      input([yearInput(2024, REVENUE_2024), yearInput(2026, REVENUE_2026)]),
-      "dolares",
-    );
-
-    expect(card.option?.series).toHaveLength(1);
-    expect(card.option?.series[0].label?.show).toBe(true);
-    expect(card.option?.series[0].labelLayout?.hideOverlap).toBe(true);
-  });
-
-  it("con VARIOS años base se calla: dos etiquetas no caben ni se pueden atribuir", () => {
-    // Un mes mete N barras en una sola ranura, así que sus centros quedan a un ancho de barra —unos
-    // 39px— mientras «▼ -$12,287.73» mide unos 90. Y la etiqueta lleva la tinta del SIGNO, no la de
-    // la serie: con dos, nada empareja cada cifra con su barra salvo la posición.
+  it("con VARIOS años base la lectura no cambia: la forma es la misma sin cifras", () => {
     const card = buildGrowthCard(input(loadedYears()), "dolares");
 
     expect(card.option?.series.length).toBeGreaterThan(1);
-    expect(card.option?.series.every((serie) => serie.label?.show === false)).toBe(true);
-    // La línea de cero sigue ahí, y el tooltip y la tabla siguen trayendo las cifras con signo.
+    expect(card.option?.series.every((serie) => serie.label === undefined)).toBe(true);
+    // La línea de cero sigue ahí, que es donde se lee el signo.
     expect(card.option?.series[0].markLine?.data).toEqual([{ yAxis: 0 }]);
-    expect(card.table.columns).toContain("vs 2024 · Δ $");
-    expect(card.table.columns).toContain("vs 2024 · Δ %");
-  });
-
-  it("la etiqueta se coloca por el SIGNO: encima de una subida, debajo de una caída", () => {
-    // `position: "top"` es el borde superior del rectángulo del dato, y una barra que cae va de cero
-    // hacia abajo: su borde superior ES la línea de cero. Con dos años base, dos etiquetas de ~90px
-    // caían a ~20px una de otra a la MISMA altura, y salía «▼ -$4,5▼-$4,52…12,287.73».
-    //
-    // 2024 contra 2023 es el caso con los dos signos: enero cae (−$38,183.31) y marzo sube
-    // (+$62,476.00).
-    const card = buildGrowthCard(
-      input([yearInput(2023, REVENUE_2023), yearInput(2024, REVENUE_2024)]),
-      "dolares",
-    );
-    const data = card.option?.series[0].data;
-
-    expect(data?.[0]?.value).toBeCloseTo(-38183.31, 2);
-    expect(data?.[0]?.label?.position).toBe("bottom");
-    expect(data?.[2]?.value).toBeCloseTo(62476.0, 2);
-    // Una subida se queda con el `position` de la serie, que es «top».
-    expect(data?.[2]?.label?.position).toBeUndefined();
-    expect(card.option?.series[0].label?.position).toBe("top");
-  });
-
-  it("un mes sin dato no discute su posición: no dibuja etiqueta", () => {
-    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1] }), "dolares");
-    const label = card.option?.series[0].label;
-
-    expect(label?.formatter?.({ name: "Ene", value: null, dataIndex: 0 })).toBe("");
-    expect(label?.formatter?.({ name: "Ene", value: 0, dataIndex: 0 })).toBe("");
   });
 
   it("el eje es el tramo COMPARTIDO, no el span marcado: nada de columnas muertas", () => {
@@ -652,7 +688,6 @@ describe("las etiquetas van ESCRITAS, nunca bajadas de caja", () => {
     const card = buildRatioCard(
       comision,
       input([yearInput(2024, REVENUE_2024), yearInput(2026, REVENUE_2026)]),
-      "montos",
     );
 
     expect(card.note).toContain("las comisiones TC");
@@ -660,18 +695,17 @@ describe("las etiquetas van ESCRITAS, nunca bajadas de caja", () => {
   });
 
   it("un nombre propio conserva su mayúscula", () => {
-    const card = buildRatioCard(facebook, input(loadedYears()), "montos");
+    const card = buildRatioCard(facebook, input(loadedYears()));
 
     expect(card.note).toContain("la pauta de Facebook");
     expect(card.note).not.toContain("publicidad facebook");
   });
 
   it("la nota de años sin registrar concuerda con su sujeto", () => {
-    const several = buildRatioCard(facebook, input(loadedYears()), "montos");
+    const several = buildRatioCard(facebook, input(loadedYears()));
     const one = buildRatioCard(
       facebook,
       input([yearInput(2022, REVENUE_2022), yearInput(2026, REVENUE_2026)]),
-      "montos",
     );
 
     // El verbo concuerda con los AÑOS, que es lo que se cuenta; un participio tendría que concordar
@@ -684,11 +718,7 @@ describe("las etiquetas van ESCRITAS, nunca bajadas de caja", () => {
 
 describe("un año sin nada registrado lo dice, no finge un tramo", () => {
   it("el subtítulo nombra la ausencia en vez de componer «Sin meses 2026»", () => {
-    const card = buildRatioCard(
-      RATIO_DESCRIPTORS[0],
-      input([yearInput(2024, REVENUE_2024)]),
-      "montos",
-    );
+    const card = buildRatioCard(RATIO_DESCRIPTORS[0], input([yearInput(2024, REVENUE_2024)]));
 
     expect(card.subtitle).toBe(
       "2024 · sin datos registrados · qué parte de la venta se cobró con tarjeta",
@@ -787,7 +817,6 @@ describe("marcar un semestre no cambia cómo se mide, solo sobre qué", () => {
     const card = buildRatioCard(
       RATIO_DESCRIPTORS[0],
       input([yearInput(2026, REVENUE_2026)], { months: S1 }),
-      "montos",
     );
 
     expect(card.subtitle).toBe("Ene–Jun 2026 · qué parte de la venta se cobró con tarjeta");

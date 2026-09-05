@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHART_NEUTRAL, CHART_PALETTE, CHART_SLICE_SEQUENCE } from "@/lib/charts/palette";
-import { is3DOption, type Chart3DOption } from "@/lib/charts/types";
+import { is3DOption, type Chart3DOption, type ChartParam } from "@/lib/charts/types";
 import {
   buildSalesCards as buildCards,
   PAYER_SLICES,
@@ -477,6 +477,83 @@ describe("barras CON línea en la evolución", () => {
   });
 });
 
+describe("cada columna de la evolución escribe su total, tumbado", () => {
+  function overMonths(years: number[], monthCount: number): SalesCardsInput {
+    const points = Array.from({ length: monthCount }, (_unused, monthIndex) => ({
+      monthIndex,
+      amount: 100 + monthIndex,
+    }));
+    return {
+      reading: readSales([line({ amount: 1 })]),
+      byYear: years.map((year) => ({ year, reading: readSales([line({ amount: 1 })]) })),
+      period: years.join(", "),
+      monthlyByYear: years.map((year) => ({ year, points })),
+    };
+  }
+
+  function seriesOf(input: SalesCardsInput) {
+    return buildSalesCards(input).evolution.option?.series ?? [];
+  }
+
+  function wrote(series: { label?: { show: boolean; formatter?: (p: ChartParam) => string } }) {
+    const label = series.label;
+    return label?.show ? (label.formatter?.({ value: 160, name: "Ene", dataIndex: 0 }) ?? "") : "";
+  }
+
+  it("no calla el total porque el eje traiga doce meses", () => {
+    const [bar] = seriesOf(overMonths([2026], 12));
+
+    expect(wrote(bar)).toBe("$160.00");
+  });
+
+  it("en el apilado lo escribe la LÍNEA del total, nunca las bandas", () => {
+    const months = [
+      month(0, [
+        line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
+        line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+      ]),
+    ];
+    const lines = months[0].lines;
+    const reading = readSales(lines);
+    const series = seriesOf({
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Enero 2026",
+      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026),
+    });
+
+    expect(wrote(series.find((entry) => entry.type === "line") ?? {})).toBe("$160.00");
+    // Cinco cifras subiendo por una columna es como una columna deja de leerse como UN importe.
+    expect(
+      series.filter((entry) => entry.type === "bar").every((entry) => !entry.label?.show),
+    ).toBe(true);
+  });
+
+  it("comparando años, cada uno escribe en SU fila", () => {
+    const bars = seriesOf(overMonths([2025, 2026], 12)).filter((entry) => entry.type === "bar");
+
+    expect(bars).toHaveLength(2);
+    expect(bars[1].label?.distance).toBeGreaterThan(bars[0].label?.distance ?? 0);
+    expect(bars.every((entry) => entry.label?.show)).toBe(true);
+  });
+
+  it("cede el cuerpo según se aprieta el eje, y nunca la cifra", () => {
+    const dense = seriesOf(overMonths([2026], 12))[0];
+    const roomy = seriesOf(overMonths([2026], 4))[0];
+
+    expect(dense.label?.fontSize).toBeLessThan(roomy.label?.fontSize ?? 0);
+    expect(wrote(dense)).not.toBe("");
+  });
+
+  it("le abre sitio a la fila de arriba, que `outerBoundsContain` no reserva", () => {
+    const one = buildSalesCards(overMonths([2026], 12)).evolution.option?.grid?.top;
+    const three = buildSalesCards(overMonths([2024, 2025, 2026], 12)).evolution.option?.grid?.top;
+
+    expect(Number(three)).toBeGreaterThan(Number(one));
+  });
+});
+
 describe("la guía del ⓘ", () => {
   const lines = [line({ amount: 60 }), line({ serviceCode: "\\02", amount: 40 })];
 
@@ -808,6 +885,18 @@ describe("el skyline le da al servicio su propio eje", () => {
     for (const entry of option.series) {
       expect(new Set(entry.data.map((datum) => datum.value[1])).size).toBe(1);
     }
+  });
+
+  it("la cifra de la barra bajo el cursor sale como dinero, no como el dato en crudo", () => {
+    // `echarts-gl` escribe el dato TAL CUAL sobre la barra a la que se apunta si no se le dice otra
+    // cosa: era el único importe de la app que llegaba a pantalla como «39684.6195…».
+    const [serie] = skyline().series;
+    const label = serie.emphasis?.label;
+
+    expect(label?.show).toBe(true);
+    expect(label?.formatter?.({ name: "HONORARIOS", value: [0, 1, 39_684.6195] })).toBe(
+      "$39,684.62",
+    );
   });
 
   it("la serie MAYOR va al fondo, que es lo que evita que tape a las demás", () => {

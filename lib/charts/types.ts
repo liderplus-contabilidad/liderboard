@@ -48,6 +48,18 @@ export interface ChartLabel extends ChartTextStyle {
    */
   position?: "top" | "bottom" | "inside" | "right" | "left" | "outside" | "insideRight";
   distance?: number;
+  /**
+   * `[x, y]` moved off where `position` put it. `distance` only pushes along the position's own
+   * direction —upwards, for a `"top"` label— so a figure that leans sideways over the bar BESIDE it
+   * has no other way of stepping aside.
+   */
+  offset?: [number, number];
+  /**
+   * Which EDGE of the text lands on the anchor point. The default centres it, which is what makes a
+   * label wider than its bar spill equally over both neighbours; `"left"` makes it grow rightwards
+   * from the anchor instead, so it can only ever cover empty plot.
+   */
+  align?: "left" | "center" | "right";
   formatter?: (param: ChartParam) => string;
   /**
    * Named styles a formatter can apply per fragment with `{nombre|texto}`. The ONE reason it is
@@ -471,7 +483,7 @@ export interface Chart3DSeries {
    */
   shading?: "color" | "lambert" | "realistic";
   itemStyle?: ChartItemStyle;
-  emphasis?: { itemStyle?: ChartItemStyle; label?: { show?: boolean } };
+  emphasis?: { itemStyle?: ChartItemStyle; label?: Chart3DLabel };
   /** A hair of bevel reads as a solid; more than that eats a short bar's height. */
   bevelSize?: number;
   bevelSmoothness?: number;
@@ -480,6 +492,27 @@ export interface Chart3DSeries {
   /** A real zero still draws a tile: it is a figure the file asserted, not an absence. */
   minHeight?: number;
   animationDurationUpdate?: number;
+}
+
+/**
+ * A figure written ON a 3D bar — the hovered one, which is the only case the app uses.
+ *
+ * It is not `ChartLabel`: `echarts-gl` nests every type property under `textStyle` and draws the
+ * label in its own box, so the two shapes have almost nothing in common but the name. And it is not
+ * optional to configure: left alone, gl prints the raw datum, which is the one figure in the app
+ * that would come out as «39684.6195…» instead of as money.
+ */
+export interface Chart3DLabel {
+  show?: boolean;
+  distance?: number;
+  formatter?: (param: Chart3DParam) => string;
+  textStyle?: ChartTextStyle & {
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
+    borderRadius?: number;
+    padding?: [number, number];
+  };
 }
 
 /** What a 3D tooltip's formatter receives: `value` is the whole triple, not a scalar. */

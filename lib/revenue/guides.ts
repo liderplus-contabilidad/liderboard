@@ -38,14 +38,10 @@ export function ratioGuide(numerator: string, denominator: string): ChartGuide {
   return {
     purpose: `Qué parte de ${denominator} representa ${numerator}, mes a mes y en el periodo.`,
     actions: [
-      {
-        control: "Ver como",
-        effect: "los dos montos en dólares, o la participación en porcentaje",
-      },
       { control: "Mes", effect: "acota el tramo que se lee" },
       { control: "Registrar datos", effect: "abre el cajón donde se escriben las cifras del mes" },
     ],
-    reading: `Un mes solo entra en el porcentaje si tiene ${numerator} y ${denominator}: un mes con venta y sin registrar queda fuera del cálculo, no cuenta como cero.`,
+    reading: `Las dos barras son dólares sobre el mismo eje, y bajo la cifra de ${numerator} va qué parte de ${denominator} representa. Un mes solo entra en ese porcentaje si tiene ${numerator} y ${denominator}: un mes con venta y sin registrar queda fuera del cálculo, no cuenta como cero.`,
   };
 }
 

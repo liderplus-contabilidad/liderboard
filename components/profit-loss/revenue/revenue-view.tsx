@@ -10,7 +10,7 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import type { AnnualShape, ComparisonShape, GrowthUnit, RatioShape } from "@/lib/revenue/cards";
+import type { AnnualShape, ComparisonShape, GrowthUnit } from "@/lib/revenue/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { RevenueCapturePanel } from "./revenue-capture-panel";
 import { RevenueDataProvider, useRevenueData } from "./revenue-data-provider";
@@ -35,12 +35,6 @@ const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
 const ANNUAL_SHAPES: { value: AnnualShape; label: string }[] = [
   { value: "total", label: "Total" },
   { value: "promedio", label: "Promedio mensual" },
-];
-
-/** «Ver como» — a ratio card's shape. */
-const RATIO_SHAPES: { value: RatioShape; label: string }[] = [
-  { value: "montos", label: "Montos" },
-  { value: "participacion", label: "Participación" },
 ];
 
 /**
@@ -74,8 +68,6 @@ function RevenueContent() {
     setComparisonShape,
     annualShape,
     setAnnualShape,
-    ratioShape,
-    setRatioShape,
   } = useRevenueData();
   const [captureOpen, setCaptureOpen] = useState(false);
 
@@ -285,19 +277,14 @@ function RevenueContent() {
                 </div>
               ) : (
                 cards.ratios.map((card) => (
+                  /* Sin «Ver como»: el monto y su participación ya se leen en la misma gráfica —
+                     la barra del numerador escribe debajo de su cifra qué parte es de la de al
+                     lado—, así que no queda una segunda forma entre la que elegir. */
                   <ChartCard
                     key={card.id}
                     {...card}
                     collapsed={isCollapsed(card.id)}
                     onToggleCollapsed={() => toggle(card.id)}
-                    headerSlot={
-                      <HeaderChoice
-                        label="Ver como"
-                        value={ratioShape(card.id)}
-                        options={RATIO_SHAPES}
-                        onChange={(shape) => setRatioShape(card.id, shape)}
-                      />
-                    }
                   />
                 ))
               )}

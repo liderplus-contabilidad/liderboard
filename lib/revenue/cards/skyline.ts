@@ -75,7 +75,27 @@ export function skylineOption(
     bevelSmoothness: 2,
     minHeight: 1.2,
     barSize,
-    emphasis: { itemStyle: { borderColor: CHART_INK.strong, borderWidth: 1 } },
+    emphasis: {
+      itemStyle: { borderColor: CHART_INK.strong, borderWidth: 1 },
+      // `echarts-gl` writes the RAW datum on the hovered bar unless told otherwise, so the one
+      // figure of this app that reached the screen as «39684.6195…» was this one. It goes through
+      // the same formatter as every other amount —comma thousands, two decimals— and it is drawn on
+      // the card's own surface, which is the tooltip's chrome and not gl's default box.
+      label: {
+        show: true,
+        formatter: (param) => money(param.value[2]),
+        textStyle: {
+          color: CHART_INK.strong,
+          fontSize: 11.5,
+          fontFamily: CHART_FONT,
+          backgroundColor: CHART_SURFACE,
+          borderColor: CHART_LINES.axis,
+          borderWidth: 1,
+          borderRadius: 4,
+          padding: [4, 6],
+        },
+      },
+    },
     data: axis.flatMap((month, index) => {
       const value = entry.monthly[month];
       return value === null

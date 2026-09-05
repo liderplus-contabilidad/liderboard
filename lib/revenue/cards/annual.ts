@@ -26,6 +26,8 @@ import {
   baseOption,
   categoryAxis,
   currencyAxis,
+  directLabel,
+  fitDirectLabel,
   legendFor,
   money,
   moneyOrDash,
@@ -49,6 +51,10 @@ export function buildAnnualCard(input: RevenueCardsInput, shape: AnnualShape): C
   const years = drawn.map((entry) => entry.year);
   const asAverage = shape === "promedio";
 
+  // One column per year and one series, so the figure over each bar has the whole strip to itself:
+  // four years give it 250 px where it needs sixty.
+  const fit = fitDirectLabel(years.length);
+
   const series: ChartSeries[] = [
     {
       id: shape,
@@ -61,6 +67,9 @@ export function buildAnnualCard(input: RevenueCardsInput, shape: AnnualShape): C
         itemStyle: { color: yearColor(entry.year, years), borderRadius: ROUND_TOP },
       })),
       barMaxWidth: CHART_MARK.barMaxWidth,
+      // The year as ONE figure is what this card exists for, so it is written on the bar and not left
+      // to a hover: «Ver como» moves which figure it is, never whether it is there.
+      ...directLabel(fit),
     },
   ];
 
@@ -80,6 +89,7 @@ export function buildAnnualCard(input: RevenueCardsInput, shape: AnnualShape): C
               currencyAxis(),
               // One series: a legend would name the shape the header's own control already names.
               legendFor(false),
+              { rows: 1, fit },
             ),
             tooltip: axisTooltip(money),
             series,

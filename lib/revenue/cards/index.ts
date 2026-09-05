@@ -30,7 +30,7 @@ import {
   type ComparisonShape,
 } from "./comparison";
 import { buildGrowthCard, DEFAULT_GROWTH_UNIT, growthOf, type GrowthUnit } from "./growth";
-import { buildRatioCard, DEFAULT_RATIO_SHAPE, type RatioShape } from "./ratio";
+import { buildRatioCard } from "./ratio";
 
 export { ANNUAL_CARD_ID, buildAnnualCard, DEFAULT_ANNUAL_SHAPE, type AnnualShape } from "./annual";
 export {
@@ -42,7 +42,7 @@ export {
   type ComparisonShape,
 } from "./comparison";
 export { buildGrowthCard, DEFAULT_GROWTH_UNIT, GROWTH_CARD_ID, type GrowthUnit } from "./growth";
-export { buildRatioCard, DEFAULT_RATIO_SHAPE, type RatioShape } from "./ratio";
+export { buildRatioCard } from "./ratio";
 /** Re-exported from its home in `types.ts`, so `@/lib/revenue/cards` keeps being where a consumer
  *  finds it. It lives there and not here because all five builders need it and importing it back
  *  from this file —which imports them— would be a cycle. */
@@ -51,8 +51,6 @@ export type { RevenueCardsInput } from "../types";
 export interface RevenueCardsOptions {
   /** The screen's «Ver en»; the paper prints both and passes neither. */
   growthUnit?: GrowthUnit;
-  /** The screen's «Ver como», per card id. */
-  ratioShape?: (cardId: string) => RatioShape;
   /** The comparison's «Ver como». Omitted, it is flat — see `DEFAULT_COMPARISON_SHAPE`. */
   comparisonShape?: ComparisonShape;
   /** The annual card's «Ver como». Omitted, it is the total. */
@@ -86,11 +84,8 @@ export function buildRevenueCards(
   input: RevenueCardsInput,
   options: RevenueCardsOptions = {},
 ): RevenueCards {
-  const shapeOf = options.ratioShape ?? (() => DEFAULT_RATIO_SHAPE);
   const ratios = input.canCapture
-    ? RATIO_DESCRIPTORS.map((descriptor) =>
-        buildRatioCard(descriptor, input, shapeOf(descriptor.id)),
-      )
+    ? RATIO_DESCRIPTORS.map((descriptor) => buildRatioCard(descriptor, input))
     : [];
 
   return {
@@ -99,8 +94,7 @@ export function buildRevenueCards(
     annual: buildAnnualCard(input, options.annualShape ?? DEFAULT_ANNUAL_SHAPE),
     growth: buildGrowthCard(input, options.growthUnit ?? DEFAULT_GROWTH_UNIT),
     ratios,
-    // Every one of them has nothing to draw: the shape is not the question, so it holds whichever
-    // «Ver como» each card happens to be in.
+    // Every one of them has nothing to draw.
     ratiosIdle: ratios.length > 0 && ratios.every((card) => card.option === null),
   };
 }

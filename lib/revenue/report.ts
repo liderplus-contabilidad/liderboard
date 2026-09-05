@@ -67,15 +67,9 @@ export function buildRevenueReport(input: BuildRevenueReportInput): RevenueRepor
 
   if (input.canCapture) {
     for (const descriptor of RATIO_DESCRIPTORS) {
-      // BOTH shapes, for the same reason.
-      sections.push({
-        id: `${descriptor.id}-montos`,
-        card: buildRatioCard(descriptor, input, "montos"),
-      });
-      sections.push({
-        id: `${descriptor.id}-participacion`,
-        card: buildRatioCard(descriptor, input, "participacion"),
-      });
+      // ONE section and no longer two: the card draws the two amounts and writes the participation
+      // over the numerator's bar, so there is no second shape left for the paper to print.
+      sections.push({ id: descriptor.id, card: buildRatioCard(descriptor, input) });
     }
   }
 

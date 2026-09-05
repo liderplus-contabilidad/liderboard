@@ -7,8 +7,16 @@
  *
  * Nothing here divides either: `ratio.ts` (the sibling one directory up, `../ratio`) is THE
  * definition of a share and this file asks it.
+ *
+ * **There is no «Ver como» here any more, and that is the point.** The card used to offer two shapes
+ * —the two amounts in dollars, or the participation in percent— and they were never two readings: the
+ * question this card asks is «qué parte de aquello es esto», which is an amount AND its percentage at
+ * once. Split across a switch, whichever half was on screen had to be read against the other half
+ * held in the reader's head, and the percentage's own axis silently rescaled between the two. Now the
+ * two amounts are drawn —they are commensurable, which is why one `yAxis` carries both— and the
+ * numerator's bar writes its share under its figure, in fainter ink. One chart, both halves, no
+ * second scale.
  */
-import { CHART_MARK } from "@/lib/charts/palette";
 import type { ChartCardSpec, ChartSeries, ChartTable, ChartTableRow } from "@/lib/charts/types";
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { pluralize } from "@/lib/format";
@@ -28,20 +36,16 @@ import {
   baseOption,
   categoryAxis,
   currencyAxis,
+  directLabel,
+  fitDirectLabel,
   legendFor,
   money,
   moneyOrDash,
   percent,
-  percentAxis,
   percentOrDash,
   ROUND_TOP,
   seriesColor,
 } from "./chrome";
-
-/** «Ver como» — a ratio card's SHAPE. */
-export type RatioShape = "montos" | "participacion";
-
-export const DEFAULT_RATIO_SHAPE: RatioShape = "montos";
 
 /** One marked year's reading of this ratio, with the series it was read from. */
 interface RatioYear {
@@ -66,7 +70,6 @@ interface RatioYear {
 export function buildRatioCard(
   descriptor: RatioDescriptor,
   input: RevenueCardsInput,
-  shape: RatioShape,
 ): ChartCardSpec {
   const years: RatioYear[] = input.years.map((year) => {
     const numerator = scopeToMonths(seriesOf(year, descriptor.numerator), input.months);
@@ -80,8 +83,8 @@ export function buildRatioCard(
     .map((entry) => entry.year);
 
   return withData.length > 1
-    ? ratioAcrossYears(descriptor, withData, idle, shape)
-    : ratioAcrossMonths(descriptor, withData[0] ?? years[years.length - 1], idle, shape, input);
+    ? ratioAcrossYears(descriptor, withData, idle)
+    : ratioAcrossMonths(descriptor, withData[0] ?? years[years.length - 1], idle, input);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,36 +92,33 @@ export function buildRatioCard(
 // ---------------------------------------------------------------------------
 
 /**
- * The three columns a ratio card can draw, whichever its axis is.
+ * The three columns a ratio card draws, whichever its axis is.
  *
- * `montos` puts the two series on the SAME dollar axis — they are commensurable, which is exactly why
- * no second `yAxis` is needed (and the type forbids one). `participacion` draws the percentage in the
- * NUMERATOR's colour. The colour follows the ENTITY in both shapes and in both axes, so «cobros con
- * tarjeta» is the same orange being numerator here and denominator in the card below.
+ * The two amounts go on the SAME dollar axis — they are commensurable, which is exactly why no second
+ * `yAxis` is needed (and the type forbids one). `share` is not a third bar: it is written under the
+ * numerator's figure, so the percentage rides the very bar it is the percentage OF. The colour
+ * follows the ENTITY on both axes, so «cobros con tarjeta» is the same orange being numerator here
+ * and denominator in the card below.
  */
 interface RatioColumns {
   share: (number | null)[];
   numerator: (number | null)[];
   denominator: (number | null)[];
-  /**
-   * Two widths, because the two shapes carry a different number of bars per category: `participacion`
-   * draws ONE and can take the house maximum, `montos` draws two side by side and has to leave room
-   * for its pair. Wider on the year axis, where there are at most a handful of columns.
-   */
-  barMaxWidth: { share: number; amounts: number };
+  /** Two bars side by side per category, so each has to leave room for its pair. Wider on the year
+   *  axis, where there are at most a handful of columns. */
+  barMaxWidth: number;
 }
 
 /**
  * The card, assembled once for both axes.
  *
  * The two readings differ in what goes ON the axis and in how the note is worded, and in NOTHING
- * else: the same two shapes, the same colours, the same chrome, the same `option`/`table`/`note`
- * shape. Building that twice is how one axis quietly grew a legend the other did not, so each caller
- * now contributes only its labels, its columns and its own sentences.
+ * else: the same two bars, the same colours, the same chrome, the same `option`/`table`/`note` shape.
+ * Building that twice is how one axis quietly grew a legend the other did not, so each caller now
+ * contributes only its labels, its columns and its own sentences.
  */
 function assembleRatioCard(
   descriptor: RatioDescriptor,
-  shape: RatioShape,
   parts: {
     labels: string[];
     columns: RatioColumns;
@@ -130,36 +130,39 @@ function assembleRatioCard(
     tooltipSpan?: string;
   },
 ): ChartCardSpec {
-  const asShare = shape === "participacion";
-  const series: ChartSeries[] = asShare
-    ? [
-        {
-          id: descriptor.numerator,
-          name: descriptor.shareLabel,
-          type: "bar",
-          data: parts.columns.share,
-          itemStyle: { color: seriesColor(descriptor.colorSlot), borderRadius: ROUND_TOP },
-          barMaxWidth: parts.columns.barMaxWidth.share,
-        },
-      ]
-    : [
-        {
-          id: descriptor.denominator,
-          name: SERIES_LABELS[descriptor.denominator],
-          type: "bar",
-          data: parts.columns.denominator,
-          itemStyle: { color: seriesColor(descriptor.denominator), borderRadius: ROUND_TOP },
-          barMaxWidth: parts.columns.barMaxWidth.amounts,
-        },
-        {
-          id: descriptor.numerator,
-          name: SERIES_LABELS[descriptor.numerator],
-          type: "bar",
-          data: parts.columns.numerator,
-          itemStyle: { color: seriesColor(descriptor.numerator), borderRadius: ROUND_TOP },
-          barMaxWidth: parts.columns.barMaxWidth.amounts,
-        },
-      ];
+  // The two amounts share the axis, so a figure per bar is TWO rows — the denominator on the first,
+  // the numerator on the second — and the numerator's carries the share underneath it. That is where
+  // the percentage belongs: on the bar it is the percentage OF, and not on a chart of its own the
+  // reader has to switch to.
+  const fit = fitDirectLabel(parts.labels.length);
+  // The NUMERATOR's figure is the one with a problem, and it is not the category before it: the bar
+  // immediately to its left is the denominator's, an order of magnitude taller, so a label centred on
+  // the short bar printed its first digits across that fill. Anchoring its left edge to its own bar's
+  // left edge is what keeps every pixel it occupies to the right of that fill.
+  //
+  // The denominator's stays centred: it crowns the tallest bar of the card, with nothing beside it at
+  // that height.
+  const startAt = -parts.columns.barMaxWidth / 2;
+  const series: ChartSeries[] = [
+    {
+      id: descriptor.denominator,
+      name: SERIES_LABELS[descriptor.denominator],
+      type: "bar",
+      data: parts.columns.denominator,
+      itemStyle: { color: seriesColor(descriptor.denominator), borderRadius: ROUND_TOP },
+      barMaxWidth: parts.columns.barMaxWidth,
+      ...directLabel(fit),
+    },
+    {
+      id: descriptor.numerator,
+      name: SERIES_LABELS[descriptor.numerator],
+      type: "bar",
+      data: parts.columns.numerator,
+      itemStyle: { color: seriesColor(descriptor.numerator), borderRadius: ROUND_TOP },
+      barMaxWidth: parts.columns.barMaxWidth,
+      ...directLabel(fit, { row: 1, shares: parts.columns.share, startAt }),
+    },
+  ];
 
   const notes = parts.notes.filter((note): note is string => note !== null);
 
@@ -171,10 +174,13 @@ function assembleRatioCard(
       ? {
           ...baseOption(
             categoryAxis(parts.labels),
-            asShare ? percentAxis() : currencyAxis(),
-            legendFor(!asShare),
+            currencyAxis(),
+            legendFor(true),
+            // Three lines over the tallest column: the denominator's row, the numerator's, and the
+            // share written under it.
+            { rows: 3, fit },
           ),
-          tooltip: axisTooltip(asShare ? percent : money, parts.tooltipSpan),
+          tooltip: axisTooltip(money, parts.tooltipSpan),
           series,
         }
       : null,
@@ -199,7 +205,6 @@ function ratioAcrossMonths(
   descriptor: RatioDescriptor,
   entry: RatioYear | undefined,
   idle: readonly number[],
-  shape: RatioShape,
   input: RevenueCardsInput,
 ): ChartCardSpec {
   const axis = [...input.months].sort((a, b) => a - b);
@@ -207,13 +212,13 @@ function ratioAcrossMonths(
   const reading = entry?.reading ?? readRatio([], []);
   const span = monthSpanLabel(reading.sharedMonths);
 
-  return assembleRatioCard(descriptor, shape, {
+  return assembleRatioCard(descriptor, {
     labels,
     columns: {
       share: axis.map((month) => reading.points[month]?.percent ?? null),
       numerator: axis.map((month) => reading.points[month]?.numerator ?? null),
       denominator: axis.map((month) => reading.points[month]?.denominator ?? null),
-      barMaxWidth: { share: CHART_MARK.barMaxWidth, amounts: 18 },
+      barMaxWidth: 18,
     },
     covered: reading.sharedMonths.length > 0,
     // The subtitle names the span the PERCENTAGE was measured over, which may be shorter than the
@@ -248,7 +253,6 @@ function ratioAcrossYears(
   descriptor: RatioDescriptor,
   years: readonly RatioYear[],
   idle: readonly number[],
-  shape: RatioShape,
 ): ChartCardSpec {
   const common = sharedAcrossYears(years);
   // Re-read over the common span: what each year contributes has to be measured on the same months as
@@ -270,13 +274,13 @@ function ratioAcrossYears(
   const amountOf = (reading: RatioReading, pick: "numeratorTotal" | "denominatorTotal") =>
     reading.sharedMonths.length > 0 ? reading[pick] : null;
 
-  return assembleRatioCard(descriptor, shape, {
+  return assembleRatioCard(descriptor, {
     labels,
     columns: {
       share: compared.map((entry) => entry.reading.percent),
       numerator: compared.map((entry) => amountOf(entry.reading, "numeratorTotal")),
       denominator: compared.map((entry) => amountOf(entry.reading, "denominatorTotal")),
-      barMaxWidth: { share: CHART_MARK.barMaxWidth, amounts: 28 },
+      barMaxWidth: 28,
     },
     covered,
     subtitle: `${labels.join(", ")} · ${span ?? "sin tramo común"} · ${descriptor.question}`,

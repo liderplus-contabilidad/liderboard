@@ -12,12 +12,10 @@ import {
   buildRevenueCards,
   DEFAULT_ANNUAL_SHAPE,
   DEFAULT_GROWTH_UNIT,
-  DEFAULT_RATIO_SHAPE,
   readRevenueSummary,
   type AnnualShape,
   type ComparisonShape,
   type GrowthUnit,
-  type RatioShape,
   type RevenueCards,
   type RevenueCardsInput,
   type RevenueSummary,
@@ -99,8 +97,6 @@ interface RevenueDataValue {
   /** The annual card's «Ver como» — el total del tramo, o el promedio mensual. */
   annualShape: AnnualShape;
   setAnnualShape: (shape: AnnualShape) => void;
-  ratioShape: (cardId: string) => RatioShape;
-  setRatioShape: (cardId: string, shape: RatioShape) => void;
   toggleYear: (year: number) => void;
   clearYears: () => void;
   toggleMonth: (monthIndex: number) => void;
@@ -135,7 +131,6 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
   const [growthUnit, setGrowthUnit] = useState<GrowthUnit>(DEFAULT_GROWTH_UNIT);
   const [comparisonShape, setComparisonShape] = useState<ComparisonShape>("plano");
   const [annualShape, setAnnualShape] = useState<AnnualShape>(DEFAULT_ANNUAL_SHAPE);
-  const [shapes, setShapes] = useState<Record<string, RatioShape>>({});
   const [captureYearRaw, setCaptureYear] = useState<number | null>(null);
 
   const canCapture = canCaptureExternal({ sourceSystemId, isConsolidated });
@@ -268,14 +263,9 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
     return { years: inputs, months: period, period: periodName, canCapture };
   }, [revenueByYear, externalByYear, filters.years, period, periodName, canCapture]);
 
-  const ratioShape = useCallback(
-    (cardId: string) => shapes[cardId] ?? DEFAULT_RATIO_SHAPE,
-    [shapes],
-  );
-
   const cards = useMemo(
-    () => buildRevenueCards(cardsInput, { growthUnit, ratioShape, comparisonShape, annualShape }),
-    [cardsInput, growthUnit, ratioShape, comparisonShape, annualShape],
+    () => buildRevenueCards(cardsInput, { growthUnit, comparisonShape, annualShape }),
+    [cardsInput, growthUnit, comparisonShape, annualShape],
   );
   const summary = useMemo(() => readRevenueSummary(cardsInput), [cardsInput]);
 
@@ -364,8 +354,6 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       setComparisonShape,
       annualShape,
       setAnnualShape,
-      ratioShape,
-      setRatioShape: (cardId, shape) => setShapes((current) => ({ ...current, [cardId]: shape })),
       ...marks,
       captureYear,
       setCaptureYear,
@@ -389,7 +377,6 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       growthUnit,
       comparisonShape,
       annualShape,
-      ratioShape,
       captureYear,
       captureSeries,
       captureRevenue,
