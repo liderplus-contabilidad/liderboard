@@ -1,14 +1,22 @@
 "use client";
 
-import { EyeOff } from "lucide-react";
+import { AlertTriangle, EyeOff, Trash2 } from "lucide-react";
 import { useCallback } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
+import { PersonnelCostCapture } from "./personnel-cost-capture";
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 import { PersonnelCostGrid } from "./personnel-cost-grid";
 
 /**
- * The Datos tab: the comparativo, whole, and the control that only it can use.
+ * The Datos tab: **the open exercise's table, and only its own**.
+ *
+ * Which of the two shapes is drawn is decided by the year the strip above has open, and never by a
+ * control: a year the estado de resultados answers has twenty-one accounts under three groups, so it
+ * gets the comparativo whole; a year somebody typed has four lines, so it gets those four. Drawing
+ * both at once would put a table of twenty-one rows above a table of four that says the same thing at
+ * another resolution, and the reader would spend the page working out which of the two to believe.
  *
  * **There are no tiles here.** The table already closes on every total and every percentage it
  * computes, and putting them again in four boxes above it would be saying the same number twice on one
@@ -20,8 +28,19 @@ import { PersonnelCostGrid } from "./personnel-cost-grid";
  * where it leaves a chip. Only the grid has rows to hide.
  */
 export function PersonnelCostDatosView() {
-  const { grid, reading, hideEmptyRows, setHideEmptyRows, periodName, saveFamily } =
-    usePersonnelCostData();
+  const {
+    grid,
+    reading,
+    hideEmptyRows,
+    setHideEmptyRows,
+    periodName,
+    saveFamily,
+    saveFamilyBlock,
+    captureYear,
+    captureFromPyg,
+    typedMonthsIn,
+    removeCaptureYear,
+  } = usePersonnelCostData();
 
   const onCapture = useCallback(
     (year: number, monthIndex: number, amount: number | null) => {
@@ -30,12 +49,34 @@ export function PersonnelCostDatosView() {
     [saveFamily],
   );
 
+  const onPasteCapture = useCallback(
+    (year: number, months: readonly { monthIndex: number; amount: number | null }[]) => {
+      void saveFamilyBlock(year, months);
+    },
+    [saveFamilyBlock],
+  );
+
   // Reported ONCE for the whole reading and not per year: a code missing from the plan is missing from
   // every exercise of the same client, so repeating it per year would be the same warning three times.
   const missing = [...new Set(reading.years.flatMap((year) => year.missingCodes))];
 
+  // A TYPED exercise is written and read in the same four-line table; nothing else belongs on the
+  // page while it is open.
+  if (!captureFromPyg) {
+    return (
+      <div className="px-7 py-5">
+        <PersonnelCostCapture />
+      </div>
+    );
+  }
+
+  // What a year that PyG answers may still be carrying: figures typed before the estado de resultados
+  // arrived. They are NOT read any more, and saying so is the only honest thing — with a way out
+  // beside it, because otherwise they would sit in the database unreachable.
+  const orphaned = typedMonthsIn(captureYear);
+
   return (
-    <div className="px-7 py-5">
+    <div className="flex flex-col gap-4 px-7 py-5">
       <section className="flex min-w-0 flex-col overflow-hidden rounded-[13px] border border-border bg-surface">
         <header className="flex items-start justify-between gap-2.5 border-b border-border px-[18px] py-[11px]">
           <div className="min-w-0">
@@ -65,7 +106,7 @@ export function PersonnelCostDatosView() {
           </button>
         </header>
 
-        <PersonnelCostGrid grid={grid} onCapture={onCapture} />
+        <PersonnelCostGrid grid={grid} onCapture={onCapture} onPasteCapture={onPasteCapture} />
 
         <footer className="border-t border-border-soft px-[18px] py-3 text-[11.5px] leading-snug text-faint">
           {/* Said where it can be acted on: the highlighted row is the one figure the estado de
@@ -74,7 +115,8 @@ export function PersonnelCostDatosView() {
           La fila resaltada es la única que se escribe: la nómina de la familia sale de{" "}
           <span className="font-mono text-[11px]">5.5.01.01</span> y entra en «Administración
           (Familia Durán)», así que el par siempre suma lo que trajo el archivo. Se guarda al salir
-          de la celda; vaciarla la borra.
+          de la celda; vaciarla la borra. También acepta una fila pegada desde Excel: cae desde la
+          celda donde esté el cursor hacia la derecha, y se salta los meses sin cargar.
           {missing.length > 0 && (
             <>
               {" "}
@@ -86,6 +128,25 @@ export function PersonnelCostDatosView() {
           )}
         </footer>
       </section>
+
+      {orphaned > 0 && (
+        <p className="flex items-center justify-between gap-3 rounded-[13px] border border-warning/40 bg-warning/10 px-[18px] py-3 text-[12.5px] leading-[1.5] text-ink">
+          <span>
+            <AlertTriangle size={14} className="mr-1.5 inline align-[-2px] text-warning" />
+            {captureYear} tiene {orphaned} {orphaned === 1 ? "mes escrito" : "meses escritos"} a
+            mano de antes de que llegara el estado de resultados. La pantalla lee el estado de
+            resultados, así que esas cifras ya no se usan.
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Trash2 size={14} />}
+            onClick={() => void removeCaptureYear(captureYear)}
+          >
+            Borrarlas
+          </Button>
+        </p>
+      )}
     </div>
   );
 }

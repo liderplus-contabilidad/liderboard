@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PERSONNEL_ACCOUNT_CODES, PERSONNEL_CONCEPTS } from "./accounts";
 import { readPersonnelCost, readPersonnelYear, shareOf, sumOf } from "./derive";
+import { emptyLegacySeries, legacyCoverage } from "./legacy";
+import { emptyFamilySeries, type PersonnelCostYearInput } from "./types";
 import {
   GOLDEN_CONCEPT_TOTALS,
   GOLDEN_COVERAGE,
@@ -206,5 +208,89 @@ describe("El mapa", () => {
   it("lee veinte cuentas para veintiún conceptos: una es capturada", () => {
     expect(PERSONNEL_CONCEPTS).toHaveLength(21);
     expect(PERSONNEL_ACCOUNT_CODES).toHaveLength(20);
+  });
+});
+
+describe("Un ejercicio TIPEADO entra como un año más", () => {
+  const legacy = () => {
+    const series = emptyLegacySeries();
+    series["afiliado-personal"][0] = 1000;
+    series["afiliado-familia"][0] = 500;
+    series["factura-familia"][0] = 250;
+    series.externos[0] = 2000;
+    series["afiliado-personal"][1] = 1100;
+    return series;
+  };
+
+  /** Lo que «Reportería de ingresos» tiene escrito para ese año, mes a mes. */
+  const ventas = Array.from({ length: 12 }, (_, month) =>
+    month === 0 ? 10000 : month === 1 ? 12000 : 0,
+  );
+
+  const typedYear = (): PersonnelCostYearInput => ({
+    year: 2019,
+    coverage: legacyCoverage(legacy()),
+    accounts: new Map(),
+    revenue: ventas,
+    family: emptyFamilySeries(),
+    legacy: legacy(),
+  });
+
+  it("no tiene grupos, y eso es lo que dice de qué forma es", () => {
+    const year = readPersonnelYear(typedYear(), [0, 1]);
+    expect(year.groups).toEqual([]);
+    expect(year.legacyRows.map((row) => row.row.id)).toEqual([
+      "afiliado-personal",
+      "afiliado-familia",
+      "factura-familia",
+      "externos",
+    ]);
+  });
+
+  it("las dos secciones y el total salen de las cuatro líneas", () => {
+    const year = readPersonnelYear(typedYear(), [0, 1]);
+    const section = (id: string) => year.sections.find((entry) => entry.section.id === id);
+    expect(section("planta")?.total).toBe(2850);
+    expect(section("externos")?.total).toBe(2000);
+    expect(year.total).toBe(4850);
+  });
+
+  it("el porcentaje sale de las ventas que resuelve el provider, no de una guardada aquí", () => {
+    const year = readPersonnelYear(typedYear(), [0, 1]);
+    expect(year.revenue).toBe(22000);
+    // 4,850 de 22,000 = 22.045 %
+    expect(year.share).toBeCloseTo(22.045, 3);
+    const planta = year.sections.find((entry) => entry.section.id === "planta");
+    expect(planta?.share).toBeCloseTo((2850 / 22000) * 100, 3);
+  });
+
+  it("las ventas no son un costo: no entran en ninguna sección ni en el total", () => {
+    const year = readPersonnelYear(typedYear(), [0, 1]);
+    expect(year.total).toBe(4850);
+    expect(year.legacyRows.map((row) => row.row.id)).not.toContain("ventas");
+  });
+
+  it("sin ventas en ninguna parte el porcentaje es null y NUNCA cero", () => {
+    const year = readPersonnelYear(
+      { ...typedYear(), revenue: Array.from({ length: 12 }, () => 0) },
+      [0, 1],
+    );
+    expect(year.revenue).toBe(0);
+    expect(year.share).toBeNull();
+    expect(year.sections.every((entry) => entry.share === null)).toBe(true);
+  });
+
+  it("su cobertura es lo escrito, así que un mes en blanco no llega al eje", () => {
+    const year = readPersonnelYear(typedYear(), [0, 1, 2, 3]);
+    expect(year.months).toEqual([0, 1]);
+    expect(year.monthly[2]).toBeNull();
+  });
+
+  it("se compara con un ejercicio de PyG sin que ninguno de los dos sepa del otro", () => {
+    const reading = readPersonnelCost([typedYear(), goldenYear()], [0, 1]);
+    expect(reading.years.map((year) => year.year)).toEqual([2019, 2026]);
+    // El consolidado suma los dos costos, y divide por las ventas que SÍ existen.
+    expect(reading.total).toBeCloseTo(4850 + 104203.12 + 139731.55, 2);
+    expect(reading.revenue).toBeCloseTo(22000 + 240314.07 * 2, 2);
   });
 });

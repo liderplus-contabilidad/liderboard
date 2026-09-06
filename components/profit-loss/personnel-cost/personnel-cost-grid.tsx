@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, type ClipboardEvent } from "react";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { cn } from "@/lib/cn";
+import { parsePastedGrid } from "@/lib/paste";
 import { formatCurrencyOrDash, formatPercentOrDash } from "@/lib/format";
 import { PERSONNEL_GROUPS } from "@/lib/personnel-cost/accounts";
 import type { PersonnelGrid, PersonnelGridCell, PersonnelGridRow } from "@/lib/personnel-cost/grid";
@@ -39,9 +40,66 @@ interface PersonnelCostGridProps {
   grid: PersonnelGrid;
   /** Commits one month of the captured row. `null` clears it. */
   onCapture: (year: number, monthIndex: number, amount: number | null) => void;
+  /** A row pasted out of Excel, already resolved to months of ONE exercise. */
+  onPasteCapture: (
+    year: number,
+    months: readonly { monthIndex: number; amount: number | null }[],
+  ) => void;
 }
 
-export function PersonnelCostGrid({ grid, onCapture }: PersonnelCostGridProps) {
+export function PersonnelCostGrid({ grid, onCapture, onPasteCapture }: PersonnelCostGridProps) {
+  /**
+   * A row of figures copied out of Excel, landing where the cursor is.
+   *
+   * **Only the captured row takes a paste, because it is the only row that takes anything at all**:
+   * every other figure of this table comes from the estado de resultados, and a block that overwrote
+   * them would be the screen contradicting the file. So the anchor has to be an editable cell, and
+   * what lands is the FIRST line of the block — there is no second writable row under it to receive a
+   * second one, and silently dropping the rest is better than wrapping it somewhere unexpected.
+   *
+   * The cells it fills are the row's OWN editable ones, read in order from the anchor: the columns are
+   * the span's months and not the twelve, so walking the DOM row is what keeps «marzo» landing on the
+   * cell headed «Mar» even when «Ene» and «Feb» are not on screen. A month outside the exercise's
+   * coverage carries no input, so it is skipped rather than written — capturing against a month with
+   * no estado de resultados behind it would be a figure with nothing to be carved out of.
+   *
+   * A single value is left to the browser: pasting one number into a focused input is already what the
+   * user expects, and intercepting it would break `NumericInput`'s draft-and-commit dance.
+   */
+  const handlePaste = useCallback(
+    (event: ClipboardEvent<HTMLTableSectionElement>) => {
+      const anchor = (event.target as HTMLElement).closest<HTMLTableCellElement>("td[data-month]");
+      const row = anchor?.closest("tr");
+      if (!anchor || !row) {
+        return;
+      }
+      const line = parsePastedGrid(event.clipboardData.getData("text/plain"))[0];
+      if (!line || line.length <= 1) {
+        return;
+      }
+      event.preventDefault();
+
+      const cells = [...row.querySelectorAll<HTMLTableCellElement>("td[data-month]")];
+      const from = cells.indexOf(anchor);
+      const year = Number(anchor.dataset.year);
+      const months: { monthIndex: number; amount: number | null }[] = [];
+      line.forEach((value, offset) => {
+        const cell = cells[from + offset];
+        // `undefined` is «no pude leer esto» and leaves the target alone — `parsePastedGrid`'s own
+        // rule, which is what stops a stray word blanking the month it lands on.
+        if (!cell || value === undefined) {
+          return;
+        }
+        months.push({ monthIndex: Number(cell.dataset.month), amount: value });
+      });
+
+      if (months.length > 0) {
+        onPasteCapture(year, months);
+      }
+    },
+    [onPasteCapture],
+  );
+
   return (
     <div className="overflow-x-auto rounded-[13px] border border-border bg-surface">
       <table className="w-full border-collapse">
@@ -102,7 +160,7 @@ export function PersonnelCostGrid({ grid, onCapture }: PersonnelCostGridProps) {
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody onPaste={handlePaste}>
           {grid.rows.map((row) => (
             <GridRow key={row.key} row={row} onCapture={onCapture} />
           ))}
@@ -235,7 +293,12 @@ function GridCell({
 
   if (edit) {
     return (
-      <td className="border-b border-l border-border-soft border-l-border-faint bg-marked/50 p-0">
+      <td
+        // The anchor a paste reads: the year it belongs to and the month this column is.
+        data-year={edit.year}
+        data-month={edit.monthIndex}
+        className="border-b border-l border-border-soft border-l-border-faint bg-marked/50 p-0"
+      >
         <NumericInput
           value={cell.value}
           onCommit={commit}

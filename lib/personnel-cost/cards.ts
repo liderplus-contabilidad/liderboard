@@ -725,6 +725,25 @@ function evolutionRows(input: PersonnelCardsInput): {
 
   const year = years[0];
   const months = year?.months ?? [];
+
+  // A TYPED exercise has no groups, so what it compares is its two SECTIONS. It is not a third shape
+  // of the card: it is the same question —«qué parte de este mes es cada cosa»— answered at the only
+  // level that year knows, which is the level the old sheet wrote.
+  if (year && year.groups.length === 0 && year.legacyRows.length > 0) {
+    return {
+      months,
+      depthLabel: "Sección",
+      rows: PERSONNEL_SECTIONS.map((section) => ({
+        id: section.id,
+        name: section.label,
+        color: colorForPersonnel(section.id),
+        values: months.map(
+          (month) => year.sections.find((e) => e.section.id === section.id)?.monthly[month] ?? null,
+        ),
+      })),
+    };
+  }
+
   return {
     months,
     depthLabel: "Grupo",
@@ -1088,19 +1107,23 @@ interface ConceptTotal {
 function conceptTotals(input: PersonnelCardsInput): ConceptTotal[] {
   const marked = new Set(input.groups);
   const totals = new Map<string, ConceptTotal>();
+  const add = (id: string, label: string, total: number) => {
+    const current = totals.get(id);
+    totals.set(id, { id, label, total: (current?.total ?? 0) + total });
+  };
   for (const year of input.reading.years) {
     for (const group of year.groups) {
       if (marked.size > 0 && !marked.has(group.group.id)) {
         continue;
       }
       for (const row of group.rows) {
-        const current = totals.get(row.concept.id);
-        totals.set(row.concept.id, {
-          id: row.concept.id,
-          label: row.concept.label,
-          total: (current?.total ?? 0) + row.total,
-        });
+        add(row.concept.id, row.concept.label, row.total);
       }
+    }
+    // The typed lines are NOT narrowed by «Grupo»: a legacy exercise has no groups, so a mark that
+    // means nothing for it must not make it disappear — the grid's same rule.
+    for (const row of year.legacyRows) {
+      add(`legacy:${row.row.id}`, row.row.label, row.total);
     }
   }
   return [...totals.values()]

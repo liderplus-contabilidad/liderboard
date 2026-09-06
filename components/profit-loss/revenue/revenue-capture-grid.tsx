@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { formatCurrency, formatCurrencyOrDash } from "@/lib/format";
 import { sumOf } from "@/lib/revenue/derive";
-import { parsePastedGrid } from "@/lib/revenue/paste";
+import { parsePastedGrid } from "@/lib/paste";
 import {
   MONTHS_IN_YEAR,
   type RevenueExternalAmounts,

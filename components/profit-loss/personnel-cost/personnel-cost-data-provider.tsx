@@ -7,6 +7,9 @@ import { REVENUE_ROOT } from "@/lib/profit-loss/charts/presets";
 import { applyEditsToLeafAccounts, mergeCenters } from "@/lib/profit-loss/derive";
 import { loadedMonthsFor, type PygDataset } from "@/lib/profit-loss/types";
 import type { SolidView } from "@/lib/charts/solid-bars";
+import { externalForClient } from "@/lib/revenue/db";
+import { resolveMonthlyRevenue } from "@/lib/revenue/derive";
+import type { RevenueExternalMonth } from "@/lib/revenue/types";
 import type { PersonnelGroupId } from "@/lib/personnel-cost/accounts";
 import { PERSONNEL_ACCOUNT_CODES } from "@/lib/personnel-cost/accounts";
 import { canReadPersonnelCost } from "@/lib/personnel-cost/availability";
@@ -17,7 +20,22 @@ import {
   type PersonnelCards,
   type PersonnelCardsInput,
 } from "@/lib/personnel-cost/cards";
-import { familyForClient, saveFamilyMonth } from "@/lib/personnel-cost/db";
+import {
+  deleteLegacyYear,
+  familyForClient,
+  legacyForClient,
+  saveFamilyMonth,
+  saveFamilyMonths,
+  saveLegacyMonth,
+  saveLegacyMonths,
+} from "@/lib/personnel-cost/db";
+import {
+  emptyLegacySeries,
+  legacyCoverage,
+  PERSONNEL_LEGACY_COST_ROWS,
+  type PersonnelLegacyAmounts,
+  type PersonnelLegacySeries,
+} from "@/lib/personnel-cost/legacy";
 import { readPersonnelCost, type PersonnelCostReading } from "@/lib/personnel-cost/derive";
 import {
   activeMarkCount,
@@ -42,6 +60,7 @@ import {
   MONTHS_IN_YEAR,
   type PersonnelCostYearInput,
   type PersonnelFamilyMonth,
+  type PersonnelLegacyMonth,
 } from "@/lib/personnel-cost/types";
 import { usePygData } from "../pyg-data-provider";
 
@@ -99,6 +118,12 @@ interface PersonnelCostDataValue {
   hideEmptyRows: boolean;
   setHideEmptyRows: (hide: boolean) => void;
   markCount: number;
+  /**
+   * Whether anything on screen HAS groups. A span of typed exercises has none, and «Grupo» would then
+   * offer three marks that narrow nothing — a control that means nothing for the open data renders
+   * nothing rather than sitting disabled, which is the bar's rule everywhere else in the app.
+   */
+  groupsAvailable: boolean;
   toggleYear: (year: number) => void;
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
@@ -107,11 +132,51 @@ interface PersonnelCostDataValue {
   clearGroups: () => void;
   /** Writes one month of the nómina de familia. `null` clears it. */
   saveFamily: (year: number, monthIndex: number, amount: number | null) => Promise<void>;
+  /** The same, for a whole row pasted out of Excel — one transaction. */
+  saveFamilyBlock: (
+    year: number,
+    months: readonly { monthIndex: number; amount: number | null }[],
+  ) => Promise<void>;
+
+  // ── Ejercicios tipeados ──────────────────────────────────────────────────
+  /**
+   * The years typed by hand, ascending. They are a SECOND source of exercises, not a fallback: a firm
+   * that kept its history in a sheet before MicroPlus has those years here and its recent ones in PyG,
+   * and the comparison across the two is the whole reason this exists.
+   */
+  legacyYears: number[];
+  /** Which one the drawer is writing. Its own selection, independent of the bar's marks. */
+  captureYear: number;
+  setCaptureYear: (year: number) => void;
+  /** The four series of `captureYear`, twelve slots each. */
+  captureSeries: PersonnelLegacySeries;
+  /**
+   * The open year's VENTAS as the app resolves them — raíz 4 first, «Reportería de ingresos» after.
+   * Shown beside the four lines so the percentage can be checked; never written here.
+   */
+  captureRevenue: (number | null)[];
+  /**
+   * Whether the OPEN year comes from the estado de resultados. Then it is not written by hand at all:
+   * the card says so instead of offering a form whose figures nothing would read.
+   */
+  captureFromPyg: boolean;
+  addCaptureYear: (year: number) => void;
+  removeCaptureYear: (year: number) => Promise<void>;
+  /** How many months of a typed year carry something — what the drawer's list shows. */
+  typedMonthsIn: (year: number) => number;
+  /** Writes ONE month of the open typed year. */
+  saveLegacy: (monthIndex: number, amounts: PersonnelLegacyAmounts) => Promise<void>;
+  /** Writes a pasted block in one transaction. */
+  saveLegacyBlock: (
+    months: readonly { monthIndex: number; amounts: PersonnelLegacyAmounts }[],
+  ) => Promise<void>;
 }
 
 const PersonnelCostDataContext = createContext<PersonnelCostDataValue | null>(null);
 
 const NO_FAMILY: PersonnelFamilyMonth[] = [];
+const NO_LEGACY: PersonnelLegacyMonth[] = [];
+const NO_EXTERNAL: RevenueExternalMonth[] = [];
 
 export function PersonnelCostDataProvider({ children }: { children: ReactNode }) {
   const { activeClientId, isConsolidated, datasets, edits, loadedMonthsByYear, sourceSystemId } =
@@ -135,6 +200,40 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   // in silence.
   const stored = useLiveQuery(() => familyForClient(clientId), [clientId]);
   const family = stored ?? NO_FAMILY;
+  const storedLegacy = useLiveQuery(() => legacyForClient(clientId), [clientId]);
+  const legacyMonths = storedLegacy ?? NO_LEGACY;
+
+  /**
+   * The VENTAS «Reportería de ingresos» holds for this client, by year.
+   *
+   * This module does not store ventas of its own: the app already has ONE place where the sales of a
+   * year with no estado de resultados are written, and a second would be a second answer to «cuánto se
+   * vendió en marzo de 2019». Reading them rather than copying them is also what keeps the two screens
+   * from drifting the day one of the figures is corrected.
+   */
+  const storedRevenue = useLiveQuery(() => externalForClient(clientId), [clientId]);
+  const manualRevenueByYear = useMemo(() => {
+    const byYear = new Map<number, (number | null)[]>();
+    for (const month of storedRevenue ?? NO_EXTERNAL) {
+      const series = byYear.get(month.year) ?? Array.from({ length: MONTHS_IN_YEAR }, () => null);
+      series[month.monthIndex] = month.manualRevenue;
+      byYear.set(month.year, series);
+    }
+    return byYear;
+  }, [storedRevenue]);
+
+  /** The typed months folded into one series per line, by year. */
+  const legacyByYear = useMemo(() => {
+    const byYear = new Map<number, PersonnelLegacySeries>();
+    for (const month of legacyMonths) {
+      const series = byYear.get(month.year) ?? emptyLegacySeries();
+      for (const row of PERSONNEL_LEGACY_COST_ROWS) {
+        series[row.id][month.monthIndex] = month.amounts[row.id] ?? null;
+      }
+      byYear.set(month.year, series);
+    }
+    return byYear;
+  }, [legacyMonths]);
   const ready = stored !== undefined;
 
   /** The captured figures indexed by year, as twelve slots each. */
@@ -212,8 +311,38 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
         family: familyByYear.get(year) ?? emptyFamilySeries(),
       });
     }
+    // The TYPED exercises, and only where PyG has nothing to say about that year: an estado de
+    // resultados is the stronger claim of the two, so a year that gets uploaded stops being read off
+    // the sheet — the drawer says so rather than letting two answers to one year coexist in silence.
+    for (const [year, legacy] of legacyByYear) {
+      if (byYear.has(year) || legacyCoverage(legacy).length === 0) {
+        continue;
+      }
+      // The denominator: the estado de resultados has nothing for this year by construction, so what
+      // is left is what Ingresos holds. `resolveMonthlyRevenue` is that module's own rule and the one
+      // place the two sources meet — a fallback and never an override.
+      const manual = manualRevenueByYear.get(year) ?? [];
+      result.push({
+        year,
+        // Its coverage is what was TYPED — see `legacyCoverage`, where that inference is argued.
+        coverage: legacyCoverage(legacy),
+        accounts: new Map(),
+        revenue: resolveMonthlyRevenue([], manual).map((value) => value ?? 0),
+        family: emptyFamilySeries(),
+        legacy,
+      });
+    }
+
     return result.sort((a, b) => a.year - b.year);
-  }, [canRead, datasets, edits, loadedMonthsByYear, familyByYear]);
+  }, [
+    canRead,
+    datasets,
+    edits,
+    loadedMonthsByYear,
+    familyByYear,
+    legacyByYear,
+    manualRevenueByYear,
+  ]);
 
   const years = useMemo(() => inputs.map((input) => input.year), [inputs]);
 
@@ -302,6 +431,84 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     [clientId, canRead],
   );
 
+  const saveFamilyBlock = useCallback(
+    async (year: number, months: readonly { monthIndex: number; amount: number | null }[]) => {
+      if (!clientId || !canRead) {
+        return;
+      }
+      await saveFamilyMonths(clientId, year, months);
+    },
+    [clientId, canRead],
+  );
+
+  // ── The drawer ───────────────────────────────────────────────────────────
+  const legacyYears = useMemo(() => [...legacyByYear.keys()].sort((a, b) => a - b), [legacyByYear]);
+  const pygYears = useMemo(
+    () => new Set(inputs.filter((input) => !input.legacy).map((input) => input.year)),
+    [inputs],
+  );
+  const [captureYearRaw, setCaptureYear] = useState<number | null>(null);
+  /**
+   * Which year the drawer writes: the one picked, and otherwise the LAST typed one — or the year
+   * before the earliest exercise there is, which is where somebody filling in history starts.
+   */
+  const captureYear = useMemo(() => {
+    if (captureYearRaw !== null) {
+      return captureYearRaw;
+    }
+    if (legacyYears.length > 0) {
+      return legacyYears[legacyYears.length - 1];
+    }
+    const earliest = inputs[0]?.year;
+    return earliest ? earliest - 1 : new Date().getFullYear() - 1;
+  }, [captureYearRaw, legacyYears, inputs]);
+
+  const captureSeries = useMemo(
+    () => legacyByYear.get(captureYear) ?? emptyLegacySeries(),
+    [legacyByYear, captureYear],
+  );
+  const captureRevenue = useMemo(() => {
+    const fromPyg = inputs.find((input) => input.year === captureYear && !input.legacy)?.revenue;
+    return resolveMonthlyRevenue(
+      fromPyg ? [...fromPyg] : [],
+      manualRevenueByYear.get(captureYear) ?? [],
+    );
+  }, [inputs, captureYear, manualRevenueByYear]);
+
+  const typedMonthsIn = useCallback(
+    (year: number) => legacyCoverage(legacyByYear.get(year) ?? emptyLegacySeries()).length,
+    [legacyByYear],
+  );
+
+  const saveLegacy = useCallback(
+    async (monthIndex: number, amounts: PersonnelLegacyAmounts) => {
+      if (!clientId) {
+        return;
+      }
+      await saveLegacyMonth(clientId, captureYear, monthIndex, amounts);
+    },
+    [clientId, captureYear],
+  );
+  const saveLegacyBlock = useCallback(
+    async (months: readonly { monthIndex: number; amounts: PersonnelLegacyAmounts }[]) => {
+      if (!clientId) {
+        return;
+      }
+      await saveLegacyMonths(clientId, captureYear, months);
+    },
+    [clientId, captureYear],
+  );
+  const removeCaptureYear = useCallback(
+    async (year: number) => {
+      if (!clientId) {
+        return;
+      }
+      await deleteLegacyYear(clientId, year);
+      setCaptureYear(null);
+    },
+    [clientId],
+  );
+
   const value: PersonnelCostDataValue = {
     clientId,
     isConsolidated,
@@ -322,6 +529,7 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     hideEmptyRows,
     setHideEmptyRows,
     markCount: activeMarkCount(filters),
+    groupsAvailable: reading.years.some((year) => year.groups.length > 0),
     toggleYear,
     selectAllYears,
     toggleMonth,
@@ -329,6 +537,18 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     toggleGroup,
     clearGroups,
     saveFamily,
+    saveFamilyBlock,
+    legacyYears,
+    captureYear,
+    setCaptureYear: (year: number) => setCaptureYear(year),
+    captureSeries,
+    captureRevenue,
+    captureFromPyg: pygYears.has(captureYear),
+    addCaptureYear: (year: number) => setCaptureYear(year),
+    removeCaptureYear,
+    typedMonthsIn,
+    saveLegacy,
+    saveLegacyBlock,
   };
 
   return (

@@ -37,6 +37,12 @@ import {
   type PersonnelGroup,
   type PersonnelSection,
 } from "./accounts";
+import {
+  legacyCoverage,
+  legacySectionSeries,
+  PERSONNEL_LEGACY_COST_ROWS,
+  type PersonnelLegacyRow,
+} from "./legacy";
 import { MONTHS_IN_YEAR, type PersonnelCostYearInput } from "./types";
 
 /** What every level of the reading answers, so a row, a group, a section and the total read alike. */
@@ -68,6 +74,11 @@ export interface PersonnelSectionReading extends PersonnelAmounts {
   section: PersonnelSection;
 }
 
+/** One of the four typed lines of an exercise that predates the estado de resultados. */
+export interface PersonnelLegacyRowReading extends PersonnelAmounts {
+  row: PersonnelLegacyRow;
+}
+
 /** One year's whole reading, already narrowed to the span. */
 export interface PersonnelYearReading extends PersonnelAmounts {
   year: number;
@@ -79,6 +90,14 @@ export interface PersonnelYearReading extends PersonnelAmounts {
   revenue: number;
   /** The raíz 4 month by month, for the cards that plot it. */
   revenueMonthly: (number | null)[];
+  /**
+   * The four TYPED lines, and empty on every year PyG answers.
+   *
+   * A year has one shape or the other and never both: `groups` is empty exactly when this is not, so
+   * a consumer asks which of the two it is by looking at what the year carries, and no flag has to be
+   * kept truthful beside the data.
+   */
+  legacyRows: PersonnelLegacyRowReading[];
   /** Codes the map asks for that this plan does not have, in the map's order. */
   missingCodes: string[];
   /** Whether the year has anything to say at all — what decides if it is drawn. */
@@ -206,6 +225,9 @@ export function readPersonnelYear(
   input: PersonnelCostYearInput,
   months: readonly number[],
 ): PersonnelYearReading {
+  if (input.legacy) {
+    return readLegacyYear(input, input.legacy, months);
+  }
   const covered = new Set(input.coverage);
   const inSpan = new Set([...months].filter((month) => covered.has(month)));
 
@@ -242,12 +264,73 @@ export function readPersonnelYear(
     months: [...inSpan].sort((a, b) => a - b),
     groups,
     sections,
+    legacyRows: [],
     revenue,
     revenueMonthly,
     missingCodes: PERSONNEL_ACCOUNT_CODES.filter((code) => !input.accounts.has(code)),
     covered: inSpan.size > 0,
     ...grand,
   };
+}
+
+/**
+ * The SAME reading for an exercise that was typed: four lines, two sections, no groups and no ventas.
+ *
+ * Its coverage is what was WRITTEN and not what a workspace declares — see `legacyCoverage`, where
+ * that is the one inference this app allows itself and why. Everything else is the engine's own rules
+ * unchanged: `null` outside the span, `null` only where every line is, and a `share` of `null` because
+ * dividing by no ventas is not a zero, it is a question nobody answered.
+ */
+function readLegacyYear(
+  input: PersonnelCostYearInput,
+  legacy: NonNullable<PersonnelCostYearInput["legacy"]>,
+  months: readonly number[],
+): PersonnelYearReading {
+  const covered = new Set(legacyCoverage(legacy));
+  const inSpan = new Set([...months].filter((month) => covered.has(month)));
+
+  // The denominator comes in through `input.revenue`, the same field a loaded year fills — see
+  // `legacy.ts`: this module does not store the ventas of a typed exercise, because the app already
+  // has one place where those are written. Rule (d) is untouched: the percentage divides by the ventas
+  // of exactly the months the numerator was summed over, and a month nobody wrote sums zero, which
+  // `shareOf` answers with `null` rather than inventing a hundred per cent.
+  const revenueMonthly = scopeTo(input.revenue, inSpan);
+  const revenue = sumOf(revenueMonthly);
+
+  const legacyRows: PersonnelLegacyRowReading[] = PERSONNEL_LEGACY_COST_ROWS.map((row) => ({
+    row,
+    ...amountsOf(scopeToSpan(legacy[row.id], inSpan), revenue),
+  }));
+
+  const sections: PersonnelSectionReading[] = PERSONNEL_SECTIONS.map((section) => ({
+    section,
+    ...amountsOf(scopeToSpan(legacySectionSeries(legacy, section.id), inSpan), revenue),
+  }));
+
+  const grand = amountsOf(addSeries(sections.map((section) => section.monthly)), revenue);
+
+  return {
+    year: input.year,
+    months: [...inSpan].sort((a, b) => a - b),
+    groups: [],
+    sections,
+    legacyRows,
+    revenue,
+    revenueMonthly,
+    missingCodes: [],
+    covered: inSpan.size > 0,
+    ...grand,
+  };
+}
+
+/** A twelve-slot series of `number | null` narrowed to the span: outside it, `null`. */
+function scopeToSpan(
+  series: readonly (number | null)[],
+  months: ReadonlySet<number>,
+): (number | null)[] {
+  return Array.from({ length: MONTHS_IN_YEAR }, (_, month) =>
+    months.has(month) ? (series[month] ?? null) : null,
+  );
 }
 
 /**

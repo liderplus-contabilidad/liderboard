@@ -36,6 +36,7 @@ export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
     clearMonths,
     toggleGroup,
     clearGroups,
+    groupsAvailable,
   } = usePersonnelCostData();
 
   const markedYears = new Set(filters.years);
@@ -123,36 +124,40 @@ export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
               </Dropdown>
             )}
 
-            <Dropdown>
-              <DropdownTrigger active={markedGroups.size > 0} icon={<Layers size={15} />}>
-                {markedGroups.size === 0
-                  ? "Grupo"
-                  : markedGroups.size === 1
-                    ? `Grupo · ${groupName(filters.groups[0])}`
-                    : `Grupo · ${markedGroups.size} de ${PERSONNEL_GROUPS.length}`}
-              </DropdownTrigger>
-              <DropdownPanel width={260}>
-                <div className="-mx-1 mb-1">
-                  <DropdownChoice selected={markedGroups.size === 0} onSelect={clearGroups}>
-                    Todos los grupos
-                  </DropdownChoice>
-                </div>
-                <div className="-mx-1 border-t border-border-soft pt-1.5">
-                  {PERSONNEL_GROUPS.map((group) => (
-                    <DropdownOption
-                      key={group.id}
-                      selected={markedGroups.has(group.id)}
-                      onToggle={() => toggleGroup(group.id)}
-                    >
-                      {group.label}
-                    </DropdownOption>
-                  ))}
-                </div>
-                <DropdownNote>
-                  Acota toda la pantalla: la tabla, los indicadores y las cuatro lecturas.
-                </DropdownNote>
-              </DropdownPanel>
-            </Dropdown>
+            {/* Un tramo de ejercicios TIPEADOS no tiene grupos, así que aquí no se dibuja nada: es la
+                misma regla con la que este bar oculta «Mes» cuando no hay meses que acotar. */}
+            {groupsAvailable && (
+              <Dropdown>
+                <DropdownTrigger active={markedGroups.size > 0} icon={<Layers size={15} />}>
+                  {markedGroups.size === 0
+                    ? "Grupo"
+                    : markedGroups.size === 1
+                      ? `Grupo · ${groupName(filters.groups[0])}`
+                      : `Grupo · ${markedGroups.size} de ${PERSONNEL_GROUPS.length}`}
+                </DropdownTrigger>
+                <DropdownPanel width={260}>
+                  <div className="-mx-1 mb-1">
+                    <DropdownChoice selected={markedGroups.size === 0} onSelect={clearGroups}>
+                      Todos los grupos
+                    </DropdownChoice>
+                  </div>
+                  <div className="-mx-1 border-t border-border-soft pt-1.5">
+                    {PERSONNEL_GROUPS.map((group) => (
+                      <DropdownOption
+                        key={group.id}
+                        selected={markedGroups.has(group.id)}
+                        onToggle={() => toggleGroup(group.id)}
+                      >
+                        {group.label}
+                      </DropdownOption>
+                    ))}
+                  </div>
+                  <DropdownNote>
+                    Acota toda la pantalla: la tabla, los indicadores y las cuatro lecturas.
+                  </DropdownNote>
+                </DropdownPanel>
+              </Dropdown>
+            )}
           </>
         )}
 

@@ -33,7 +33,7 @@ function depthOf(option: Chart3DOption, name: string): number {
 }
 
 import { readPersonnelCost } from "./derive";
-import { GOLDEN_ACCOUNTS, GOLDEN_COVERAGE, goldenYear } from "./fixtures";
+import { GOLDEN_ACCOUNTS, GOLDEN_COVERAGE, goldenYear, legacyYear } from "./fixtures";
 
 const SPAN = GOLDEN_COVERAGE;
 
@@ -492,5 +492,58 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
     expect(built.sections.option).toBeNull();
     expect(built.ratio.option).toBeNull();
     expect(built.concepts.option).toBeNull();
+  });
+});
+
+describe("Las tarjetas ante un ejercicio TIPEADO", () => {
+  const typed = (years = [legacyYear()], span: readonly number[] = [0, 1]) =>
+    buildPersonnelCards({
+      reading: readPersonnelCost(years, span),
+      groups: [],
+      period: "Ene–Feb 2019",
+      evolutionView: "apilada",
+    });
+
+  it("la evolución compara SECCIONES, que es el único nivel que ese año conoce", () => {
+    const { groups } = typed();
+    expect(flat(groups.option).series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
+  });
+
+  it("«Planta vs Externos» se dibuja igual: las dos secciones existen en las dos formas", () => {
+    const { sections } = typed();
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Externos"]);
+    expect(sections.table.rows[0].values).toEqual(["$1,750.00", "$2,000.00", "$3,750.00"]);
+  });
+
+  it("el ranking lista las cuatro líneas tecleadas", () => {
+    const { concepts } = typed();
+    // Ordenado por monto, como el de siempre: personal $2,100 · externos $2,000 · familia $500 · $250.
+    expect(concepts.table.rows.map((row) => row.label)).toEqual([
+      "Afiliado personal",
+      "Externos",
+      "Afiliado familia",
+      "Factura familia",
+      "Total costo de personal",
+    ]);
+  });
+
+  it("la ratio divide por las ventas tecleadas, mes contra el MISMO mes", () => {
+    const { ratio } = typed();
+    // Enero: 3,750 de 10,000; febrero: 1,100 de 12,000.
+    expect(ratio.table.rows[0].values[0]).toBe("37.5 %");
+    expect(ratio.table.rows[0].values[1]).toBe("9.2 %");
+  });
+
+  it("una marca de «Grupo» no puede esconder unas líneas que no tienen grupo", () => {
+    const marked = buildPersonnelCards({
+      reading: readPersonnelCost([legacyYear()], [0, 1]),
+      groups: ["afiliados"],
+      period: "Ene–Feb 2019",
+    });
+    expect(marked.concepts.table.rows).toHaveLength(5);
   });
 });

@@ -1,5 +1,9 @@
 /**
- * **What a block copied out of Excel means**, and the only place this module reads a clipboard.
+ * **What a block copied out of Excel means**, and the app's ONE reading of a clipboard.
+ *
+ * It started in `lib/revenue/` and moved here the day a second capture needed it: two clipboard
+ * parsers would be two answers to «qué es un bloque pegado», which is exactly what a shared `lib/`
+ * exists to prevent — `lib/format.ts`'s same rule for «qué es un monto».
  *
  * The gesture it serves is the one the accountant already has in their hands: select a column of
  * twelve figures in their own workbook, copy, click a cell in the drawer and paste. What arrives on

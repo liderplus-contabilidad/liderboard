@@ -18,6 +18,8 @@
  * same reasoning.
  */
 
+import type { PersonnelLegacySeries } from "./legacy";
+
 /** Every year has twelve of them, and the axis is always the full year. */
 export const MONTHS_IN_YEAR = 12;
 
@@ -43,6 +45,30 @@ export interface PersonnelFamilyMonth {
    * month the user merely tabbed through.
    */
   amount: number;
+}
+
+/**
+ * A month of a year TYPED BY HAND, as it is stored: the four lines of the old sheet.
+ *
+ * It shares the family capture's rules —the id is derived from `(client, year, month)` so a rewrite
+ * REPLACES by construction, and a month with nothing in any line has NO ROW rather than a row of
+ * `null`s— and lives in a table of its own because it is a different claim: the family capture carves
+ * a figure out of an account PyG already has, and this one stands where PyG has nothing at all.
+ */
+export interface PersonnelLegacyMonth {
+  /** `<clientId>:<year>-<mm>`. */
+  id: string;
+  clientId: string;
+  year: number;
+  /** 0–11, as in the whole app. */
+  monthIndex: number;
+  /** The four lines. A `null` is «no se escribió»; a `0` is «se escribió y fue cero». */
+  amounts: {
+    "afiliado-personal": number | null;
+    "afiliado-familia": number | null;
+    "factura-familia": number | null;
+    externos: number | null;
+  };
 }
 
 /** A month's key within a client. */
@@ -85,4 +111,14 @@ export interface PersonnelCostYearInput {
   revenue: readonly number[];
   /** The captured nómina de familia: `null` where nothing was written, even inside coverage. */
   family: readonly (number | null)[];
+  /**
+   * The four typed lines, present ONLY on an exercise that predates the estado de resultados.
+   *
+   * Its presence is what makes the year a LEGACY one, and the two shapes never mix: a year that PyG
+   * answers is read off `accounts` and never has this, and a year that carries this has no accounts,
+   * no coverage of its own beyond what was typed and no ventas. Reading it as a flag rather than as a
+   * second input type keeps every consumer walking ONE list of years — which is the whole point, since
+   * a typed 2023 has to sit next to a loaded 2026 in the same comparison.
+   */
+  legacy?: PersonnelLegacySeries;
 }

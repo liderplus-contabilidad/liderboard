@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readPersonnelCost } from "./derive";
-import { GOLDEN_COVERAGE, goldenYear } from "./fixtures";
+import { GOLDEN_COVERAGE, goldenYear, legacyYear } from "./fixtures";
 import { buildPersonnelGrid, type PersonnelGrid } from "./grid";
 
 /** Un centavo, la misma tolerancia que `derive.test.ts`: el libro redondea donde el motor no. */
@@ -201,5 +201,64 @@ describe("La captura vive EN la tabla", () => {
     expect(built.rows.every((row) => row.cells.every((cell) => cell.edit === null))).toBe(true);
     // Y por eso la vista lo dice: se captura con un solo año marcado.
     expect(built.comparing).toBe(true);
+  });
+});
+
+describe("Un ejercicio TIPEADO en la misma tabla", () => {
+  it("solo, son sus cuatro líneas, sus dos secciones y el total", () => {
+    const { rows } = grid({}, [legacyYear()], [0, 1]);
+    expect(rows.map((row) => row.label)).toEqual([
+      "Afiliado personal",
+      "Afiliado familia",
+      "Factura familia",
+      "Planta",
+      "Externos",
+      "Total costo de personal",
+    ]);
+    // Ninguna lleva cuenta contable: no las produjo un plan de cuentas, las tecleó alguien.
+    expect(rows.slice(0, 4).every((row) => row.code === null)).toBe(true);
+  });
+
+  it("junto a uno de PyG, cada forma llena SUS columnas y deja null las de la otra", () => {
+    const { rows, columns } = grid({}, [legacyYear(), goldenYear()], [0, 1]);
+    const at = (label: string, year: number) => {
+      const row = rows.find((entry) => entry.label === label);
+      const index = columns.findIndex((column) => column.year === year && column.kind === "total");
+      return row?.cells[index]?.value ?? null;
+    };
+    // La línea tipeada no existe en 2026, y la cuenta de MicroPlus no existe en 2019.
+    expect(at("Afiliado personal", 2019)).toBe(2100);
+    expect(at("Afiliado personal", 2026)).toBeNull();
+    expect(at("Mano de obra directa · Farmacia / Laboratorio", 2019)).toBeNull();
+    expect(at("Mano de obra directa · Farmacia / Laboratorio", 2026)).not.toBeNull();
+  });
+
+  it("la sección SÍ cierra en los dos, porque las dos formas suman ahí", () => {
+    const { rows, columns } = grid({}, [legacyYear(), goldenYear()], [0, 1]);
+    const planta = rows.find((row) => row.kind === "section" && row.label === "Planta");
+    const total = (year: number) =>
+      planta?.cells[columns.findIndex((c) => c.year === year && c.kind === "total")]?.value ?? null;
+    expect(total(2019)).toBe(1750 + 1100);
+    expect(total(2026)).not.toBeNull();
+  });
+
+  it("«% vs ventas» sale de las ventas TECLEADAS, como en cualquier otro ejercicio", () => {
+    const { rows, columns } = grid({}, [legacyYear()], [0, 1]);
+    const grand = rows.find((row) => row.kind === "grand");
+    const share = columns.findIndex((column) => column.kind === "share");
+    // 4,850 de 22,000 tecleados.
+    expect(grand?.cells[share].value).toBeCloseTo((4850 / 22000) * 100, 3);
+  });
+
+  it("y sin ellas va vacío: null y nunca cero", () => {
+    const bare = legacyYear();
+    const { rows, columns } = grid(
+      {},
+      [{ ...bare, revenue: Array.from({ length: 12 }, () => 0) }],
+      [0, 1],
+    );
+    const grand = rows.find((row) => row.kind === "grand");
+    const share = columns.findIndex((column) => column.kind === "share");
+    expect(grand?.cells[share].value).toBeNull();
   });
 });

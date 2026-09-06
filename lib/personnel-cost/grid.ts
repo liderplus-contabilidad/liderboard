@@ -23,12 +23,8 @@
  * lines under it — the reader looking for the difference between numbers that have none.
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
-import {
-  PERSONNEL_SECTIONS,
-  groupsOfSection,
-  type PersonnelGroupId,
-  type PersonnelSectionId,
-} from "./accounts";
+import { PERSONNEL_SECTIONS, type PersonnelGroupId, type PersonnelSectionId } from "./accounts";
+import { PERSONNEL_LEGACY_COST_ROWS } from "./legacy";
 import {
   shareOf,
   type PersonnelCostReading,
@@ -274,9 +270,18 @@ export function buildPersonnelGrid(
 
   const marked = new Set(options.groups);
   const inScope = (id: PersonnelGroupId) => marked.size === 0 || marked.has(id);
-  // Read off the FIRST year: every year carries the same twenty-one rows in the same order, which is
-  // what makes a row's identity independent of the exercise it is being compared in.
-  const groups = (years[0]?.groups ?? []).filter((group) => inScope(group.group.id));
+  // Read off the first year that HAS groups, and not off `years[0]`: a typed exercise carries none, so
+  // marking it first would have emptied the table of the loaded one beside it. Every year that does
+  // have them carries the same twenty-one rows in the same order, which is what makes a row's identity
+  // independent of the exercise it is being compared in.
+  const groups = (years.find((year) => year.groups.length > 0)?.groups ?? []).filter((group) =>
+    inScope(group.group.id),
+  );
+  // The four TYPED lines enter the table when any marked exercise carries them. They are not narrowed
+  // by «Grupo»: a legacy year has no groups, so a mark that means nothing for it cannot hide it.
+  const legacyRows = years.some((year) => year.legacyRows.length > 0)
+    ? PERSONNEL_LEGACY_COST_ROWS
+    : [];
 
   const rows: PersonnelGridRow[] = [];
   let hiddenRows = 0;
@@ -284,81 +289,108 @@ export function buildPersonnelGrid(
   const groupOf = (year: PersonnelYearReading, id: PersonnelGroupId) =>
     year.groups.find((entry) => entry.group.id === id);
 
-  const inScopeIds = new Set(groups.map((group) => group.group.id));
-  /** The groups of a section that survived the narrowing — what decides how its figure is written. */
-  const sectionGroups = (id: PersonnelSectionId) =>
-    groupsOfSection(id).filter((group) => inScopeIds.has(group.id));
-  const sectionsInScope = PERSONNEL_SECTIONS.filter(
-    (section) => sectionGroups(section.id).length > 0,
-  );
+  const groupsIn = (section: PersonnelSectionId) =>
+    groups.filter((group) => group.group.section === section);
+  const legacyIn = (section: PersonnelSectionId) =>
+    legacyRows.filter((row) => row.section === section);
+  /** What a section has UNDER it — group subtotals plus typed lines. */
+  const under = (section: PersonnelSectionId) =>
+    groupsIn(section).length + legacyIn(section).length;
+  const sectionsInScope = PERSONNEL_SECTIONS.filter((section) => under(section.id) > 0);
 
-  for (const group of groups) {
-    const conceptRows: PersonnelGridRow[] = [];
-    for (const row of group.rows) {
-      const id = row.concept.id;
+  // Walked SECTION by section, so the two shapes land in the same table without either knowing about
+  // the other: a section closes once, under everything that adds into it, whether that is nine
+  // accounts of a chart of accounts or one line somebody typed.
+  for (const section of sectionsInScope) {
+    for (const group of groupsIn(section.id)) {
+      const conceptRows: PersonnelGridRow[] = [];
+      for (const row of group.rows) {
+        const id = row.concept.id;
+        const moves = years.some(
+          (year) =>
+            groupOf(year, group.group.id)?.rows.find((entry) => entry.concept.id === id)?.moves ??
+            false,
+        );
+        if (options.hideEmptyRows && !moves) {
+          hiddenRows += 1;
+          continue;
+        }
+        conceptRows.push({
+          key: `concept:${id}`,
+          kind: "concept",
+          label: row.concept.label,
+          code: row.code,
+          group: null,
+          groupSpan: 0,
+          hint: null,
+          cells: cellsFor(
+            `concept:${id}`,
+            years,
+            months,
+            (year) => groupOf(year, group.group.id)?.rows.find((entry) => entry.concept.id === id),
+            row.concept.source.kind === "captured",
+            consolidated,
+          ),
+          moves,
+          missing: row.missing,
+        });
+      }
+
+      if (conceptRows.length === 0) {
+        // Every row of the group was held back; its subtotal would head nothing.
+        continue;
+      }
+
+      // The band opens on the first row that SURVIVED the filter, and spans the concepts plus their
+      // subtotal — computing it after the pruning is what keeps it aligned with what is drawn.
+      conceptRows[0].group = group.group.id;
+      conceptRows[0].groupSpan = conceptRows.length + 1;
+      rows.push(...conceptRows);
+
+      // A section made of ONE group is the same figure twice, so the two rows become one and the
+      // subtotal carries both names. It is not a special case of the layout — it is the workbook's own
+      // shape: its columns R and S write 22.6 % side by side for exactly this reason.
+      const alone = under(section.id) === 1 && sectionsInScope.length > 1;
+      rows.push(
+        subtotalRow(group, years, months, groupOf, alone ? section.label : null, consolidated),
+      );
+    }
+
+    for (const row of legacyIn(section.id)) {
       const moves = years.some(
-        (year) =>
-          groupOf(year, group.group.id)?.rows.find((entry) => entry.concept.id === id)?.moves ??
-          false,
+        (year) => year.legacyRows.find((entry) => entry.row.id === row.id)?.moves ?? false,
       );
       if (options.hideEmptyRows && !moves) {
         hiddenRows += 1;
         continue;
       }
-      conceptRows.push({
-        key: `concept:${id}`,
+      rows.push({
+        key: `legacy:${row.id}`,
         kind: "concept",
-        label: row.concept.label,
-        code: row.code,
+        label: row.label,
+        // No account behind it: nothing produced this figure but somebody typing it.
+        code: null,
         group: null,
         groupSpan: 0,
         hint: null,
         cells: cellsFor(
-          `concept:${id}`,
+          `legacy:${row.id}`,
           years,
           months,
-          (year) => groupOf(year, group.group.id)?.rows.find((entry) => entry.concept.id === id),
-          row.concept.source.kind === "captured",
+          (year) => year.legacyRows.find((entry) => entry.row.id === row.id),
+          // Written in its own drawer and not here: a typed exercise is filled a year at a time, and
+          // the grid's columns are the SPAN, which is not the same twelve months.
+          false,
           consolidated,
         ),
         moves,
-        missing: row.missing,
+        missing: false,
       });
     }
 
-    if (conceptRows.length === 0) {
-      // Every row of the group was held back; its subtotal would head nothing.
-      continue;
-    }
-
-    // The band opens on the first row that SURVIVED the filter, and spans the concepts plus their
-    // subtotal — computing it after the pruning is what keeps it aligned with what is drawn.
-    conceptRows[0].group = group.group.id;
-    conceptRows[0].groupSpan = conceptRows.length + 1;
-    rows.push(...conceptRows);
-
-    const section = PERSONNEL_SECTIONS.find((entry) => entry.id === group.group.section);
-    const siblings = section ? sectionGroups(section.id) : [];
-    const alone = siblings.length === 1 && sectionsInScope.length > 1;
-    // A section made of ONE group is the same figure twice, so the two rows become one and the
-    // subtotal carries both names. It is not a special case of the layout — it is the workbook's own
-    // shape: its columns R and S write 22.6 % side by side for exactly this reason.
-    rows.push(
-      subtotalRow(
-        group,
-        years,
-        months,
-        groupOf,
-        alone ? (section?.label ?? null) : null,
-        consolidated,
-      ),
-    );
-
-    // The section closes right after the LAST of its groups, so everything above the band belongs to
-    // it. Emitting all sections at the end instead would put «Planta» under the honorarios it does
-    // not include.
-    const isLast = siblings.length > 1 && siblings[siblings.length - 1].id === group.group.id;
-    if (isLast && section) {
+    // The section closes right after everything that belongs to it. Emitting all sections at the end
+    // instead would put «Planta» under the honorarios it does not include.
+    if (under(section.id) > 1) {
       const key = `section:${section.id}`;
       rows.push({
         key,
@@ -382,9 +414,9 @@ export function buildPersonnelGrid(
     }
   }
 
-  // Same rule as the sections: with one group on screen the grand total is that group's subtotal
+  // Same rule as the sections: with one thing on screen the grand total is that thing's subtotal
   // again, and a reader looking for the difference between two identical lines will not find one.
-  if (groups.length > 1) {
+  if (groups.length + legacyRows.length > 1) {
     rows.push({
       key: "grand",
       kind: "grand",

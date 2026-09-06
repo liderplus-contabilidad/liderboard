@@ -13,6 +13,20 @@ import {
 } from "./personnel-cost-empty-state";
 import { PersonnelCostToolbar } from "./personnel-cost-toolbar";
 
+/**
+ * The capture, on its own for ONE case: a client with nothing loaded draws no tabs, so the card that
+ * lives in Datos would be unreachable exactly where it is most needed — a workspace whose history is
+ * the only thing there is to write.
+ */
+const Capture = dynamic(
+  () => import("./personnel-cost-capture").then((mod) => mod.PersonnelCostCapture),
+  { ssr: false },
+);
+const YearTabs = dynamic(
+  () => import("./personnel-cost-year-tabs").then((mod) => mod.PersonnelCostYearTabs),
+  { ssr: false },
+);
+
 type PersonnelTabId = "graficos" | "datos";
 
 /** The same two tabs PyG opens with, in the same order and with the same icons. */
@@ -87,7 +101,26 @@ function PersonnelCostContent() {
   if (gap) {
     // `PygEmptyState` brings its own padding — it is the shell's own empty state; the three of this
     // module are cards and take the page's.
-    return clientId === null && !isConsolidated ? gap : <div className="px-7 py-5">{gap}</div>;
+    if (clientId === null && !isConsolidated) {
+      return gap;
+    }
+    // Only the «sin datos» gap keeps the capture: with no client, another system or the consolidado
+    // there is no partition to write into, and it would have nowhere to put a figure.
+    const writable = canRead && universe.years.length === 0;
+    if (!writable) {
+      return <div className="px-7 py-5">{gap}</div>;
+    }
+    // With no exercise at all the strip is still the way IN: it carries no tab yet and its «Agregar
+    // año» is the only thing on the page that can create one.
+    return (
+      <div className="flex h-full flex-col">
+        <YearTabs />
+        <div className="flex flex-1 flex-col gap-4 overflow-auto bg-canvas px-7 py-5">
+          {gap}
+          <Capture />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -100,6 +133,11 @@ function PersonnelCostContent() {
         idPrefix="personnel-cost"
         className="shrink-0 px-7 pt-[18px]"
       />
+
+      {/* Los EJERCICIOS del cliente, y SÓLO sobre Datos: abrir un año dice qué tabla se ve, y en
+          Gráficos no hay ninguna que cambie. La tira abre uno; la barra de abajo marca cuáles se
+          comparan — dos gestos distintos, dos controles. */}
+      {tab === "datos" && <YearTabs />}
 
       <PersonnelCostToolbar />
 

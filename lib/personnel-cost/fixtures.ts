@@ -14,7 +14,8 @@
  *   ($1,441,884.42, celda C84); lo que estas pruebas verifican de las ventas es la suma y los
  *   porcentajes que salen de ella, nunca un mes suelto.
  */
-import type { PersonnelCostYearInput } from "./types";
+import { emptyLegacySeries, legacyCoverage } from "./legacy";
+import { emptyFamilySeries, type PersonnelCostYearInput } from "./types";
 
 /** Los seis meses cargados del ejercicio. */
 export const GOLDEN_COVERAGE = [0, 1, 2, 3, 4, 5];
@@ -110,3 +111,29 @@ export const GOLDEN_CONCEPT_TOTALS: Record<string, number> = {
 export const GOLDEN_MONTHLY_TOTAL = [
   104203.12, 139731.55, 115612.64, 117730.54, 100208.69, 144277.59,
 ];
+
+/**
+ * Un ejercicio TIPEADO — enero y febrero de un año anterior a MicroPlus, con las cuatro líneas que
+ * llevaba la hoja. Es el fixture de la segunda forma que puede tener un año, y deliberadamente NO se
+ * parece al de oro: lo que se prueba con él es que las dos conviven, no que coincidan.
+ */
+export function legacyYear(
+  overrides: Partial<PersonnelCostYearInput> = {},
+): PersonnelCostYearInput {
+  const legacy = emptyLegacySeries();
+  legacy["afiliado-personal"][0] = 1000;
+  legacy["afiliado-familia"][0] = 500;
+  legacy["factura-familia"][0] = 250;
+  legacy.externos[0] = 2000;
+  legacy["afiliado-personal"][1] = 1100;
+  return {
+    year: 2019,
+    coverage: legacyCoverage(legacy),
+    accounts: new Map(),
+    // Lo que «Reportería de ingresos» tiene escrito para ese año: el módulo no guarda ventas propias.
+    revenue: months([10000, 12000]),
+    family: emptyFamilySeries(),
+    legacy,
+    ...overrides,
+  };
+}
