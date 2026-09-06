@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CHART_MAX_SERIES } from "@/lib/charts/palette";
-import { is3DOption } from "@/lib/charts/types";
+import {
+  CHART_MAX_SERIES,
+  CHART_PALETTE,
+  CHART_STAGE_PALETTE,
+  stageColor,
+} from "@/lib/charts/palette";
+import { bar3DSeries, flatOnly, is3DOption } from "@/lib/charts/types";
 import {
   buildAnnualCard,
   buildComparisonCard,
@@ -419,6 +424,7 @@ describe("buildRatioCard · varios años con datos", () => {
 
   /** 2025 con la mitad de lo capturado en 2026, y un mes MENOS: Ene–May. */
   const external2025 = {
+    manualRevenue: emptyMonthSeries(),
     cardRevenue: [20000, 20000, 20000, 20000, 20000, null, null, null, null, null, null, null],
     cardFees: [1000, 1000, 1000, 1000, 1000, null, null, null, null, null, null, null],
     adSpend: [500, 500, 500, 500, 500, null, null, null, null, null, null, null],
@@ -575,7 +581,7 @@ describe("el comparativo en tres dimensiones", () => {
     expect(option.grid3D.viewControl?.distance).toBe(170);
   });
 
-  it("el color del año es el MISMO en las dos formas", () => {
+  it("el año guarda su RANURA en la escala del escenario", () => {
     const flat = flatComparisonCard(input(loadedYears()));
     const solid = buildComparisonCard(input(loadedYears()), "skyline");
     const option = solid.option;
@@ -585,7 +591,41 @@ describe("el comparativo en tres dimensiones", () => {
 
     const flatColor = flat.option?.series.find((serie) => serie.name === "2026")?.itemStyle?.color;
     const solidColor = option.series.find((serie) => serie.name === "2026")?.itemStyle?.color;
-    expect(solidColor).toBe(flatColor);
+    // El escenario tiene escala propia, y lo que se conserva es la POSICIÓN: `stageColor` traduce
+    // por ranura, así que el año es el mismo color en todas las tarjetas 3D.
+    expect(solidColor).toBe(stageColor(flatColor ?? ""));
+    expect(CHART_PALETTE.indexOf(flatColor as (typeof CHART_PALETTE)[number])).toBe(
+      CHART_STAGE_PALETTE.indexOf(solidColor as (typeof CHART_STAGE_PALETTE)[number]),
+    );
+  });
+
+  it("las tres «vs» toman cuerpo sólido con los MISMOS dos importes, el numerador delante", () => {
+    const entrada = input(loadedYears());
+    const [descriptor] = RATIO_DESCRIPTORS;
+    const plano = buildRatioCard(descriptor, entrada);
+    const solido = buildRatioCard(descriptor, entrada, "solido");
+    if (solido.option === null || !is3DOption(solido.option)) {
+      throw new Error("se esperaba el cuerpo sólido");
+    }
+    const barras = bar3DSeries(solido.option);
+
+    // El numerador va DELANTE, y no es preferencia: un numerador es una PARTE de su denominador, así
+    // que nunca es el más alto de los dos y delante es el único sitio donde no lo tapa.
+    expect(barras.map((serie) => serie.id)).toEqual([descriptor.numerator, descriptor.denominator]);
+    // El mismo eje y la misma tabla: es un cuerpo del mismo dato, no una segunda lectura.
+    const ejeX = plano.option?.xAxis;
+    expect(solido.option.xAxis3D.data).toEqual((Array.isArray(ejeX) ? ejeX[0] : ejeX)?.data);
+    expect(solido.table).toEqual(plano.table);
+  });
+
+  it("por omisión vienen PLANAS, que es lo que el informe y el Excel pueden imprimir", () => {
+    const entrada = input(loadedYears());
+    for (const descriptor of RATIO_DESCRIPTORS) {
+      const card = buildRatioCard(descriptor, entrada);
+      expect(card.option !== null && is3DOption(card.option)).toBe(false);
+      // Y el guardián compartido las deja pasar sin lanzar, que es su contrato.
+      expect(() => flatOnly(card)).not.toThrow();
+    }
   });
 
   it("con UN año no hay fondo que dar, así que no se ofrece", () => {

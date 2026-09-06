@@ -4,6 +4,7 @@ import {
   readRevenueYear,
   readRevenueYears,
   referenceYearOf,
+  resolveMonthlyRevenue,
   scopeToMonths,
   sumOf,
 } from "./derive";
@@ -133,5 +134,40 @@ describe("referenceYearOf", () => {
     );
 
     expect(referenceYearOf(shuffled)?.year).toBe(2026);
+  });
+});
+
+describe("resolveMonthlyRevenue", () => {
+  const twelve = (fill: (month: number) => number | null) =>
+    Array.from({ length: 12 }, (_, month) => fill(month));
+
+  it("reads the PyG figure wherever the workspace declares coverage", () => {
+    const pyg = twelve((month) => (month < 3 ? 100 + month : null));
+    const typed = twelve(() => 999);
+    expect(resolveMonthlyRevenue(pyg, typed).slice(0, 3)).toEqual([100, 101, 102]);
+  });
+
+  it("falls back to what was typed only where PyG has nothing", () => {
+    const pyg = twelve((month) => (month < 3 ? 100 : null));
+    const typed = twelve((month) => (month === 5 ? 777 : null));
+    const resolved = resolveMonthlyRevenue(pyg, typed);
+    expect(resolved[2]).toBe(100);
+    expect(resolved[5]).toBe(777);
+  });
+
+  it("keeps a loaded ZERO from PyG instead of falling through to the typed figure", () => {
+    // Rule (a): `0` is «se cargó y vendió cero», and it must not be mistaken for «no cargado».
+    const pyg = twelve((month) => (month === 0 ? 0 : null));
+    const typed = twelve(() => 500);
+    expect(resolveMonthlyRevenue(pyg, typed)[0]).toBe(0);
+  });
+
+  it("leaves a month neither side has as `null`, so it drops out of every denominator", () => {
+    expect(
+      resolveMonthlyRevenue(
+        twelve(() => null),
+        twelve(() => null),
+      ),
+    ).toEqual(twelve(() => null));
   });
 });

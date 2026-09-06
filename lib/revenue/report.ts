@@ -11,7 +11,7 @@
  * ignores «Ver en» and «Ver como» and prints BOTH shapes of every ratio card and BOTH units of the
  * growth. What on screen is a choice is on paper simply two sections.
  */
-import type { ChartCardSpec } from "@/lib/charts/types";
+import { flatOnly, type ChartCardSpec } from "@/lib/charts/types";
 import { formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/workspaces";
 import {
@@ -69,7 +69,7 @@ export function buildRevenueReport(input: BuildRevenueReportInput): RevenueRepor
     for (const descriptor of RATIO_DESCRIPTORS) {
       // ONE section and no longer two: the card draws the two amounts and writes the participation
       // over the numerator's bar, so there is no second shape left for the paper to print.
-      sections.push({ id: descriptor.id, card: buildRatioCard(descriptor, input) });
+      sections.push({ id: descriptor.id, card: flatOnly(buildRatioCard(descriptor, input)) });
     }
   }
 

@@ -17,7 +17,21 @@
  * numerator's bar writes its share under its figure, in fainter ink. One chart, both halves, no
  * second scale.
  */
-import type { ChartCardSpec, ChartSeries, ChartTable, ChartTableRow } from "@/lib/charts/types";
+import { stageColor } from "@/lib/charts/palette";
+import {
+  SCREEN_SOLID_VIEW,
+  SOLID_BARS_HEIGHT,
+  solidBarsOption,
+  type SolidView,
+} from "@/lib/charts/solid-bars";
+import type {
+  Chart3DOption,
+  ChartCardSpec,
+  ChartOption,
+  ChartSeries,
+  ChartTable,
+  ChartTableRow,
+} from "@/lib/charts/types";
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { scopeToMonths, sumOf } from "../derive";
@@ -70,7 +84,8 @@ interface RatioYear {
 export function buildRatioCard(
   descriptor: RatioDescriptor,
   input: RevenueCardsInput,
-): ChartCardSpec {
+  view: SolidView = SCREEN_SOLID_VIEW,
+): ChartCardSpec<ChartOption | Chart3DOption> {
   const years: RatioYear[] = input.years.map((year) => {
     const numerator = scopeToMonths(seriesOf(year, descriptor.numerator), input.months);
     const denominator = scopeToMonths(seriesOf(year, descriptor.denominator), input.months);
@@ -83,8 +98,8 @@ export function buildRatioCard(
     .map((entry) => entry.year);
 
   return withData.length > 1
-    ? ratioAcrossYears(descriptor, withData, idle)
-    : ratioAcrossMonths(descriptor, withData[0] ?? years[years.length - 1], idle, input);
+    ? ratioAcrossYears(descriptor, withData, idle, view)
+    : ratioAcrossMonths(descriptor, withData[0] ?? years[years.length - 1], idle, input, view);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +144,8 @@ function assembleRatioCard(
     /** Named on the tooltip only where a column is a YEAR carrying the figure of a span. */
     tooltipSpan?: string;
   },
-): ChartCardSpec {
+  view: SolidView,
+): ChartCardSpec<ChartOption | Chart3DOption> {
   // The two amounts share the axis, so a figure per bar is TWO rows — the denominator on the first,
   // the numerator on the second — and the numerator's carries the share underneath it. That is where
   // the percentage belongs: on the bar it is the percentage OF, and not on a chart of its own the
@@ -166,28 +182,68 @@ function assembleRatioCard(
 
   const notes = parts.notes.filter((note): note is string => note !== null);
 
+  // The SOLID body of this same reading: the same two amounts over the same axis, as two rows of the
+  // stage's depth. The NUMERATOR goes in front and the denominator behind, and that is not a
+  // preference — a numerator is a PART of its denominator, so it is never the taller of the two, and
+  // in front is the only place it is not hidden by it. The legend follows the depth, because the
+  // rows ARE the legend.
+  const solid: Chart3DOption | null = parts.covered
+    ? solidBarsOption({
+        columns: parts.labels,
+        rows: [
+          {
+            id: descriptor.numerator,
+            name: SERIES_LABELS[descriptor.numerator],
+            color: stageColor(seriesColor(descriptor.numerator)),
+            values: parts.columns.numerator,
+          },
+          {
+            id: descriptor.denominator,
+            name: SERIES_LABELS[descriptor.denominator],
+            color: stageColor(seriesColor(descriptor.denominator)),
+            values: parts.columns.denominator,
+          },
+        ],
+        formatValue: money,
+        // Without cents, `currencyAxis`'s same rule: a scale is estimated against, not read off.
+        formatAxis: (value) => money(value, false),
+      })
+    : null;
+  const asSolid = view === "solido" && solid !== null;
+
   return {
     id: descriptor.id,
     title: descriptor.title,
     subtitle: parts.subtitle,
-    option: parts.covered
-      ? {
-          ...baseOption(
-            categoryAxis(parts.labels),
-            currencyAxis(),
-            legendFor(true),
-            // Three lines over the tallest column: the denominator's row, the numerator's, and the
-            // share written under it.
-            { rows: 3, fit },
-          ),
-          tooltip: axisTooltip(money, parts.tooltipSpan),
-          series,
-        }
-      : null,
+    option: asSolid
+      ? solid
+      : parts.covered
+        ? {
+            ...baseOption(
+              categoryAxis(parts.labels),
+              currencyAxis(),
+              legendFor(true),
+              // Three lines over the tallest column: the denominator's row, the numerator's, and the
+              // share written under it.
+              { rows: 3, fit },
+            ),
+            tooltip: axisTooltip(money, parts.tooltipSpan),
+            series,
+          }
+        : null,
     table: parts.table,
-    ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
+    // On the stage the share is NOT written under the numerator's bar — a label in perspective lands
+    // at a depth of its own and stops lining up with the figure above it. It is in the table, in the
+    // tooltip's own reading of the flat shape, and one click away in «Plano».
+    ...(notes.length > 0 || asSolid
+      ? {
+          note: [...notes, asSolid ? "Arrastra para girar la vista." : null]
+            .filter(Boolean)
+            .join(" "),
+        }
+      : {}),
     guide: descriptor.guide,
-    height: 260,
+    height: asSolid ? SOLID_BARS_HEIGHT : 260,
   };
 }
 
@@ -206,35 +262,40 @@ function ratioAcrossMonths(
   entry: RatioYear | undefined,
   idle: readonly number[],
   input: RevenueCardsInput,
-): ChartCardSpec {
+  view: SolidView,
+): ChartCardSpec<ChartOption | Chart3DOption> {
   const axis = [...input.months].sort((a, b) => a - b);
   const labels = axis.map((month) => MONTHS_SHORT_ES[month]);
   const reading = entry?.reading ?? readRatio([], []);
   const span = monthSpanLabel(reading.sharedMonths);
 
-  return assembleRatioCard(descriptor, {
-    labels,
-    columns: {
-      share: axis.map((month) => reading.points[month]?.percent ?? null),
-      numerator: axis.map((month) => reading.points[month]?.numerator ?? null),
-      denominator: axis.map((month) => reading.points[month]?.denominator ?? null),
-      barMaxWidth: 18,
+  return assembleRatioCard(
+    descriptor,
+    {
+      labels,
+      columns: {
+        share: axis.map((month) => reading.points[month]?.percent ?? null),
+        numerator: axis.map((month) => reading.points[month]?.numerator ?? null),
+        denominator: axis.map((month) => reading.points[month]?.denominator ?? null),
+        barMaxWidth: 18,
+      },
+      covered: reading.sharedMonths.length > 0,
+      // The subtitle names the span the PERCENTAGE was measured over, which may be shorter than the
+      // sales' own — and saying so is the point. With NO span there is nothing to name: «Sin meses 2026»
+      // was a rótulo pretending to be a tramo, so the year says plainly that it has nothing registered.
+      subtitle: entry
+        ? span
+          ? `${span} ${entry.year} · ${descriptor.question}`
+          : `${entry.year} · sin datos registrados · ${descriptor.question}`
+        : `${input.period} · ${descriptor.question}`,
+      table: monthRatioTable(reading, axis, descriptor),
+      notes: [
+        missingMonthsNote(reading, descriptor.numerator, descriptor.denominator),
+        idleYearsNote(idle, descriptor.numerator),
+      ],
     },
-    covered: reading.sharedMonths.length > 0,
-    // The subtitle names the span the PERCENTAGE was measured over, which may be shorter than the
-    // sales' own — and saying so is the point. With NO span there is nothing to name: «Sin meses 2026»
-    // was a rótulo pretending to be a tramo, so the year says plainly that it has nothing registered.
-    subtitle: entry
-      ? span
-        ? `${span} ${entry.year} · ${descriptor.question}`
-        : `${entry.year} · sin datos registrados · ${descriptor.question}`
-      : `${input.period} · ${descriptor.question}`,
-    table: monthRatioTable(reading, axis, descriptor),
-    notes: [
-      missingMonthsNote(reading, descriptor.numerator, descriptor.denominator),
-      idleYearsNote(idle, descriptor.numerator),
-    ],
-  });
+    view,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +314,8 @@ function ratioAcrossYears(
   descriptor: RatioDescriptor,
   years: readonly RatioYear[],
   idle: readonly number[],
-): ChartCardSpec {
+  view: SolidView,
+): ChartCardSpec<ChartOption | Chart3DOption> {
   const common = sharedAcrossYears(years);
   // Re-read over the common span: what each year contributes has to be measured on the same months as
   // the year beside it.
@@ -274,25 +336,29 @@ function ratioAcrossYears(
   const amountOf = (reading: RatioReading, pick: "numeratorTotal" | "denominatorTotal") =>
     reading.sharedMonths.length > 0 ? reading[pick] : null;
 
-  return assembleRatioCard(descriptor, {
-    labels,
-    columns: {
-      share: compared.map((entry) => entry.reading.percent),
-      numerator: compared.map((entry) => amountOf(entry.reading, "numeratorTotal")),
-      denominator: compared.map((entry) => amountOf(entry.reading, "denominatorTotal")),
-      barMaxWidth: 28,
+  return assembleRatioCard(
+    descriptor,
+    {
+      labels,
+      columns: {
+        share: compared.map((entry) => entry.reading.percent),
+        numerator: compared.map((entry) => amountOf(entry.reading, "numeratorTotal")),
+        denominator: compared.map((entry) => amountOf(entry.reading, "denominatorTotal")),
+        barMaxWidth: 28,
+      },
+      covered,
+      subtitle: `${labels.join(", ")} · ${span ?? "sin tramo común"} · ${descriptor.question}`,
+      table: yearRatioTable(compared, descriptor),
+      notes: [
+        covered
+          ? `Los ${compared.length} años se miden sobre ${span}, el tramo en que todos tienen ${numerator} y ${denominator}: comparar un año de doce meses contra uno de seis diría más del calendario que del negocio.`
+          : `Los años marcados no comparten ningún mes con ${numerator} y ${denominator} a la vez, así que no hay tramo sobre el que compararlos.`,
+        idleYearsNote(idle, descriptor.numerator),
+      ],
+      ...(span ? { tooltipSpan: span } : {}),
     },
-    covered,
-    subtitle: `${labels.join(", ")} · ${span ?? "sin tramo común"} · ${descriptor.question}`,
-    table: yearRatioTable(compared, descriptor),
-    notes: [
-      covered
-        ? `Los ${compared.length} años se miden sobre ${span}, el tramo en que todos tienen ${numerator} y ${denominator}: comparar un año de doce meses contra uno de seis diría más del calendario que del negocio.`
-        : `Los años marcados no comparten ningún mes con ${numerator} y ${denominator} a la vez, así que no hay tramo sobre el que compararlos.`,
-      idleYearsNote(idle, descriptor.numerator),
-    ],
-    ...(span ? { tooltipSpan: span } : {}),
-  });
+    view,
+  );
 }
 
 /** The months every compared year has BOTH terms in — the span the comparison is measured over. */

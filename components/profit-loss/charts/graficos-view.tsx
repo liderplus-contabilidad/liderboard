@@ -35,11 +35,20 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
  * here is where each one goes on screen. The printable report reads that same list, which is why
  * it cannot come back into this file.
  */
-/** The two readings of the same breakdown: the length of a bar or the angle of a slice. */
+/**
+ * The shapes of the same breakdown: the length of a bar —flat on the card or solid on the stage— or
+ * the angle of a slice, flat or solid too. They are ordered in PAIRS, each 3D one right after the
+ * flat shape it repeats, because that is what they are: one reading in two bodies, never two
+ * readings.
+ */
 const ANNEX_SHAPES = [
   { value: "barras" as const, label: "Barras" },
+  { value: "solido" as const, label: "Sólido 3D" },
   { value: "pastel" as const, label: "Pastel" },
+  { value: "rosca" as const, label: "Rosca 3D" },
 ];
+
+type AnnexShape = (typeof ANNEX_SHAPES)[number]["value"];
 
 export function GraficosView() {
   const { dataset, filters, frequency } = usePygData();
@@ -80,32 +89,33 @@ export function GraficosView() {
   // screen, like the two switches above: it is not stored, it produces no chip and the printable
   // report still puts out every card whole.
   /**
-   * In which SHAPE the annex is read. Its two cards draw the same breakdown —one single reduction,
-   * the same rows, the same cut— and showing them at once is saying the same thing twice, the rule
-   * Ocupaciones already applies to its «Ver como». It opens in BARS because they are what withstands
-   * eighteen lines: the pie at that size writes its labels outside, with guide lines piled up on one
-   * edge and the legend paginated, which is exactly what made «Composición de los ingresos» stop being
-   * a pie. It is local state, like the two switches above: it is not stored, it leaves no chip, and
-   * the printable report —which calls `buildGraficosCards` on its own— still puts out BOTH, because a
-   * printed control is a button nobody can press.
+   * In which SHAPE the annex is read. Its three cards draw the same breakdown —one single reduction,
+   * the same rows, the same cut— and showing them at once is saying the same thing three times, the
+   * rule Ocupaciones already applies to its «Ver como». It opens in BARS because they are what
+   * withstands eighteen lines with a figure written over each one: «Sólido 3D» is the same reading in
+   * a body that cannot carry those fifteen labels, and the pie at that size writes its own outside,
+   * with guide lines piled up on one edge and the legend paginated, which is exactly what made
+   * «Composición de los ingresos» stop being a pie. It is local state, like the two switches above:
+   * it is not stored, it leaves no chip, and the printable report —which calls `buildGraficosCards`
+   * on its own— still puts out every shape PAPER CAN CARRY, because a printed control is a button
+   * nobody can press; the solid one it drops for a different reason, being a WebGL canvas.
    */
-  const [annexShape, setAnnexShape] = useState<"barras" | "pastel">("barras");
+  const [annexShape, setAnnexShape] = useState<AnnexShape>("barras");
   // The annex card being read, and `null` outside that view. It is an ID and not a position because
   // on changing shape the list is reordered: with the pie in place, the first card is no longer the
   // annex's, and a click tied to index 0 would open the window from another one.
-  const visibleAnnexId = annexShapes
-    ? annexShape === "barras"
-      ? annexShapes.barras
-      : annexShapes.pastel
-    : null;
+  const visibleAnnexId = annexShapes ? annexShapes[annexShape] : null;
   // The shape that is NOT being read drops off the list; with the annex off there is none to remove
   // and this is the whole list.
   const visibleCards = useMemo(() => {
     if (!annexShapes) {
       return cards;
     }
-    const hidden = annexShape === "barras" ? annexShapes.pastel : annexShapes.barras;
-    return cards.filter((card) => card.id !== hidden);
+    // Every shape that is NOT being read drops off, which with three of them is no longer «the other
+    // one»: the list is filtered against the one on screen, so adding a fourth changes nothing here.
+    const shown = annexShapes[annexShape];
+    const hidden = new Set(Object.values(annexShapes).filter((id) => id !== shown));
+    return cards.filter((card) => !hidden.has(card.id));
   }, [cards, annexShapes, annexShape]);
   const cardIds = useMemo(() => visibleCards.map((card) => card.id), [visibleCards]);
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);

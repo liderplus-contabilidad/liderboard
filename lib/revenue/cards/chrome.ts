@@ -226,7 +226,11 @@ export function percentAxis(): ChartAxis {
   };
 }
 
-export function legendFor(show: boolean): ChartLegend {
+export function legendFor(
+  show: boolean,
+  /** The skyline draws its legend ON the stage, where the card's ink would not be read. */
+  tone: string = CHART_INK.muted,
+): ChartLegend {
   return {
     show,
     type: "scroll",
@@ -235,7 +239,7 @@ export function legendFor(show: boolean): ChartLegend {
     itemWidth: 10,
     itemHeight: 10,
     itemGap: 14,
-    textStyle: { color: CHART_INK.muted, fontSize: 11.5 },
+    textStyle: { color: tone, fontSize: 11.5 },
   };
 }
 

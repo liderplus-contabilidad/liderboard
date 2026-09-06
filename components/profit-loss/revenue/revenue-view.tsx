@@ -3,6 +3,7 @@
 import { ChevronsDownUp, ChevronsUpDown, PanelsTopLeft, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { SolidView } from "@/lib/charts/solid-bars";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -29,6 +30,15 @@ const GROWTH_UNITS: { value: GrowthUnit; label: string }[] = [
 const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
   { value: "plano", label: "Plano" },
   { value: "skyline", label: "Skyline 3D" },
+];
+
+/**
+ * «Ver como» en las tres tarjetas «vs» — los dos importes sobre la tarjeta, o de pie en el escenario.
+ * Es UNA lista para las tres, porque son la misma pregunta tres veces.
+ */
+const SOLID_VIEWS: { value: SolidView; label: string }[] = [
+  { value: "plano", label: "Plano" },
+  { value: "solido", label: "Sólido 3D" },
 ];
 
 /** «Ver como» en «Ventas por año» — el total del tramo, o el promedio mensual. */
@@ -68,6 +78,8 @@ function RevenueContent() {
     setComparisonShape,
     annualShape,
     setAnnualShape,
+    ratioViews,
+    setRatioView,
   } = useRevenueData();
   const [captureOpen, setCaptureOpen] = useState(false);
 
@@ -277,14 +289,32 @@ function RevenueContent() {
                 </div>
               ) : (
                 cards.ratios.map((card) => (
-                  /* Sin «Ver como»: el monto y su participación ya se leen en la misma gráfica —
-                     la barra del numerador escribe debajo de su cifra qué parte es de la de al
-                     lado—, así que no queda una segunda forma entre la que elegir. */
+                  /* El «Ver como» de aquí elige un CUERPO, nunca una lectura: el monto y su
+                     participación se leen en la misma gráfica —la barra del numerador escribe debajo
+                     de su cifra qué parte es de la de al lado—, y de pie en el escenario esa cifra se
+                     va al hover y a la tabla. Por eso abre en plano. */
                   <ChartCard
                     key={card.id}
                     {...card}
                     collapsed={isCollapsed(card.id)}
                     onToggleCollapsed={() => toggle(card.id)}
+                    {...(card.option === null
+                      ? {}
+                      : {
+                          headerSlot: (
+                            <span className="flex items-center gap-2">
+                              <span className="text-[11.5px] font-semibold text-faint">
+                                Ver como
+                              </span>
+                              <SegmentedControl
+                                value={ratioViews[card.id] ?? "plano"}
+                                options={SOLID_VIEWS}
+                                onChange={(view) => setRatioView(card.id, view)}
+                                ariaLabel="Ver como"
+                              />
+                            </span>
+                          ),
+                        })}
                   />
                 ))
               )}

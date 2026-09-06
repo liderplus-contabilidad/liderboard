@@ -380,7 +380,34 @@ export interface Chart3DOption {
   zAxis3D: ChartAxis3D;
   legend?: ChartLegend;
   tooltip?: Chart3DTooltip;
-  series: Chart3DSeries[];
+  /**
+   * A card draws bars OR surfaces, never both, but the two travel in the same field because that is
+   * how ECharts takes them. `type` discriminates, so a reader that wants the bars asks for them.
+   */
+  series: (Chart3DSeries | Chart3DSurfaceSeries)[];
+}
+
+/**
+ * A card as everything that is NOT a browser canvas can carry it — the printed report and the Excel.
+ *
+ * It is one function and not one per consumer because the rule is one: a 3D option is drawn by
+ * `echarts-gl` into a WebGL canvas, and neither a sheet of paper nor a spreadsheet has one. Every
+ * caller passes no shape, so the flat body is what the builders return by omission and this never
+ * throws — writing the check down rather than casting is what keeps it that way. If a default is
+ * ever flipped it fails HERE and loudly, instead of printing an empty rectangle where the reading
+ * was.
+ */
+export function flatOnly(card: ChartCardSpec<ChartOption | Chart3DOption>): ChartCardSpec {
+  const option = card.option;
+  if (option !== null && is3DOption(option)) {
+    throw new Error(`Fuera de la pantalla no hay 3D: «${card.title}» vino en tres dimensiones.`);
+  }
+  return { ...card, option };
+}
+
+/** The bars of a `Chart3DOption`, for the readers that only ever draw those. */
+export function bar3DSeries(option: Chart3DOption): Chart3DSeries[] {
+  return option.series.filter((serie): serie is Chart3DSeries => serie.type === "bar3D");
 }
 
 /** Which of the two a card carries. The only place the two shapes are told apart. */
@@ -396,13 +423,24 @@ export function is3DOption(option: ChartOption | Chart3DOption): option is Chart
  * deep— instead of a cube where every row hides the one behind it.
  */
 export interface ChartGrid3D {
+  /**
+   * `false` hides the whole box — the three axes, their labels and the grid planes — while keeping
+   * the coordinate system that places what is drawn in it. It is what a doughnut needs: a ring has
+   * no axes to read, and the ones a `grid3D` draws by default would be three rulers around it
+   * measuring nothing.
+   */
+  show?: boolean;
   boxWidth?: number;
   boxDepth?: number;
   boxHeight?: number;
   /** Flat, ambient-only light. See `Chart3DSeries.shading`. */
   light?: ChartLight3D;
-  /** The card's own background; a 3D grid paints its own and would show a seam otherwise. */
-  environment?: string;
+  /**
+   * What the box is seen against. A 3D grid paints a light gradient of its own unless told
+   * otherwise, so this is never optional in practice: the skyline replaces it with `CHART_STAGE_SKY`
+   * and a flat colour would show a seam against the card either way.
+   */
+  environment?: string | ChartGradient;
   axisPointer?: { show?: boolean; lineStyle?: ChartLineStyle };
   axisLine?: { lineStyle?: ChartLineStyle };
   splitLine?: { lineStyle?: ChartLineStyle };
@@ -410,16 +448,30 @@ export interface ChartGrid3D {
 }
 
 /**
- * Ambient light only, at full strength, with the directional one off.
+ * A vertical gradient, as `echarts-gl` takes one for the box's environment: it draws the stops onto
+ * a 16 px texture and wraps the scene in it. Declared here rather than imported for the same reason
+ * as the rest of the file — `lib/` never sees the renderer.
+ */
+export interface ChartGradient {
+  type: "linear";
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  colorStops: readonly { offset: number; color: string }[];
+}
+
+/**
+ * The rig that lights a stage. There is exactly ONE, `CHART_STAGE_LIGHT`, and every 3D card mounts
+ * it — see that constant for why a lit face is what draws a solid's edge, and for the measured floor
+ * that keeps the shadowed side of every fill above 3:1.
  *
- * It is not a taste decision: with a main light the renderer multiplies each face by its angle to
- * it, so one bar comes out in three tones and `colorForEntity`'s hue stops being the entity's
- * identity — the same hue the composition card and the stack use for that service. It would also
- * throw away every contrast figure the palette's validator measured, since none of them were
- * measured against a shaded face.
+ * `alpha` and `beta` place the light the way `ChartViewControl`'s place the camera, and they are not
+ * chrome: a light coming from exactly where the camera stands flattens every face it hits, so the
+ * rig is deliberately off-axis from it.
  */
 export interface ChartLight3D {
-  main?: { intensity?: number; shadow?: boolean };
+  main?: { intensity?: number; alpha?: number; beta?: number; shadow?: boolean };
   ambient?: { intensity?: number };
 }
 
@@ -479,11 +531,21 @@ export interface Chart3DSeries {
   name?: string;
   data: Chart3DDatum[];
   /**
-   * Always `"color"` — flat. See `ChartLight3D` for why the app does not light its bars.
+   * `"realistic"` on the stage. `"color"` returns the same pixel for every face of every bar and
+   * fifteen solids drawn that way read as one continuous ribbon; `"lambert"` separates the faces but
+   * leaves the EDGE where two of them meet as a step and nothing more. Realistic adds the specular
+   * term, which is what puts a lit rim along a bevel. See `CHART_STAGE_MATERIAL`.
    */
   shading?: "color" | "lambert" | "realistic";
+  /** Only read under `shading: "realistic"`. There is one setting — `CHART_STAGE_MATERIAL`. */
+  realisticMaterial?: { roughness?: number; metalness?: number };
   itemStyle?: ChartItemStyle;
-  emphasis?: { itemStyle?: ChartItemStyle; label?: Chart3DLabel };
+  /**
+   * `echarts-gl` reads ONLY `color` and `opacity` here — a `bar3D` is one merged mesh with vertex
+   * colours, so `borderColor`/`borderWidth` are silently ignored (setting them is what left the
+   * hovered bar taking gl's own default lift instead of a step this app chose).
+   */
+  emphasis?: { itemStyle?: { color?: string; opacity?: number }; label?: Chart3DLabel };
   /** A hair of bevel reads as a solid; more than that eats a short bar's height. */
   bevelSize?: number;
   bevelSmoothness?: number;
@@ -513,6 +575,37 @@ export interface Chart3DLabel {
     borderRadius?: number;
     padding?: [number, number];
   };
+}
+
+/**
+ * A parametric SURFACE — the one 3D series that is not a bar, and the only way `echarts-gl` can draw
+ * a solid that is not a box. The doughnut is built out of these: one wedge per slice, each swept
+ * from its own cross-section.
+ *
+ * `parametricEquation` is sampled by gl at build time —`u` and `v` are stepped and the three
+ * functions called per sample— so the functions must be pure and cheap, and the STEP is what decides
+ * how round an arc comes out and where a fold lands. A fold that does not sit exactly on a sample
+ * gets rounded away, which is why the cross-section's corners are placed on whole steps.
+ */
+export interface Chart3DSurfaceSeries {
+  type: "surface";
+  id?: string;
+  name?: string;
+  parametric: true;
+  parametricEquation: {
+    u: { min: number; max: number; step: number };
+    v: { min: number; max: number; step: number };
+    x: (u: number, v: number) => number;
+    y: (u: number, v: number) => number;
+    z: (u: number, v: number) => number;
+  };
+  /** See `ChartLight3D`: a surface with no light is a silhouette with no body. */
+  shading?: "color" | "lambert" | "realistic";
+  /** Only read under `shading: "realistic"`. There is one setting — `CHART_STAGE_MATERIAL`. */
+  realisticMaterial?: { roughness?: number; metalness?: number };
+  itemStyle?: ChartItemStyle;
+  /** gl draws the PARAMETRIC grid, not the silhouette, so on a wedge it is noise. Off. */
+  wireframe?: { show: boolean; lineStyle?: { color?: string; width?: number } };
 }
 
 /** What a 3D tooltip's formatter receives: `value` is the whole triple, not a scalar. */

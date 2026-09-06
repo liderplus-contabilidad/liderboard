@@ -30,6 +30,7 @@ import {
   type ComparisonShape,
 } from "./comparison";
 import { buildGrowthCard, DEFAULT_GROWTH_UNIT, growthOf, type GrowthUnit } from "./growth";
+import type { SolidView } from "@/lib/charts/solid-bars";
 import { buildRatioCard } from "./ratio";
 
 export { ANNUAL_CARD_ID, buildAnnualCard, DEFAULT_ANNUAL_SHAPE, type AnnualShape } from "./annual";
@@ -55,6 +56,14 @@ export interface RevenueCardsOptions {
   comparisonShape?: ComparisonShape;
   /** The annual card's «Ver como». Omitted, it is the total. */
   annualShape?: AnnualShape;
+  /**
+   * Which body each ratio card takes, BY DESCRIPTOR ID. It is a record and not three fields for the
+   * reason the three cards come out of one constructor: adding a fourth ratio is an entry in
+   * `RATIO_DESCRIPTORS` and nothing else, and a fourth field here would break that. An id it does
+   * not carry falls back to `SCREEN_SOLID_VIEW`, so the paper —which passes none— keeps printing
+   * flat.
+   */
+  ratioViews?: Readonly<Record<string, SolidView>>;
 }
 
 export interface RevenueCards {
@@ -64,7 +73,7 @@ export interface RevenueCards {
   annual: ChartCardSpec;
   growth: ChartCardSpec;
   /** Empty where the workspace cannot capture: the cards are NOT DRAWN, not drawn disabled. */
-  ratios: ChartCardSpec[];
+  ratios: ChartCardSpec<ChartOption | Chart3DOption>[];
   /**
    * The workspace CAN capture and not one marked year has anything captured — so all three ratio
    * cards would draw nothing.
@@ -85,7 +94,9 @@ export function buildRevenueCards(
   options: RevenueCardsOptions = {},
 ): RevenueCards {
   const ratios = input.canCapture
-    ? RATIO_DESCRIPTORS.map((descriptor) => buildRatioCard(descriptor, input))
+    ? RATIO_DESCRIPTORS.map((descriptor) =>
+        buildRatioCard(descriptor, input, options.ratioViews?.[descriptor.id]),
+      )
     : [];
 
   return {

@@ -10,7 +10,7 @@
  * - **«Datos externos»**: the captured matrix, for reconciling against whatever the firm keeps.
  */
 import ExcelJS from "exceljs";
-import type { ChartCardSpec } from "@/lib/charts/types";
+import { flatOnly, type ChartCardSpec } from "@/lib/charts/types";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import {
   buildAnnualCard,
@@ -109,7 +109,7 @@ export async function buildRevenueWorkbook(
 
   if (input.canCapture) {
     for (const descriptor of RATIO_DESCRIPTORS) {
-      writeCardSheet(wb, buildRatioCard(descriptor, input), header, descriptor.title);
+      writeCardSheet(wb, flatOnly(buildRatioCard(descriptor, input)), header, descriptor.title);
     }
   }
 

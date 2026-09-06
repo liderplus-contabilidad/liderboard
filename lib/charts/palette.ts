@@ -103,6 +103,252 @@ export const CHART_LINES = {
   axis: "#e5e9ee",
 } as const;
 
+/**
+ * The 3D STAGE — the one dark ground in the app, and it exists for the only drawing that needs one.
+ *
+ * A `bar3D` is a SOLID: what says where it ends is its silhouette, and on a white card the pale
+ * faces of a short bar dissolve into the ground while the tall ones read as cut-outs. Against a
+ * night sky every bar has an edge, which is the whole reason the shape is drawn in three dimensions
+ * — and it is what the card's own name has been saying all along: a skyline is read against a sky.
+ *
+ * Its ONLY consumers are the two skyline cards. Nothing 2D takes these values: the app is a light
+ * dashboard, and this is a framed stage inside a white card, never a dark mode.
+ *
+ * The marks that stand on it are `CHART_STAGE_PALETTE` and never the light scale: measured against
+ * `sky`, `CHART_PALETTE` comes out (slots 1-8) 3.14 · 5.02 · 8.12 · 7.87 · 5.90 · 3.17 · 2.36 · 4.16,
+ * with slot 7 under 3:1 and no dark ground able to save it.
+ *
+ * The navy is the reference's own (#111e40 sampled off it), taken two steps deeper so the marks
+ * still carry: every figure measured against `sky` — grid 1.48 · axis 1.93 (the light chrome's own
+ * recession, 1.09 and 1.16, is invisible on dark) · ink 14.71 · inkMuted 8.77 · inkFaint 5.93 ·
+ * panel 1.30, which is why the panel does not float on its fill but on `panelBorder` at 2.48.
+ * On the panel: ink 11.27.
+ */
+export const CHART_STAGE = {
+  /** The deep end of the sky, and the tone the card paints behind the canvas so there is no seam. */
+  sky: "#0e1a3a",
+  /** The horizon: the sky lightens UPWARD, so the bars keep the deepest ground behind them. */
+  skyTop: "#1a2c5c",
+  grid: "#23366b",
+  axis: "#33487f",
+  ink: "#e8eefb",
+  inkMuted: "#a9bade",
+  inkFaint: "#8698c2",
+  /** The fill of what is drawn OVER the stage — the tooltip, and the chip on the hovered bar. */
+  panel: "#1c2e5e",
+  panelBorder: "#41598f",
+} as const;
+
+/**
+ * How a stage solid takes the light — the other half of `CHART_STAGE_LIGHT`, and what makes an EDGE
+ * out of what was only a step in tone.
+ */
+export const CHART_STAGE_MATERIAL = {
+  /**
+   * The highlight's WIDTH, and the first value here was wrong in the direction nobody guesses. The
+   * shader's lobe is `pow(8192, 1 - roughness)`: at 0.22 that is an exponent of **1128**, a mirror
+   * pinpoint that lands between pixels and shows as nothing at all. At 0.42 it is 180 — still tight,
+   * but wide enough that a bevel a few pixels across actually catches it.
+   */
+  roughness: 0.42,
+  /**
+   * Metal takes its colour from what it reflects and not from its own albedo — the shader is
+   * literal about it, `albedo *= (1 - metalness)` — so at 1 a bar on this stage would be a navy
+   * mirror with no identity left. Kept low on purpose: the rim is bought with the LIGHT's contrast
+   * (see `CHART_STAGE_LIGHT`), not by trading away the fill, and every point of metalness here comes
+   * straight off the floor measured there.
+   */
+  metalness: 0.14,
+} as const;
+
+/**
+ * The stage's LIGHT — one rig, mounted by EVERY 3D card, and it exists for one thing: the edge.
+ *
+ * The first stage was drawn flat, ambient only, on the rule that a lit face turns one colour into
+ * three. On a white card that rule was right. On this one it left fifteen solids reading as a single
+ * continuous ribbon: with no light every face of every bar returns the same pixel, so where one bar
+ * ends and the next begins is not drawn anywhere. `bar3D` has no border to fall back on — it renders
+ * one merged mesh with vertex colours, and `itemStyle.borderWidth` is not a property it reads — so
+ * the ONLY thing that can draw a silhouette is the shading itself.
+ *
+ * **What separates two faces is the RATIO, not the light's presence.** The rig before this one sat
+ * at ambient 0.88 against a main of 0.36 and was, in effect, still flat: it put the top face at 0.96
+ * of the fill and the face beside it at 0.88, an eight-per-cent step nobody can see. This one is set
+ * from the three faces the reader ACTUALLY sees, given that both the camera and the light are fixed:
+ *
+ *     top     N·L 0.819    1.000 of the fill
+ *     front   N·L 0.520    0.869
+ *     side    N·L 0        0.645      ← the darkest face anyone ever looks at
+ *
+ * `top` lands on 1.000 by construction: past it the term clips, and a clipped face is a flat one
+ * again. And the floor is the SIDE and not the theoretical minimum, because a fixed camera never
+ * shows the back of a bar. Measured against `CHART_STAGE.sky` at 0.645 — identity slots 5.41 · 3.61
+ * · 3.05 · 6.44 · 3.86 · 4.67 · 4.04 · 4.89 · the eighteen doughnut slices no lower than 4.76 · the
+ * section blues 5.55 · 5.91 · 5.22 · «Otros» 3.06. Every one still clears 3:1 on its darkest face.
+ *
+ * `shadow` stays OFF: a cast shadow lands on the neighbouring bar and darkens a figure that was
+ * measured, which is the thing this rig is careful not to do. And `beta` is deliberately off-axis
+ * from the camera, because a light coming from exactly where you stand lights every visible face
+ * equally — which is the flat rig again, by another route.
+ */
+export const CHART_STAGE_LIGHT = {
+  main: { intensity: 0.5, alpha: 55, beta: 25, shadow: false },
+  ambient: { intensity: 0.75 },
+} as const;
+
+/**
+ * The scale the STAGE wears — a set of its own, and the only one in the app not derived from
+ * `CHART_PALETTE`.
+ *
+ * It is here because the light scale cannot do this job. Those eight steps were chosen against
+ * WHITE, and on the stage two of them fall under 3:1 — the violet at 2.36, which no dark ground
+ * fixes (against pure black it is still 2.82). Re-stepping the same hues solved the reading and left
+ * the look untouched, which was not what was asked for: what the 3D box wanted was the register of
+ * the reference — turquoise, coral, purple, amber, orange — on navy.
+ *
+ * **The hues come from that reference, sampled off it and not guessed**: turquoise `#21bdc2`, coral
+ * `#f64b74`, purple `#953edb`, amber `#f7bf57`, orange `#f18b2e`, magenta `#ce66f4`. Those are five
+ * families and a scale needs eight, so the three that fill it —the azure of slot 5, the magenta of
+ * 7, the jade of 8— are extensions of the same family and not a second one. The ORDER alternates
+ * the two halves colour-blind vision collapses the wheel into: cool · warm · cool · warm, so no two
+ * neighbours land on the same side of it.
+ *
+ * **What it costs, stated plainly: on the stage a service does NOT wear the hue it wears on the
+ * white cards.** `stageColor` maps by SLOT, so identity is kept where it can be —the same service is
+ * the same colour in every 3D card, and the legend and the depth axis name it— but the blue of
+ * «Composición por servicio» is turquoise here. That is the trade this register asks for.
+ *
+ * Measured against `CHART_STAGE.sky` — chroma floor PASS (all 8 >= 0.10) · CVD separation PASS
+ * (worst adjacent ΔE 10.8 deutan, tritan 6.9) · normal-vision floor PASS (worst adjacent ΔE 23.7) ·
+ * contrast PASS, all 8 well over 3:1: 7.94 · 5.17 · 4.26 · 9.52 · 5.52 · 6.80 · 5.79 · 7.16 (against
+ * `skyTop`, the gradient's hardest end: 6.26 · 4.07 · 3.36 · 7.49 · 4.34 · 5.35 · 4.56 · 5.64).
+ *
+ * The ONE check it does not clear is the **lightness band**, whose dark ceiling is 0.67 and which
+ * six of the eight sit above (L 0.62–0.82). That is the register and not an oversight: an amber
+ * holds chroma only above L 0.70, so inside the band the reference's `#f7bf57` comes out a muddy
+ * gold and its orange a burnt one — measured, drawn and compared side by side before this was
+ * chosen. That ceiling guards against a mark GLARING on a dark ground; every check that guards the
+ * READING —contrast, separation, chroma— passes with room, and this ground is a navy, not a black.
+ */
+export const CHART_STAGE_PALETTE = [
+  "#36c3c3",
+  "#f74f78",
+  "#a25aee",
+  "#f0b851",
+  "#2896f5",
+  "#f28832",
+  "#de65e6",
+  "#3dbc8f",
+] as const;
+
+/**
+ * The statement's ROOTS on the stage — `CHART_SECTION`'s three, in the register the navy asks for.
+ *
+ * It exists for the same reason `CHART_SECTION` does, and keeps its rule intact: when what is drawn
+ * is a BLOCK of the statement the colour says WHICH block, so a light blue means «costos y gastos»
+ * in Datos, in the report, in the flat bars and in the solid ones. What re-steps is only the step —
+ * the hue angle of each is its source's to the degree — because the accountant's own fills were
+ * sampled off a white sheet and read as chalk on this ground.
+ *
+ * Measured against `CHART_STAGE.sky`: income 8.69 · cost 8.20 · other 7.64 (against `skyTop`, the
+ * gradient's hardest end: 6.85 · 6.46 · 6.02). They are BLOCK colours and not a categorical scale,
+ * so the checks that govern one —adjacent separation, a fixed order— do not apply: three roots are
+ * never neighbours competing for identity, they are three different questions.
+ */
+export const CHART_STAGE_SECTION = {
+  income: "#a3c554",
+  cost: "#4cc1e5",
+  other: "#f89546",
+} as const;
+
+/**
+ * «Otros» on the stage. `CHART_NEUTRAL` is a pale grey — read against white it recedes, and against
+ * the navy it measures 9.08:1, over every one of the eight entities it is meant to sit behind.
+ *
+ * This one is set by its SHADOWED face and not by its lit one: under `CHART_STAGE_LIGHT` the darkest
+ * side of a solid falls to 0.72 of its fill, and the step before this measured 2.93 there — a mark
+ * that stopped being a mark on the faces turned away from the light. At 4.31 lit and 3.33 in shadow
+ * it clears the floor on both. That leaves it level with the dimmest identity slot (4.26), and what
+ * keeps it behind them is not contrast but CHROMA: it is the one fill on the stage with none.
+ */
+export const CHART_STAGE_NEUTRAL = "#6d80a6";
+
+/**
+ * `CHART_SLICE_SEQUENCE` on the stage — the eighteen a breakdown that NAMES all its parts needs.
+ *
+ * Derived by the rule and not picked one by one: each keeps its source's OKLCH hue angle to the
+ * degree and is re-stepped to the same lightness the reference register asks for (L 0.745, 95 % of
+ * the chroma that hue still holds there), which is the same lift `CHART_STAGE_SECTION` takes. Eight
+ * hand-picked slots is a scale; eighteen would be a guess repeated eighteen times.
+ *
+ * All eighteen come out distinct, and the floor that matters here is the SHADOWED face —
+ * `CHART_STAGE_LIGHT` drops the side turned from the light to 0.72 of the fill. Against
+ * `CHART_STAGE.sky`: lit, 6.92 at worst; in shadow, 5.20. Adjacent-pair separation is not checked
+ * for this set for the reason its flat twin is not either — it is the sequence for a shape that
+ * writes every slice's NAME, so colour is not carrying the identity alone.
+ */
+export const CHART_STAGE_SLICE_SEQUENCE = [
+  "#fb8579",
+  "#fa8c1f",
+  "#26c7ab",
+  "#82c321",
+  "#77aefb",
+  "#fc7f9e",
+  "#6ab1fb",
+  "#fb885b",
+  "#fc74cb",
+  "#26c994",
+  "#b499fb",
+  "#dda020",
+  "#26bafb",
+  "#fb847f",
+  "#83c321",
+  "#fc7bae",
+  "#26c5b8",
+  "#fb8a33",
+] as const;
+
+/**
+ * A slice colour translated to the stage, BY SLOT — `stageColor`'s same contract for the sequence a
+ * doughnut draws from. A colour the sequence does not contain is left alone.
+ */
+export function stageSliceColor(color: string): string {
+  const slot = CHART_SLICE_SEQUENCE.indexOf(color as (typeof CHART_SLICE_SEQUENCE)[number]);
+  return slot < 0 ? color : CHART_STAGE_SLICE_SEQUENCE[slot];
+}
+
+/**
+ * A scale colour translated to the stage, BY SLOT — the one way into `CHART_STAGE_PALETTE`.
+ *
+ * It takes the colour and not the entity on purpose: the skyline is handed segments that already
+ * carry their hue, and re-deriving it here from an id and an order would be a second answer to «what
+ * colour is this service» — which is the one thing `colorForEntity` exists to prevent. A colour the
+ * scale does not contain is left alone, except `CHART_NEUTRAL`, which has a stage step of its own.
+ */
+export function stageColor(color: string): string {
+  if (color === CHART_NEUTRAL) {
+    return CHART_STAGE_NEUTRAL;
+  }
+  const slot = CHART_PALETTE.indexOf(color as (typeof CHART_PALETTE)[number]);
+  return slot < 0 ? color : CHART_STAGE_PALETTE[slot];
+}
+
+/**
+ * The sky as `grid3D.environment` takes it. `echarts-gl` paints a gradient of its own when left
+ * alone, and it is a light one: the stage has to REPLACE it, not sit under it.
+ */
+export const CHART_STAGE_SKY = {
+  type: "linear",
+  x: 0,
+  y: 0,
+  x2: 0,
+  y2: 1,
+  colorStops: [
+    { offset: 0, color: CHART_STAGE.skyTop },
+    { offset: 1, color: CHART_STAGE.sky },
+  ],
+} as const;
+
 /** Stroke weights and gaps shared by every mark. */
 export const CHART_MARK = {
   /** Separation between stacked segments and contiguous bars, painted in the surface color. */

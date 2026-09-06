@@ -24,7 +24,13 @@ import {
   colorForEntity,
   colorForRankingSlot,
 } from "@/lib/charts/palette";
-import type { ChartCardSpec, ChartTable, ChartTableRow } from "@/lib/charts/types";
+import type {
+  Chart3DOption,
+  ChartCardSpec,
+  ChartOption,
+  ChartTable,
+  ChartTableRow,
+} from "@/lib/charts/types";
 import { formatCurrency } from "@/lib/format";
 import { periodLabel, periodRangeLabel } from "../analytics/period";
 import { buildSeries } from "../analytics/series";
@@ -58,6 +64,8 @@ import {
   shareOf,
   type ExpenseDistribution,
 } from "./expense-distribution";
+import { SOLID_EXPENSE_COLOR, SOLID_HEIGHT, solidBarOption } from "./solid";
+import { SOLID_PIE_HEIGHT, solidPieOption } from "./solid-pie";
 import {
   distributionColor,
   distributionShares,
@@ -175,7 +183,12 @@ export interface GraficosCards {
   periods: PeriodRef[];
   periodName: string;
   tiles: CardTile[];
-  cards: ChartCardSpec[];
+  /**
+   * The list widens for ONE card —the annex's `solido`— and not for everyone, the same way the two
+   * skylines widen their own: a builder that never returns a `grid3D` should not have to prove it
+   * does not, and `option.yAxis` has to keep resolving without a narrowing step everywhere else.
+   */
+  cards: ChartCardSpec<ChartOption | Chart3DOption>[];
   /**
    * The annex's breakdown RAW, and `null` outside that view. It also comes out of the cards because
    * clicking a bar opens THAT line's weight, and drawing it needs its numbers and the two totals —
@@ -196,14 +209,19 @@ export interface GraficosCards {
   /**
    * The ids of the annex's TWO cards, or `null` outside that view.
    *
-   * They come out declared because both draw EXACTLY the same breakdown —one single reduction, the
-   * same rows, the same cut— and who decides how many are seen is the CONSUMER: the screen shows one
-   * with a «Barras · Pastel» switch, and the printable report both, because a printed control is a
-   * button nobody can press (the rule Sueldos por Áreas already applies to its table and its chart).
-   * Emitting one here would force the report to ask for the list twice, and emitting two without
-   * saying they are a pair would force the view to recognise them by their label.
+   * They come out declared because all three draw EXACTLY the same breakdown —one single reduction,
+   * the same rows, the same cut— and who decides how many are seen is the CONSUMER: the screen shows
+   * one with a «Barras · Sólido 3D · Pastel · Rosca 3D» switch, and the report the two it can carry,
+   * because a printed control is a button nobody can press (the rule Sueldos por Áreas already
+   * applies to its table and its chart). Emitting one here would force the report to ask for the
+   * list twice, and emitting them without saying they are the same reading would force the view to
+   * recognise them by their label.
+   *
+   * `solido` and `rosca` are the two the report leaves out, and not because they are controls: they
+   * are WebGL canvases, and a printed sheet cannot carry one. They say exactly what `barras` and
+   * `pastel` say.
    */
-  annexShapes: { barras: string; pastel: string } | null;
+  annexShapes: { barras: string; solido: string; pastel: string; rosca: string } | null;
   /**
    * How many COVERED periods moved nothing — what «Ocultar meses en 0» can remove from the axis. It
    * is always counted over the UNPRUNED axis, so it does not change on pressing the button: counting
@@ -473,6 +491,11 @@ function businessLineCard(
  * what part of the total each one is. The accountant's annex carries both, one below the other, for
  * that very reason.
  *
+ * There are three SHAPES and still two readings: `barras` and `solido` are the same reading —a bar
+ * per line, ordered from largest, read in dollars— and differ only in the body they are drawn with,
+ * flat on the card or solid on the stage. Which is why the solid one carries no reading of its own
+ * and no table of its own: it hands over the bars' same twin.
+ *
  * **The bars' table twin IS the whole annex**: code, value, % of the expense and % of the revenue,
  * the seventeen rows uncut and with their TOTAL row. That is the place where an account the chart
  * folded still has its figure, and it is what makes cutting the chart lose nothing — the same
@@ -484,7 +507,12 @@ function expenseDistributionCards(
   periodName: string,
   warnings: string[],
   emptyNote: string | undefined,
-): [ChartCardSpec, ChartCardSpec] {
+): [
+  ChartCardSpec,
+  ChartCardSpec<ChartOption | Chart3DOption>,
+  ChartCardSpec,
+  ChartCardSpec<ChartOption | Chart3DOption>,
+] {
   // ONE single reduction for both cards: the bars and the pie draw exactly the same list, folded into
   // «Otros» from line fifteen on. Each used to cut on its own —the bars by the ranking's scale, the
   // pie by its own— and they could show a different number of lines of the same breakdown, which is
@@ -532,6 +560,23 @@ function expenseDistributionCards(
       height: 420,
     },
     {
+      // The SAME bars, given a body. It is a shape and not a second reading, so it repeats the bars'
+      // table twin whole rather than building one of its own — two tables of one breakdown is the
+      // disagreement the single reduction above exists to prevent.
+      id: "distribucion-solida",
+      title: "Distribución de costos y gastos",
+      guide: GUIDE_EXPENSE_ANNEX_BARS,
+      subtitle: `${distribution.categories.length} ${distribution.categories.length === 1 ? "rubro" : "rubros"} · ${periodName}`,
+      option:
+        drawn.length > 0 ? solidBarOption(drawn, { colorOf: () => SOLID_EXPENSE_COLOR }) : null,
+      table: drawn.length > 0 ? expenseAnnexTable(distribution) : EMPTY_TABLE,
+      warnings,
+      // The note says what the flat one's says, plus the one thing this body adds and no control
+      // announces: the camera turns.
+      ...withNote(note ? `${note} Arrastra para girar la vista.` : "Arrastra para girar la vista."),
+      height: SOLID_HEIGHT,
+    },
+    {
       id: "ranking",
       title: "Distribución de costos y gastos %",
       guide: GUIDE_EXPENSE_ANNEX_PIE,
@@ -543,6 +588,37 @@ function expenseDistributionCards(
       // already applies to the revenue composition.
       ...withNote(emptyNote ?? excludedNote(slices.excluded)),
       height: PIE_HEIGHT,
+    },
+    {
+      // The SAME doughnut with a body. Like the solid bars it repeats the flat card's table whole:
+      // it is a shape of that reading, not a second one.
+      id: "rosca-solida",
+      title: "Distribución de costos y gastos %",
+      guide: GUIDE_EXPENSE_ANNEX_PIE,
+      subtitle: `Peso de cada rubro · ${periodName}`,
+      option:
+        drawn.length > 0 && slices.total > 0
+          ? solidPieOption(
+              drawn.map((slice) => ({
+                id: `rubro-${slice.code}`,
+                label: slice.label,
+                value: slice.value,
+                // The share is the ANGLE, and it is taken from the same total the flat doughnut
+                // divides by — a wedge measured against anything else would disagree with the
+                // percentage its own table twin prints.
+                share: slice.value / slices.total,
+                color: sliceColor(slice.code),
+              })),
+            )
+          : null,
+      table: drawn.length > 0 ? entryTable(drawn, { colorOf: sliceColor }) : EMPTY_TABLE,
+      warnings,
+      ...withNote(
+        [emptyNote ?? excludedNote(slices.excluded), "Arrastra para girar la vista."]
+          .filter(Boolean)
+          .join(" "),
+      ),
+      height: SOLID_PIE_HEIGHT,
     },
   ];
 }
@@ -851,9 +927,9 @@ export function buildGraficosCards(
   // and leaving both would print the same list twice. The revenue composition stays on the list on
   // purpose: the annex's second denominator is revenue, so having it on screen is the context for
   // the «% del ingreso» column.
-  const [annexBars, annexPie] = annex
+  const [annexBars, annexSolid, annexPie, annexRing] = annex
     ? expenseDistributionCards(annex, periodName, expenses.warnings, rankingEmptyNote)
-    : [null, null];
+    : [null, null, null, null];
 
   // The three that close the list are declared separately because the annex changes WHICH ones come
   // out —it takes the ranking and «Distribución» with it— while leaving the others in their same
@@ -962,7 +1038,15 @@ export function buildGraficosCards(
     // Only when «Otros» is actually on screen: with marked accounts the breakdown is a slice on
     // purpose and there is no residual bar to open.
     annexResidualCodes: annexPlan && annex?.residual ? residualCodes(source, annexPlan) : [],
-    annexShapes: annexBars && annexPie ? { barras: annexBars.id, pastel: annexPie.id } : null,
+    annexShapes:
+      annexBars && annexSolid && annexPie && annexRing
+        ? {
+            barras: annexBars.id,
+            solido: annexSolid.id,
+            pastel: annexPie.id,
+            rosca: annexRing.id,
+          }
+        : null,
     lines: lineLegend,
     tiles: [
       { id: "ingresos", label: "Ingresos", value: revenue },
@@ -1005,8 +1089,13 @@ export function buildGraficosCards(
       // the path from revenue to result. In the annex, the ranking gives up its place, keeping the
       // logical order: composition and then cascade. «Distribución» is omitted under the expense
       // annex, since its reading is already covered by the other cards.
+      // The solid shape travels next to the bars and never instead of them: the list carries every
+      // shape, and it is the consumer —the screen with its switch, the report with what paper can
+      // hold— that decides which of the three is seen. Emitting only the one being read would put
+      // that decision in here, where neither of the two consumers can reach it.
+      ...(annex ? (annexSolid ? [annexSolid] : []) : []),
       ...(annex
-        ? [annexPie ?? rankingCard, composicionCard, cascadaCard]
+        ? [annexPie ?? rankingCard, ...(annexRing ? [annexRing] : []), composicionCard, cascadaCard]
         : [composicionCard, rankingCard, distribucionCard, cascadaCard]),
     ],
   };

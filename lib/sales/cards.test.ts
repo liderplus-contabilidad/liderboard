@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { CHART_NEUTRAL, CHART_PALETTE, CHART_SLICE_SEQUENCE } from "@/lib/charts/palette";
-import { is3DOption, type Chart3DOption, type ChartParam } from "@/lib/charts/types";
+import {
+  CHART_NEUTRAL,
+  CHART_PALETTE,
+  CHART_SLICE_SEQUENCE,
+  CHART_STAGE_LIGHT,
+  CHART_STAGE_MATERIAL,
+  CHART_STAGE_PALETTE,
+  stageColor,
+  stageSliceColor,
+} from "@/lib/charts/palette";
+import {
+  is3DOption,
+  type Chart3DOption,
+  type ChartCardSpec,
+  type ChartOption,
+  type ChartParam,
+} from "@/lib/charts/types";
 import {
   buildSalesCards as buildCards,
   PAYER_SLICES,
@@ -111,6 +126,66 @@ describe("composición por servicio", () => {
 
   it("sin ninguna línea no dibuja: la tarjeta dice por qué en vez de un plot vacío", () => {
     expect(buildSalesCards(input([])).services.option).toBeNull();
+  });
+});
+
+describe("el cuerpo SÓLIDO de las dos tarjetas planas", () => {
+  const lines = [
+    line({ serviceCode: "\\01", serviceName: "HONORARIOS", payer: "SALUDSA", amount: 60 }),
+    line({ serviceCode: "\\02", serviceName: "MEDICINAS", payer: "PREPAGADA", amount: 40 }),
+  ];
+
+  const solidOf = (card: ChartCardSpec<ChartOption | Chart3DOption>) => {
+    if (card.option === null || !is3DOption(card.option)) {
+      throw new Error("se esperaba el cuerpo sólido");
+    }
+    return card.option;
+  };
+
+  it("por omisión NO se levantan: el plano es lo que trae los nombres enteros y las cifras", () => {
+    const { services, payers } = buildCards(input(lines));
+    expect(services.option !== null && is3DOption(services.option)).toBe(false);
+    expect(payers.option !== null && is3DOption(payers.option)).toBe(false);
+  });
+
+  it("levantada, la composición dibuja los MISMOS servicios en el mismo orden", () => {
+    const plano = buildCards(input(lines));
+    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
+    const ejeY = plano.services.option?.yAxis;
+
+    expect(solido.xAxis3D.data).toEqual((Array.isArray(ejeY) ? ejeY[0] : ejeY)?.data);
+    // Y la tabla gemela es la misma: es un cuerpo del mismo dato, no una segunda lectura.
+    expect(buildCards(input(lines), { servicesView: "solido" }).services.table).toEqual(
+      plano.services.table,
+    );
+  });
+
+  it("con UN año no hay fondo: una fila sin nombre y ninguna leyenda", () => {
+    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
+    // Es tema visual y no una variable más: la profundidad aquí es el grosor de la barra.
+    expect(solido.yAxis3D.data).toEqual([""]);
+    expect(solido.legend?.show).toBe(false);
+    expect(solido.series).toHaveLength(1);
+  });
+
+  it("comparando años, cada año es una FILA — lo mismo que nombraba la leyenda plana", () => {
+    const dos = comparing([
+      { year: 2025, lines },
+      { year: 2026, lines },
+    ]);
+    const solido = solidOf(buildCards(dos, { servicesView: "solido" }).services);
+
+    expect(solido.series.map((serie) => serie.name)).toEqual(["2025", "2026"]);
+    expect(solido.yAxis3D.data).toEqual(["2026", "2025"]);
+    expect(solido.legend?.show).toBe(true);
+  });
+
+  it("los pagadores se levantan igual y con su misma escala, en el paso del escenario", () => {
+    const solido = solidOf(buildCards(input(lines), { payersView: "solido" }).payers);
+    const fills = solido.series[0].data.map((datum) => datum.itemStyle?.color);
+
+    expect(solido.xAxis3D.data).toEqual(["SALUDSA", "PREPAGADA"]);
+    expect(fills).toEqual([0, 1].map((slot) => stageSliceColor(CHART_SLICE_SEQUENCE[slot])));
   });
 });
 
@@ -935,17 +1010,36 @@ describe("el skyline le da al servicio su propio eje", () => {
     expect(depth).toBeLessThan((option.grid3D.boxDepth ?? 0) / 2);
   });
 
-  it("un servicio lleva el MISMO color que en la composición", () => {
+  it("un servicio guarda su RANURA en la escala del escenario", () => {
     const cards = buildCards(opened(), { evolutionView: "skyline" });
-    expect(skyline().series[0].itemStyle?.color).toBe(
-      datumColor(cards.services.option?.series[0], 0),
+    const composition = datumColor(cards.services.option?.series[0], 0);
+    // El escenario tiene escala propia —el azul de la composición es turquesa aquí—, y lo que se
+    // conserva es la POSICIÓN: `stageColor` traduce por ranura, así que el servicio es el mismo
+    // color en todas las tarjetas 3D y su sitio en el desglose no se mueve.
+    expect(skyline().series[0].itemStyle?.color).toBe(stageColor(composition ?? ""));
+    expect(CHART_PALETTE.indexOf(composition as (typeof CHART_PALETTE)[number])).toBe(
+      CHART_STAGE_PALETTE.indexOf(
+        skyline().series[0].itemStyle?.color as (typeof CHART_STAGE_PALETTE)[number],
+      ),
     );
   });
 
-  it("las barras van SIN luz: el color es identidad y no un sombreado", () => {
+  it("las barras llevan LA MISMA luz que todo el escenario: el contorno es lo que dibuja", () => {
     const option = skyline();
-    expect(option.series.every((entry) => entry.shading === "color")).toBe(true);
-    expect(option.grid3D.light?.main?.intensity).toBe(0);
+    // Planas —`shading: "color"`— cada cara de cada barra devolvía el mismo píxel y las filas se
+    // leían como una sola superficie continua; un `bar3D` es una malla única y no tiene borde al
+    // que recurrir. `lambert` separaba las caras y se quedaba ahí: dos caras que se encuentran son
+    // un escalón de tono, no un canto. Lo que dibuja el canto es el término especular, y por eso el
+    // escenario sombrea `realistic`. El aparejo y el material son UNOS para las tres tarjetas 3D.
+    expect(option.series.every((entry) => entry.shading === "realistic")).toBe(true);
+    expect(option.series.every((entry) => entry.realisticMaterial === CHART_STAGE_MATERIAL)).toBe(
+      true,
+    );
+    // Y el bisel es la SUPERFICIE del canto: el brillo tiene que caer sobre algo.
+    expect(option.series.every((entry) => (entry.bevelSize ?? 0) > 0.15)).toBe(true);
+    expect(option.grid3D.light).toEqual(CHART_STAGE_LIGHT);
+    // Sin sombra proyectada: caería sobre la barra vecina y oscurecería una cifra ya medida.
+    expect(option.grid3D.light?.main?.shadow).toBe(false);
   });
 
   it("la cámara arranca quieta y no se puede sacar de cuadro", () => {
