@@ -6,6 +6,7 @@ import { buildAnalyticsSource } from "@/lib/profit-loss/analytics/source";
 import { REVENUE_ROOT } from "@/lib/profit-loss/charts/presets";
 import { applyEditsToLeafAccounts, mergeCenters } from "@/lib/profit-loss/derive";
 import { loadedMonthsFor, type PygDataset } from "@/lib/profit-loss/types";
+import type { SolidView } from "@/lib/charts/solid-bars";
 import type { PersonnelGroupId } from "@/lib/personnel-cost/accounts";
 import { PERSONNEL_ACCOUNT_CODES } from "@/lib/personnel-cost/accounts";
 import { canReadPersonnelCost } from "@/lib/personnel-cost/availability";
@@ -83,6 +84,16 @@ interface PersonnelCostDataValue {
    */
   evolutionView: EvolutionView;
   setEvolutionView: (view: EvolutionView) => void;
+  /**
+   * Which of the other three cards are standing on the stage — held here for the same reason
+   * `evolutionView` is: the cards are rebuilt from `cardsInput` on every read, so a shape kept inside
+   * one would come undone on the next unrelated mark.
+   */
+  solidViews: PersonnelCardsInput["solidViews"];
+  setSolidView: (
+    card: keyof NonNullable<PersonnelCardsInput["solidViews"]>,
+    view: SolidView,
+  ) => void;
   grid: PersonnelGrid;
   /** Whether a row that moved nothing anywhere is held back — a control of the GRID's own header. */
   hideEmptyRows: boolean;
@@ -108,6 +119,12 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   const [rawFilters, setRawFilters] = useState<PersonnelCostFilters>(emptyFilters);
   const [hideEmptyRows, setHideEmptyRows] = useState(false);
   const [evolutionView, setEvolutionView] = useState<EvolutionView>(DEFAULT_EVOLUTION_VIEW);
+  const [solidViews, setSolidViews] = useState<PersonnelCardsInput["solidViews"]>({});
+  const setSolidView = useCallback(
+    (card: keyof NonNullable<PersonnelCardsInput["solidViews"]>, view: SolidView) =>
+      setSolidViews((current) => ({ ...current, [card]: view })),
+    [],
+  );
 
   const canRead = canReadPersonnelCost({ sourceSystemId, isConsolidated });
   // The capture writes into a REAL client and never into the consolidado, so the partition it uses is
@@ -244,8 +261,8 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   }, [inputs, filters.years, months]);
 
   const cardsInput = useMemo<PersonnelCardsInput>(
-    () => ({ reading, groups: filters.groups, period: periodName, evolutionView }),
-    [reading, filters.groups, periodName, evolutionView],
+    () => ({ reading, groups: filters.groups, period: periodName, evolutionView, solidViews }),
+    [reading, filters.groups, periodName, evolutionView, solidViews],
   );
   const cards = useMemo(() => buildPersonnelCards(cardsInput), [cardsInput]);
   const grid = useMemo(
@@ -299,6 +316,8 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     cards,
     evolutionView,
     setEvolutionView,
+    solidViews,
+    setSolidView,
     grid,
     hideEmptyRows,
     setHideEmptyRows,

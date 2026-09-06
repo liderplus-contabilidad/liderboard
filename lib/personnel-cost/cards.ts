@@ -24,9 +24,15 @@ import {
   CHART_LINES,
   CHART_MARK,
   CHART_NEUTRAL,
+  CHART_STAGE,
+  CHART_STAGE_LIGHT,
+  CHART_STAGE_MATERIAL,
+  CHART_STAGE_SKY,
   CHART_SURFACE,
   colorForEntity,
   colorForSliceSlot,
+  stageColor,
+  stageSliceColor,
 } from "@/lib/charts/palette";
 import type {
   Chart3DOption,
@@ -43,6 +49,18 @@ import type {
   ChartTableRow,
   ChartTooltip,
 } from "@/lib/charts/types";
+import {
+  fitDirectLabel,
+  labelDistance,
+  labelHeadroom,
+  type LabelFit,
+} from "@/lib/charts/label-fit";
+import {
+  SOLID_BARS_HEIGHT,
+  solidBarsOption,
+  type SolidBarRow,
+  type SolidView,
+} from "@/lib/charts/solid-bars";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
@@ -109,14 +127,27 @@ export interface PersonnelCardsInput {
   period: string;
   /** «Evolución»'s shape. `apilada` when not given. */
   evolutionView?: EvolutionView;
+  /**
+   * Which of the other three cards are standing on the stage. Flat when not given.
+   *
+   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly three, they are
+   * fixed, and a typo in a key would silently draw a flat card forever. «Evolución» is not among them
+   * because its second shape is a skyline and not a frieze — a different reading, with a control of
+   * its own (`evolutionView`).
+   */
+  solidViews?: {
+    sections?: SolidView;
+    ratio?: SolidView;
+    concepts?: SolidView;
+  };
 }
 
 export interface PersonnelCards {
-  sections: ChartCardSpec;
-  ratio: ChartCardSpec;
-  /** The only card that can come out in three dimensions — hence the widened option type. */
+  /** All four can come out in three dimensions — hence the widened option type on every one. */
+  sections: ChartCardSpec<ChartOption | Chart3DOption>;
+  ratio: ChartCardSpec<ChartOption | Chart3DOption>;
   groups: ChartCardSpec<ChartOption | Chart3DOption>;
-  concepts: ChartCardSpec;
+  concepts: ChartCardSpec<ChartOption | Chart3DOption>;
   /**
    * Whether the skyline has anything to put on its depth axis. With ONE entity to compare it has
    * none, and the control is NOT DRAWN — a control that means nothing for the open data does not
@@ -243,11 +274,167 @@ function cell(value: number | null, unit: (value: number) => string): string | n
   return value === null ? null : unit(value);
 }
 
+/**
+ * Beyond this many ROWS a figure per mark stops being read and becomes texture — PyG's and Ingresos'
+ * same number, and the rows themselves are what would cost it: five of them eat a third of a 280 px
+ * card. Past it the amount stays where it is never missing, in the tooltip and in the table twin.
+ */
+const MAX_LABEL_ROWS = 4;
+
+/**
+ * The figure written over a mark — the module's ONE composition of it, so four cards cannot end up
+ * writing an amount four different ways.
+ *
+ * Its SHAPE is `lib/charts/label-fit`'s and not this module's: body first, then the cents —which the
+ * tooltip and the table twin keep— and never the figure itself. Written flat at every density, because
+ * these cards are read at a glance and a turned amount is read by tilting the head.
+ *
+ * `read` is what the label SAYS, and it is deliberately not `param.value`: over a stack the value under
+ * the label is the band's and what belongs there is the column's total. `row` is which strip of figures
+ * the series writes on — one figure per column per series is what buys the width, and it is what lets
+ * the ratio's exercises carry their percentage without disputing one strip.
+ */
+function directLabel(
+  fit: LabelFit,
+  read: (param: ChartParam) => number | null,
+  write: (value: number) => string,
+  row = 0,
+): Pick<ChartSeries, "label" | "labelLayout"> {
+  return {
+    label: {
+      show: true,
+      position: "top",
+      distance: labelDistance(row, fit),
+      color: CHART_INK.muted,
+      fontSize: fit.fontSize,
+      formatter: (param: ChartParam) => {
+        const value = read(param);
+        // A month never loaded writes NOTHING. `$0.00` would be a claim the file never made — the
+        // grid's and the tooltip's same rule.
+        return value === null ? "" : write(value);
+      },
+    },
+    // The rows keep one series' figures off the next one's; what is left for `hideOverlap` is a
+    // collision INSIDE a row — two adjacent columns on an axis narrower than the fit assumed.
+    labelLayout: { hideOverlap: true },
+  };
+}
+
+/**
+ * The figure over a COLUMN, and it is always the column's total — never the band the label happens to
+ * ride on. It is Ventas' and PyG's same rule: a stack's bands are told apart by colour and read one by
+ * one in the tooltip, and writing three figures up a column is how a column stops being read as one
+ * amount.
+ */
+function columnTotalLabel(
+  fit: LabelFit,
+  totals: readonly (number | null)[],
+): Pick<ChartSeries, "label" | "labelLayout"> {
+  return directLabel(
+    fit,
+    (param) => totals[param.dataIndex] ?? null,
+    (value) => formatCurrency(value, { cents: fit.cents }),
+  );
+}
+
+/** A column's total across a set of stacked series: `null` only where NO band has a figure. */
+function columnTotals(series: readonly ChartSeries[], columns: number): (number | null)[] {
+  return Array.from({ length: columns }, (_, index) =>
+    series.reduce<number | null>((sum, entry) => {
+      const value = entry.data[index] as number | null;
+      return value === null ? sum : (sum ?? 0) + value;
+    }, null),
+  );
+}
+
+/**
+ * Which band WRITES the total: the last one that has a figure anywhere on the axis.
+ *
+ * A stack's label sits at the top edge of the band carrying it, so the topmost band is where the
+ * column's total belongs. But a client with no outside fees reads `externos` as `null` the whole
+ * exercise, and hanging the figure there would have left the card with no figures at all — so the
+ * choice falls back down the stack instead of onto silence. Returns `-1` when nothing is drawn.
+ */
+function labelCarrier(series: readonly ChartSeries[]): number {
+  return series.reduce(
+    (found, entry, index) => (entry.data.some((value) => value !== null) ? index : found),
+    -1,
+  );
+}
+
+/** The same series with the total's figure hung off the band that has to write it. */
+function writingTotals(
+  series: readonly ChartSeries[],
+  totals: readonly (number | null)[],
+  fit: LabelFit,
+): ChartSeries[] {
+  const carrier = labelCarrier(series);
+  return series.map((entry, index) =>
+    index === carrier ? { ...entry, ...columnTotalLabel(fit, totals) } : entry,
+  );
+}
+
+/**
+ * The SOLID body of a flat card — the same reading given depth, and the one door to it, so three
+ * cards cannot end up standing on three different stages.
+ *
+ * It is `lib/charts/solid-bars.ts` and NOT this module's skyline, and the two are different shapes on
+ * purpose: a skyline hands every entity an axis of its own to be followed month by month; a frieze
+ * puts few rows behind one another so the columns can be compared. «Evolución» wants the first —it is
+ * a trajectory— and these three want the second.
+ *
+ * **The rows go smallest FIRST.** `solidBarsOption` draws `rows[0]` nearest the reader and a bar hides
+ * whatever is behind it, so the tallest at the front covers the rest whole. It is the skyline's same
+ * rule read from the other end, because that camera looks at the box from the other side.
+ */
+function solidBody(
+  columns: readonly string[],
+  rows: readonly SolidBarRow[],
+  units: { value: (value: number) => string; axis: (value: number) => string },
+  colors?: readonly string[],
+): Chart3DOption | null {
+  if (columns.length === 0 || rows.length === 0) {
+    return null;
+  }
+  return solidBarsOption({
+    columns,
+    // Sorted by PEAK and never by total: occlusion is a fact about heights, and an entity that adds up
+    // to more can still have every column shorter than the one it would hide.
+    rows: [...rows].sort((a, b) => peakOf(a.values) - peakOf(b.values)),
+    ...(colors ? { colors } : {}),
+    formatValue: units.value,
+    formatAxis: units.axis,
+  });
+}
+
+/** The tallest column a row reaches, which is what decides how far back it is drawn. */
+function peakOf(values: readonly (number | null)[]): number {
+  const heights = values.filter((value): value is number => value !== null);
+  return heights.length > 0 ? Math.max(...heights) : 0;
+}
+
+/** Whether the card DRAWS its solid: the control asked for it and there is a body to draw. */
+function standing(
+  view: SolidView | undefined,
+  solid: Chart3DOption | null,
+): solid is Chart3DOption {
+  return view === "solido" && solid !== null;
+}
+
+/** What a card standing on the stage says under itself, since its camera is not obvious. */
+const SOLID_HINT = "Arrastra para girar la vista.";
+
+/** A card's note, with the stage's hint appended where it is standing. */
+function sentence(note: string | undefined, asSolid: boolean): string | undefined {
+  const parts = [note, asSolid ? SOLID_HINT : undefined].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // 1 · Planta vs Externos
 // ---------------------------------------------------------------------------
 
-function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec {
+function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
   const { reading, period } = input;
   const years = reading.years.filter((year) => year.covered);
   const comparing = years.length > 1;
@@ -285,6 +472,11 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec {
     };
   });
 
+  // ONE definition of the month's total, read by the figure over the column and by the table twin —
+  // two computations of the same number drift apart and nothing can say which of the two is right.
+  const totals = columnTotals(series, categories.length);
+  const fit = fitDirectLabel(categories.length);
+
   const table: ChartTable = {
     // `columns` nombra sólo las columnas de VALORES: la de la etiqueta la encabeza `ChartCard`
     // («Serie»), y anteponerla aquí corría toda la fila una posición.
@@ -297,13 +489,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec {
           const found = series.find((entry) => entry.id === `section-${section.id}`);
           return cell((found?.data[index] as number | null) ?? null, moneyExact);
         }),
-        cell(
-          series.reduce<number | null>((sum, entry) => {
-            const value = entry.data[index] as number | null;
-            return value === null ? sum : (sum ?? 0) + value;
-          }, null),
-          moneyExact,
-        ),
+        cell(totals[index], moneyExact),
       ],
     })),
   };
@@ -311,32 +497,63 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec {
   const planta = reading.sections.find((entry) => entry.section.id === "planta");
   const externos = reading.sections.find((entry) => entry.section.id === "externos");
 
+  // On the stage the two sections stop being a pile and become two ROWS: what the stack says by
+  // accumulating, the depth axis says by standing them one behind the other, and each is then read
+  // from the floor instead of from wherever the one below it ended.
+  const solid = solidBody(
+    categories,
+    PERSONNEL_SECTIONS.map((section) => ({
+      id: section.id,
+      name: section.label,
+      color: stageColor(colorForPersonnel(section.id)),
+      values: (series.find((entry) => entry.id === `section-${section.id}`)?.data ?? []) as (
+        | number
+        | null
+      )[],
+    })),
+    { value: moneyExact, axis: money },
+  );
+  const asSolid = standing(input.solidViews?.sections, solid);
+
   return {
     id: "personnel-sections",
     title: "Planta vs Externos",
     subtitle: period,
-    option:
-      categories.length === 0
+    option: asSolid
+      ? solid
+      : categories.length === 0
         ? null
         : {
             animationDuration: 300,
             textStyle: { fontFamily: CHART_FONT },
-            grid: { left: 8, right: 12, top: 12, bottom: 34, outerBoundsMode: "same" },
+            grid: {
+              left: 8,
+              right: 12,
+              // The room the row of figures asks for: `outerBoundsContain` only reserves for the
+              // AXIS' labels, so without this the amount over the tallest column is cropped against
+              // the card's edge — the one failure worse than the hover it replaces.
+              top: labelHeadroom(1, fit, 12),
+              bottom: 34,
+              outerBoundsMode: "same",
+              outerBoundsContain: "axisLabel",
+            },
             xAxis: categoryAxis(categories),
             yAxis: valueAxis(money),
             legend: legendFor(true),
             tooltip: axisTooltip(moneyExact),
-            series,
+            series: writingTotals(series, totals, fit),
           },
     table,
-    note:
+    note: sentence(
       planta && externos
         ? `Sobre ventas: planta ${planta.share === null ? "—" : percent(planta.share)}, externos ${
             externos.share === null ? "—" : percent(externos.share)
           }.`
         : undefined,
+      asSolid,
+    ),
     guide: GUIDE_SECTIONS,
-    height: SECTIONS_HEIGHT,
+    height: asSolid ? SOLID_BARS_HEIGHT : SECTIONS_HEIGHT,
   };
 }
 
@@ -344,7 +561,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec {
 // 2 · Costo de personal vs ventas
 // ---------------------------------------------------------------------------
 
-function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec {
+function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
   const { reading, period } = input;
   const years = reading.years.filter((year) => year.covered);
   const months = [...new Set(years.flatMap((year) => year.months))].sort((a, b) => a - b);
@@ -364,7 +581,13 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec {
     return shareOf(cost, revenue);
   };
 
-  const series: ChartSeries[] = years.map((year) => ({
+  const fit = fitDirectLabel(months.length);
+  // Here the figure IS each point's own: a percentage is read against the axis and not against the
+  // other exercises, so unlike the two stacks nothing has to be totalled to write it. Each exercise
+  // gets its own ROW of figures, which is what lets several carry theirs without disputing one strip.
+  const labelRows = years.length <= MAX_LABEL_ROWS ? years.length : 0;
+
+  const series: ChartSeries[] = years.map((year, index) => ({
     id: `ratio-${year.year}`,
     type: "line",
     name: String(year.year),
@@ -375,6 +598,14 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec {
     lineStyle: { color: yearColor(year.year, order), width: CHART_MARK.lineWidth },
     itemStyle: { color: yearColor(year.year, order) },
     emphasis: { focus: "series" },
+    ...(labelRows === 0
+      ? {}
+      : directLabel(
+          fit,
+          (param) => (param.value === null ? null : Number(param.value)),
+          percent,
+          index,
+        )),
   }));
 
   const table: ChartTable = {
@@ -390,17 +621,43 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec {
     })),
   };
 
+  // Standing up, the trajectory gives way to a comparison of HEIGHTS from a common floor: one solid
+  // per month and one row per exercise, on the same percentage scale. It is a second shape and not a
+  // replacement — what a line draws and a bar cannot is exactly where the ratio is going.
+  const solid = solidBody(
+    months.map((month) => MONTHS_SHORT_ES[month]),
+    years.map((year) => ({
+      id: `ratio-${year.year}`,
+      name: String(year.year),
+      color: stageColor(yearColor(year.year, order)),
+      values: months.map((month) => ratioAt(year, month)),
+    })),
+    { value: percent, axis: percent },
+  );
+  const asSolid = standing(input.solidViews?.ratio, solid);
+
   return {
     id: "personnel-ratio",
     title: "Costo de personal vs ventas",
     subtitle: period,
-    option:
-      months.length === 0
+    option: asSolid
+      ? solid
+      : months.length === 0
         ? null
         : {
             animationDuration: 300,
             textStyle: { fontFamily: CHART_FONT },
-            grid: { left: 8, right: 12, top: 12, bottom: 34, outerBoundsMode: "same" },
+            grid: {
+              left: 8,
+              right: 12,
+              // One row of figures per exercise, and the top one is cropped against the card's edge
+              // without this: `outerBoundsContain` reserves for the AXIS' labels and nothing else.
+              // With no figures written there is nothing to reserve for, and the plot keeps the room.
+              top: labelRows === 0 ? 12 : labelHeadroom(labelRows, fit, 12),
+              bottom: 34,
+              outerBoundsMode: "same",
+              outerBoundsContain: "axisLabel",
+            },
             xAxis: categoryAxis(months.map((month) => MONTHS_SHORT_ES[month])),
             yAxis: valueAxis(percent),
             legend: legendFor(years.length > 1),
@@ -408,12 +665,14 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec {
             series,
           },
     table,
-    note:
+    note: sentence(
       reading.share === null
         ? undefined
         : `En el tramo completo: ${percent(reading.share)} de ${moneyExact(reading.revenue)} facturados.`,
+      asSolid,
+    ),
     guide: GUIDE_REVENUE_RATIO,
-    height: RATIO_HEIGHT,
+    height: asSolid ? SOLID_BARS_HEIGHT : RATIO_HEIGHT,
   };
 }
 
@@ -500,6 +759,8 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     return present.length > 0 ? present.reduce((sum, value) => sum + value, 0) : null;
   });
 
+  const labelFit = fitDirectLabel(labels.length);
+
   const barSeries: ChartSeries[] = rows.map((row, index) => ({
     id: `evolution-${row.id}`,
     type: "bar",
@@ -535,6 +796,10 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     symbol: "circle",
     symbolSize: CHART_MARK.symbolSize,
     smooth: false,
+    // It is the one mark of the card that already IS the column's total, so it is the one that writes
+    // it. Measured as ONE series and not as the fourth: what decides the figure's shape is its own
+    // row over the columns, not the stack below it.
+    ...columnTotalLabel(labelFit, totals),
     // Over the bars, never under: a line hidden behind the stack it measures is a line that is not
     // there.
     z: 3,
@@ -555,7 +820,16 @@ function buildGroupsCard(input: PersonnelCardsInput): {
   const flat: ChartOption = {
     animationDuration: 300,
     textStyle: { fontFamily: CHART_FONT },
-    grid: { left: 8, right: 12, top: 12, bottom: 34, outerBoundsMode: "same" },
+    grid: {
+      left: 8,
+      right: 12,
+      // The same headroom the sections card reserves, and for the same reason: nothing else accounts
+      // for a figure written over the tallest column.
+      top: labelHeadroom(1, labelFit, 12),
+      bottom: 34,
+      outerBoundsMode: "same",
+      outerBoundsContain: "axisLabel",
+    },
     xAxis: categoryAxis(labels),
     yAxis: valueAxis(money),
     legend: legendFor(true),
@@ -595,43 +869,91 @@ function buildGroupsCard(input: PersonnelCardsInput): {
  * What it gives up is the month's TOTAL, which the stack states by its height and the line by its
  * shape. That is why this is a second shape of one card and not a card of its own: the two answer
  * different halves of the same question and the reader picks the half they need.
+ *
+ * It is drawn on THE STAGE, and the three decisions that keep it a reading and not an effect are the
+ * other two skylines' (`lib/sales/cards.ts`, `lib/revenue/cards/skyline.ts`) same three:
+ *
+ * - **One rig, and it is what draws the EDGE.** Flat shading was the first rule here, on the reasoning
+ *   that a lit face turns one colour into three. On a white card that was right; on this one it left
+ *   the rows reading as a single continuous surface, because `bar3D` renders one merged mesh and has
+ *   no border to fall back on. `CHART_STAGE_LIGHT` models the solid without repainting it.
+ * - **The figure goes on the HOVERED bar**, through the app's own formatter — left alone gl writes the
+ *   raw datum, which is how an amount reaches the screen as «144277.59000000001».
+ * - **A bar takes little more than HALF its cell.** What it leaves is the gap, and in perspective the
+ *   side face of the nearer bar eats most of it: at two thirds the rows closed up again.
  */
 function skylineOption(
   rows: readonly EvolutionRow[],
   labels: readonly string[],
   depthLabel: string,
 ): Chart3DOption {
-  // **The LARGEST goes at the back**, which is the only thing that makes a matrix of bars in
-  // perspective legible: a bar hides whatever is behind it, so with the largest in front it covers
-  // the rest whole. Inverted, a short bar never reaches the one behind it. The COLOUR does not move —
-  // it stays the entity's, so a group is the same hue here and in the other cards.
-  const ordered = [...rows].sort((a, b) => total(b) - total(a));
+  // **The tallest goes at the BACK**, which is the only thing that makes a matrix of bars in
+  // perspective legible: a bar hides whatever is behind it, so with the tallest in front it covers the
+  // rest whole.
+  //
+  // What decides that is the PEAK and never the total — occlusion is a fact about heights, and the two
+  // do not agree: an exercise loaded to June totals more than one loaded to January and can still have
+  // every month shorter than it. The COLOUR and the legend keep their own order, so a group's identity
+  // does not move with the camera.
+  const ordered = [...rows].sort((a, b) => peakOf(b.values) - peakOf(a.values));
   const depthOf = (index: number) => ordered.length - 1 - index;
   const names = ordered.map((row) => row.name);
 
-  const boxWidth = clamp(labels.length * 17, 90, 210);
-  const boxDepth = clamp(names.length * 20, 34, 95);
-  // A bar takes TWO THIRDS of its cell, and the third it leaves is what separates one row from the
-  // next: cell-to-cell the rows touch and read as a single continuous surface, which is exactly what
-  // this drawing exists not to be.
+  // The box FILLS the card: sized smaller it sat in the middle third of a wide one, and that empty
+  // space is no longer white paper but night. The floor of the clamp keeps a three-month span from
+  // collapsing into a sliver.
+  const boxWidth = clamp(labels.length * 19, 120, 235);
+  const boxDepth = clamp(names.length * 17, 34, 95);
+  // A bar takes little more than HALF its cell, and what it leaves is what separates one row from the
+  // next. It was two thirds, and that gap closed up in perspective: what is seen between two bars is
+  // not the gap but its projection. Shading draws a bar's body; the gap draws that there are TWO.
   const barSize: [number, number] = [
-    (boxWidth / Math.max(labels.length, 1)) * 0.66,
-    (boxDepth / Math.max(names.length, 1)) * 0.66,
+    (boxWidth / Math.max(labels.length, 1)) * 0.52,
+    (boxDepth / Math.max(names.length, 1)) * 0.52,
   ];
 
   const series: Chart3DSeries[] = ordered.map((row, index) => ({
     type: "bar3D",
     id: `skyline-${row.id}`,
     name: row.name,
-    shading: "color",
-    itemStyle: { color: row.color },
-    bevelSize: 0.12,
+    shading: "realistic",
+    realisticMaterial: CHART_STAGE_MATERIAL,
+    // The entity's colour ON THE STAGE, which is its own scale: `stageColor` translates by SLOT, so a
+    // group is the same hue in every 3D card of the app — though not the one it wears on the white
+    // ones, where the scale was measured against a different ground.
+    itemStyle: { color: stageColor(row.color) },
+    // The bevel is the EDGE's surface: `CHART_STAGE_LIGHT`'s highlight has to land on something, and a
+    // chamfer of a hair is a line one pixel wide that catches nothing. Wider than this and it starts
+    // eating the height of the short bars, which are the ones this shape exists to make legible.
+    bevelSize: 0.2,
     bevelSmoothness: 2,
     // A real zero still gets a tile: it is a figure the file asserted, and it has to be tellable apart
     // from the empty floor of a month that never arrived.
     minHeight: 1.2,
     barSize,
-    emphasis: { itemStyle: { borderColor: CHART_INK.strong, borderWidth: 1 } },
+    emphasis: {
+      // NO `itemStyle` here, and that is the fix and not an omission: a `bar3D` is one merged mesh with
+      // vertex colours, so gl reads only `color`/`opacity` and silently ignored the border this used to
+      // declare. Left alone it lifts the fill itself — the same hue, plainly brighter, which is what a
+      // hover is for.
+      //
+      // What the hover DOES say is the amount, through the same formatter as every other figure of the
+      // app: gl writes the raw datum otherwise, and it is drawn on the stage's own panel.
+      label: {
+        show: true,
+        formatter: (param) => moneyExact(param.value[2]),
+        textStyle: {
+          color: CHART_STAGE.ink,
+          fontSize: 11.5,
+          fontFamily: CHART_FONT,
+          backgroundColor: CHART_STAGE.panel,
+          borderColor: CHART_STAGE.panelBorder,
+          borderWidth: 1,
+          borderRadius: 4,
+          padding: [4, 6],
+        },
+      },
+    },
     data: row.values.flatMap((value, month) =>
       value === null ? [] : [{ value: [month, depthOf(index), value] as [number, number, number] }],
     ),
@@ -640,20 +962,26 @@ function skylineOption(
   return {
     animationDuration: 320,
     textStyle: { fontFamily: CHART_FONT },
-    legend: legendFor(true),
+    // On the stage the legend goes to the TOP. The camera looks DOWN at the box, so the reading hangs
+    // low in the frame and the empty sky is above it: anchored at the bottom it sat ON the last months
+    // of the axis.
+    legend: {
+      ...legendFor(true),
+      bottom: "auto",
+      top: 6,
+      textStyle: { color: CHART_STAGE.inkMuted, fontSize: 11.5 },
+    },
     grid3D: {
       boxWidth,
       boxDepth,
       boxHeight: 82,
-      // The card's own surface: the default paints a gradient, which shows as a seam against a white
-      // card and puts a colour behind the bars that no token accounts for.
-      environment: CHART_SURFACE,
-      // Ambient only. With a main light the renderer multiplies each face by its angle to it and one
-      // bar comes out in three tones, which is precisely what `colorForEntity`'s identity cannot
-      // survive.
-      light: { main: { intensity: 0, shadow: false }, ambient: { intensity: 1 } },
-      axisLine: { lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
-      splitLine: { lineStyle: { color: CHART_LINES.grid, width: 1, type: "solid" } },
+      // THE STAGE. `gl`'s own default is a pale gradient, and on it a bar had nothing but its own fill
+      // to be found by: the short ones washed out and the tall ones read as holes in the card. The sky
+      // lightens upward, so what is behind the BARS is its deepest end.
+      environment: CHART_STAGE_SKY,
+      light: CHART_STAGE_LIGHT,
+      axisLine: { lineStyle: { color: CHART_STAGE.axis, width: 1, type: "solid" } },
+      splitLine: { lineStyle: { color: CHART_STAGE.grid, width: 1, type: "solid" } },
       axisPointer: { show: false },
       viewControl: {
         // It opens STILL, from above and slightly off to one side. Below the mid thirties the front
@@ -662,7 +990,9 @@ function skylineOption(
         // left to right, which is the direction a year is read in.
         alpha: 38,
         beta: 12,
-        distance: 195,
+        // The other half of `boxWidth`, and measured against it: a bigger box seen from further away is
+        // the same picture, so the camera backs off exactly enough for the widest box to still fit.
+        distance: 196,
         minDistance: 130,
         maxDistance: 330,
         // Panning is off: the box is the whole reading, and dragging it out of frame has no way back.
@@ -678,21 +1008,23 @@ function skylineOption(
     zAxis3D: {
       type: "value",
       name: "",
-      axisLine: { lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
-      splitLine: { show: true, lineStyle: { color: CHART_LINES.grid, width: 1, type: "solid" } },
+      axisLine: { lineStyle: { color: CHART_STAGE.axis, width: 1, type: "solid" } },
+      splitLine: { show: true, lineStyle: { color: CHART_STAGE.grid, width: 1, type: "solid" } },
       axisLabel: {
-        color: CHART_INK.faint,
+        color: CHART_STAGE.inkFaint,
         fontSize: 10.5,
         formatter: (value) => money(Number(value)),
       },
     },
     tooltip: {
+      // The card's tooltip, in the stage's tones: it is drawn INSIDE the dark panel, and the white box
+      // the other three cards use would be a hole punched in the night.
       trigger: "item",
-      backgroundColor: CHART_SURFACE,
-      borderColor: CHART_LINES.axis,
+      backgroundColor: CHART_STAGE.panel,
+      borderColor: CHART_STAGE.panelBorder,
       borderWidth: 1,
       padding: [8, 10],
-      textStyle: { color: CHART_INK.strong, fontSize: 12 },
+      textStyle: { color: CHART_STAGE.ink, fontSize: 12 },
       confine: true,
       formatter: (param: Chart3DParam) => {
         // The month comes from the datum's own X INDEX and not from `param.name`: in a 3D chart that
@@ -707,10 +1039,6 @@ function skylineOption(
     },
     series,
   };
-}
-
-function total(row: EvolutionRow): number {
-  return row.values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
 }
 
 /** A 3D category axis with the house chrome. `truncate` caps a label that would run into the box. */
@@ -780,7 +1108,7 @@ function conceptTotals(input: PersonnelCardsInput): ConceptTotal[] {
     .sort((a, b) => b.total - a.total);
 }
 
-function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec {
+function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
   const { period } = input;
   const all = conceptTotals(input);
   const grandTotal = all.reduce((sum, entry) => sum + entry.total, 0);
@@ -863,18 +1191,40 @@ function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec {
     });
   }
 
+  // The ranking standing up is `solid-bars`' own case: ONE row, and the colour belongs to the COLUMN
+  // because there it is the concept's identity and not the row's. Translated by slot, so a concept is
+  // the same hue here and in every other 3D card.
+  const solid = solidBody(
+    bars.map((entry) => entry.label),
+    [
+      {
+        id: "concepts",
+        name: "Conceptos",
+        color: stageSliceColor(colorForSliceSlot(0)),
+        values: bars.map((entry) => entry.total),
+      },
+    ],
+    { value: moneyExact, axis: money },
+    bars.map((entry, index) =>
+      entry.id === "resto" ? stageColor(CHART_NEUTRAL) : stageSliceColor(colorForSliceSlot(index)),
+    ),
+  );
+  const asSolid = standing(input.solidViews?.concepts, solid);
+
   return {
     id: "personnel-concepts",
     title: "Composición por concepto",
     subtitle: period,
-    option,
+    option: asSolid ? solid : option,
     table: { columns: ["Monto", "% del costo"], rows },
-    note:
+    note: sentence(
       tail.length > 0
         ? `${tail.length} conceptos más suman ${moneyExact(tailTotal)} y se dibujan en una sola barra; la tabla los lista todos.`
         : undefined,
+      asSolid,
+    ),
     guide: GUIDE_CONCEPTS,
-    height: CONCEPTS_HEIGHT,
+    height: asSolid ? SOLID_BARS_HEIGHT : CONCEPTS_HEIGHT,
   };
 }
 

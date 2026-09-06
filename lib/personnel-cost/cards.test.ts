@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { is3DOption, type Chart3DOption, type ChartOption } from "@/lib/charts/types";
+import {
+  is3DOption,
+  type Chart3DOption,
+  type ChartOption,
+  type ChartParam,
+} from "@/lib/charts/types";
+import {
+  CHART_NEUTRAL,
+  CHART_STAGE,
+  CHART_STAGE_LIGHT,
+  CHART_STAGE_MATERIAL,
+  CHART_STAGE_SKY,
+  colorForSliceSlot,
+  stageColor,
+  stageSliceColor,
+} from "@/lib/charts/palette";
 import { buildPersonnelCards, CONCEPT_SLICES, type PersonnelCardsInput } from "./cards";
 
 /** Narrows a card that CAN come out in three dimensions, asserting it did not. */
@@ -8,8 +23,17 @@ function flat(option: ChartOption | Chart3DOption | null): ChartOption {
   expect(is3DOption(option as ChartOption | Chart3DOption)).toBe(false);
   return option as ChartOption;
 }
+/** La fila del suelo en la que descansa una serie del skyline: cuanto más alta, más al fondo. */
+function depthOf(option: Chart3DOption, name: string): number {
+  const series = option.series.find((entry) => entry.name === name);
+  if (!series) {
+    throw new Error(`El skyline no dibujó «${name}»`);
+  }
+  return (series.data[0].value as number[])[1];
+}
+
 import { readPersonnelCost } from "./derive";
-import { GOLDEN_COVERAGE, goldenYear } from "./fixtures";
+import { GOLDEN_ACCOUNTS, GOLDEN_COVERAGE, goldenYear } from "./fixtures";
 
 const SPAN = GOLDEN_COVERAGE;
 
@@ -241,20 +265,26 @@ describe("El skyline", () => {
 
   it("pone la serie MAYOR al fondo, que es lo único que hace legible una matriz en perspectiva", () => {
     const { groups } = cards([goldenYear()], [], SPAN, "skyline");
-    const option = groups.option as Chart3DOption;
-    // Honorarios médicos ($325,540) es la mayor y va al fondo (profundidad más alta).
-    const depth = (name: string) => {
-      const series = option.series.find((entry) => entry.name === name);
-      if (!series) {
-        throw new Error(`El skyline no dibujó «${name}»`);
-      }
-      return (series.data[0].value as number[])[1];
-    };
-    expect(depth("Honorarios médicos")).toBe(2);
-    expect(depth("No afiliados")).toBe(0);
+    // Honorarios médicos (pico de $77,380 en junio) es la mayor y va al fondo.
+    expect(depthOf(groups.option as Chart3DOption, "Honorarios médicos")).toBe(2);
+    expect(depthOf(groups.option as Chart3DOption, "No afiliados")).toBe(0);
   });
 
-  it("el color NO se mueve: sigue siendo el de la entidad en las cuatro cards", () => {
+  it("lo que decide el fondo es el PICO y nunca el total: tapar es cosa de alturas", () => {
+    // 2025 factura más en el tramo (dos meses: $243,934) pero su mes más alto es $139,731; 2026 trae
+    // un solo mes de $144,277. Ordenado por total, 2026 se iba DELANTE y enterraba al otro.
+    const { groups } = cards(
+      [goldenYear({ year: 2025, coverage: [0, 1] }), goldenYear({ coverage: [5] })],
+      [],
+      SPAN,
+      "skyline",
+    );
+    const option = groups.option as Chart3DOption;
+    expect(depthOf(option, "2026")).toBe(1);
+    expect(depthOf(option, "2025")).toBe(0);
+  });
+
+  it("el color se traduce al escenario POR RANURA: la identidad se queda, el tono no", () => {
     const stacked = cards();
     const sky = cards([goldenYear()], [], SPAN, "skyline");
     const flatColor = flat(stacked.groups.option).series.find((entry) => entry.name === "Afiliados")
@@ -262,7 +292,10 @@ describe("El skyline", () => {
     const skyColor = (sky.groups.option as Chart3DOption).series.find(
       (entry) => entry.name === "Afiliados",
     )?.itemStyle?.color;
-    expect(skyColor).toBe(flatColor);
+    // Sobre el navío la escala clara no llega a 3:1, así que el escenario tiene la suya: un grupo es
+    // el mismo color en TODAS las 3D, aunque no sea el que lleva en las tarjetas blancas.
+    expect(skyColor).toBe(stageColor(flatColor as string));
+    expect(skyColor).not.toBe(flatColor);
   });
 
   it("comparando ejercicios la profundidad son los AÑOS y los meses siguen en el eje", () => {
@@ -276,5 +309,188 @@ describe("El skyline", () => {
     expect(cards([goldenYear()], [], SPAN, "skyline").groups.height).toBeGreaterThan(
       cards().groups.height,
     );
+  });
+
+  it("se dibuja sobre EL ESCENARIO, con el aparejo que le saca el canto a un sólido", () => {
+    const option = cards([goldenYear()], [], SPAN, "skyline").groups.option as Chart3DOption;
+    expect(option.grid3D.environment).toBe(CHART_STAGE_SKY);
+    expect(option.grid3D.light).toBe(CHART_STAGE_LIGHT);
+    for (const entry of option.series) {
+      expect(entry.shading).toBe("realistic");
+      expect(entry.realisticMaterial).toBe(CHART_STAGE_MATERIAL);
+    }
+    // La leyenda se va ARRIBA: la cámara mira hacia abajo, así que abajo es donde cae la lectura.
+    expect(option.legend?.top).toBe(6);
+    expect(option.legend?.bottom).toBe("auto");
+    expect(option.tooltip?.backgroundColor).toBe(CHART_STAGE.panel);
+  });
+
+  it("el hover no declara un borde que gl ignora: escribe la cifra, y como moneda", () => {
+    const option = cards([goldenYear()], [], SPAN, "skyline").groups.option as Chart3DOption;
+    for (const entry of option.series) {
+      expect(entry.emphasis?.itemStyle).toBeUndefined();
+    }
+    const label = option.series[0].emphasis?.label;
+    expect(label?.show).toBe(true);
+    // Sin formateador, gl escribe el dato crudo: «39684.6195…» en vez de un monto.
+    expect(label?.formatter?.({ value: [0, 0, 39684.6195], seriesName: "" })).toBe("$39,684.62");
+  });
+});
+
+describe("La cifra sobre la columna", () => {
+  /** Lo que el renderizador le pasa al formateador de una etiqueta. */
+  const param = (dataIndex: number, value: number | null): ChartParam => ({
+    name: "",
+    value,
+    dataIndex,
+  });
+
+  /** Las series que ESCRIBEN una cifra, que nunca deberían ser más de una por tarjeta. */
+  const writing = (option: ChartOption | null) =>
+    (option?.series ?? []).filter((entry) => entry.label?.show);
+
+  it("la pila escribe el TOTAL del mes y no el de la banda que la lleva", () => {
+    const { sections } = cards();
+    const written = writing(sections.option);
+    expect(written.map((entry) => entry.name)).toEqual(["Externos"]);
+    const label = written[0].label;
+    expect(label?.position).toBe("top");
+    // Enero: 55,989.00 de planta + 48,214.12 de externos. La banda que la lleva vale lo segundo.
+    expect(label?.formatter?.(param(0, 48214.12))).toBe("$104,203.12");
+    expect(label?.formatter?.(param(5, 0))).toBe("$144,277.59");
+  });
+
+  it("la lleva la última sección CON datos: sin externos, la escribe planta", () => {
+    const soloPlanta = new Map(
+      [...GOLDEN_ACCOUNTS].filter(([code]) => !code.startsWith("5.3.03.")),
+    );
+    const { sections } = cards([goldenYear({ accounts: soloPlanta })]);
+    const written = writing(sections.option);
+    expect(written.map((entry) => entry.name)).toEqual(["Planta"]);
+    expect(written[0].label?.formatter?.(param(0, 55989))).toBe("$55,989.00");
+  });
+
+  it("un mes sin cargar no escribe un cero: no hay cifra que escribir", () => {
+    const parcial = cards([goldenYear({ coverage: [0, 1] })], [], [0, 1, 2]);
+    const label = writing(parcial.sections.option)[0]?.label;
+    expect(label?.formatter?.(param(9, null))).toBe("");
+  });
+
+  it("la ratio la escribe sobre CADA punto, en porcentaje y no en moneda", () => {
+    const { ratio } = cards();
+    const written = writing(ratio.option);
+    expect(written.map((entry) => entry.name)).toEqual(["2026"]);
+    // Enero: 104,203.12 / 240,314.07 = 43.4 %, el mismo número que la gemela.
+    expect(written[0].label?.formatter?.(param(0, 43.36))).toBe("43.4 %");
+    expect(written[0].label?.formatter?.(param(9, null))).toBe("");
+  });
+
+  it("cada ejercicio escribe en SU fila, que es lo que compra el ancho", () => {
+    const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
+    const written = writing(ratio.option);
+    expect(written.map((entry) => entry.name)).toEqual(["2025", "2026"]);
+    const [first, second] = written.map((entry) => Number(entry.label?.distance));
+    expect(second).toBeGreaterThan(first);
+    // Y el techo crece con las filas: dos ejercicios piden más aire que uno.
+    expect(Number(ratio.option?.grid?.top)).toBeGreaterThan(
+      Number(cards().ratio.option?.grid?.top),
+    );
+  });
+
+  it("pasadas cuatro filas la cifra deja de leerse y no se escribe ninguna", () => {
+    const many = cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year })));
+    expect(writing(many.ratio.option)).toHaveLength(0);
+    // Y sin cifras no hay fila que reservar: el techo vuelve a ser el del dibujo solo.
+    expect(many.ratio.option?.grid?.top).toBe(12);
+  });
+
+  it("en la evolución la lleva la LÍNEA del total, que ya es la cifra de la columna", () => {
+    const { groups } = cards();
+    const written = writing(flat(groups.option));
+    expect(written.map((entry) => entry.name)).toEqual(["Total"]);
+    expect(written[0].type).toBe("line");
+    expect(written[0].label?.formatter?.(param(0, 104203.12))).toBe("$104,203.12");
+  });
+
+  it("le abre sitio a la fila de arriba, que `outerBoundsContain` no reserva", () => {
+    const { sections, groups } = cards();
+    expect(Number(sections.option?.grid?.top)).toBeGreaterThan(12);
+    expect(Number(flat(groups.option).grid?.top)).toBeGreaterThan(12);
+    expect(sections.option?.grid?.outerBoundsContain).toBe("axisLabel");
+    expect(flat(groups.option).grid?.outerBoundsContain).toBe("axisLabel");
+  });
+
+  it("el skyline no escribe ninguna: en perspectiva la cifra flota sobre nada", () => {
+    const { groups } = cards([goldenYear()], [], SPAN, "skyline");
+    expect((groups.option as Chart3DOption).series.every((entry) => !("label" in entry))).toBe(
+      true,
+    );
+  });
+});
+
+describe("Las cuatro lecturas pueden ponerse de pie", () => {
+  const solid = (which: "sections" | "ratio" | "concepts", years = [goldenYear()]) => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost(years, SPAN),
+      groups: [],
+      period: "Ene–Jun 2026",
+      solidViews: { [which]: "solido" },
+    });
+    const option = built[which].option;
+    expect(option).not.toBeNull();
+    expect(is3DOption(option as ChartOption | Chart3DOption)).toBe(true);
+    return { card: built[which], option: option as Chart3DOption };
+  };
+
+  it("por omisión ninguna lo está: el plano es lo que abre", () => {
+    const built = cards();
+    expect(is3DOption(built.sections.option as ChartOption)).toBe(false);
+    expect(is3DOption(built.ratio.option as ChartOption)).toBe(false);
+    expect(is3DOption(built.concepts.option as ChartOption)).toBe(false);
+  });
+
+  it("el sólido gasta el alto que la perspectiva pide, y la gemela no se mueve", () => {
+    const flatCard = cards().sections;
+    const { card, option } = solid("sections");
+    expect(card.height).toBeGreaterThan(flatCard.height as number);
+    // La tabla es la MISMA: el sólido es otra forma de la misma lectura, no otra lectura.
+    expect(card.table).toEqual(flatCard.table);
+    expect(option.grid3D.environment).toBe(CHART_STAGE_SKY);
+  });
+
+  it("lo que la pila apila, la profundidad lo separa: una fila por sección", () => {
+    const { option } = solid("sections");
+    expect(option.series.map((entry) => entry.name).sort()).toEqual(["Externos", "Planta"]);
+    // Externos pica más alto que planta (junio: $77,380 contra $73,006), así que va al fondo — y el
+    // eje de profundidad se rotula de atrás hacia delante.
+    expect(option.yAxis3D.data).toEqual(["Externos", "Planta"]);
+  });
+
+  it("la ratio se pone de pie en PORCENTAJE, con una fila por ejercicio", () => {
+    const { option } = solid("ratio", [goldenYear({ year: 2025 }), goldenYear()]);
+    expect(option.series.map((entry) => entry.name).sort()).toEqual(["2025", "2026"]);
+    expect(option.zAxis3D.axisLabel?.formatter?.(43.36)).toBe("43.4 %");
+    expect(option.xAxis3D.data).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun"]);
+  });
+
+  it("el ranking es UNA fila y el color lo lleva cada columna, traducido al escenario", () => {
+    const { option } = solid("concepts");
+    expect(option.series).toHaveLength(1);
+    const colors = option.series[0].data.map((datum) => datum.itemStyle?.color);
+    expect(colors[0]).toBe(stageSliceColor(colorForSliceSlot(0)));
+    // La cola doblada es NEUTRA aquí también: no es la novena entidad.
+    expect(colors.at(-1)).toBe(stageColor(CHART_NEUTRAL));
+  });
+
+  it("sin nada que dibujar tampoco hay sólido que ofrecer", () => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], [10, 11]),
+      groups: [],
+      period: "Nov–Dic 2026",
+      solidViews: { sections: "solido", ratio: "solido", concepts: "solido" },
+    });
+    expect(built.sections.option).toBeNull();
+    expect(built.ratio.option).toBeNull();
+    expect(built.concepts.option).toBeNull();
   });
 });
