@@ -8,7 +8,7 @@ import {
   EyeOff,
   FileSpreadsheet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,7 +17,7 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
-import type { EvolutionView } from "@/lib/sales/cards";
+import type { EvolutionView, SolidView } from "@/lib/sales/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
 import { SalesExcelActions } from "./sales-excel-actions";
@@ -28,6 +28,15 @@ import { SalesToolbar } from "./sales-toolbar";
 const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
   { value: "skyline", label: "Skyline 3D" },
   { value: "stacked", label: "Apilado" },
+];
+
+/**
+ * The two BODIES of a flat bar card — see `SolidView`. It is the same control for the two that take
+ * it, so it is one constant and not two: two lists that have to stay equal are one list.
+ */
+const SOLID_VIEWS: { value: SolidView; label: string }[] = [
+  { value: "plano", label: "Plano" },
+  { value: "solido", label: "Sólido 3D" },
 ];
 
 /**
@@ -59,6 +68,10 @@ function SalesContent() {
     toggleEmptyMonths,
     evolutionView,
     setEvolutionView,
+    servicesView,
+    setServicesView,
+    payersView,
+    setPayersView,
   } = useSalesData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
@@ -96,10 +109,34 @@ function SalesContent() {
   const empty = months.length === 0;
 
   // The evolution's header controls, and BOTH are conditional on there being something for them to
-  // do: «Ver como» exists only where there is a breakdown to shape —comparing years the series is
-  // the year, and a skyline would have nothing to put on its depth axis— and «Ocultar meses en 0»
+  // do: «Ver como» exists only where there is a breakdown to shape AND months to follow —comparing
+  // years the series is the year, and a skyline would have nothing to put on its depth axis; with a
+  // single month the card opens into one bar per service and there is no shape to choose— and
+  // «Ocultar meses en 0»
   // only where there is an empty month to hide. Neither one sits disabled: with nothing to offer the
   // card gets no header slot at all.
+  /**
+   * «Ver como» for a card whose two shapes are two BODIES of one reading. It is offered exactly when
+   * there is something drawn to give a body to: with nothing on the plot the switch would change one
+   * empty state for another.
+   */
+  const bodyControl = (
+    value: SolidView,
+    onChange: (view: SolidView) => void,
+    drawn: boolean,
+  ): ReactNode =>
+    drawn ? (
+      <span className="flex items-center gap-2">
+        <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+        <SegmentedControl
+          value={value}
+          options={SOLID_VIEWS}
+          onChange={onChange}
+          ariaLabel="Ver como"
+        />
+      </span>
+    ) : null;
+
   const evolutionControls =
     cards.skylineAvailable || cards.emptyMonths > 0 ? (
       <div className="flex items-center gap-3">
@@ -208,11 +245,17 @@ function SalesContent() {
                 {...cards.services}
                 collapsed={isCollapsed(cards.services.id)}
                 onToggleCollapsed={() => toggle(cards.services.id)}
+                headerSlot={bodyControl(
+                  servicesView,
+                  setServicesView,
+                  cards.services.option !== null,
+                )}
               />
               <ChartCard
                 {...cards.payers}
                 collapsed={isCollapsed(cards.payers.id)}
                 onToggleCollapsed={() => toggle(cards.payers.id)}
+                headerSlot={bodyControl(payersView, setPayersView, cards.payers.option !== null)}
               />
               <ChartCard
                 {...cards.evolution}

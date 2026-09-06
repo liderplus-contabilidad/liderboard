@@ -22,6 +22,9 @@ type EChartsInstallable = Exclude<
 declare module "echarts-gl/charts" {
   /** `series: [{ type: "bar3D" }]` — see `Chart3DSeries`. */
   export const Bar3DChart: EChartsInstallable;
+  /** `series: [{ type: "surface" }]` — see `Chart3DSurfaceSeries`. gl has no pie: the doughnut's
+   *  slices are parametric surfaces. */
+  export const SurfaceChart: EChartsInstallable;
 }
 
 declare module "echarts-gl/components" {

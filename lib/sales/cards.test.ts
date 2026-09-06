@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { CHART_NEUTRAL, CHART_PALETTE, CHART_SLICE_SEQUENCE } from "@/lib/charts/palette";
-import { is3DOption, type Chart3DOption } from "@/lib/charts/types";
+import {
+  CHART_NEUTRAL,
+  CHART_PALETTE,
+  CHART_SLICE_SEQUENCE,
+  CHART_STAGE_LIGHT,
+  CHART_STAGE_MATERIAL,
+  CHART_STAGE_PALETTE,
+  stageColor,
+  stageSliceColor,
+} from "@/lib/charts/palette";
+import {
+  is3DOption,
+  type Chart3DOption,
+  type ChartCardSpec,
+  type ChartOption,
+  type ChartParam,
+} from "@/lib/charts/types";
 import {
   buildSalesCards as buildCards,
   PAYER_SLICES,
@@ -111,6 +126,66 @@ describe("composición por servicio", () => {
 
   it("sin ninguna línea no dibuja: la tarjeta dice por qué en vez de un plot vacío", () => {
     expect(buildSalesCards(input([])).services.option).toBeNull();
+  });
+});
+
+describe("el cuerpo SÓLIDO de las dos tarjetas planas", () => {
+  const lines = [
+    line({ serviceCode: "\\01", serviceName: "HONORARIOS", payer: "SALUDSA", amount: 60 }),
+    line({ serviceCode: "\\02", serviceName: "MEDICINAS", payer: "PREPAGADA", amount: 40 }),
+  ];
+
+  const solidOf = (card: ChartCardSpec<ChartOption | Chart3DOption>) => {
+    if (card.option === null || !is3DOption(card.option)) {
+      throw new Error("se esperaba el cuerpo sólido");
+    }
+    return card.option;
+  };
+
+  it("por omisión NO se levantan: el plano es lo que trae los nombres enteros y las cifras", () => {
+    const { services, payers } = buildCards(input(lines));
+    expect(services.option !== null && is3DOption(services.option)).toBe(false);
+    expect(payers.option !== null && is3DOption(payers.option)).toBe(false);
+  });
+
+  it("levantada, la composición dibuja los MISMOS servicios en el mismo orden", () => {
+    const plano = buildCards(input(lines));
+    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
+    const ejeY = plano.services.option?.yAxis;
+
+    expect(solido.xAxis3D.data).toEqual((Array.isArray(ejeY) ? ejeY[0] : ejeY)?.data);
+    // Y la tabla gemela es la misma: es un cuerpo del mismo dato, no una segunda lectura.
+    expect(buildCards(input(lines), { servicesView: "solido" }).services.table).toEqual(
+      plano.services.table,
+    );
+  });
+
+  it("con UN año no hay fondo: una fila sin nombre y ninguna leyenda", () => {
+    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
+    // Es tema visual y no una variable más: la profundidad aquí es el grosor de la barra.
+    expect(solido.yAxis3D.data).toEqual([""]);
+    expect(solido.legend?.show).toBe(false);
+    expect(solido.series).toHaveLength(1);
+  });
+
+  it("comparando años, cada año es una FILA — lo mismo que nombraba la leyenda plana", () => {
+    const dos = comparing([
+      { year: 2025, lines },
+      { year: 2026, lines },
+    ]);
+    const solido = solidOf(buildCards(dos, { servicesView: "solido" }).services);
+
+    expect(solido.series.map((serie) => serie.name)).toEqual(["2025", "2026"]);
+    expect(solido.yAxis3D.data).toEqual(["2026", "2025"]);
+    expect(solido.legend?.show).toBe(true);
+  });
+
+  it("los pagadores se levantan igual y con su misma escala, en el paso del escenario", () => {
+    const solido = solidOf(buildCards(input(lines), { payersView: "solido" }).payers);
+    const fills = solido.series[0].data.map((datum) => datum.itemStyle?.color);
+
+    expect(solido.xAxis3D.data).toEqual(["SALUDSA", "PREPAGADA"]);
+    expect(fills).toEqual([0, 1].map((slot) => stageSliceColor(CHART_SLICE_SEQUENCE[slot])));
   });
 });
 
@@ -477,6 +552,83 @@ describe("barras CON línea en la evolución", () => {
   });
 });
 
+describe("cada columna de la evolución escribe su total, tumbado", () => {
+  function overMonths(years: number[], monthCount: number): SalesCardsInput {
+    const points = Array.from({ length: monthCount }, (_unused, monthIndex) => ({
+      monthIndex,
+      amount: 100 + monthIndex,
+    }));
+    return {
+      reading: readSales([line({ amount: 1 })]),
+      byYear: years.map((year) => ({ year, reading: readSales([line({ amount: 1 })]) })),
+      period: years.join(", "),
+      monthlyByYear: years.map((year) => ({ year, points })),
+    };
+  }
+
+  function seriesOf(input: SalesCardsInput) {
+    return buildSalesCards(input).evolution.option?.series ?? [];
+  }
+
+  function wrote(series: { label?: { show: boolean; formatter?: (p: ChartParam) => string } }) {
+    const label = series.label;
+    return label?.show ? (label.formatter?.({ value: 160, name: "Ene", dataIndex: 0 }) ?? "") : "";
+  }
+
+  it("no calla el total porque el eje traiga doce meses", () => {
+    const [bar] = seriesOf(overMonths([2026], 12));
+
+    expect(wrote(bar)).toBe("$160.00");
+  });
+
+  it("en el apilado lo escribe la LÍNEA del total, nunca las bandas", () => {
+    const months = [
+      month(0, [
+        line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
+        line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+      ]),
+    ];
+    const lines = months[0].lines;
+    const reading = readSales(lines);
+    const series = seriesOf({
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Enero 2026",
+      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026),
+    });
+
+    expect(wrote(series.find((entry) => entry.type === "line") ?? {})).toBe("$160.00");
+    // Cinco cifras subiendo por una columna es como una columna deja de leerse como UN importe.
+    expect(
+      series.filter((entry) => entry.type === "bar").every((entry) => !entry.label?.show),
+    ).toBe(true);
+  });
+
+  it("comparando años, cada uno escribe en SU fila", () => {
+    const bars = seriesOf(overMonths([2025, 2026], 12)).filter((entry) => entry.type === "bar");
+
+    expect(bars).toHaveLength(2);
+    expect(bars[1].label?.distance).toBeGreaterThan(bars[0].label?.distance ?? 0);
+    expect(bars.every((entry) => entry.label?.show)).toBe(true);
+  });
+
+  it("cede el cuerpo según se aprieta el eje, y nunca la cifra", () => {
+    const dense = seriesOf(overMonths([2026], 12))[0];
+    const roomy = seriesOf(overMonths([2026], 4))[0];
+
+    expect(dense.label?.fontSize).toBeLessThan(roomy.label?.fontSize ?? 0);
+    expect(wrote(dense)).not.toBe("");
+  });
+
+  it("le abre sitio a la fila de arriba, que `outerBoundsContain` no reserva", () => {
+    const one = buildSalesCards(overMonths([2026], 12)).evolution.option?.grid?.top;
+    const three = buildSalesCards(overMonths([2024, 2025, 2026], 12)).evolution.option?.grid?.top;
+
+    expect(Number(three)).toBeGreaterThan(Number(one));
+  });
+});
+
 describe("la guía del ⓘ", () => {
   const lines = [line({ amount: 60 }), line({ serviceCode: "\\02", amount: 40 })];
 
@@ -633,6 +785,97 @@ describe("la evolución se desglosa por servicio", () => {
   });
 });
 
+describe("con un solo mes la evolución se abre en barras por servicio", () => {
+  const LINES = [
+    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
+    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
+  ];
+
+  /** El eje acotado a UN mes, que es lo que deja marcar «Ene» en la barra de filtros. */
+  function january(lines = LINES): SalesCardsInput {
+    const reading = readSales(lines);
+    const months = [month(0, lines)];
+    const onlyJanuary = (points: readonly MonthPoint[]) =>
+      points.filter((point) => point.monthIndex === 0);
+    return {
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Enero 2026",
+      monthlyByYear: [{ year: 2026, points: onlyJanuary(monthlySeries(months, 2026)) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026).map((entry) => ({
+        ...entry,
+        points: onlyJanuary(entry.points),
+      })),
+    };
+  }
+
+  it("el eje son los SERVICIOS y cada uno trae su barra, sin apilar", () => {
+    const option = buildSalesCards(january()).evolution.option;
+    expect(option?.xAxis?.data).toEqual(["HONORARIOS", "MEDICINAS"]);
+    expect(option?.series).toHaveLength(1);
+    expect(option?.series[0].type).toBe("bar");
+    expect(option?.series[0].stack).toBeUndefined();
+    expect(option?.series[0].data.map((datum) => (datum as { value: unknown }).value)).toEqual([
+      100, 60,
+    ]);
+  });
+
+  it("un servicio conserva el color que lleva en la composición", () => {
+    const cards = buildSalesCards(january());
+    expect(datumColor(cards.evolution.option?.series[0], 0)).toBe(
+      datumColor(cards.services.option?.series[0], 0),
+    );
+  });
+
+  it("sin línea de total y sin leyenda: una y otra repetirían lo que ya está en el eje", () => {
+    const option = buildSalesCards(january()).evolution.option;
+    expect(option?.series.some((entry) => entry.type === "line")).toBe(false);
+    expect(option?.legend?.show).toBe(false);
+  });
+
+  it("la tabla gemela no cambia: una columna, una fila por servicio y el TOTAL", () => {
+    const { table } = buildSalesCards(january()).evolution;
+    expect(table.columns).toEqual(["Ene"]);
+    expect(table.rows.map((row) => row.label)).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
+    expect(table.rows.at(-1)?.values).toEqual(["$160.00"]);
+  });
+
+  it("la nota dice que cada barra es un servicio, no un mes", () => {
+    expect(buildSalesCards(january()).evolution.note).toContain("cada barra es un servicio");
+  });
+
+  it("con UN solo servicio la barra se conserva sola, en el eje del mes", () => {
+    // No hay nada que repartir: el eje sigue siendo el mes y la columna, ese servicio.
+    const only = [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 })];
+    const option = buildSalesCards(january(only)).evolution.option;
+    expect(option?.xAxis?.data).toEqual(["Ene"]);
+  });
+
+  it("no se ofrece skyline con una sola columna: no hay meses que seguir", () => {
+    const cards = buildCards(january(), { evolutionView: "skyline" });
+    expect(cards.skylineAvailable).toBe(false);
+    expect(cards.evolution.option !== null && is3DOption(cards.evolution.option)).toBe(false);
+  });
+
+  it("con dos meses vuelve a ser la pila de siempre", () => {
+    const lines = LINES;
+    const reading = readSales(lines);
+    const months = [month(0, lines), month(1, lines)];
+    const cards = buildSalesCards({
+      reading,
+      byYear: [{ year: 2026, reading }],
+      period: "Ene–Feb 2026",
+      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
+      serviceMonthly: monthlyServiceSeries(months, 2026),
+    });
+    const bars = (cards.evolution.option?.series ?? []).filter(
+      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
+    );
+    expect(bars).toHaveLength(2);
+    expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
+  });
+});
+
 describe("el color de una barra de pagador", () => {
   const many = Array.from({ length: 10 }, (_unused, index) =>
     line({ payer: `PAGADOR${index}`, amount: 100 - index }),
@@ -719,6 +962,18 @@ describe("el skyline le da al servicio su propio eje", () => {
     }
   });
 
+  it("la cifra de la barra bajo el cursor sale como dinero, no como el dato en crudo", () => {
+    // `echarts-gl` escribe el dato TAL CUAL sobre la barra a la que se apunta si no se le dice otra
+    // cosa: era el único importe de la app que llegaba a pantalla como «39684.6195…».
+    const [serie] = skyline().series;
+    const label = serie.emphasis?.label;
+
+    expect(label?.show).toBe(true);
+    expect(label?.formatter?.({ name: "HONORARIOS", value: [0, 1, 39_684.6195] })).toBe(
+      "$39,684.62",
+    );
+  });
+
   it("la serie MAYOR va al fondo, que es lo que evita que tape a las demás", () => {
     // Con la mayor delante —el orden del desglose— HONORARIOS esconde entero lo que hay detrás.
     const option = skyline();
@@ -755,17 +1010,36 @@ describe("el skyline le da al servicio su propio eje", () => {
     expect(depth).toBeLessThan((option.grid3D.boxDepth ?? 0) / 2);
   });
 
-  it("un servicio lleva el MISMO color que en la composición", () => {
+  it("un servicio guarda su RANURA en la escala del escenario", () => {
     const cards = buildCards(opened(), { evolutionView: "skyline" });
-    expect(skyline().series[0].itemStyle?.color).toBe(
-      datumColor(cards.services.option?.series[0], 0),
+    const composition = datumColor(cards.services.option?.series[0], 0);
+    // El escenario tiene escala propia —el azul de la composición es turquesa aquí—, y lo que se
+    // conserva es la POSICIÓN: `stageColor` traduce por ranura, así que el servicio es el mismo
+    // color en todas las tarjetas 3D y su sitio en el desglose no se mueve.
+    expect(skyline().series[0].itemStyle?.color).toBe(stageColor(composition ?? ""));
+    expect(CHART_PALETTE.indexOf(composition as (typeof CHART_PALETTE)[number])).toBe(
+      CHART_STAGE_PALETTE.indexOf(
+        skyline().series[0].itemStyle?.color as (typeof CHART_STAGE_PALETTE)[number],
+      ),
     );
   });
 
-  it("las barras van SIN luz: el color es identidad y no un sombreado", () => {
+  it("las barras llevan LA MISMA luz que todo el escenario: el contorno es lo que dibuja", () => {
     const option = skyline();
-    expect(option.series.every((entry) => entry.shading === "color")).toBe(true);
-    expect(option.grid3D.light?.main?.intensity).toBe(0);
+    // Planas —`shading: "color"`— cada cara de cada barra devolvía el mismo píxel y las filas se
+    // leían como una sola superficie continua; un `bar3D` es una malla única y no tiene borde al
+    // que recurrir. `lambert` separaba las caras y se quedaba ahí: dos caras que se encuentran son
+    // un escalón de tono, no un canto. Lo que dibuja el canto es el término especular, y por eso el
+    // escenario sombrea `realistic`. El aparejo y el material son UNOS para las tres tarjetas 3D.
+    expect(option.series.every((entry) => entry.shading === "realistic")).toBe(true);
+    expect(option.series.every((entry) => entry.realisticMaterial === CHART_STAGE_MATERIAL)).toBe(
+      true,
+    );
+    // Y el bisel es la SUPERFICIE del canto: el brillo tiene que caer sobre algo.
+    expect(option.series.every((entry) => (entry.bevelSize ?? 0) > 0.15)).toBe(true);
+    expect(option.grid3D.light).toEqual(CHART_STAGE_LIGHT);
+    // Sin sombra proyectada: caería sobre la barra vecina y oscurecería una cifra ya medida.
+    expect(option.grid3D.light?.main?.shadow).toBe(false);
   });
 
   it("la cámara arranca quieta y no se puede sacar de cuadro", () => {

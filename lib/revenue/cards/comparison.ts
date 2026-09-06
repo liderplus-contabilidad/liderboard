@@ -82,6 +82,17 @@ export function buildComparisonCard(
   const drawnYears = drawn.map((entry) => entry.year);
   const comparing = drawn.length > 1;
 
+  /**
+   * **This card writes NO figure over its marks**, and it is the one card of the module where that is
+   * the reading and not a shortage of room.
+   *
+   * What it answers is the SHAPE of a year — which months rise, which fall, how one year runs above
+   * another — over an axis of twelve columns. Twelve amounts, or twelve per year, do not add a
+   * reading to that: they cover the very trajectory being followed, and the trajectory is the whole
+   * point of drawing months instead of tabulating them. The month's figure is a hover away in the
+   * tooltip and always present in the table twin, which lists every marked year, not only the drawn
+   * ones.
+   */
   const series: ChartSeries[] = comparing
     ? drawn.map((entry) => ({
         id: `year-${entry.year}`,

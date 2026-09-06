@@ -413,6 +413,67 @@ describe("marcas, leyenda y etiquetas", () => {
   });
 });
 
+describe("cada barra escribe su importe, y lo escribe tumbado", () => {
+  /** `count` series over `points` periods — the density the rule is measured against. */
+  function grid(count: number, points: number): Series[] {
+    return Array.from({ length: count }, (_, index) =>
+      makeSeries(
+        Array.from({ length: points }, () => 25_229),
+        {
+          code: `4.${index}`,
+          label: `Cuenta ${index}`,
+        },
+      ),
+    );
+  }
+
+  function labelAt(option: ChartOption, index: number): string {
+    const label = option.series[index].label;
+    return label?.show
+      ? (label.formatter?.({ value: 25_229, name: "Ene", dataIndex: 0 }) ?? "")
+      : "";
+  }
+
+  it("no calla el importe porque el eje tenga doce meses", () => {
+    const option = barOption(grid(2, 12), CONTEXT);
+
+    expect(labelAt(option, 0)).toBe("$25,229.00");
+    expect(labelAt(option, 1)).toBe("$25,229.00");
+  });
+
+  it("le da a cada serie su propia fila, que es lo que compra el ancho", () => {
+    const option = barOption(grid(2, 12), CONTEXT);
+    const [first, second] = option.series;
+
+    expect(first.label?.distance).toBe(4);
+    expect(second.label?.distance).toBeGreaterThan(first.label?.distance ?? 0);
+    // Una sola serie no apila nada: se queda con el aire de siempre sobre su barra.
+    expect(barOption(grid(1, 12), CONTEXT).series[0].label?.distance).toBe(4);
+  });
+
+  it("cede el cuerpo y luego los centavos antes que la cifra", () => {
+    const dense = barOption(grid(2, 24), CONTEXT);
+    const roomy = barOption(grid(2, 6), CONTEXT);
+
+    expect(dense.series[0].label?.fontSize).toBeLessThan(roomy.series[0].label?.fontSize ?? 0);
+    // Los centavos siguen en el tooltip y en la tabla gemela, que es donde se cotejan.
+    expect(labelAt(dense, 0)).toBe("$25,229");
+    expect(labelAt(roomy, 0)).toBe("$25,229.00");
+  });
+
+  it("le abre sitio a la fila de arriba, que `outerBoundsContain` no reserva", () => {
+    const stacked = barOption(grid(3, 12), CONTEXT);
+
+    expect(Number(stacked.grid?.top)).toBeGreaterThan(
+      Number(barOption(grid(1, 12), CONTEXT).grid?.top),
+    );
+  });
+
+  it("sigue callando más allá de cuatro series, donde la cifra es textura", () => {
+    expect(barOption(grid(5, 12), CONTEXT).series.every((s) => s.label?.show === false)).toBe(true);
+  });
+});
+
 describe("el porcentaje dentro de la cuenta que la contiene", () => {
   const PARENT_ID = `4|cultura-manor|2026`;
   const CHILD_ID = `4.1|cultura-manor|2026`;
@@ -445,14 +506,13 @@ describe("el porcentaje dentro de la cuenta que la contiene", () => {
     expect(labelOf(option, 1)).toBe("$7,161.00\n{share|28.4 %}");
   });
 
-  it("apaga el monto pero conserva el porcentaje cuando el eje se aprieta", () => {
-    // Two series over twelve months are 24 marks and no amount fits; only the child carries the
-    // percentage, so there are 12 and they do fit. It is the reading that was asked for, and it
-    // survives more density.
+  it("mantiene monto y porcentaje cuando el eje se aprieta, cada serie en su fila", () => {
+    // Two series over twelve months no longer give the amount up: each one writes its own row, so
+    // what shares the width are the twelve columns and not the twenty-four marks.
     const option = barOption(pair(12), { ...CONTEXT, shares: sharesOf(Array(12).fill(28.4)) });
 
-    expect(option.series[0].label?.show).toBe(false);
-    expect(labelOf(option, 1)).toBe("{share|28.4 %}");
+    expect(option.series[0].label?.show).toBe(true);
+    expect(labelOf(option, 1)).toBe("$7,161.00\n{share|28.4 %}");
   });
 
   it("deja el monto solo cuando el porcentaje de ese periodo no se pudo calcular", () => {

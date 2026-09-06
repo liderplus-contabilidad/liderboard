@@ -3,9 +3,12 @@ import {
   CHART_COMPOSITION_PALETTE,
   CHART_NEUTRAL,
   CHART_PALETTE,
+  CHART_RANKING_MAX,
   CHART_SECTION,
   CHART_SLICE_MAX,
-  CHART_RANKING_MAX,
+  CHART_STAGE_LIGHT,
+  CHART_STAGE_MATERIAL,
+  CHART_STAGE_SECTION,
 } from "@/lib/charts/palette";
 import {
   CENTRO_PRINCIPAL_SOURCE,
@@ -13,7 +16,13 @@ import {
   CULTURA_MANOR_SEGMENTADO_SOURCE,
   CULTURA_MANOR_SOURCE,
 } from "../analytics/fixtures";
-import type { ChartCardSpec } from "@/lib/charts/types";
+import {
+  bar3DSeries,
+  is3DOption,
+  type Chart3DOption,
+  type ChartCardSpec,
+  type ChartOption,
+} from "@/lib/charts/types";
 import type { AnalyticsSource } from "../analytics/types";
 import { OTHERS_CODE } from "../analytics/structure";
 import { ANNEX_MAX_SLICES, DECLARED_ANNEX_ROWS } from "./expense-distribution";
@@ -107,6 +116,31 @@ const SIN_HOTEL = ctx(
   ],
   "cultura-manor",
 );
+
+/**
+ * A shape of the annex, by the id `annexShapes` declares — never by position. The list carries every
+ * shape, so an index is a promise about where the pie landed, and adding «Sólido 3D» broke every one
+ * of those promises at once.
+ */
+function anexo(
+  result: ReturnType<typeof buildGraficosCards>,
+  shape: "barras" | "solido" | "pastel" | "rosca",
+): ChartCardSpec<ChartOption | Chart3DOption> {
+  const id = result.annexShapes?.[shape];
+  const card = id === undefined ? undefined : result.cards.find((entry) => entry.id === id);
+  if (card === undefined) {
+    throw new Error(`El anexo no puso «${shape}» en la lista.`);
+  }
+  return card;
+}
+
+/** The flat half of a widened spec, so an assertion can reach `xAxis` without a narrowing step. */
+function flat(card: ChartCardSpec<ChartOption | Chart3DOption>): ChartCardSpec {
+  if (card.option !== null && is3DOption(card.option)) {
+    throw new Error("Se esperaba la forma plana, y vino la sólida.");
+  }
+  return { ...card, option: card.option };
+}
 
 function withFilters(overrides: Partial<PygFilters>): PygFilters {
   return { ...emptyFilters(), ...overrides };
@@ -1097,7 +1131,14 @@ describe("la vista predeterminada de costos y gastos", () => {
 
     expect(cards.map((card) => [card.id, card.title])).toEqual([
       ["evolucion", "Distribución de costos y gastos"],
+      // The SAME reading in a body, next to the bars it repeats and never instead of them: the list
+      // carries every shape and the consumer picks one — the screen with its «Ver como», the report
+      // with what paper can hold.
+      ["distribucion-solida", "Distribución de costos y gastos"],
       ["ranking", "Distribución de costos y gastos %"],
+      // The same doughnut with a body, right after the flat one it repeats: the shapes travel in
+      // PAIRS, each 3D one behind the flat shape it says the same thing as.
+      ["rosca-solida", "Distribución de costos y gastos %"],
       // Behind the annex the order is the SAME as outside it: the composition says what is made of
       // what came in —and it is the context for the «% del ingreso» column— and the cascade closes
       // with the path from revenue to result.
@@ -1107,6 +1148,99 @@ describe("la vista predeterminada de costos y gastos", () => {
     // «Distribución» breaks down ONE account and with fifteen marked it resolved to Ingresos: under an
     // expense annex it was a card breaking down revenue with nothing to do with what is being read.
     expect(cards.map((card) => card.id)).not.toContain("distribucion");
+  });
+
+  it("«Sólido 3D» es la MISMA lectura de las barras, no una segunda", () => {
+    const resultado = conAnexo();
+    const solido = anexo(resultado, "solido");
+    const barras = flat(anexo(resultado, "barras"));
+    const ejeX = barras.option?.xAxis;
+
+    if (solido.option === null || !is3DOption(solido.option)) {
+      throw new Error("se esperaba la forma sólida");
+    }
+    // Los mismos rubros, en el mismo orden, y la MISMA tabla gemela: dos tablas de un reparto es la
+    // discrepancia que la reducción única existe para evitar.
+    expect(solido.option.xAxis3D.data).toEqual((Array.isArray(ejeX) ? ejeX[0] : ejeX)?.data);
+    expect(solido.table).toEqual(barras.table);
+    expect(solido.title).toBe(barras.title);
+  });
+
+  it("no inventa un tercer eje: el de profundidad lleva UNA fila y ningún dato", () => {
+    const solido = anexo(conAnexo(), "solido");
+    if (solido.option === null || !is3DOption(solido.option)) {
+      throw new Error("se esperaba la forma sólida");
+    }
+    // Es tema visual y no una variable más: un reparto tiene dos cosas que decir —qué rubro y
+    // cuánto—, y la profundidad aquí es el grosor de la barra.
+    expect(solido.option.yAxis3D.data).toEqual([""]);
+    expect(new Set(solido.option.series[0].data.map((datum) => datum.value[1]))).toEqual(
+      new Set([0]),
+    );
+  });
+
+  it("las barras sólidas comparten el color del BLOQUE, y la LUZ es lo que las separa", () => {
+    const solido = anexo(conAnexo(), "solido");
+    if (solido.option === null || !is3DOption(solido.option)) {
+      throw new Error("se esperaba la forma sólida");
+    }
+    const [barras] = bar3DSeries(solido.option);
+    // El color dice de qué bloque del estado se habla, así que repartir un tono por rubro gastaría
+    // el canal de identidad en repetir lo que ya dice el largo de la barra. Justamente por eso
+    // dieciocho barras del mismo azul no tienen más contorno que el que les da el aparejo, que es
+    // el MISMO de las otras tarjetas 3D.
+    expect(solido.option.series).toHaveLength(1);
+    expect(barras.itemStyle?.color).toBe(CHART_STAGE_SECTION.cost);
+    expect(barras.shading).toBe("realistic");
+    expect(barras.realisticMaterial).toBe(CHART_STAGE_MATERIAL);
+    expect(solido.option.grid3D.light).toEqual(CHART_STAGE_LIGHT);
+  });
+
+  it("«Rosca 3D» reparte los MISMOS ángulos que el pastel y comparte su tabla", () => {
+    const resultado = conAnexo();
+    const rosca = anexo(resultado, "rosca");
+    const pastel = flat(anexo(resultado, "pastel"));
+    if (rosca.option === null || !is3DOption(rosca.option)) {
+      throw new Error("se esperaba la rosca sólida");
+    }
+    const cunas = rosca.option.series;
+    // Una cuña por porción, en el mismo orden, con la misma tabla gemela detrás.
+    expect(cunas.map((cuna) => cuna.name)).toEqual(pastel.table.rows.map((row) => row.label));
+    expect(rosca.table).toEqual(pastel.table);
+    expect(rosca.title).toBe(pastel.title);
+  });
+
+  it("las cuñas barren la vuelta entera y dejan hueco entre ellas", () => {
+    const rosca = anexo(conAnexo(), "rosca");
+    if (rosca.option === null || !is3DOption(rosca.option)) {
+      throw new Error("se esperaba la rosca sólida");
+    }
+    const arcos = rosca.option.series.map((cuna) => {
+      if (cuna.type !== "surface") {
+        throw new Error("una porción de la rosca no es una superficie");
+      }
+      return cuna.parametricEquation.u;
+    });
+    // Los arcos suman una vuelta MENOS los huecos: es el hueco, y no un trazo encima, lo que separa
+    // una porción de la siguiente.
+    const barrido = arcos.reduce((sum, u) => sum + (u.max - u.min), 0);
+    expect(barrido).toBeLessThan(Math.PI * 2);
+    expect(barrido).toBeGreaterThan(Math.PI * 2 - arcos.length * 0.02);
+    // Y ninguno se queda sin arco: una porción de 0.4 % sigue teniendo cuerpo.
+    expect(arcos.every((u) => u.max > u.min)).toBe(true);
+  });
+
+  it("la caja de la rosca no se dibuja, y es REDONDA: ancho y fondo iguales", () => {
+    const rosca = anexo(conAnexo(), "rosca");
+    if (rosca.option === null || !is3DOption(rosca.option)) {
+      throw new Error("se esperaba la rosca sólida");
+    }
+    // Un anillo no tiene tres reglas que leer, y una caja más ancha que honda lo vuelve una elipse
+    // —una segunda distorsión encima de la que ya cuesta la perspectiva—.
+    expect(rosca.option.grid3D.show).toBe(false);
+    expect(rosca.option.grid3D.boxWidth).toBe(rosca.option.grid3D.boxDepth);
+    // Y se abre CASI EN PLANTA, que es lo que mantiene los ángulos cerca de lo que representan.
+    expect(rosca.option.grid3D.viewControl?.alpha).toBeGreaterThan(50);
   });
 
   it("apagada, la lista vuelve a ser exactamente la de siempre", () => {
@@ -1180,7 +1314,7 @@ describe("la vista predeterminada de costos y gastos", () => {
     // composition, where the seventh account does not change the answer to «what is the total made
     // of».
     const { cards } = conAnexo();
-    const dona = cards[1];
+    const dona = anexo(conAnexo(), "pastel");
     const barras = cards[0].table.rows.filter((row) => row.id !== "__total__");
 
     expect(dona.option?.series[0].type).toBe("pie");
@@ -1189,8 +1323,7 @@ describe("la vista predeterminada de costos y gastos", () => {
   });
 
   it("cada porción toma un tono propio, hasta donde llega la secuencia", () => {
-    const { cards } = conAnexo();
-    const data = cards[1].option?.series[0].data ?? [];
+    const data = flat(anexo(conAnexo(), "pastel")).option?.series[0].data ?? [];
     const colors = data.map((d) => (d as { itemStyle?: { color?: string } }).itemStyle?.color);
 
     expect(new Set(colors).size).toBe(colors.length);
@@ -1202,7 +1335,7 @@ describe("la vista predeterminada de costos y gastos", () => {
   it("las dos tarjetas hablan del MISMO reparto", () => {
     const { cards } = conAnexo();
     const barras = cards[0].table.rows.filter((row) => row.id !== "__total__");
-    const dona = cards[1].table.rows;
+    const dona = anexo(conAnexo(), "pastel").table.rows;
 
     expect(dona[0].id).toBe(barras[0].id);
   });
@@ -1445,15 +1578,16 @@ describe("el anexo declarado llega hasta las dos tarjetas", () => {
   );
 
   it("las dos tarjetas dibujan los diecisiete rubros con el rótulo de la hoja", () => {
-    const { cards } = buildGraficosCards(
+    const anexoClinica = buildGraficosCards(
       CLINICA,
       withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET }),
     );
-    const barras = cards[0].option?.xAxis;
+    const { cards } = anexoClinica;
+    const barras = flat(cards[0]).option?.xAxis;
     const eje = (Array.isArray(barras) ? barras[0] : barras)?.data ?? [];
 
     expect(eje).toEqual(DECLARED_ANNEX_ROWS.map((row) => row.label));
-    expect(cards[1].table.rows.map((row) => row.label)).toEqual(eje);
+    expect(anexo(anexoClinica, "pastel").table.rows.map((row) => row.label)).toEqual(eje);
     // Not even a «Como lo llama el sistema» on screen.
     expect(eje.some((label) => String(label).startsWith("Como lo llama"))).toBe(false);
   });
@@ -1465,7 +1599,12 @@ describe("el anexo declarado llega hasta las dos tarjetas", () => {
     );
 
     expect(cards[0].option?.series[0].data).toHaveLength(DECLARED_ANNEX_ROWS.length);
-    expect(cards[1].table.rows.map((row) => row.id)).not.toContain(OTHERS_CODE);
+    expect(
+      anexo(
+        buildGraficosCards(CLINICA, withFilters({ preset: EXPENSE_DISTRIBUTION_PRESET })),
+        "pastel",
+      ).table.rows.map((row) => row.id),
+    ).not.toContain(OTHERS_CODE);
   });
 
   it("un plan que no lo declara sigue repartiendo por cuentas de movimiento", () => {
@@ -1516,7 +1655,7 @@ describe("el corte del anexo es el MISMO en las dos tarjetas", () => {
   it("barras y dona dibujan quince y la última es «Otros»", () => {
     const { cards } = conMuchos();
     const barras = cards[0].option?.series[0].data ?? [];
-    const dona = cards[1].table.rows;
+    const dona = anexo(conMuchos(), "pastel").table.rows;
 
     expect(barras).toHaveLength(ANNEX_MAX_SLICES);
     expect(dona).toHaveLength(ANNEX_MAX_SLICES);
@@ -1529,9 +1668,9 @@ describe("el corte del anexo es el MISMO en las dos tarjetas", () => {
     // It is what used to fail: each card cut on its own and they could show a different number of
     // lines of the same breakdown, a disagreement nobody reads as an error.
     const { cards } = conMuchos();
-    const ejeX = cards[0].option?.xAxis;
+    const ejeX = flat(cards[0]).option?.xAxis;
     const barras = (Array.isArray(ejeX) ? ejeX[0] : ejeX)?.data ?? [];
-    const dona = cards[1].table.rows.map((row) => row.label);
+    const dona = anexo(conMuchos(), "pastel").table.rows.map((row) => row.label);
 
     expect(barras).toEqual(dona);
   });

@@ -215,7 +215,10 @@ export const ChartCard = memo(function ChartCard({
 export function SpecCard({
   spec,
   ...rest
-}: { spec: ChartCardSpec } & Omit<ChartCardProps, keyof ChartCardSpec>) {
+}: { spec: ChartCardSpec<ChartOption | Chart3DOption> } & Omit<
+  ChartCardProps,
+  keyof ChartCardSpec
+>) {
   return (
     <ChartCard
       title={spec.title}

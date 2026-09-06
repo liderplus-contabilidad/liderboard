@@ -5,9 +5,11 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import {
   buildSalesCards,
   SCREEN_EVOLUTION_VIEW,
+  SCREEN_SOLID_VIEW,
   type EvolutionView,
   type SalesCards,
   type SalesCardsInput,
+  type SolidView,
   type YearMonths,
   type YearReading,
 } from "@/lib/sales/cards";
@@ -96,6 +98,16 @@ interface SalesDataValue {
    */
   evolutionView: EvolutionView;
   setEvolutionView: (view: EvolutionView) => void;
+  /**
+   * Which body the two flat bar cards take, and they are held here for the evolution's same reason:
+   * the cards are rebuilt from `cardsInput` on every read, so a shape kept in the component would
+   * reset to the default on the next mark and the reader would find their choice undone by an
+   * unrelated click. See `SolidView`.
+   */
+  servicesView: SolidView;
+  setServicesView: (view: SolidView) => void;
+  payersView: SolidView;
+  setPayersView: (view: SolidView) => void;
   toggleYear: (year: number) => void;
   selectAllYears: () => void;
   toggleMonth: (monthIndex: number) => void;
@@ -117,6 +129,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   // The SCREEN opens in three dimensions; the pure layer's default stays flat so the printed report
   // cannot inherit a canvas by omission. See `SCREEN_EVOLUTION_VIEW`.
   const [evolutionView, setEvolutionView] = useState<EvolutionView>(SCREEN_EVOLUTION_VIEW);
+  const [servicesView, setServicesView] = useState<SolidView>(SCREEN_SOLID_VIEW);
+  const [payersView, setPayersView] = useState<SolidView>(SCREEN_SOLID_VIEW);
   const clientId = isConsolidated ? null : activeClientId;
 
   // The ONLY query, and always bounded by the client: it is what stops the billing of two companies
@@ -232,8 +246,8 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   );
 
   const cards = useMemo(
-    () => buildSalesCards(cardsInput, { hideEmptyMonths, evolutionView }),
-    [cardsInput, hideEmptyMonths, evolutionView],
+    () => buildSalesCards(cardsInput, { hideEmptyMonths, evolutionView, servicesView, payersView }),
+    [cardsInput, hideEmptyMonths, evolutionView, servicesView, payersView],
   );
   const toggleEmptyMonths = useCallback(() => setHideEmptyMonths((current) => !current), []);
 
@@ -295,6 +309,10 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       hideEmptyMonths,
       toggleEmptyMonths,
       evolutionView,
+      servicesView,
+      setServicesView,
+      payersView,
+      setPayersView,
       setEvolutionView,
       toggleYear,
       selectAllYears,
@@ -321,6 +339,10 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       hideEmptyMonths,
       toggleEmptyMonths,
       evolutionView,
+      servicesView,
+      setServicesView,
+      payersView,
+      setPayersView,
       setEvolutionView,
       toggleYear,
       selectAllYears,

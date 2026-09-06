@@ -17,7 +17,7 @@ import type { ChartGuide } from "@/lib/charts/types";
 import { ratioGuide } from "./guides";
 import type { RevenueYearInput } from "./types";
 
-export const REVENUE_SERIES_ORDER = ["ventas", "cobros-tc", "comision-tc", "facebook"] as const;
+export const REVENUE_SERIES_ORDER = ["ventas", "cobros-tc", "comision-tc", "publicidad"] as const;
 
 export type RevenueSeriesId = (typeof REVENUE_SERIES_ORDER)[number];
 
@@ -30,15 +30,15 @@ export const SERIES_LABELS: Record<RevenueSeriesId, string> = {
   ventas: "Ventas",
   "cobros-tc": "Cobros con tarjeta",
   "comision-tc": "Comisiones TC",
-  facebook: "Publicidad Facebook",
+  publicidad: "Publicidad",
 };
 
 /**
  * The same series as it reads INSIDE A SENTENCE — «los cobros con tarjeta», «las comisiones TC».
  *
  * It exists because the notes used to lower-case `SERIES_LABELS` to fit them into a phrase, and
- * `.toLowerCase()` does not know what a sigla is: «Comisiones TC» came out «comisiones tc» and
- * «Publicidad Facebook» came out «publicidad facebook». A label is written, never derived by casing.
+ * `.toLowerCase()` does not know what a sigla is: «Comisiones TC» came out «comisiones tc». A label
+ * is written, never derived by casing.
  *
  * It carries the ARTICLE too, so the sentence around it does not have to guess the gender of a
  * series the day a fourth one is added.
@@ -47,7 +47,7 @@ export const SERIES_LABELS_INLINE: Record<RevenueSeriesId, string> = {
   ventas: "las ventas",
   "cobros-tc": "los cobros con tarjeta",
   "comision-tc": "las comisiones TC",
-  facebook: "la pauta de Facebook",
+  publicidad: "la publicidad",
 };
 
 /** Where a series' twelve monthly values come from, given a year's input. */
@@ -57,7 +57,7 @@ const SELECTORS: Record<RevenueSeriesId, SeriesSelector> = {
   ventas: (input) => input.monthlyRevenue,
   "cobros-tc": (input) => input.external.cardRevenue,
   "comision-tc": (input) => input.external.cardFees,
-  facebook: (input) => input.external.adSpend,
+  publicidad: (input) => input.external.adSpend,
 };
 
 /** A series' values for one year — the ONE way in, so no card reaches into `external` by hand. */
@@ -117,13 +117,13 @@ export const RATIO_DESCRIPTORS: readonly RatioDescriptor[] = [
     guide: ratioGuide(SERIES_LABELS_INLINE["comision-tc"], SERIES_LABELS_INLINE["cobros-tc"]),
   },
   {
-    id: "facebook-vs-ventas",
-    title: "Publicidad Facebook vs ventas",
+    id: "publicidad-vs-ventas",
+    title: "Publicidad vs ventas",
     question: "cuánto de la venta se reinvierte en pauta",
-    numerator: "facebook",
+    numerator: "publicidad",
     denominator: "ventas",
-    colorSlot: "facebook",
+    colorSlot: "publicidad",
     shareLabel: "% pauta",
-    guide: ratioGuide(SERIES_LABELS_INLINE.facebook, SERIES_LABELS_INLINE.ventas),
+    guide: ratioGuide(SERIES_LABELS_INLINE.publicidad, SERIES_LABELS_INLINE.ventas),
   },
 ];

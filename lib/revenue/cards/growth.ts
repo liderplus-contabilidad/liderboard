@@ -25,8 +25,6 @@ import {
   percentAxis,
   signedMoney,
   signedPercent,
-  signLabel,
-  signPosition,
   yearColor,
   zeroLine,
 } from "./chrome";
@@ -93,36 +91,23 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
     type: "bar",
     data: axis.map((month) => {
       const point = entry.points[month];
-      const value = inPercent ? point.percent : point.delta;
-      // The label rides ON the datum because its place depends on the datum's sign, and a series'
-      // `position` is one value for every bar it holds.
-      return { value, label: signPosition(value) };
+      return inPercent ? point.percent : point.delta;
     }),
     itemStyle: { color: yearColor(entry.baseYear, baseYears) },
     barMaxWidth,
     /**
-     * **The label is a ONE-BASE-YEAR shape, and it is the count of bases that decides it — the
-     * comparativo's same rule, where the number of marked years chooses bar or line.**
+     * **This card writes NO figure over its bars.**
      *
-     * It is not a threshold and not a taste: with several bases a month holds N bars packed into one
-     * category slot, so their centres sit a bar's width apart —about 39px at `barMaxWidth` 30— while
-     * «▼ -$12,287.73» measures some 90px. No spacing, no shortening and no staggering fits two of
-     * them over two adjacent bars, and `hideOverlap` can only answer by dropping one of the two
-     * figures.
+     * What it draws is a variation, and a variation is read off the ZERO LINE: whether the bar hangs
+     * above it or below, and how far. That reading survives at a glance across a whole year of
+     * columns, and it is what a printed amount interrupts — a month packs one bar per base year into
+     * a single category slot, so a signed figure some 90px wide either sits across the fills beside
+     * it or steps aside into a staircase the reader has to walk row by row. Neither is faster than
+     * the shape it covers.
      *
-     * The attribution is the half that cannot be repaired at all. This label carries the SIGN's ink
-     * and not the series', which is the house rule and is what lets it encode three things at once —
-     * so with two bars and two labels there is nothing pairing each label to its bar except its
-     * position, and position is exactly what fails. A reader could not tell which year «-$4,526.68»
-     * belonged to.
-     *
-     * With one base there is one bar per month, the label sits over it unambiguously, and
-     * `hideOverlap` goes back to being the last resort it was meant to be. With several, the sign is
-     * still read off the zero line this card draws, and the signed figures are in the tooltip and in
-     * the table — which carries BOTH units, always.
+     * The figures are not out of reach: the tooltip gives the month's, and the table twin carries Δ$
+     * AND Δ% against every base year, always and whichever unit the chart is in.
      */
-    label: signLabel(growths.length === 1, inPercent),
-    labelLayout: { hideOverlap: true },
     // The ZERO LINE, drawn ONCE — on the first series, because a mark line per series would paint the
     // same rule three times over itself. It is what turns the axis into the divider between a gain and
     // a loss: without it, a bar hanging below the grid's first line is read as a small bar and not as

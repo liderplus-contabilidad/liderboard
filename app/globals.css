@@ -57,6 +57,12 @@
   --color-crosslink-hover: #86198f;
   --color-crosslink-soft: rgba(162, 28, 175, 0.08);
 
+  /* The 3D stage: the deep end of the skyline's night sky. It is the ONE dark ground in a light
+     dashboard, and it is here —not only in `lib/charts/palette.ts`— because the card paints it
+     BEHIND the canvas: without it a WebGL box that has not finished loading is a white rectangle
+     that turns black. Mirrors `CHART_STAGE.sky`, where every contrast of this ground is measured. */
+  --color-chart-stage: #0e1a3a;
+
   --color-chip: #eef2f6;
   --color-chip-border: #dce3eb;
 

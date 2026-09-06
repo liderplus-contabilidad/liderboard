@@ -50,6 +50,9 @@ export const REVENUE_2026 = months([
  * resolver, y por eso la fixture lo conserva.
  */
 export const EXTERNAL_2026: RevenueExternalSeries = {
+  // 2026 lo trae el estado de resultados entero, así que no hay ventas escritas a mano que guardar:
+  // `manualRevenue` solo existe para los años que el workspace no alcanza.
+  manualRevenue: emptyMonthSeries(),
   cardRevenue: months([31850.7, 33005.26, 49065.46, 46085.43, 49372.19, 49649.54]),
   cardFees: months([1273.23, 2093.89, 2645.34, 1943.63, 2208.1, 2763.86]),
   adSpend: months([4398.1, 4272.74, 7178.6, 9785.92, 8367.3, 8605.5]),
@@ -58,6 +61,7 @@ export const EXTERNAL_2026: RevenueExternalSeries = {
 /** A year with nothing captured — every year but 2026 in the real file. */
 export function noExternal(): RevenueExternalSeries {
   return {
+    manualRevenue: emptyMonthSeries(),
     cardRevenue: emptyMonthSeries(),
     cardFees: emptyMonthSeries(),
     adSpend: emptyMonthSeries(),

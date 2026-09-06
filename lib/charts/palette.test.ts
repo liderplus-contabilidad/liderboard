@@ -6,16 +6,18 @@ import {
   CHART_DISTRIBUTION_RAMP,
   CHART_HEAT_EMPTY,
   CHART_HEAT_RAMP,
-  CHART_PERIOD_PALETTE,
   CHART_MARK,
   CHART_MAX_SERIES,
   CHART_NEUTRAL,
   CHART_PALETTE,
+  CHART_PERIOD_PALETTE,
   CHART_RANKING_MAX,
   CHART_RANKING_SEQUENCE,
+  CHART_SIGN,
   CHART_SLICE_MAX,
   CHART_SLICE_SEQUENCE,
-  CHART_SIGN,
+  CHART_STAGE_NEUTRAL,
+  CHART_STAGE_PALETTE,
   colorForCompositionSlot,
   colorForDistributionSlot,
   colorForEntity,
@@ -23,6 +25,7 @@ import {
   colorForRankingSlot,
   colorForSliceSlot,
   heatStep,
+  stageColor,
 } from "./palette";
 
 const CENTERS = ["consolidado", "cultura-manor", "centro-de-costo-principal", "sin-centro"];
@@ -314,5 +317,34 @@ describe("CHART_SLICE_SEQUENCE · la tarta que nombra todas sus porciones", () =
   it("la decimonovena cae en el neutro: no se inventa un tono", () => {
     expect(colorForSliceSlot(CHART_SLICE_MAX)).toBe(CHART_NEUTRAL);
     expect(colorForSliceSlot(-1)).toBe(CHART_NEUTRAL);
+  });
+});
+
+describe("CHART_STAGE_PALETTE · la escala que sólo viste el escenario", () => {
+  it("es ranura por ranura tan larga como la clara, y no comparte ni un tono", () => {
+    // The whole contract of `stageColor` is the slot. A set of a different length would translate
+    // some entities and leave others in their light step, which is the one thing it exists to avoid.
+    expect(CHART_STAGE_PALETTE).toHaveLength(CHART_PALETTE.length);
+    expect(new Set(CHART_STAGE_PALETTE).size).toBe(CHART_STAGE_PALETTE.length);
+    for (const step of CHART_STAGE_PALETTE) {
+      expect(CHART_PALETTE).not.toContain(step);
+    }
+  });
+
+  it("traduce por POSICIÓN, que es lo que conserva la identidad dentro del escenario", () => {
+    CHART_PALETTE.forEach((color, slot) => {
+      expect(stageColor(color)).toBe(CHART_STAGE_PALETTE[slot]);
+    });
+  });
+
+  it("«Otros» tiene su propio paso, y no es el gris claro de la tarjeta", () => {
+    // `CHART_NEUTRAL` measures 9.08:1 against the navy and would land in the middle of the band the
+    // eight entities occupy, instead of behind them.
+    expect(stageColor(CHART_NEUTRAL)).toBe(CHART_STAGE_NEUTRAL);
+    expect(CHART_STAGE_NEUTRAL).not.toBe(CHART_NEUTRAL);
+  });
+
+  it("un color ajeno a la escala pasa intacto: no hay tono inventado", () => {
+    expect(stageColor(CHART_SIGN.positive)).toBe(CHART_SIGN.positive);
   });
 });
