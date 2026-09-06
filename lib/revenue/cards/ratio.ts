@@ -495,7 +495,7 @@ function missingMonthsNote(
  *
  * **The verb carries the agreement, not a participle.** «no tienen … registrado» disagreed with its
  * subject, and the obvious repair —«registrados»— is right for two of the three series and wrong for
- * the third: «la pauta de Facebook» is singular and feminine. `no registran` agrees with the YEARS,
+ * the third: «la publicidad» is singular and feminine. `no registran` agrees with the YEARS,
  * which the branch below already counts, so one sentence covers all six combinations without a
  * gender table travelling beside every label.
  */

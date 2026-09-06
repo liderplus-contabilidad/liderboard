@@ -2,7 +2,7 @@
  * What «Reportería de ingresos» stores, and the narrow input its pure layer reads.
  *
  * **Three figures per month are captured because no estado de resultados contains them**: what was
- * collected by card, what the issuer took in commission and what was spent on Facebook advertising.
+ * collected by card, what the issuer took in commission and what was spent on advertising.
  * No percentage, total, average or growth is ever written down beside them — a stored copy would go
  * stale at the next adjustment in Datos and the screen would contradict the data.
  *

@@ -273,8 +273,8 @@ function RevenueContent() {
                   <EmptyState icon={<Wallet size={22} />} className="py-12">
                     <span className="flex flex-col items-center gap-3 text-center">
                       <span className="max-w-[460px]">
-                        Cobros con tarjeta, comisiones TC y publicidad Facebook no están en ningún
-                        estado de resultados: se registran a mano. Sin ellos, las tres lecturas de
+                        Cobros con tarjeta, comisiones TC y publicidad no están en ningún estado de
+                        resultados: se registran a mano. Sin ellos, las tres lecturas de
                         participación no tienen numerador que medir.
                       </span>
                       <Button

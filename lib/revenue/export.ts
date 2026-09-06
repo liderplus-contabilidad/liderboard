@@ -137,7 +137,7 @@ export async function buildExternalWorkbook(
   };
   ws.addRow([]);
 
-  const columns = ["Año", "Mes", "Cobros TC", "Comisiones TC", "Publicidad Facebook"];
+  const columns = ["Año", "Mes", "Cobros TC", "Comisiones TC", "Publicidad"];
   const head = ws.addRow(columns);
   head.font = { bold: true };
   head.eachCell((cell) => {

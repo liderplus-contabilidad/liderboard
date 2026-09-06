@@ -24,7 +24,7 @@ const COLUMNS = [
   { key: "manualRevenue", label: "Ventas" },
   { key: "cardRevenue", label: "Cobros TC" },
   { key: "cardFees", label: "Comis. TC" },
-  { key: "adSpend", label: "Facebook" },
+  { key: "adSpend", label: "Publicidad" },
 ] as const;
 
 type ColumnKey = (typeof COLUMNS)[number]["key"];
@@ -56,7 +56,7 @@ interface RevenueCaptureGridProps {
  *
  * Every figure carries the CURRENCY SYMBOL, cells included. `formatAmount` drops it for a column
  * that already names its unit, and that is not this table: «Ventas», «Cobros TC», «Comis. TC» and
- * «Facebook» name a concept, so without the symbol four columns of bare numbers sit next to a
+ * «Publicidad» name a concept, so without the symbol four columns of bare numbers sit next to a
  * percentage and a month count with nothing saying which of them are dollars.
  *
  * **It saves on leaving the cell** (`onCommit`), with no «Guardar» button — the same gesture as

@@ -318,7 +318,7 @@ describe("buildRatioCard · un solo constructor", () => {
     expect(cards.map((card) => card.id)).toEqual([
       "cobros-tc-vs-ventas",
       "comision-tc-vs-cobros-tc",
-      "facebook-vs-ventas",
+      "publicidad-vs-ventas",
     ]);
     expect(cards.every((card) => card.option?.series.length === 2)).toBe(true);
   });
@@ -719,12 +719,11 @@ describe("el crecimiento se lee contra la LÍNEA DE CERO, sin cifras encima", ()
 });
 
 describe("las etiquetas van ESCRITAS, nunca bajadas de caja", () => {
-  const facebook = RATIO_DESCRIPTORS[2];
+  const publicidad = RATIO_DESCRIPTORS[2];
   const comision = RATIO_DESCRIPTORS[1];
 
   it("una sigla sobrevive dentro de la frase", () => {
-    // `.toLowerCase()` no distingue una sigla de un nombre propio: «Comisiones TC» salía
-    // «comisiones tc» y «Publicidad Facebook» salía «publicidad facebook».
+    // `.toLowerCase()` no distingue una sigla: «Comisiones TC» salía «comisiones tc».
     const card = buildRatioCard(
       comision,
       input([yearInput(2024, REVENUE_2024), yearInput(2026, REVENUE_2026)]),
@@ -734,24 +733,17 @@ describe("las etiquetas van ESCRITAS, nunca bajadas de caja", () => {
     expect(card.note).not.toContain("comisiones tc");
   });
 
-  it("un nombre propio conserva su mayúscula", () => {
-    const card = buildRatioCard(facebook, input(loadedYears()));
-
-    expect(card.note).toContain("la pauta de Facebook");
-    expect(card.note).not.toContain("publicidad facebook");
-  });
-
   it("la nota de años sin registrar concuerda con su sujeto", () => {
-    const several = buildRatioCard(facebook, input(loadedYears()));
+    const several = buildRatioCard(publicidad, input(loadedYears()));
     const one = buildRatioCard(
-      facebook,
+      publicidad,
       input([yearInput(2022, REVENUE_2022), yearInput(2026, REVENUE_2026)]),
     );
 
     // El verbo concuerda con los AÑOS, que es lo que se cuenta; un participio tendría que concordar
-    // además con el género de la serie, y «la pauta de Facebook» es femenina y singular.
-    expect(several.note).toContain("están marcados y no registran la pauta de Facebook");
-    expect(one.note).toContain("está marcado y no registra la pauta de Facebook");
+    // además con el género de la serie, y «la publicidad» es femenina y singular.
+    expect(several.note).toContain("están marcados y no registran la publicidad");
+    expect(one.note).toContain("está marcado y no registra la publicidad");
     expect(several.note).not.toContain("registrado");
   });
 });
