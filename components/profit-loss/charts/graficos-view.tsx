@@ -273,6 +273,7 @@ export function GraficosView() {
           spec={card}
           collapsed={isCollapsed(card.id)}
           onToggleCollapsed={() => toggle(card.id)}
+          expandable
           {...(annex && (visibleAnnexId ? card.id === visibleAnnexId : index === 0)
             ? {
                 onSelect: (next: number) => {

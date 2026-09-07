@@ -99,6 +99,7 @@ export function AnalisisView() {
         spec={cards[0]}
         collapsed={isCollapsed(cards[0].id)}
         onToggleCollapsed={() => toggle(cards[0].id)}
+        expandable
       />
 
       <div className="grid grid-cols-2 gap-4">
@@ -106,11 +107,13 @@ export function AnalisisView() {
           spec={cards[1]}
           collapsed={isCollapsed(cards[1].id)}
           onToggleCollapsed={() => toggle(cards[1].id)}
+          expandable
         />
         <SpecCard
           spec={cards[2]}
           collapsed={isCollapsed(cards[2].id)}
           onToggleCollapsed={() => toggle(cards[2].id)}
+          expandable
         />
       </div>
     </div>

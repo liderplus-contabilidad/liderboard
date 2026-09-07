@@ -215,6 +215,7 @@ function RevenueContent() {
                 {...cards.comparison}
                 collapsed={isCollapsed(cards.comparison.id)}
                 onToggleCollapsed={() => toggle(cards.comparison.id)}
+                expandable
                 {...(cards.skylineAvailable
                   ? {
                       // Offered exactly where it has something to put on the depth axis: with one
@@ -238,6 +239,7 @@ function RevenueContent() {
                 {...cards.annual}
                 collapsed={isCollapsed(cards.annual.id)}
                 onToggleCollapsed={() => toggle(cards.annual.id)}
+                expandable
                 headerSlot={
                   <span className="flex items-center gap-4">
                     {/* La CIFRA y el CUERPO son dos preguntas: cualquiera de las dos cifras se lee
@@ -268,6 +270,7 @@ function RevenueContent() {
                 {...cards.growth}
                 collapsed={isCollapsed(cards.growth.id)}
                 onToggleCollapsed={() => toggle(cards.growth.id)}
+                expandable
                 headerSlot={
                   /* Solo «Ver en», la UNIDAD: esta tarjeta no ofrece cuerpo sólido — una variación
                      se lee contra la línea de cero, y el escenario no tiene línea que ofrecer. */
@@ -315,6 +318,7 @@ function RevenueContent() {
                     {...card}
                     collapsed={isCollapsed(card.id)}
                     onToggleCollapsed={() => toggle(card.id)}
+                    expandable
                     {...(card.option === null
                       ? {}
                       : {
