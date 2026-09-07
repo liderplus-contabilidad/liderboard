@@ -376,32 +376,17 @@ describe("La cifra sobre la columna", () => {
     expect(label?.formatter?.(param(9, null))).toBe("");
   });
 
-  it("la ratio la escribe sobre CADA punto, en porcentaje y no en moneda", () => {
-    const { ratio } = cards();
-    const written = writing(ratio.option);
-    expect(written.map((entry) => entry.name)).toEqual(["2026"]);
-    // Enero: 104,203.12 / 240,314.07 = 43.4 %, el mismo número que la gemela.
-    expect(written[0].label?.formatter?.(param(0, 43.36))).toBe("43.4 %");
-    expect(written[0].label?.formatter?.(param(9, null))).toBe("");
-  });
-
-  it("cada ejercicio escribe en SU fila, que es lo que compra el ancho", () => {
-    const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
-    const written = writing(ratio.option);
-    expect(written.map((entry) => entry.name)).toEqual(["2025", "2026"]);
-    const [first, second] = written.map((entry) => Number(entry.label?.distance));
-    expect(second).toBeGreaterThan(first);
-    // Y el techo crece con las filas: dos ejercicios piden más aire que uno.
-    expect(Number(ratio.option?.grid?.top)).toBeGreaterThan(
-      Number(cards().ratio.option?.grid?.top),
-    );
-  });
-
-  it("pasadas cuatro filas la cifra deja de leerse y no se escribe ninguna", () => {
-    const many = cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year })));
-    expect(writing(many.ratio.option)).toHaveLength(0);
-    // Y sin cifras no hay fila que reservar: el techo vuelve a ser el del dibujo solo.
-    expect(many.ratio.option?.grid?.top).toBe(12);
+  it("la ratio no escribe cifra sobre ningún punto: la lleva el tooltip y la gemela", () => {
+    for (const built of [
+      cards(),
+      cards([goldenYear({ year: 2025 }), goldenYear()]),
+      cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year }))),
+    ]) {
+      expect(writing(built.ratio.option)).toHaveLength(0);
+      // Y sin cifras no hay fila que reservar: el techo es el del dibujo solo.
+      expect(built.ratio.option?.grid?.top).toBe(12);
+      expect(built.ratio.option?.tooltip?.trigger).toBe("axis");
+    }
   });
 
   it("en la evolución la lleva la LÍNEA del total, que ya es la cifra de la columna", () => {

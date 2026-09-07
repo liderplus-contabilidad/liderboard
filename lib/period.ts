@@ -250,6 +250,45 @@ export function periodLabel(months: readonly number[], years: readonly number[])
 }
 
 /**
+ * **THE rótulo of a set of YEAR MARKS**, which is what a filter bar's «Año» trigger reads: every year
+ * of the universe marked is written «Todos los años» instead of enumerated, because a control that
+ * spells six exercises out is wider than the reading it describes and says no more than the shortcut
+ * that set it.
+ *
+ * The EMPTY list comes out «—» and is deliberately NOT called «todos». That is the reading of the
+ * modules whose declared exception makes no mark resolve to the MOST RECENT year («Ventas por
+ * servicio», «Análisis costo personal»), and their `sanitizeFilters` hands the bar the already
+ * resolved list, so the dash is a state the trigger never actually draws. A module where no mark
+ * means ALL of them —«Reportería de ingresos»— names its own empty case before delegating here.
+ *
+ * It lives HERE, beside `monthSpanLabel`, for the same reason that one moved: three bars now read
+ * this figure, and three rules for one rótulo is the class of debt this vocabulary exists to prevent.
+ */
+export function yearMarkLabel(years: readonly number[], universe: readonly number[]): string {
+  if (universe.length > 0 && years.length >= universe.length) {
+    return "Todos los años";
+  }
+  return [...years].sort((a, b) => a - b).join(", ") || "\u2014";
+}
+
+/**
+ * The months' twin, read by a bar's «Mes» trigger: marking every loaded month is the same reading as
+ * marking none, so it is written «Todos los meses» rather than spelling twelve abbreviations into the
+ * widest control of the bar.
+ *
+ * It ENUMERATES and does not compose a range —«Ene, Feb, Mar», never «Ene–Mar»— because the trigger
+ * says what is MARKED, one entry per checkbox, while `monthSpanLabel` says what the reading COVERS.
+ */
+export function monthMarkLabel(months: readonly number[], universe: readonly number[]): string {
+  return months.length === 0 || months.length >= universe.length
+    ? "Todos los meses"
+    : [...months]
+        .sort((a, b) => a - b)
+        .map((month) => MONTHS_SHORT_ES[month])
+        .join(", ");
+}
+
+/**
  * A reading's period with a narrowing IN FRONT — the one composition of the two, read by the
  * subtitles and by a report's header. Two of them would let the screen and the paper name the same
  * reading differently.

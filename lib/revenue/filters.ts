@@ -25,11 +25,13 @@
  * of one year against twelve of another.
  */
 import {
+  monthMarkLabel,
   monthSpanLabel,
   namedSpans,
   periodLabel,
   scopedPeriodLabel,
   SPAN_KINDS,
+  yearMarkLabel as resolvedYearMarkLabel,
   type NamedSpan,
   type SpanKind,
 } from "@/lib/period";
@@ -39,7 +41,7 @@ import {
  * because «Análisis costo personal» reads the same figure and two rules for one rótulo drift apart.
  * They stay re-exported so every caller and every test of this module keeps its import.
  */
-export { monthSpanLabel, periodLabel, scopedPeriodLabel };
+export { monthMarkLabel, monthSpanLabel, periodLabel, scopedPeriodLabel };
 
 export interface RevenueFilters {
   /** Marked years, ascending. Empty resolves to ALL of them on read, never to none. */
@@ -115,9 +117,7 @@ export function withYearsCleared(filters: RevenueFilters): RevenueFilters {
  * The empty list is «todos» by the house rule, and reads as such here too.
  */
 export function yearMarkLabel(years: readonly number[], universe: readonly number[]): string {
-  return years.length === 0 || years.length >= universe.length
-    ? "Todos los años"
-    : [...years].sort((a, b) => a - b).join(", ");
+  return years.length === 0 ? "Todos los años" : resolvedYearMarkLabel(years, universe);
 }
 
 export function withMonthToggled(
@@ -136,24 +136,6 @@ export function withMonthToggled(
 
 export function withMonthsCleared(filters: RevenueFilters): RevenueFilters {
   return { ...filters, months: [] };
-}
-
-/**
- * The months' twin of `yearMarkLabel`, read by the bar's «Mes» trigger: marking every loaded month is
- * the same reading as marking none, so it is written «Todos los meses» instead of spelling twelve
- * abbreviations into the widest control of the bar.
- *
- * It enumerates and does not compose a range —«Ene, Feb, Mar», never «Ene–Mar»— because the trigger
- * says what is MARKED, one entry per checkbox, while `monthSpanLabel` says what a reading COVERS.
- * The chip strip is where a set that happens to be a semestre gets named as one (`markedSpanOf`).
- */
-export function monthMarkLabel(months: readonly number[], universe: readonly number[]): string {
-  return months.length === 0 || months.length >= universe.length
-    ? "Todos los meses"
-    : [...months]
-        .sort((a, b) => a - b)
-        .map((month) => MONTHS_SHORT_ES[month])
-        .join(", ");
 }
 
 /**

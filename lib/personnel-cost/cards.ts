@@ -275,13 +275,6 @@ function cell(value: number | null, unit: (value: number) => string): string | n
 }
 
 /**
- * Beyond this many ROWS a figure per mark stops being read and becomes texture — PyG's and Ingresos'
- * same number, and the rows themselves are what would cost it: five of them eat a third of a 280 px
- * card. Past it the amount stays where it is never missing, in the tooltip and in the table twin.
- */
-const MAX_LABEL_ROWS = 4;
-
-/**
  * The figure written over a mark — the module's ONE composition of it, so four cards cannot end up
  * writing an amount four different ways.
  *
@@ -581,13 +574,10 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
     return shareOf(cost, revenue);
   };
 
-  const fit = fitDirectLabel(months.length);
-  // Here the figure IS each point's own: a percentage is read against the axis and not against the
-  // other exercises, so unlike the two stacks nothing has to be totalled to write it. Each exercise
-  // gets its own ROW of figures, which is what lets several carry theirs without disputing one strip.
-  const labelRows = years.length <= MAX_LABEL_ROWS ? years.length : 0;
-
-  const series: ChartSeries[] = years.map((year, index) => ({
+  // This card writes NO figure over its points: what a ratio is read for is the trajectory, and a
+  // percentage over every mark of every exercise turns the line into texture. The amount stays where
+  // it is never missing — in the tooltip on hover and in the table twin.
+  const series: ChartSeries[] = years.map((year) => ({
     id: `ratio-${year.year}`,
     type: "line",
     name: String(year.year),
@@ -598,14 +588,6 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
     lineStyle: { color: yearColor(year.year, order), width: CHART_MARK.lineWidth },
     itemStyle: { color: yearColor(year.year, order) },
     emphasis: { focus: "series" },
-    ...(labelRows === 0
-      ? {}
-      : directLabel(
-          fit,
-          (param) => (param.value === null ? null : Number(param.value)),
-          percent,
-          index,
-        )),
   }));
 
   const table: ChartTable = {
@@ -650,10 +632,8 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
             grid: {
               left: 8,
               right: 12,
-              // One row of figures per exercise, and the top one is cropped against the card's edge
-              // without this: `outerBoundsContain` reserves for the AXIS' labels and nothing else.
               // With no figures written there is nothing to reserve for, and the plot keeps the room.
-              top: labelRows === 0 ? 12 : labelHeadroom(labelRows, fit, 12),
+              top: 12,
               bottom: 34,
               outerBoundsMode: "same",
               outerBoundsContain: "axisLabel",

@@ -14,6 +14,8 @@ import {
   withMonthsCleared,
   withMonthToggled,
   withYearToggled,
+  yearMarkLabel,
+  monthMarkLabel,
   type PersonnelCostUniverse,
 } from "./filters";
 
@@ -120,6 +122,40 @@ describe("El rótulo del tramo", () => {
   it("el grupo marcado va delante", () => {
     expect(scopedPeriodLabel("No afiliados", "Ene–Jun 2026")).toBe("No afiliados · Ene–Jun 2026");
     expect(scopedPeriodLabel(null, "Ene–Jun 2026")).toBe("Ene–Jun 2026");
+  });
+});
+
+describe("El rótulo de la barra dice «Todos» en vez de listarlo todo", () => {
+  it("con todos los años marcados el trigger no enumera los ejercicios", () => {
+    expect(yearMarkLabel(withAllYears(emptyFilters(), UNIVERSE.years).years, UNIVERSE.years)).toBe(
+      "Todos los años",
+    );
+  });
+
+  it("una selección parcial sí se escribe", () => {
+    const filters = withYearToggled(emptyFilters(), 2025, UNIVERSE.years);
+    expect(yearMarkLabel(sanitizeFilters(filters, UNIVERSE).years, UNIVERSE.years)).toBe("2025");
+  });
+
+  it("marcar los seis meses a mano dice «Todos»", () => {
+    const filters = UNIVERSE.months.reduce(
+      (acc, month) => withMonthToggled(acc, month, UNIVERSE.months),
+      emptyFilters(),
+    );
+    expect(monthMarkLabel(filters.months, UNIVERSE.months)).toBe("Todos los meses");
+  });
+
+  it("sin marcas es el mismo tramo, y se nombra igual", () => {
+    expect(monthMarkLabel(emptyFilters().months, UNIVERSE.months)).toBe("Todos los meses");
+  });
+
+  it("una selección parcial enumera los meses marcados", () => {
+    const filters = withMonthToggled(
+      withMonthToggled(emptyFilters(), 0, UNIVERSE.months),
+      3,
+      UNIVERSE.months,
+    );
+    expect(monthMarkLabel(filters.months, UNIVERSE.months)).toBe("Ene, Abr");
   });
 });
 

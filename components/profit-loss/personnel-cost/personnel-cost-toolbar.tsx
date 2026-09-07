@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/dropdown";
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
+import { MONTHS_FULL_ES } from "@/lib/date";
 import { PERSONNEL_GROUPS } from "@/lib/personnel-cost/accounts";
+import { monthMarkLabel, yearMarkLabel } from "@/lib/personnel-cost/filters";
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
@@ -55,7 +56,7 @@ export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
 
             <Dropdown>
               <DropdownTrigger active icon={<CalendarDays size={15} />}>
-                {`Año · ${filters.years.join(", ") || "—"}`}
+                {`Año · ${yearMarkLabel(filters.years, universe.years)}`}
               </DropdownTrigger>
               <DropdownPanel width={230}>
                 {universe.years.length > 1 && (
@@ -94,7 +95,7 @@ export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
               <Dropdown>
                 <DropdownTrigger active={markedMonths.size > 0} icon={<CalendarRange size={15} />}>
                   {markedMonths.size > 0
-                    ? `Mes · ${filters.months.map((month) => MONTHS_SHORT_ES[month]).join(", ")}`
+                    ? `Mes · ${monthMarkLabel(filters.months, universe.months)}`
                     : "Mes"}
                 </DropdownTrigger>
                 <DropdownPanel width={230}>

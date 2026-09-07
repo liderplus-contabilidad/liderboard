@@ -18,10 +18,20 @@
  * whole screen at once: the grid, the four tiles and the four cards. A control read by every card
  * lives here, where it leaves a chip — the rule the app already holds up everywhere else.
  */
-import { periodLabel, scopedPeriodLabel } from "@/lib/period";
+import { monthMarkLabel, periodLabel, scopedPeriodLabel, yearMarkLabel } from "@/lib/period";
 import { PERSONNEL_GROUPS, type PersonnelGroupId } from "./accounts";
 
-export { periodLabel, scopedPeriodLabel };
+/**
+ * The rótulos this module composes with. `yearMarkLabel` and `monthMarkLabel` are what the bar's
+ * triggers read: with EVERY year or EVERY month of the universe marked they say «Todos los años» /
+ * «Todos los meses» instead of enumerating, because a control that spells six exercises or twelve
+ * abbreviations out is wider than the reading it describes and says no more than the word does.
+ *
+ * They are «Ventas por servicio»' definitions, and this module reads them rather than growing its
+ * own: the year rule is the SAME declared exception —no mark resolves to the most recent, and
+ * `sanitizeFilters` hands the bar the resolved list— so a second copy could only drift.
+ */
+export { monthMarkLabel, periodLabel, scopedPeriodLabel, yearMarkLabel };
 
 export interface PersonnelCostFilters {
   /** Marked years, ascending. Empty resolves to the most recent on read, never to «all». */
