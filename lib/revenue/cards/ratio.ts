@@ -51,7 +51,9 @@ import {
   categoryAxis,
   currencyAxis,
   directLabel,
+  fitBarWidth,
   fitDirectLabel,
+  GROUPED_BAR_GAP,
   legendFor,
   money,
   moneyOrDash,
@@ -119,8 +121,14 @@ interface RatioColumns {
   share: (number | null)[];
   numerator: (number | null)[];
   denominator: (number | null)[];
-  /** Two bars side by side per category, so each has to leave room for its pair. Wider on the year
-   *  axis, where there are at most a handful of columns. */
+  /**
+   * How wide each of the two bars may be — `fitBarWidth(columns, 2)`, never a number written by hand.
+   *
+   * Both readings ask the same rule and differ only in what they hand it: twelve months of two bars
+   * give a column of some 83 px, and a handful of years give one of several hundred. It also has to
+   * BIND —see `bar-fit.ts`— because `startAt` below is measured off it: an anchor computed from a
+   * ceiling that did not bind lands over the fill beside it.
+   */
   barMaxWidth: number;
 }
 
@@ -167,6 +175,10 @@ function assembleRatioCard(
       data: parts.columns.denominator,
       itemStyle: { color: seriesColor(descriptor.denominator), borderRadius: ROUND_TOP },
       barMaxWidth: parts.columns.barMaxWidth,
+      // The air between the pair, declared: ECharts' own `'10%'` glues the numerator to the
+      // denominator it is a part of, and two touching fills read as one stacked bar — which is the
+      // one thing this card must not say.
+      barGap: GROUPED_BAR_GAP,
       ...directLabel(fit),
     },
     {
@@ -176,6 +188,7 @@ function assembleRatioCard(
       data: parts.columns.numerator,
       itemStyle: { color: seriesColor(descriptor.numerator), borderRadius: ROUND_TOP },
       barMaxWidth: parts.columns.barMaxWidth,
+      barGap: GROUPED_BAR_GAP,
       ...directLabel(fit, { row: 1, shares: parts.columns.share, startAt }),
     },
   ];
@@ -277,7 +290,7 @@ function ratioAcrossMonths(
         share: axis.map((month) => reading.points[month]?.percent ?? null),
         numerator: axis.map((month) => reading.points[month]?.numerator ?? null),
         denominator: axis.map((month) => reading.points[month]?.denominator ?? null),
-        barMaxWidth: 18,
+        barMaxWidth: fitBarWidth(labels.length, 2),
       },
       covered: reading.sharedMonths.length > 0,
       // The subtitle names the span the PERCENTAGE was measured over, which may be shorter than the
@@ -344,7 +357,7 @@ function ratioAcrossYears(
         share: compared.map((entry) => entry.reading.percent),
         numerator: compared.map((entry) => amountOf(entry.reading, "numeratorTotal")),
         denominator: compared.map((entry) => amountOf(entry.reading, "denominatorTotal")),
-        barMaxWidth: 28,
+        barMaxWidth: fitBarWidth(labels.length, 2),
       },
       covered,
       subtitle: `${labels.join(", ")} · ${span ?? "sin tramo común"} · ${descriptor.question}`,

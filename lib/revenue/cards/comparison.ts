@@ -23,6 +23,7 @@ import {
   baseOption,
   categoryAxis,
   currencyAxis,
+  fitBarWidth,
   legendFor,
   money,
   moneyOrDash,
@@ -120,7 +121,8 @@ export function buildComparisonCard(
               // axis, so April keeps its tone whichever span is being looked at.
               { value, itemStyle: { color: colorForPeriod(month), borderRadius: ROUND_TOP } };
         }),
-        barMaxWidth: CHART_MARK.barMaxWidth,
+        // One bar per month and nothing sharing its column: the fit hands it the whole band it has.
+        barMaxWidth: fitBarWidth(axis.length),
       }));
 
   const covered = drawn.some((entry) => entry.covered);

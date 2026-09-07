@@ -5,6 +5,7 @@ import { ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SCREEN_SOLID_VIEW, SOLID_VIEW_OPTIONS, type SolidView } from "@/lib/charts/solid-bars";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { StatTile } from "@/components/ui/stat-tile";
 import { cn } from "@/lib/cn";
@@ -36,19 +37,34 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
  * it cannot come back into this file.
  */
 /**
- * The shapes of the same breakdown: the length of a bar —flat on the card or solid on the stage— or
- * the angle of a slice, flat or solid too. They are ordered in PAIRS, each 3D one right after the
- * flat shape it repeats, because that is what they are: one reading in two bodies, never two
- * readings.
+ * The two GRAPHICS of the same breakdown: the length of a bar, or the angle of a slice.
+ *
+ * They were four options in one strip —«Barras · Sólido 3D · Pastel · Rosca 3D»— and that strip
+ * mixed two questions: WHICH graphic and in WHICH BODY. They are not four readings but two, each
+ * available flat or standing on the stage, so they are two controls and the four cards are their
+ * product. It is the same split «Ventas por año» carries between «Cifra» and «Ver como», and what it
+ * buys is that changing the body no longer means finding your graphic again on the other end of a
+ * strip of four.
  */
-const ANNEX_SHAPES = [
+const ANNEX_CHARTS = [
   { value: "barras" as const, label: "Barras" },
-  { value: "solido" as const, label: "Sólido 3D" },
   { value: "pastel" as const, label: "Pastel" },
-  { value: "rosca" as const, label: "Rosca 3D" },
 ];
 
-type AnnexShape = (typeof ANNEX_SHAPES)[number]["value"];
+type AnnexChart = (typeof ANNEX_CHARTS)[number]["value"];
+
+/**
+ * Which of `annexShapes`' four cards each pair asks for. The pure layer keeps emitting the four —
+ * they are four options of one reading and the report picks the two paper can carry — and this is
+ * the ONE place that says which of them the two switches compose into.
+ */
+const ANNEX_CARD: Record<
+  AnnexChart,
+  Record<SolidView, "barras" | "solido" | "pastel" | "rosca">
+> = {
+  barras: { plano: "barras", solido: "solido" },
+  pastel: { plano: "pastel", solido: "rosca" },
+};
 
 export function GraficosView() {
   const { dataset, filters, frequency } = usePygData();
@@ -89,34 +105,40 @@ export function GraficosView() {
   // screen, like the two switches above: it is not stored, it produces no chip and the printable
   // report still puts out every card whole.
   /**
-   * In which SHAPE the annex is read. Its three cards draw the same breakdown —one single reduction,
-   * the same rows, the same cut— and showing them at once is saying the same thing three times, the
-   * rule Ocupaciones already applies to its «Ver como». It opens in BARS because they are what
-   * withstands eighteen lines with a figure written over each one: «Sólido 3D» is the same reading in
-   * a body that cannot carry those fifteen labels, and the pie at that size writes its own outside,
-   * with guide lines piled up on one edge and the legend paginated, which is exactly what made
-   * «Composición de los ingresos» stop being a pie. It is local state, like the two switches above:
-   * it is not stored, it leaves no chip, and the printable report —which calls `buildGraficosCards`
-   * on its own— still puts out every shape PAPER CAN CARRY, because a printed control is a button
-   * nobody can press; the solid one it drops for a different reason, being a WebGL canvas.
+   * WHICH GRAPHIC of the annex is read, and in WHICH BODY — the two questions the header asks apart.
+   *
+   * Its four cards draw the same breakdown —one single reduction, the same rows, the same cut— and
+   * showing them at once is saying the same thing four times, the rule Ocupaciones already applies to
+   * its «Ver como». It opens in BARS and FLAT: bars are what withstands eighteen lines with a figure
+   * written over each one —the pie at that size writes its own outside, with guide lines piled up on
+   * one edge and the legend paginated, which is exactly what made «Composición de los ingresos» stop
+   * being a pie— and flat is the body the report and the Excel can carry.
+   *
+   * Both are local state, like the two switches above: they are not stored, they leave no chip, and
+   * the printable report —which calls `buildGraficosCards` on its own— still puts out every shape
+   * PAPER CAN CARRY, because a printed control is a button nobody can press; the two solid ones it
+   * drops for a different reason, being WebGL canvases.
    */
-  const [annexShape, setAnnexShape] = useState<AnnexShape>("barras");
+  const [annexChart, setAnnexChart] = useState<AnnexChart>("barras");
+  /** In which BODY that graphic is read. It opens FLAT, which is what the report and the Excel can
+   *  carry — `SCREEN_SOLID_VIEW`, the same default every other «Ver como» takes. */
+  const [annexView, setAnnexView] = useState<SolidView>(SCREEN_SOLID_VIEW);
   // The annex card being read, and `null` outside that view. It is an ID and not a position because
   // on changing shape the list is reordered: with the pie in place, the first card is no longer the
   // annex's, and a click tied to index 0 would open the window from another one.
-  const visibleAnnexId = annexShapes ? annexShapes[annexShape] : null;
+  const visibleAnnexId = annexShapes ? annexShapes[ANNEX_CARD[annexChart][annexView]] : null;
   // The shape that is NOT being read drops off the list; with the annex off there is none to remove
   // and this is the whole list.
   const visibleCards = useMemo(() => {
     if (!annexShapes) {
       return cards;
     }
-    // Every shape that is NOT being read drops off, which with three of them is no longer «the other
-    // one»: the list is filtered against the one on screen, so adding a fourth changes nothing here.
-    const shown = annexShapes[annexShape];
+    // Every shape that is NOT being read drops off, which with four of them is no longer «the other
+    // one»: the list is filtered against the one on screen, so adding a fifth changes nothing here.
+    const shown = annexShapes[ANNEX_CARD[annexChart][annexView]];
     const hidden = new Set(Object.values(annexShapes).filter((id) => id !== shown));
     return cards.filter((card) => !hidden.has(card.id));
-  }, [cards, annexShapes, annexShape]);
+  }, [cards, annexShapes, annexChart, annexView]);
   const cardIds = useMemo(() => visibleCards.map((card) => card.id), [visibleCards]);
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
@@ -262,14 +284,27 @@ export function GraficosView() {
           {...(card.id === visibleAnnexId
             ? {
                 headerSlot: (
-                  <span className="flex items-center gap-2">
-                    <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
-                    <SegmentedControl
-                      value={annexShape}
-                      options={ANNEX_SHAPES}
-                      onChange={setAnnexShape}
-                      ariaLabel="Ver como"
-                    />
+                  <span className="flex items-center gap-4">
+                    {/* QUÉ gráfica y en qué CUERPO son dos preguntas: cualquiera de las dos se lee
+                        plana o de pie, así que son dos controles y no cuatro opciones de uno. */}
+                    <span className="flex items-center gap-2">
+                      <span className="text-[11.5px] font-semibold text-faint">Gráfica</span>
+                      <SegmentedControl
+                        value={annexChart}
+                        options={ANNEX_CHARTS}
+                        onChange={setAnnexChart}
+                        ariaLabel="Gráfica"
+                      />
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+                      <SegmentedControl
+                        value={annexView}
+                        options={SOLID_VIEW_OPTIONS}
+                        onChange={setAnnexView}
+                        ariaLabel="Ver como"
+                      />
+                    </span>
                   </span>
                 ),
               }

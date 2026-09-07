@@ -15,14 +15,18 @@
  *        2 ─ 3        outer wall, falling         r = r1,           z = h → 0
  *        3 ─ 4        the floor, closing back     r = r1 → r0,      z = 0
  *
- * swept over `u`, the slice's own arc. The four corners land on WHOLE steps on purpose: gl averages
- * the normals it computes, so a fold placed between two samples comes out rounded and the wedge
- * stops having edges — which is the one thing this drawing is for.
+ * swept over `u` — and `u` is NOT only the arc. **A wedge is a closed solid, and the two faces of
+ * its radial cut are the first and last bands of the sweep** (`CAP_STEPS`), drawn at a fixed angle
+ * while the cross-section grows out of its own centre. Swept over the arc alone the wedge was a tube
+ * OPEN at both ends: the gap between two rubros showed the stage behind the ring instead of the side
+ * of a piece, and turned even slightly the whole rosca read as hollow shells laid apart — which is
+ * the one thing this drawing is not for. The four corners land on WHOLE steps of `v` on purpose, and
+ * how wide the fold at each of them comes out is `PROFILE_STEP`'s business.
  *
  * The gap between one wedge and the next is angular and real: the arcs stop short of each other, so
- * what separates two slices is the stage showing through and not a stroke over them. It is kept to
- * the thinnest line that reads as a cut — each wedge already has its own two lit walls, and a wider
- * channel stops being a pie divided and becomes a set of pieces laid apart.
+ * what separates two slices is a CUT —the neighbour's lit face— and not a stroke over them. It is
+ * kept to the thinnest line that reads as one: a wedge is already bounded by its own walls, and a
+ * wider channel stops being a pie divided and becomes a set of pieces laid apart.
  */
 import {
   CHART_FONT,
@@ -47,11 +51,14 @@ export const SOLID_PIE_HEIGHT = 440;
 /**
  * The centre. It is NOT the flat shape's — that one is a whole pie (`radius: ["0%", "74%"]`) with no
  * hole at all — and it is not decoration either: at r = 0 the inner wall of every wedge collapses
- * onto the axis and the normals there stop meaning anything. This is the smallest centre that keeps
- * each wedge a solid with four walls, and it was 0.46 before, which read as a void the drawing was
- * built around rather than as the middle of a pie.
+ * onto the axis and the normals there stop meaning anything. What sets it is that **the hole is a
+ * hole THROUGH the ring**: nothing is drawn under it, so whatever it spans is the stage seen through
+ * the middle of the reading. At 0.46 and then at 0.28 that was a black lens the drawing was built
+ * around. Here the camera's own elevation closes it — a wedge stands `WEDGE_HEIGHT` tall, and at the
+ * `alpha` this opens at the near inner wall covers almost the whole opening, so what is left of the
+ * hole is a hub and not a void.
  */
-const INNER_RADIUS = 0.28;
+const INNER_RADIUS = 0.2;
 const OUTER_RADIUS = 1;
 /** How much of the ring's radius the wedge stands up. Enough to be a body, not enough to be a wall. */
 const WEDGE_HEIGHT = 0.42;
@@ -64,6 +71,40 @@ const WEDGE_HEIGHT = 0.42;
 const SLICE_GAP = 0.006;
 /** An arc is sampled at most this coarsely; below it a wedge's outer wall reads as a polygon. */
 const ARC_STEP = 0.055;
+/**
+ * The bands of `u` each RADIAL CUT is given. The face is drawn at a fixed angle, so it costs no arc
+ * and no width: what grows across these steps is the cross-section itself, out of its own centre.
+ * Two and not one because the ring where the cap meets the body is SHARED, and gl averages the
+ * normals it computes there — with a single band that average was the whole cap, and the cut came
+ * out domed instead of flat.
+ */
+const CAP_STEPS = 2;
+/**
+ * How finely the cross-section is sampled. It is NOT a smoothness knob: the four corners land on
+ * whole steps at any of these values, and what the step decides is how WIDE the fold is. gl averages
+ * the normal of every vertex over the faces that meet it, so the corner's own normal is the bisector
+ * and the shading walks from wall to top across the ONE quad on each side of it. At a quarter that
+ * quad was a fourth of the face and the ring came out domed — a torus with a sheen sweeping over it
+ * instead of a top face and a wall. At a sixteenth the same fold is a chamfer: it still catches
+ * `CHART_STAGE_LIGHT`'s highlight, which is what an edge is drawn with here, and the faces either
+ * side of it read flat.
+ */
+const PROFILE_STEP = 1 / 16;
+/**
+ * The stage's material, with the specular lobe WIDENED for this shape and nothing else touched.
+ *
+ * `CHART_STAGE_MATERIAL`'s roughness is measured on a BAR, whose faces are small, axis-aligned and
+ * never square to the mirror direction — its camera does not turn. Here the top of a wedge is a wide
+ * flat face and the camera turns all the way around it, so at some angles it lands exactly in that
+ * lobe: `pow(8192, 1 - 0.42)` is an exponent of 187, and at its peak the highlight came out several
+ * times over white. Half the ring bleached and the rubros lost the one thing that names them.
+ * Widening the lobe keeps the chamfer lit —which is what draws the edge— and puts the peak back
+ * under the fill.
+ */
+const PIE_MATERIAL = { ...CHART_STAGE_MATERIAL, roughness: 0.62 };
+/** The centre of the cross-section: where a cap closes on itself, and what the shrink is measured to. */
+const MID_RADIUS = (INNER_RADIUS + OUTER_RADIUS) / 2;
+const MID_HEIGHT = WEDGE_HEIGHT / 2;
 
 export interface SolidPieSlice {
   id: string;
@@ -172,8 +213,16 @@ export function solidPieOption(
 }
 
 /**
- * One slice as a closed wedge. `u` is its arc and `v` walks the cross-section drawn in this file's
- * header; the step of `v` is a quarter so the four corners land on samples and stay corners.
+ * One slice as a CLOSED wedge. `u` walks the slice in STEPS —not in radians— because the sweep is
+ * not only the arc: the first and last bands of `u` are the two faces of the RADIAL CUT, and they
+ * are drawn at a fixed angle while the cross-section grows out of its own centre. `v` walks that
+ * cross-section, the one drawn in this file's header, with a step of a quarter so the four corners
+ * land on samples and stay corners.
+ *
+ * Without those two bands the wedge was a tube open at both ends, and the gap between one slice and
+ * the next was a WINDOW: what showed between two rubros was the stage behind the ring, not the side
+ * of a piece. Turned even slightly the ring came apart — every slice hollow and each one floating
+ * apart from its neighbours. The cap costs two bands of `u` and closes the solid.
  */
 function wedge(slice: SolidPieSlice, from: number, to: number): Chart3DSurfaceSeries {
   const radiusAt = (v: number) => {
@@ -190,7 +239,22 @@ function wedge(slice: SolidPieSlice, from: number, to: number): Chart3DSurfaceSe
   };
   const span = to - from;
   // At least six segments even on a hairline slice, so its outer wall is an arc and not a chord.
-  const steps = Math.max(6, Math.ceil(span / ARC_STEP));
+  const arcSteps = Math.max(6, Math.ceil(span / ARC_STEP));
+  const steps = arcSteps + CAP_STEPS * 2;
+  // The step is ONE: `u` is an index into the sweep and the angle is derived from it below, which is
+  // what lets the two caps live in the same surface as the body without a fraction to round.
+  const angleAt = (u: number) => {
+    if (u <= CAP_STEPS) return from;
+    if (u >= steps - CAP_STEPS) return to;
+    return from + ((u - CAP_STEPS) / arcSteps) * span;
+  };
+  // How much of the cross-section is drawn at this step: 1 along the whole body, and along a cap it
+  // opens from 0 —the section's own centre, where the face closes on itself— out to the full profile.
+  const scaleAt = (u: number) => {
+    if (u <= CAP_STEPS) return u / CAP_STEPS;
+    if (u >= steps - CAP_STEPS) return (steps - u) / CAP_STEPS;
+    return 1;
+  };
 
   return {
     type: "surface",
@@ -198,19 +262,24 @@ function wedge(slice: SolidPieSlice, from: number, to: number): Chart3DSurfaceSe
     name: slice.label,
     parametric: true,
     parametricEquation: {
-      u: { min: from, max: to, step: span / steps },
-      v: { min: 0, max: 4, step: 0.25 },
-      x: (u, v) => radiusAt(v) * Math.cos(u),
-      y: (u, v) => radiusAt(v) * Math.sin(u),
-      z: (_u, v) => heightAt(v),
+      u: { min: 0, max: steps, step: 1 },
+      v: { min: 0, max: 4, step: PROFILE_STEP },
+      x: (u, v) => radius(radiusAt(v), scaleAt(u)) * Math.cos(angleAt(u)),
+      y: (u, v) => radius(radiusAt(v), scaleAt(u)) * Math.sin(angleAt(u)),
+      z: (u, v) => MID_HEIGHT + (heightAt(v) - MID_HEIGHT) * scaleAt(u),
     },
     shading: "realistic",
-    realisticMaterial: CHART_STAGE_MATERIAL,
+    realisticMaterial: PIE_MATERIAL,
     itemStyle: { color: stageSliceColor(slice.color) },
     // gl's wireframe draws the PARAMETRIC grid, so on a wedge it comes out as radial lines combing
     // the top face. What separates one slice from the next here is the gap, which is real geometry.
     wireframe: { show: false },
   };
+}
+
+/** The cross-section's radius at `v`, shrunk toward the section's centre by a cap's `scale`. */
+function radius(at: number, scale: number): number {
+  return MID_RADIUS + (at - MID_RADIUS) * scale;
 }
 
 /** A value axis that places things and draws nothing. */

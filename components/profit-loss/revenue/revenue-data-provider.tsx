@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import type { SolidView } from "@/lib/charts/solid-bars";
+import { SCREEN_SOLID_VIEW, type SolidView } from "@/lib/charts/solid-bars";
 import { buildAnalyticsSource } from "@/lib/profit-loss/analytics/source";
 import { REVENUE_ROOT } from "@/lib/profit-loss/charts/presets";
 import { applyEditsToLeafAccounts, mergeCenters } from "@/lib/profit-loss/derive";
@@ -101,9 +101,16 @@ interface RevenueDataValue {
   /** The comparison's «Ver como». The SCREEN opens flat; the skyline is opted into. */
   comparisonShape: ComparisonShape;
   setComparisonShape: (shape: ComparisonShape) => void;
-  /** The annual card's «Ver como» — el total del tramo, o el promedio mensual. */
+  /** The annual card's «Cifra» — el total del tramo, o el promedio mensual. */
   annualShape: AnnualShape;
   setAnnualShape: (shape: AnnualShape) => void;
+  /**
+   * The BODY the annual reading is drawn in — su «Ver como», el mismo que llevan las tres «vs». Abre
+   * PLANA: es la forma que el informe y el Excel pueden llevarse. El crecimiento no tiene cuerpo que
+   * elegir, así que tampoco tiene estado aquí.
+   */
+  annualView: SolidView;
+  setAnnualView: (view: SolidView) => void;
   /**
    * The body each RATIO card is drawn in, by descriptor id. One record and not three fields, for the
    * reason the three cards come out of one constructor: a fourth ratio is an entry in
@@ -170,6 +177,7 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
   const [growthUnit, setGrowthUnit] = useState<GrowthUnit>(DEFAULT_GROWTH_UNIT);
   const [comparisonShape, setComparisonShape] = useState<ComparisonShape>("plano");
   const [annualShape, setAnnualShape] = useState<AnnualShape>(DEFAULT_ANNUAL_SHAPE);
+  const [annualView, setAnnualView] = useState<SolidView>(SCREEN_SOLID_VIEW);
   const [ratioViews, setRatioViews] = useState<Readonly<Record<string, SolidView>>>({});
   const setRatioView = useCallback((id: string, view: SolidView) => {
     setRatioViews((current) => ({ ...current, [id]: view }));
@@ -355,8 +363,15 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
   }, [revenueByYear, externalByYear, filters.years, period, periodName, canCapture]);
 
   const cards = useMemo(
-    () => buildRevenueCards(cardsInput, { growthUnit, comparisonShape, annualShape, ratioViews }),
-    [cardsInput, growthUnit, comparisonShape, annualShape, ratioViews],
+    () =>
+      buildRevenueCards(cardsInput, {
+        growthUnit,
+        comparisonShape,
+        annualShape,
+        annualView,
+        ratioViews,
+      }),
+    [cardsInput, growthUnit, comparisonShape, annualShape, annualView, ratioViews],
   );
   const summary = useMemo(() => readRevenueSummary(cardsInput), [cardsInput]);
 
@@ -531,6 +546,8 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       setComparisonShape,
       annualShape,
       setAnnualShape,
+      annualView,
+      setAnnualView,
       ratioViews,
       setRatioView,
       ...marks,
@@ -563,6 +580,7 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       growthUnit,
       comparisonShape,
       annualShape,
+      annualView,
       ratioViews,
       setRatioView,
       captureYear,

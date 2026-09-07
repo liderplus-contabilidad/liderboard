@@ -12,14 +12,16 @@ import {
 } from "@/components/ui/dropdown";
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
+import { MONTHS_FULL_ES } from "@/lib/date";
 import { SPAN_KINDS, spanKindLabel, type NamedSpan, type SpanKind } from "@/lib/period";
 import {
   activeMarkCount,
   availableSpans,
   markedSpanOf,
+  monthMarkLabel,
   namedSpanLabel,
   spanIsMarked,
+  yearMarkLabel,
 } from "@/lib/revenue/filters";
 import { useRevenueData } from "./revenue-data-provider";
 
@@ -32,8 +34,8 @@ import { useRevenueData } from "./revenue-data-provider";
  *
  * **The years leave NO chip**, unlike the months — and the reason is that the screen OPENS with every
  * one of them marked: a chip per year would fill the strip before the user has touched anything, and
- * a strip of active marks that is full by default says nothing. The dropdown's own label already
- * carries the whole selection.
+ * a strip of active marks that is full by default says nothing. The dropdown's own label carries the
+ * selection instead — condensed to «Todos los años» when it is all of them (`yearMarkLabel`).
  */
 export function RevenueToolbar({ actions }: { actions?: ReactNode }) {
   const { universe, filters, toggleYear, clearYears, toggleMonth, clearMonths, toggleSpan } =
@@ -55,7 +57,7 @@ export function RevenueToolbar({ actions }: { actions?: ReactNode }) {
 
             <Dropdown>
               <DropdownTrigger active icon={<CalendarDays size={15} />}>
-                {`Año · ${filters.years.join(", ") || "—"}`}
+                {`Año · ${yearMarkLabel(filters.years, universe.years)}`}
               </DropdownTrigger>
               <DropdownPanel width={230}>
                 {universe.years.length > 1 && (
@@ -94,7 +96,7 @@ export function RevenueToolbar({ actions }: { actions?: ReactNode }) {
               <Dropdown>
                 <DropdownTrigger active={markedMonths.size > 0} icon={<CalendarRange size={15} />}>
                   {markedMonths.size > 0
-                    ? `Mes · ${filters.months.map((month) => MONTHS_SHORT_ES[month]).join(", ")}`
+                    ? `Mes · ${monthMarkLabel(filters.months, universe.months)}`
                     : "Mes"}
                 </DropdownTrigger>
                 <DropdownPanel width={230}>
