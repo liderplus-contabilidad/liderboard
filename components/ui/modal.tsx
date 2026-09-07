@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { cn } from "@/lib/cn";
 
 /**
  * A CENTRED window, over the native `<dialog>`: top-layer stacking, focus trapping and Escape are
@@ -14,7 +15,9 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
  * when what opens is read ALONE and closed straight away.
  *
  * `ConfirmDialog` predates this file and repeats these mechanics; when someone touches it, it is
- * better folded in here than kept as a second one.
+ * better folded in here than kept as a second one — and `fill` exists for the same reason: a window
+ * that wants the WHOLE screen is still this window, and writing a second `<dialog>` for it would be
+ * repeating the top layer, the focus trap, Escape and the scrim a third time.
  */
 export function Modal({
   open,
@@ -23,6 +26,7 @@ export function Modal({
   onClose,
   children,
   width = 460,
+  fill = false,
 }: {
   open: boolean;
   title: string;
@@ -31,6 +35,12 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
   width?: number;
+  /**
+   * The window takes the SCREEN instead of a width: for what is not read but LOOKED AT, and where
+   * the size is the whole point of opening it — an enlarged chart. The body becomes a flex box that
+   * knows its own height, so what goes inside can measure it; `width` means nothing here.
+   */
+  fill?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -78,10 +88,18 @@ export function Modal({
         event.preventDefault();
         onClose();
       }}
-      style={{ maxWidth: width }}
-      className="m-auto w-full border-none bg-transparent p-0 backdrop:bg-ink/40"
+      style={fill ? undefined : { maxWidth: width }}
+      className={cn(
+        "m-auto border-none bg-transparent p-0 backdrop:bg-ink/40",
+        fill ? "h-[92vh] w-[94vw]" : "w-full",
+      )}
     >
-      <div className="rounded-[13px] border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+      <div
+        className={cn(
+          "rounded-[13px] border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]",
+          fill && "flex h-full flex-col",
+        )}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-border-soft px-5 py-4">
           <div className="min-w-0">
             {eyebrow && <div className="mb-1 flex items-center gap-2">{eyebrow}</div>}
@@ -99,7 +117,9 @@ export function Modal({
             <X size={16} />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        {/* Filling, the body is what has a HEIGHT: the dialog's flex fixes it, so its content can
+            measure the box instead of guessing it from the viewport. */}
+        <div className={cn("px-5 py-4", fill && "min-h-0 flex-1 overflow-hidden")}>{children}</div>
       </div>
     </dialog>
   );
