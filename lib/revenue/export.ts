@@ -100,7 +100,7 @@ export async function buildRevenueWorkbook(
   writeCardSheet(wb, flatComparisonCard(input), header, "Comparativo por año");
   // One sheet and not two: the annual table already carries the total AND the average, so the shape
   // the screen happens to be in costs the file nothing.
-  writeCardSheet(wb, buildAnnualCard(input, "total"), header, "Ventas por año");
+  writeCardSheet(wb, flatOnly(buildAnnualCard(input, "total")), header, "Ventas por año");
   writeCardSheet(wb, buildGrowthCard(input, "dolares"), header, "Crecimiento");
 
   if (input.canCapture) {

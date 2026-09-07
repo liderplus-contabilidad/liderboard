@@ -18,7 +18,6 @@
 import {
   CHART_COMPOSITION_MAX,
   CHART_MAX_SERIES,
-  CHART_SECTION,
   colorForSliceSlot,
   colorForCompositionSlot,
   colorForEntity,
@@ -64,7 +63,7 @@ import {
   shareOf,
   type ExpenseDistribution,
 } from "./expense-distribution";
-import { SOLID_EXPENSE_COLOR, SOLID_HEIGHT, solidBarOption } from "./solid";
+import { SOLID_HEIGHT, solidBarOption } from "./solid";
 import { SOLID_PIE_HEIGHT, solidPieOption } from "./solid-pie";
 import {
   distributionColor,
@@ -211,7 +210,8 @@ export interface GraficosCards {
    *
    * They come out declared because all three draw EXACTLY the same breakdown —one single reduction,
    * the same rows, the same cut— and who decides how many are seen is the CONSUMER: the screen shows
-   * one with a «Barras · Sólido 3D · Pastel · Rosca 3D» switch, and the report the two it can carry,
+   * ONE, picked by two switches —«Gráfica» barras o pastel, «Ver como» plano o sólido—, and the
+   * report the two it can carry,
    * because a printed control is a button nobody can press (the rule Sueldos por Áreas already
    * applies to its table and its chart). Emitting one here would force the report to ask for the
    * list twice, and emitting them without saying they are the same reading would force the view to
@@ -527,14 +527,16 @@ function expenseDistributionCards(
     !distribution.residual && drawn.some((slice) => slice.code === OTHERS_CODE)
       ? distribution.categories.length - (distribution.maxSlices - 1)
       : 0;
-  // ONE SINGLE colour for the seventeen bars, and it is the one the app already has for this block:
-  // the light blue Datos paints root 5 with, sampled from the accountant's own book. Here the colour
-  // distinguishes nothing —every bar carries its line labelled on the axis and its figure beside
-  // it—, so handing out seventeen hues would spend the identity channel re-saying what the bar's
-  // length already says. It is also the rule `CHART_SECTION` declares: when what is drawn is a BLOCK
-  // of the statement, the colour says which block it talks about, and a light blue means «costos y
-  // gastos» in Datos, in the report and here.
-  const colorOf = () => CHART_SECTION.cost;
+  // ONE hue PER RUBRO, and it is the PIE's — the four cards below are four shapes of ONE breakdown,
+  // and the colour is what says so: `annexSliceColor` hands out `CHART_SLICE_SEQUENCE`'s slots by
+  // PLACE in the list, so «Sueldos» is the same hue in the bars, in their solid twin, in the pastel
+  // and in the rosca, and going from one to the next is following a rubro and not re-reading a list.
+  //
+  // It steps over the rule the bars used to apply —`CHART_SECTION.cost` on all of them, because when
+  // what is drawn is a BLOCK of the statement the colour says WHICH block—. That rule holds where the
+  // colour has nothing else to say; here it has, and the block is already named by the card's own
+  // title. Nothing changes in Datos or in the report, where the light blue keeps meaning «costos y
+  // gastos».
   const sliceColor = annexSliceColor(drawn.map((slice) => slice.code));
   const note =
     emptyNote ??
@@ -551,7 +553,7 @@ function expenseDistributionCards(
       title: "Distribución de costos y gastos",
       guide: GUIDE_EXPENSE_ANNEX_BARS,
       subtitle: `${distribution.categories.length} ${distribution.categories.length === 1 ? "rubro" : "rubros"} · ${periodName}`,
-      option: drawn.length > 0 ? verticalBarOption(drawn, { colorOf }) : null,
+      option: drawn.length > 0 ? verticalBarOption(drawn, { colorOf: sliceColor }) : null,
       table: drawn.length > 0 ? expenseAnnexTable(distribution) : EMPTY_TABLE,
       warnings,
       ...withNote(note),
@@ -567,8 +569,9 @@ function expenseDistributionCards(
       title: "Distribución de costos y gastos",
       guide: GUIDE_EXPENSE_ANNEX_BARS,
       subtitle: `${distribution.categories.length} ${distribution.categories.length === 1 ? "rubro" : "rubros"} · ${periodName}`,
-      option:
-        drawn.length > 0 ? solidBarOption(drawn, { colorOf: () => SOLID_EXPENSE_COLOR }) : null,
+      // The same hue per rubro as the flat bars: `solidBarOption` is what translates it to the
+      // stage, by slot, the way the rosca already does with the pastel's.
+      option: drawn.length > 0 ? solidBarOption(drawn, { colorOf: sliceColor }) : null,
       table: drawn.length > 0 ? expenseAnnexTable(distribution) : EMPTY_TABLE,
       warnings,
       // The note says what the flat one's says, plus the one thing this body adds and no control
@@ -628,9 +631,11 @@ function expenseDistributionCards(
  * accountant's file prints next to the value.
  *
  * The code goes as a `sublabel` and not stuck to the name because in a table there is room for both,
- * the same decision `categoryTable` takes with the establishment. The rows carry NO colour dot, which
- * is what `ChartTableRow.color` documents for a row that is not a series: here the seventeen bars
- * share a fill, so a dot per row would promise a distinction that does not exist. The TOTAL row
+ * the same decision `categoryTable` takes with the establishment. The rows carry NO colour dot even
+ * though the bars now wear one hue per rubro, and it is not an oversight: this table is the ANNEX
+ * whole —every category, plus the total—, while the bars draw the cut list with the tail folded into
+ * «Otros». A dot would pair each row with a bar in a list where that pairing does not hold; the
+ * pie's table twin, which draws exactly what is drawn, does carry it. The TOTAL row
  * closes with `emphasis`: without it a total reads as one more line of the list, and here it is
  * precisely the figure everything above is checked against.
  */

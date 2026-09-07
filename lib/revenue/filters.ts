@@ -90,6 +90,22 @@ export function withYearsCleared(filters: RevenueFilters): RevenueFilters {
   return { ...filters, years: [] };
 }
 
+/**
+ * **The rótulo of the year marks**, which is what the bar's «Año» trigger reads.
+ *
+ * Every year marked is written «Todos los años» and not enumerated: it is where the screen OPENS, so
+ * spelling out six exercises makes the widest control of the bar say precisely nothing — the same
+ * reason the years leave no chip. A SUBSET is the selection the user made, and there the years
+ * themselves are the label.
+ *
+ * The empty list is «todos» by the house rule, and reads as such here too.
+ */
+export function yearMarkLabel(years: readonly number[], universe: readonly number[]): string {
+  return years.length === 0 || years.length >= universe.length
+    ? "Todos los años"
+    : [...years].sort((a, b) => a - b).join(", ");
+}
+
 export function withMonthToggled(
   filters: RevenueFilters,
   month: number,
@@ -106,6 +122,24 @@ export function withMonthToggled(
 
 export function withMonthsCleared(filters: RevenueFilters): RevenueFilters {
   return { ...filters, months: [] };
+}
+
+/**
+ * The months' twin of `yearMarkLabel`, read by the bar's «Mes» trigger: marking every loaded month is
+ * the same reading as marking none, so it is written «Todos los meses» instead of spelling twelve
+ * abbreviations into the widest control of the bar.
+ *
+ * It enumerates and does not compose a range —«Ene, Feb, Mar», never «Ene–Mar»— because the trigger
+ * says what is MARKED, one entry per checkbox, while `monthSpanLabel` says what a reading COVERS.
+ * The chip strip is where a set that happens to be a semestre gets named as one (`markedSpanOf`).
+ */
+export function monthMarkLabel(months: readonly number[], universe: readonly number[]): string {
+  return months.length === 0 || months.length >= universe.length
+    ? "Todos los meses"
+    : [...months]
+        .sort((a, b) => a - b)
+        .map((month) => MONTHS_SHORT_ES[month])
+        .join(", ");
 }
 
 /**

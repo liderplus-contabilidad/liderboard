@@ -9,6 +9,7 @@ import {
   CHART_STAGE_LIGHT,
   CHART_STAGE_MATERIAL,
   CHART_STAGE_SECTION,
+  CHART_STAGE_SLICE_SEQUENCE,
 } from "@/lib/charts/palette";
 import {
   CENTRO_PRINCIPAL_SOURCE,
@@ -20,6 +21,8 @@ import {
   bar3DSeries,
   is3DOption,
   type Chart3DOption,
+  type Chart3DSeries,
+  type Chart3DSurfaceSeries,
   type ChartCardSpec,
   type ChartOption,
 } from "@/lib/charts/types";
@@ -140,6 +143,37 @@ function flat(card: ChartCardSpec<ChartOption | Chart3DOption>): ChartCardSpec {
     throw new Error("Se esperaba la forma plana, y vino la sólida.");
   }
   return { ...card, option: card.option };
+}
+
+/** La superficie de una cuña de la rosca, con el tipo estrechado. */
+function superficie(serie: Chart3DSeries | Chart3DSurfaceSeries): Chart3DSurfaceSeries {
+  if (serie.type !== "surface") {
+    throw new Error("una porción de la rosca no es una superficie");
+  }
+  return serie;
+}
+
+/** Los valores que gl muestrea de un eje paramétrico, extremos incluidos. */
+function muestras(eje: { min: number; max: number; step: number }): number[] {
+  const valores: number[] = [];
+  for (let valor = eje.min; valor <= eje.max + 1e-9; valor += eje.step) {
+    valores.push(Math.min(valor, eje.max));
+  }
+  return valores;
+}
+
+/**
+ * El ángulo que abarca una cuña, leído de sus puntos. Se toma el primer punto como referencia y cada
+ * otro como una diferencia envuelta a (−π, π], que es lo que deja medir una cuña a caballo del ±π.
+ */
+function barridoDe(cuna: Chart3DSurfaceSeries): number {
+  const { parametricEquation: eq } = cuna;
+  const angulos = muestras(eq.u).map((u) => Math.atan2(eq.y(u, 2), eq.x(u, 2)));
+  const deltas = angulos.map((angulo) => {
+    const bruto = angulo - angulos[0];
+    return bruto - Math.PI * 2 * Math.round(bruto / (Math.PI * 2));
+  });
+  return Math.max(...deltas) - Math.min(...deltas);
 }
 
 function withFilters(overrides: Partial<PygFilters>): PygFilters {
@@ -1179,18 +1213,24 @@ describe("la vista predeterminada de costos y gastos", () => {
     );
   });
 
-  it("las barras sólidas comparten el color del BLOQUE, y la LUZ es lo que las separa", () => {
+  it("cada barra sólida lleva el color de SU rubro, traducido al escenario por slot", () => {
     const solido = anexo(conAnexo(), "solido");
     if (solido.option === null || !is3DOption(solido.option)) {
       throw new Error("se esperaba la forma sólida");
     }
     const [barras] = bar3DSeries(solido.option);
-    // El color dice de qué bloque del estado se habla, así que repartir un tono por rubro gastaría
-    // el canal de identidad en repetir lo que ya dice el largo de la barra. Justamente por eso
-    // dieciocho barras del mismo azul no tienen más contorno que el que les da el aparejo, que es
-    // el MISMO de las otras tarjetas 3D.
+    const fills = new Set(
+      barras.data.map((datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color),
+    );
+    // Sigue siendo UNA fila —la profundidad es el grosor de la barra—, así que el tono va por
+    // columna: es el del pastel, dado un paso al registro que pide el navy. El azul del bloque ya
+    // no aparece; quién es cada barra lo dice su color, igual que en las otras tres formas.
     expect(solido.option.series).toHaveLength(1);
-    expect(barras.itemStyle?.color).toBe(CHART_STAGE_SECTION.cost);
+    expect(fills.size).toBeGreaterThan(1);
+    expect(fills.has(CHART_STAGE_SECTION.cost)).toBe(false);
+    for (const fill of fills) {
+      expect(CHART_STAGE_SLICE_SEQUENCE).toContain(fill);
+    }
     expect(barras.shading).toBe("realistic");
     expect(barras.realisticMaterial).toBe(CHART_STAGE_MATERIAL);
     expect(solido.option.grid3D.light).toEqual(CHART_STAGE_LIGHT);
@@ -1215,19 +1255,39 @@ describe("la vista predeterminada de costos y gastos", () => {
     if (rosca.option === null || !is3DOption(rosca.option)) {
       throw new Error("se esperaba la rosca sólida");
     }
-    const arcos = rosca.option.series.map((cuna) => {
-      if (cuna.type !== "surface") {
-        throw new Error("una porción de la rosca no es una superficie");
-      }
-      return cuna.parametricEquation.u;
-    });
+    // El barrido se mide en el PUNTO y no en `u`: los primeros y los últimos pasos de la barrida son
+    // las dos caras del corte radial, dibujadas a ángulo fijo, así que `u` cuenta pasos y no radianes.
+    const barridos = rosca.option.series.map((cuna) => barridoDe(superficie(cuna)));
     // Los arcos suman una vuelta MENOS los huecos: es el hueco, y no un trazo encima, lo que separa
     // una porción de la siguiente.
-    const barrido = arcos.reduce((sum, u) => sum + (u.max - u.min), 0);
+    const barrido = barridos.reduce((sum, arco) => sum + arco, 0);
     expect(barrido).toBeLessThan(Math.PI * 2);
-    expect(barrido).toBeGreaterThan(Math.PI * 2 - arcos.length * 0.02);
+    expect(barrido).toBeGreaterThan(Math.PI * 2 - barridos.length * 0.02);
     // Y ninguno se queda sin arco: una porción de 0.4 % sigue teniendo cuerpo.
-    expect(arcos.every((u) => u.max > u.min)).toBe(true);
+    expect(barridos.every((arco) => arco > 0)).toBe(true);
+  });
+
+  it("cada cuña es un SÓLIDO cerrado: el corte radial trae sus dos caras", () => {
+    const rosca = anexo(conAnexo(), "rosca");
+    if (rosca.option === null || !is3DOption(rosca.option)) {
+      throw new Error("se esperaba la rosca sólida");
+    }
+    // Barrida sólo sobre el arco, la cuña era un tubo ABIERTO por los dos extremos: por el hueco
+    // entre dos rubros se veía el escenario de detrás y la rosca se leía hueca al girar. La cara del
+    // corte es el extremo de la barrida, donde la sección entera se cierra sobre su propio centro.
+    for (const cuna of rosca.option.series) {
+      const { parametricEquation: eq } = superficie(cuna);
+      for (const u of [eq.u.min, eq.u.max]) {
+        const puntos = muestras(eq.v).map((v) => [eq.x(u, v), eq.y(u, v), eq.z(u, v)]);
+        for (const punto of puntos) {
+          expect(punto[0]).toBeCloseTo(puntos[0][0], 10);
+          expect(punto[1]).toBeCloseTo(puntos[0][1], 10);
+          expect(punto[2]).toBeCloseTo(puntos[0][2], 10);
+        }
+      }
+      // Y el cuerpo sigue estando: si la cuña fuera sólo caras, no habría rosca que cerrar.
+      expect(eq.u.max - eq.u.min).toBeGreaterThan(4);
+    }
   });
 
   it("la caja de la rosca no se dibuja, y es REDONDA: ancho y fondo iguales", () => {
@@ -1379,20 +1439,26 @@ describe("el anexo se dibuja como la hoja del contador", () => {
     expect(axis?.axisLabel?.overflow).toBe("break");
   });
 
-  it("las barras van TODAS del mismo color, y es el del bloque de gastos", () => {
-    // Here the colour distinguishes nothing —every bar carries its line labelled and its figure—, so
-    // handing out hues would spend the identity channel re-saying what the length already says.
+  it("cada barra lleva SU color, y es el mismo tono que el rubro tiene en el pastel", () => {
+    // Cuatro formas de UN reparto: seguir un rubro de las barras a la rosca es seguir un color. El
+    // azul del bloque —que antes llevaban las dieciocho— ya no dice nada que el título no diga.
     const { cards } = conAnexo();
     const data = cards[0].option?.series[0].data ?? [];
     const colors = new Set(
       data.map((datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color),
     );
+    const pastel = new Set(cards[2].table.rows.map((row) => row.color));
 
-    expect(colors.size).toBe(1);
-    expect([...colors][0]).toBe(CHART_SECTION.cost);
+    expect(colors.size).toBeGreaterThan(1);
+    expect(colors.has(CHART_SECTION.cost)).toBe(false);
+    expect(colors).toEqual(pastel);
   });
 
-  it("la tabla NO lleva punto de color: diecisiete puntos iguales no distinguen nada", () => {
+  it("la tabla del anexo NO lleva punto de color: sus filas no son las barras dibujadas", () => {
+    // Las barras van con un tono por rubro, pero esta tabla es el anexo ENTERO —cada categoría y el
+    // total—, mientras que el dibujo corta la cola en «Otros»: un punto por fila prometería un
+    // emparejamiento que no existe. La tabla del pastel, que dibuja lo mismo que se dibuja, sí lo
+    // lleva.
     const { cards } = conAnexo();
 
     for (const row of cards[0].table.rows) {

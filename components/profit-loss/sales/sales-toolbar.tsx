@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/dropdown";
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
-import { activeMarkCount } from "@/lib/sales/filters";
+import { MONTHS_FULL_ES } from "@/lib/date";
+import { activeMarkCount, monthMarkLabel, yearMarkLabel } from "@/lib/sales/filters";
 import { useSalesData } from "./sales-data-provider";
 
 /**
@@ -57,7 +57,7 @@ export function SalesToolbar({ actions }: { actions?: ReactNode }) {
 
             <Dropdown>
               <DropdownTrigger active icon={<CalendarDays size={15} />}>
-                {`Año · ${filters.years.join(", ") || "—"}`}
+                {`Año · ${yearMarkLabel(filters.years, universe.years)}`}
               </DropdownTrigger>
               <DropdownPanel width={230}>
                 {universe.years.length > 1 && (
@@ -98,7 +98,7 @@ export function SalesToolbar({ actions }: { actions?: ReactNode }) {
               <Dropdown>
                 <DropdownTrigger active={marked.size > 0} icon={<CalendarRange size={15} />}>
                   {marked.size > 0
-                    ? `Mes · ${filters.months.map((month) => MONTHS_SHORT_ES[month]).join(", ")}`
+                    ? `Mes · ${monthMarkLabel(filters.months, universe.months)}`
                     : "Mes"}
                 </DropdownTrigger>
                 <DropdownPanel width={230}>

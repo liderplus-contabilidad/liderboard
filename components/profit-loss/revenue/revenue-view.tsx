@@ -3,7 +3,7 @@
 import { ChevronsDownUp, ChevronsUpDown, PanelsTopLeft, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { SolidView } from "@/lib/charts/solid-bars";
+import { SOLID_VIEW_OPTIONS } from "@/lib/charts/solid-bars";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -33,16 +33,13 @@ const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
 ];
 
 /**
- * «Ver como» en las tres tarjetas «vs» — los dos importes sobre la tarjeta, o de pie en el escenario.
- * Es UNA lista para las tres, porque son la misma pregunta tres veces.
+ * «Cifra» en «Ventas por año» — el total del tramo, o el promedio mensual.
+ *
+ * No se llama «Ver como» aunque de eso venga: en este módulo «Ver como» elige un CUERPO —plano o de
+ * pie en el escenario— y esta tarjeta lleva las dos cosas. Dos controles con el mismo rótulo en una
+ * cabecera no dicen cuál mueve qué.
  */
-const SOLID_VIEWS: { value: SolidView; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "solido", label: "Sólido 3D" },
-];
-
-/** «Ver como» en «Ventas por año» — el total del tramo, o el promedio mensual. */
-const ANNUAL_SHAPES: { value: AnnualShape; label: string }[] = [
+const ANNUAL_FIGURES: { value: AnnualShape; label: string }[] = [
   { value: "total", label: "Total" },
   { value: "promedio", label: "Promedio mensual" },
 ];
@@ -78,6 +75,8 @@ function RevenueContent() {
     setComparisonShape,
     annualShape,
     setAnnualShape,
+    annualView,
+    setAnnualView,
     ratioViews,
     setRatioView,
   } = useRevenueData();
@@ -240,12 +239,28 @@ function RevenueContent() {
                 collapsed={isCollapsed(cards.annual.id)}
                 onToggleCollapsed={() => toggle(cards.annual.id)}
                 headerSlot={
-                  <HeaderChoice
-                    label="Ver como"
-                    value={annualShape}
-                    options={ANNUAL_SHAPES}
-                    onChange={setAnnualShape}
-                  />
+                  <span className="flex items-center gap-4">
+                    {/* La CIFRA y el CUERPO son dos preguntas: cualquiera de las dos cifras se lee
+                        en cualquiera de los dos cuerpos, así que son dos controles y no cuatro
+                        opciones de uno. */}
+                    <HeaderChoice
+                      label="Cifra"
+                      value={annualShape}
+                      options={ANNUAL_FIGURES}
+                      onChange={setAnnualShape}
+                    />
+                    {/* Solo donde hay algo que levantar: sin ningún año con meses cargados la
+                        tarjeta no dibuja, y un control que no puede hacer nada enseña a no leer el
+                        de al lado. */}
+                    {cards.annual.option !== null && (
+                      <HeaderChoice
+                        label="Ver como"
+                        value={annualView}
+                        options={SOLID_VIEW_OPTIONS}
+                        onChange={setAnnualView}
+                      />
+                    )}
+                  </span>
                 }
               />
 
@@ -254,6 +269,8 @@ function RevenueContent() {
                 collapsed={isCollapsed(cards.growth.id)}
                 onToggleCollapsed={() => toggle(cards.growth.id)}
                 headerSlot={
+                  /* Solo «Ver en», la UNIDAD: esta tarjeta no ofrece cuerpo sólido — una variación
+                     se lee contra la línea de cero, y el escenario no tiene línea que ofrecer. */
                   <HeaderChoice
                     label="Ver en"
                     value={growthUnit}
@@ -308,7 +325,7 @@ function RevenueContent() {
                               </span>
                               <SegmentedControl
                                 value={ratioViews[card.id] ?? "plano"}
-                                options={SOLID_VIEWS}
+                                options={SOLID_VIEW_OPTIONS}
                                 onChange={(view) => setRatioView(card.id, view)}
                                 ariaLabel="Ver como"
                               />

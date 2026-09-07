@@ -179,6 +179,15 @@ export interface ChartSeries {
   smooth?: boolean;
   barMaxWidth?: number;
   barWidth?: number | string;
+  /**
+   * The space between two bars of the SAME category, as a percentage of a bar's width.
+   *
+   * It has to be declared wherever several series share a slot: ECharts' own default is `'10%'`, and
+   * a card that caps its bars (`barMaxWidth`) does not get that space back — the leftover width stays
+   * in the category gap, so the bars come out capped, adjacent and reading as one block instead of as
+   * five marks. Read off the LAST series that sets it.
+   */
+  barGap?: string;
   /** Pie geometry: `[inner, outer]` turns it into a donut. */
   radius?: string | [string, string];
   center?: [string, string];

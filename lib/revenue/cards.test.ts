@@ -5,6 +5,7 @@ import {
   CHART_STAGE_PALETTE,
   stageColor,
 } from "@/lib/charts/palette";
+import { fitBarWidth } from "@/lib/charts/bar-fit";
 import { bar3DSeries, flatOnly, is3DOption } from "@/lib/charts/types";
 import {
   buildAnnualCard,
@@ -26,6 +27,17 @@ import {
 } from "./fixtures";
 import { RATIO_DESCRIPTORS } from "./series";
 import { emptyMonthSeries, type RevenueYearInput } from "./types";
+
+/**
+ * «Ventas por año» en su cuerpo PLANO, que es el que casi todas estas pruebas leen.
+ *
+ * `flatOnly` es la misma guarda que aplican el informe y el Excel: deja el tipo en 2D sin castear y
+ * revienta si algún día el defecto se invirtiera, en vez de dejar una prueba mirando un `undefined`.
+ * Las pruebas del cuerpo sólido llaman al constructor directamente. El crecimiento no pasa por aquí:
+ * no tiene más cuerpo que el plano.
+ */
+const flatAnnual = (...args: Parameters<typeof buildAnnualCard>) =>
+  flatOnly(buildAnnualCard(...args));
 
 function input(years: RevenueYearInput[], overrides: Partial<RevenueCardsInput> = {}) {
   return {
@@ -138,9 +150,13 @@ describe("buildGrowthCard", () => {
     const dollars = buildGrowthCard(input(loadedYears()), "dolares");
     const percent = buildGrowthCard(input(loadedYears()), "porcentaje");
 
-    // El dato es el valor a secas: sin etiqueta encima, ya no hay nada que colgarle a la marca.
-    expect(dollars.option?.series[2].data[0]).toBeCloseTo(155079.71, 2);
-    expect(percent.option?.series[2].data[0]).toBeCloseTo(168.61, 1);
+    // El dato es un objeto porque lleva de qué lado se escribe su cifra; el valor es el mismo.
+    const valueOf = (card: typeof dollars, serie: number) => {
+      const datum = card.option?.series[serie].data[0];
+      return typeof datum === "object" && datum !== null ? datum.value : datum;
+    };
+    expect(valueOf(dollars, 2)).toBeCloseTo(155079.71, 2);
+    expect(valueOf(percent, 2)).toBeCloseTo(168.61, 1);
     // La tabla trae SIEMPRE las dos, con independencia de la unidad del gráfico.
     expect(dollars.table.columns).toEqual(percent.table.columns);
     expect(dollars.table.rows).toEqual(percent.table.rows);
@@ -187,7 +203,7 @@ describe("cada gráfica del módulo escribe su cifra sobre la marca, tumbada", (
   }
 
   it("«Ventas por año» escribe el total de cada año sobre su barra", () => {
-    const card = buildAnnualCard(input(loadedYears()), "total");
+    const card = flatAnnual(input(loadedYears()), "total");
 
     expect(wrote(card.option?.series[0] ?? {})).toBe("$100,000.00");
   });
@@ -650,21 +666,62 @@ describe("el comparativo en tres dimensiones", () => {
   });
 });
 
-describe("el crecimiento se lee contra la LÍNEA DE CERO, sin cifras encima", () => {
-  it("ninguna barra escribe su variación: es la línea de cero la que la dice", () => {
-    // Un mes mete una barra por año base en una sola ranura, así que una cifra con signo de unos 90px
-    // o se imprime sobre los rellenos de al lado o se aparta en escalera. Ninguna de las dos se lee
-    // más rápido que la forma que tapan.
-    const one = buildGrowthCard(
-      input([yearInput(2026, REVENUE_2026), yearInput(2024, REVENUE_2024)]),
+describe("el crecimiento se lee contra la LÍNEA DE CERO, con su cifra encima", () => {
+  it("cada barra escribe su variación CON SIGNO, y cada año base en su propia fila", () => {
+    // Un mes mete una barra por año base en una sola ranura, así que medida contra UNA franja la
+    // cifra no cabría; medida contra tantas franjas como series, cada fila lleva una cifra por
+    // COLUMNA, que es la densidad a la que ya escribe la tarjeta anual.
+    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+    const series = card.option?.series ?? [];
+
+    expect(series.length).toBeGreaterThan(1);
+    expect(series.every((serie) => serie.label?.show === true)).toBe(true);
+    // Una fila por serie: la distancia crece con el índice y no se repite.
+    const rows = series.map((serie) => serie.label?.distance ?? 0);
+    expect(new Set(rows).size).toBe(rows.length);
+    // Y la cifra lleva el signo, que es lo que se lee de una variación.
+    const wrote = series[0].label?.formatter?.({
+      value: 155_079.71,
+      name: "Ene",
+      dataIndex: 0,
+    } as never);
+    expect(wrote?.startsWith("+")).toBe(true);
+  });
+
+  it("una caída escribe su cifra DEBAJO de la barra, no sobre la línea de cero", () => {
+    // El rect de una barra que cae va de cero hacia abajo, así que su borde «top» ES la línea de
+    // cero: todas las negativas aparcarían su cifra sobre el eje, una encima de otra. `position` no
+    // acepta función, así que el lado se resuelve por DATO.
+    // Un año de referencia MÁS BAJO que su base: es la única forma de que haya caídas que colocar.
+    const card = buildGrowthCard(
+      input([yearInput(2024, REVENUE_2026), yearInput(2026, REVENUE_2022)], { months: [0, 1, 2] }),
       "dolares",
     );
-    const several = buildGrowthCard(input(loadedYears()), "dolares");
+    const data = card.option?.series.flatMap((serie) => serie.data) ?? [];
+    const negatives = data.filter(
+      (datum) => typeof datum === "object" && datum !== null && (datum.value ?? 0) < 0,
+    );
+    const positives = data.filter(
+      (datum) => typeof datum === "object" && datum !== null && (datum.value ?? 0) > 0,
+    );
 
-    expect(one.option?.series.every((serie) => serie.label === undefined)).toBe(true);
-    expect(several.option?.series.every((serie) => serie.label === undefined)).toBe(true);
-    // Y sin cifras arriba la rejilla no gasta margen en alojarlas.
-    expect(one.option?.grid?.top).toBe(16);
+    expect(negatives.length).toBeGreaterThan(0);
+    for (const datum of negatives) {
+      expect((datum as { label?: { position?: string } }).label?.position).toBe("bottom");
+    }
+    // Y la positiva no declara nada: se queda con el «top» de la serie.
+    for (const datum of positives) {
+      expect((datum as { label?: { position?: string } }).label).toBeUndefined();
+    }
+  });
+
+  it("las filas escritas se pagan en ALTO, no a costa del dibujo", () => {
+    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+
+    // La rejilla reserva las filas —sin eso la de arriba sale cortada contra el borde— y la tarjeta
+    // crece lo mismo, en vez de dejar las barras un tercio más cortas.
+    expect(card.option?.grid?.top).toBeGreaterThan(16);
+    expect(card.height).toBeGreaterThan(280);
   });
 
   it("las cifras con signo siguen enteras en la tabla, en las DOS unidades", () => {
@@ -685,21 +742,103 @@ describe("el crecimiento se lee contra la LÍNEA DE CERO, sin cifras encima", ()
     expect(withLine?.[0].markLine?.data).toEqual([{ yAxis: 0 }]);
   });
 
+  it("las barras de un mismo mes NO se tocan: el hueco es lo que dice que son varias", () => {
+    // El defecto de ECharts por omisión es `'10%'` del ancho de la barra, y estas tarjetas topan el
+    // ancho: lo que sobra se va al hueco ENTRE CATEGORÍAS, no entre las barras, así que los rellenos
+    // salen pegados y se leen como un bloque apilado — lo contrario de lo que dice un agrupado.
+    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+
+    expect(card.option?.series.length).toBeGreaterThan(1);
+    for (const serie of card.option?.series ?? []) {
+      expect(serie.barGap).toBe("30%");
+    }
+  });
+
+  it("con UN solo mes compartido el eje son los AÑOS BASE, y las barras se reparten a lo ancho", () => {
+    // El mes no distingue nada cuando es uno solo: es un rótulo debajo de todo, y las series se
+    // apilan en UNA ranura topadas a 30 px, como una isla en medio del gráfico. Lo que sí varía es
+    // el año base, así que toma el eje y cada barra recibe su propia categoría.
+    const uno = buildGrowthCard(input(loadedYears(), { months: [0] }), "dolares");
+    const varios = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+
+    expect(uno.option?.xAxis.data?.[0]).toMatch(/^vs \d{4}$/);
+    expect(uno.option?.series).toHaveLength(1);
+    // La leyenda se va con ellas: nombrar «vs 2018» debajo de la barra y otra vez en un cuadrito es
+    // la leyenda diciendo lo que ya dijo el eje.
+    expect(uno.option?.legend?.show).toBe(false);
+    // Y la línea de cero sigue ahí, que es donde se lee el signo.
+    expect(uno.option?.series[0].markLine?.data).toEqual([{ yAxis: 0 }]);
+    // Con dos meses o más nada de esto pasa: el mes vuelve al eje y los años a las series.
+    expect(varios.option?.xAxis.data).toEqual(["Ene", "Feb", "Mar"]);
+    expect(varios.option?.series.length).toBeGreaterThan(1);
+  });
+
+  it("con los años en el eje, cada barra lleva SU color y el mes se nombra en el tooltip", () => {
+    const uno = buildGrowthCard(input(loadedYears(), { months: [0] }), "dolares");
+    const varios = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+    const fills = (uno.option?.series[0].data ?? []).map((datum) =>
+      typeof datum === "object" && datum !== null ? datum.itemStyle?.color : undefined,
+    );
+
+    // El color sigue al AÑO BASE y nunca al signo: es el mismo tono que ese año lleva cuando es una
+    // serie, solo que ahora su nombre está en el eje.
+    expect(fills).toEqual(varios.option?.series.map((serie) => serie.itemStyle?.color));
+    // Y el mes, que ya no está en el eje, se nombra en la cabecera del tooltip.
+    const head = uno.option?.tooltip?.formatter?.([
+      { name: "vs 2018", value: 100, dataIndex: 0, seriesName: "Variación" },
+    ] as never);
+    expect(head).toContain("vs 2018 · Enero");
+  });
+
   it("con pocos meses las barras se ensanchan en vez de quedarse perdidas", () => {
     const narrow = buildGrowthCard(input(loadedYears(), { months: [1, 2, 3] }), "dolares");
     const wide = buildGrowthCard(input(loadedYears()), "dolares");
+    const columnas = (card: typeof narrow) => card.option?.xAxis.data?.length ?? 0;
 
-    expect(narrow.option?.series[0].barMaxWidth).toBe(30);
-    expect(wide.option?.series[0].barMaxWidth).toBe(18);
+    // El ancho no es un número escrito aquí: sale de cuántas columnas se reparten el gráfico y
+    // cuántas barras se reparten la columna, que es lo que `fitBarWidth` responde una sola vez para
+    // toda la app. Pocas columnas, más ancho; muchas, menos.
+    expect(narrow.option?.series[0].barMaxWidth).toBe(
+      fitBarWidth(columnas(narrow), narrow.option?.series.length ?? 1),
+    );
+    expect(wide.option?.series[0].barMaxWidth).toBe(
+      fitBarWidth(columnas(wide), wide.option?.series.length ?? 1),
+    );
+    expect(narrow.option?.series[0].barMaxWidth).toBeGreaterThan(
+      wide.option?.series[0].barMaxWidth ?? 0,
+    );
   });
 
-  it("con VARIOS años base la lectura no cambia: la forma es la misma sin cifras", () => {
-    const card = buildGrowthCard(input(loadedYears()), "dolares");
+  it("con VARIOS años base la línea de cero sigue dibujándose UNA sola vez", () => {
+    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
 
     expect(card.option?.series.length).toBeGreaterThan(1);
-    expect(card.option?.series.every((serie) => serie.label === undefined)).toBe(true);
-    // La línea de cero sigue ahí, que es donde se lee el signo.
     expect(card.option?.series[0].markLine?.data).toEqual([{ yAxis: 0 }]);
+    expect(card.option?.series.filter((serie) => serie.markLine !== undefined)).toHaveLength(1);
+  });
+
+  it("pasados TRES meses las cifras se van al cursor: la rejilla no gasta margen en alojarlas", () => {
+    // Las filas hacen que quepan a cualquier densidad, pero caber no es leerse: siete meses por
+    // cinco años base son treinta y cinco importes, y quien tiene que recorrer esa cuadrícula para
+    // encontrar uno va más lento que quien pasa el cursor por el mes.
+    const tres = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2] }), "dolares");
+    const doce = buildGrowthCard(input(loadedYears()), "dolares");
+
+    expect(tres.option?.xAxis.data).toHaveLength(3);
+    expect(tres.option?.series.every((serie) => serie.label?.show === true)).toBe(true);
+    expect((doce.option?.xAxis.data?.length ?? 0) > 3).toBe(true);
+    expect(doce.option?.series.every((serie) => serie.label === undefined)).toBe(true);
+    // Y sin cifras escritas la tarjeta vuelve a su alto y el dibujo se queda con toda la caja.
+    expect(doce.option?.grid?.top).toBe(16);
+    expect(doce.height).toBe(280);
+    expect(tres.height).toBeGreaterThan(280);
+  });
+
+  it("el eje de AÑOS BASE escribe siempre: un mes, una barra por columna y banda entera", () => {
+    const uno = buildGrowthCard(input(loadedYears(), { months: [0] }), "dolares");
+
+    expect(uno.option?.series).toHaveLength(1);
+    expect(uno.option?.series[0].label?.show).toBe(true);
   });
 
   it("el eje es el tramo COMPARTIDO, no el span marcado: nada de columnas muertas", () => {
@@ -782,7 +921,7 @@ describe("un año sin nada registrado lo dice, no finge un tramo", () => {
 
 describe("Ventas por año · la lectura anual", () => {
   it("una barra por año marcado, con el color de su identidad", () => {
-    const card = buildAnnualCard(input(loadedYears()), "total");
+    const card = flatAnnual(input(loadedYears()), "total");
 
     expect(card.option?.xAxis.data).toEqual(["2022", "2023", "2024", "2026"]);
     expect(card.option?.series).toHaveLength(1);
@@ -790,8 +929,8 @@ describe("Ventas por año · la lectura anual", () => {
   });
 
   it("«Ver como» cambia la CIFRA sobre el mismo eje, nunca añade un segundo", () => {
-    const total = buildAnnualCard(input(loadedYears()), "total");
-    const average = buildAnnualCard(input(loadedYears()), "promedio");
+    const total = flatAnnual(input(loadedYears()), "total");
+    const average = flatAnnual(input(loadedYears()), "promedio");
 
     // 2026: $1,683,720.41 en siete meses → $240,531.487… al mes.
     const valueOf = (card: typeof total, index: number) =>
@@ -804,7 +943,7 @@ describe("Ventas por año · la lectura anual", () => {
   });
 
   it("la tabla lleva las tres cifras, esté en la forma que esté", () => {
-    const card = buildAnnualCard(input(loadedYears()), "total");
+    const card = flatAnnual(input(loadedYears()), "total");
 
     expect(card.table.columns).toEqual(["Total", "Promedio mensual", "Meses cargados"]);
     expect(card.table.rows.map((row) => row.label)).toEqual(["2022", "2023", "2024", "2026"]);
@@ -812,14 +951,14 @@ describe("Ventas por año · la lectura anual", () => {
   });
 
   it("un año a medias se explica: la barra es corta por el calendario, no por el negocio", () => {
-    const card = buildAnnualCard(input(loadedYears()), "total");
+    const card = flatAnnual(input(loadedYears()), "total");
 
     expect(card.note).toContain("2026 llega hasta julio");
     expect(card.note).toContain("Promedio mensual");
   });
 
   it("un año sin ningún mes cargado no dibuja y lleva raya", () => {
-    const card = buildAnnualCard(
+    const card = flatAnnual(
       input([yearInput(2026, REVENUE_2026), yearInput(2025, emptyMonthSeries())]),
       "total",
     );
@@ -854,5 +993,83 @@ describe("marcar un semestre no cambia cómo se mide, solo sobre qué", () => {
     expect(card.subtitle).toBe("Ene–Jun 2026 · qué parte de la venta se cobró con tarjeta");
     // Julio queda FUERA del span, así que no es un mes «que falta registrar»: no existe aquí.
     expect(card.note).toBeUndefined();
+  });
+});
+
+describe("«Ventas por año» toma cuerpo sólido; el crecimiento no", () => {
+  /** El cuerpo sólido de una tarjeta, ya estrechado: si llega plano es que el «Ver como» no llegó. */
+  function solidOf(card: { option: unknown }) {
+    const option = card.option as Parameters<typeof is3DOption>[0] | null;
+    if (option === null || !is3DOption(option)) {
+      throw new Error("se esperaba el cuerpo sólido");
+    }
+    return option;
+  }
+
+  it("«Ventas por año» se levanta con las MISMAS cifras y un color por año", () => {
+    const entrada = input(loadedYears());
+    const plano = flatAnnual(entrada, "total");
+    const solido = solidOf(buildAnnualCard(entrada, "total", "solido"));
+    const [barras] = bar3DSeries(solido);
+
+    // Un año es una COLUMNA y no hay nada que poner en el fondo: una sola fila, donde la
+    // profundidad es el grosor de la barra.
+    expect(bar3DSeries(solido)).toHaveLength(1);
+    expect(solido.xAxis3D.data).toEqual(plano.option?.xAxis.data);
+    // La misma cifra, en el mismo orden: es un cuerpo de la misma lectura, no una segunda.
+    expect(barras.data.map((datum) => datum.value[2])).toEqual(
+      plano.option?.series[0].data.map((datum) =>
+        typeof datum === "object" && datum !== null ? datum.value : datum,
+      ),
+    );
+    // El color es la IDENTIDAD del año, traducida al escenario por ranura: el mismo 2024 de la
+    // línea del comparativo y de la fila del skyline.
+    const fills = barras.data.map(
+      (datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color,
+    );
+    const flatFills = plano.option?.series[0].data.map((datum) =>
+      typeof datum === "object" && datum !== null ? datum.itemStyle?.color : undefined,
+    );
+    expect(fills).toEqual(flatFills?.map((color) => stageColor(color ?? "")));
+    expect(new Set(fills).size).toBe(fills.length);
+    // Y la tabla no se mueve: lleva el total, el promedio y los meses cargados en cualquier cuerpo.
+    expect(solidOf(buildAnnualCard(entrada, "total", "solido"))).toBeDefined();
+    expect(buildAnnualCard(entrada, "total", "solido").table).toEqual(plano.table);
+    expect(buildAnnualCard(entrada, "total", "solido").note).toContain(
+      "Arrastra para girar la vista.",
+    );
+  });
+
+  it("«Cifra» sigue eligiendo qué se levanta: el promedio no es el total", () => {
+    const entrada = input(loadedYears());
+    const total = bar3DSeries(solidOf(buildAnnualCard(entrada, "total", "solido")))[0];
+    const promedio = bar3DSeries(solidOf(buildAnnualCard(entrada, "promedio", "solido")))[0];
+
+    expect(total.name).toBe("Total del tramo");
+    expect(promedio.name).toBe("Promedio mensual");
+    expect(promedio.data[0].value[2]).toBeLessThan(total.data[0].value[2]);
+  });
+
+  it("por omisión viene PLANA, que es lo que el informe y el Excel imprimen", () => {
+    const entrada = input(loadedYears());
+
+    // Y la guarda compartida la deja pasar sin lanzar, que es su contrato.
+    expect(() => flatOnly(buildAnnualCard(entrada, "total"))).not.toThrow();
+  });
+
+  it("el CRECIMIENTO no ofrece cuerpo sólido: una variación se lee contra la línea de cero", () => {
+    // `zeroLine` es un `markLine` y `echarts-gl` no tiene ninguno, así que en el escenario esa línea
+    // se vuelve un suelo que hay que deducir de dónde arrancan los sólidos, con la base de cada uno
+    // tapada por el de delante. La forma que lleva la lectura es la plana, y es la única.
+    const card = buildGrowthCard(input(loadedYears()), "dolares");
+
+    expect(card.option !== null && is3DOption(card.option)).toBe(false);
+  });
+
+  it("sin nada que dibujar no hay cuerpo que ofrecer", () => {
+    // Un año sin ningún mes cargado no levanta una barra de cero.
+    const sinMeses = input([yearInput(2026, emptyMonthSeries())]);
+
+    expect(buildAnnualCard(sinMeses, "total", "solido").option).toBeNull();
   });
 });

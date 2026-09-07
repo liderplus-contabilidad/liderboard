@@ -26,12 +26,14 @@ import type {
   ChartSeries,
   ChartTooltip,
 } from "@/lib/charts/types";
+import { fitBarWidth, GROUPED_BAR_GAP } from "@/lib/charts/bar-fit";
 import {
   fitDirectLabel,
   labelDistance,
   labelHeadroom,
   type LabelFit,
 } from "@/lib/charts/label-fit";
+export { labelHeadroom };
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { REVENUE_SERIES_ORDER } from "../series";
 
@@ -78,6 +80,10 @@ export function baseOption(
   /**
    * The rows of figures written over the marks, when the card writes any. `outerBoundsContain` only
    * reserves for the AXIS' labels, so without this the top row is cropped against the card's edge.
+   *
+   * There is NO twin of this for the bottom, and the reason is worth writing down: what hangs under a
+   * falling bar is reserved by the AXIS' own margin (`categoryAxis`), which `outerBoundsContain`
+   * already accounts for. Adding it here as well took the room twice and left the plot a strip.
    */
   labels?: { rows: number; fit: LabelFit },
 ): Omit<ChartOption, "series"> {
@@ -185,14 +191,36 @@ export function directLabel(
  *  door to the tooltip and to the axes. */
 export { fitDirectLabel, type LabelFit };
 
-export function categoryAxis(labels: readonly string[]): ChartAxis {
+/**
+ * And ONE door to the bar rule, for the same reason.
+ *
+ * `fitBarWidth` is what replaced the four ceilings this module used to write by hand —44 on the
+ * comparativo and on the annual, 30 and 18 on the growth, 28 and 18 on the «vs» cards—: none of them
+ * looked at how much room the column it landed in had, so a year's own column was drawn three
+ * quarters empty while twelve months of two series were drawn right. `GROUPED_BAR_GAP` travels with
+ * it because the two are one arithmetic: the gap is a share of the width the fit hands out.
+ */
+export { fitBarWidth, GROUPED_BAR_GAP };
+
+/**
+ * `margin` is what a chart that writes figures UNDER its bars has to push its own names down by: the
+ * axis' labels are drawn just below the plot's floor, and a falling bar's figure hangs into exactly
+ * that band. It travels with `baseOption`'s `below`, which reserves the room this margin then uses.
+ */
+export function categoryAxis(labels: readonly string[], margin?: number): ChartAxis {
   return {
     type: "category",
     data: [...labels],
     axisLine: { show: true, lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
     axisTick: { show: false },
     splitLine: { show: false },
-    axisLabel: { color: CHART_INK.muted, fontSize: 11, interval: 0, hideOverlap: true },
+    axisLabel: {
+      color: CHART_INK.muted,
+      fontSize: 11,
+      interval: 0,
+      hideOverlap: true,
+      ...(margin === undefined ? {} : { margin }),
+    },
   };
 }
 
@@ -205,9 +233,7 @@ export function currencyAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      // Without cents: an axis is the scale a bar is estimated against, and six labels of
-      // «$337,092.91» eat the drawing's width. The exact figure is in the tooltip and the table.
-      formatter: (value) => formatCurrency(Number(value)),
+      formatter: (value) => axisMoney(Number(value)),
     },
   };
 }
@@ -221,7 +247,7 @@ export function percentAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      formatter: (value) => formatPercent(Number(value), 0),
+      formatter: (value) => axisPercent(Number(value)),
     },
   };
 }
@@ -292,11 +318,28 @@ export function seriesColor(id: string): string {
  *  where `fitDirectLabel` says the axis no longer holds them. */
 export const money = (value: number, cents = true) => formatCurrency(value, { cents });
 export const percent = (value: number) => formatPercent(value);
+/**
+ * What an AXIS writes, in each of the module's two units — ONE definition, read by the flat axes
+ * above and by the stage's `zAxis3D`, which builds its own labels and cannot call them.
+ *
+ * An axis is the scale a mark is estimated against, not a figure that is read off: without cents,
+ * because six labels of «$337,092.91» eat the drawing's width, and without decimals in percent. The
+ * exact figure is in the tooltip and in the table twin. Written twice, the flat card and its solid
+ * body would end up scaled in two different registers, which is the one thing a «Ver como» must
+ * never change.
+ */
+export const axisMoney = (value: number) => money(value, false);
+export const axisPercent = (value: number) => formatPercent(value, 0);
 export const moneyOrDash = (value: number | null) => (value === null ? null : money(value));
 export const percentOrDash = (value: number | null) => (value === null ? null : percent(value));
-/** A signed amount: a growth reads as a variation, so the `+` has to be written. */
-export const signedMoney = (value: number | null) =>
-  value === null ? null : `${value > 0 ? "+" : ""}${money(value)}`;
+/**
+ * A signed amount: a growth reads as a variation, so the `+` has to be written.
+ *
+ * `cents` is what a direct label takes off it where the rows no longer hold them, and nothing else:
+ * the table always writes them, because that is where a figure is checked.
+ */
+export const signedMoney = (value: number | null, cents = true) =>
+  value === null ? null : `${value > 0 ? "+" : ""}${money(value, cents)}`;
 export const signedPercent = (value: number | null) =>
   value === null ? null : `${value > 0 ? "+" : ""}${percent(value)}`;
 

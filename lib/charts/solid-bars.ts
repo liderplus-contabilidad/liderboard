@@ -49,6 +49,18 @@ export type SolidView = "plano" | "solido";
 /** What the SCREEN opens those cards in; paper has no shapes to choose from. */
 export const SCREEN_SOLID_VIEW: SolidView = "plano";
 
+/**
+ * What the «Ver como» switch offers, wherever it is drawn — one list for every card that carries it.
+ *
+ * It lives beside the type and not in each view because it is the SAME control four screens over:
+ * three copies of a two-entry array is three chances for one of them to say «3D» while the others
+ * say «Sólido 3D», and a reader who learns the switch on one card has to learn it again on the next.
+ */
+export const SOLID_VIEW_OPTIONS: { value: SolidView; label: string }[] = [
+  { value: "plano", label: "Plano" },
+  { value: "solido", label: "Sólido 3D" },
+];
+
 /** Past this many characters a label runs into the box; the tooltip carries the name whole. */
 const LABEL_CAP = 12;
 /** A bar's share of its cell. The rest is the gap — see the note in this file's header. */

@@ -17,6 +17,7 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
+import { SOLID_VIEW_OPTIONS } from "@/lib/charts/solid-bars";
 import type { EvolutionView, SolidView } from "@/lib/sales/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
@@ -28,15 +29,6 @@ import { SalesToolbar } from "./sales-toolbar";
 const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
   { value: "skyline", label: "Skyline 3D" },
   { value: "stacked", label: "Apilado" },
-];
-
-/**
- * The two BODIES of a flat bar card — see `SolidView`. It is the same control for the two that take
- * it, so it is one constant and not two: two lists that have to stay equal are one list.
- */
-const SOLID_VIEWS: { value: SolidView; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "solido", label: "Sólido 3D" },
 ];
 
 /**
@@ -130,7 +122,7 @@ function SalesContent() {
         <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
         <SegmentedControl
           value={value}
-          options={SOLID_VIEWS}
+          options={SOLID_VIEW_OPTIONS}
           onChange={onChange}
           ariaLabel="Ver como"
         />

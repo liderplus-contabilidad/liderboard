@@ -8,8 +8,8 @@
  * and whoever receives the PDF no longer has the screen beside them to check against.
  *
  * **On paper there are no controls.** A printed toggle is a button nobody can press, so the report
- * ignores «Ver en» and «Ver como» and prints BOTH shapes of every ratio card and BOTH units of the
- * growth. What on screen is a choice is on paper simply two sections.
+ * ignores «Ver en», «Cifra» and «Ver como» and prints BOTH figures of the annual reading and BOTH
+ * units of the growth, always in the only body paper has. What on screen is a choice is on paper simply two sections.
  */
 import { flatOnly, type ChartCardSpec } from "@/lib/charts/types";
 import { formatTimestampEs } from "@/lib/date";
@@ -58,9 +58,13 @@ export function buildRevenueReport(input: BuildRevenueReportInput): RevenueRepor
     { id: "comparativo", card: flatComparisonCard(input) },
     // BOTH shapes of the annual reading, for the same reason as the growth's two units: on paper
     // «Ver como» is a button nobody can press.
-    { id: "anual-total", card: buildAnnualCard(input, "total") },
-    { id: "anual-promedio", card: buildAnnualCard(input, "promedio") },
+    // `flatOnly` on the annual: on paper a 3D box is a WebGL canvas no sheet renders and a camera
+    // nobody can press, so the guard is written down instead of cast — the builder returns the flat
+    // body by omission and this never throws.
+    { id: "anual-total", card: flatOnly(buildAnnualCard(input, "total")) },
+    { id: "anual-promedio", card: flatOnly(buildAnnualCard(input, "promedio")) },
     // BOTH units, because the screen's switch does not exist here.
+    // No `flatOnly` on these two: the growth has one body and it is the flat one.
     { id: "crecimiento-dolares", card: buildGrowthCard(input, "dolares") },
     { id: "crecimiento-porcentaje", card: buildGrowthCard(input, "porcentaje") },
   ];

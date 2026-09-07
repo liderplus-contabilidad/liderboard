@@ -122,6 +122,39 @@ export function withMonthsCleared(filters: SalesFilters): SalesFilters {
   return { ...filters, months: [] };
 }
 
+/**
+ * **The rótulo of the year marks**, which is what the bar's «Año» trigger reads: every year marked is
+ * written «Todos los años» instead of enumerated, because a control that spells six exercises out is
+ * wider than the reading it describes and says no more than the shortcut that set it.
+ *
+ * The EMPTY list is enumerated —it comes out «—»— and is deliberately not called «todos»: here no
+ * mark resolves to the MOST RECENT year, this module's declared exception, and `sanitizeFilters`
+ * already hands the bar the resolved list.
+ */
+export function yearMarkLabel(years: readonly number[], universe: readonly number[]): string {
+  if (universe.length > 0 && years.length >= universe.length) {
+    return "Todos los años";
+  }
+  return [...years].sort((a, b) => a - b).join(", ") || "—";
+}
+
+/**
+ * The months' twin, read by the «Mes» trigger: marking every loaded month is the same reading as
+ * marking none, so it is written «Todos los meses» rather than spelling twelve abbreviations into the
+ * widest control of the bar.
+ *
+ * It ENUMERATES and does not compose a range —«Ene, Feb, Mar», never «Ene–Mar»— because the trigger
+ * says what is MARKED, one entry per checkbox, while `periodLabel` says what the reading COVERS.
+ */
+export function monthMarkLabel(months: readonly number[], universe: readonly number[]): string {
+  return months.length === 0 || months.length >= universe.length
+    ? "Todos los meses"
+    : [...months]
+        .sort((a, b) => a - b)
+        .map((month) => MONTHS_SHORT_ES[month])
+        .join(", ");
+}
+
 export function withServiceToggled(
   filters: SalesFilters,
   code: string,

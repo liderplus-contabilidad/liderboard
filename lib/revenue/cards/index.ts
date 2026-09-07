@@ -54,8 +54,16 @@ export interface RevenueCardsOptions {
   growthUnit?: GrowthUnit;
   /** The comparison's «Ver como». Omitted, it is flat — see `DEFAULT_COMPARISON_SHAPE`. */
   comparisonShape?: ComparisonShape;
-  /** The annual card's «Ver como». Omitted, it is the total. */
+  /** The annual card's «Cifra» — WHICH figure it draws. Omitted, it is the total. */
   annualShape?: AnnualShape;
+  /**
+   * The BODY the annual reading is drawn in — «Ver como», the same control the three ratios carry.
+   * Omitted it is flat, so the paper and the Excel keep inheriting the shape they can carry.
+   *
+   * The growth has NO field here and no body to choose: a variation is read against the zero line,
+   * and the stage has no line to read it against — see `buildGrowthCard`.
+   */
+  annualView?: SolidView;
   /**
    * Which body each ratio card takes, BY DESCRIPTOR ID. It is a record and not three fields for the
    * reason the three cards come out of one constructor: adding a fourth ratio is an entry in
@@ -70,7 +78,7 @@ export interface RevenueCards {
   comparison: ChartCardSpec<ChartOption | Chart3DOption>;
   /** Whether the skyline can be offered at all: it needs a depth axis, so two years at least. */
   skylineAvailable: boolean;
-  annual: ChartCardSpec;
+  annual: ChartCardSpec<ChartOption | Chart3DOption>;
   growth: ChartCardSpec;
   /** Empty where the workspace cannot capture: the cards are NOT DRAWN, not drawn disabled. */
   ratios: ChartCardSpec<ChartOption | Chart3DOption>[];
@@ -102,7 +110,7 @@ export function buildRevenueCards(
   return {
     comparison: buildComparisonCard(input, options.comparisonShape ?? DEFAULT_COMPARISON_SHAPE),
     skylineAvailable: skylineAvailableFor(input),
-    annual: buildAnnualCard(input, options.annualShape ?? DEFAULT_ANNUAL_SHAPE),
+    annual: buildAnnualCard(input, options.annualShape ?? DEFAULT_ANNUAL_SHAPE, options.annualView),
     growth: buildGrowthCard(input, options.growthUnit ?? DEFAULT_GROWTH_UNIT),
     ratios,
     // Every one of them has nothing to draw.
