@@ -14,6 +14,9 @@
  * **(b) The average divides by the LOADED months, not by twelve.** 2026 has seven months loaded
  * summing $1,683,720.41, so its monthly average is $240,531.49. The workbook writes $240,312.73,
  * dividing by something else; the difference is not a rounding.
+ *
+ * **(c) `resolveMonthlyRevenue` is the ONE place the estado de resultados and what was typed by hand
+ * meet**, and rule (a) is what makes it a single line — see its own docstring.
  */
 import { MONTHS_IN_YEAR, type RevenueYearInput } from "./types";
 
@@ -49,6 +52,33 @@ export function scopeToMonths(
   const inSpan = new Set(months);
   return Array.from({ length: MONTHS_IN_YEAR }, (_, index) =>
     inSpan.has(index) ? (series[index] ?? null) : null,
+  );
+}
+
+/**
+ * **Where a month's VENTAS comes from — the one definition, and a FALLBACK rather than an override.**
+ *
+ * A month the workspace declares loaded is read from the raíz 4 of the PyG and what was typed for it
+ * is not consulted; only a month PyG has nothing for falls back to the stored figure. Written the
+ * other way round —typed value wins— the screen would be able to contradict the estado de resultados,
+ * and the accountant would have two answers to «cuánto se vendió en marzo» with nothing to say which
+ * is right.
+ *
+ * That is also why there is no `2026` anywhere in this module. The cut is not a year: it is where the
+ * workspace's coverage begins, and it moves on its own the day another year is uploaded — a month
+ * that arrives in Datos simply stops reading the manual figure, without anybody editing a constant.
+ *
+ * Rule (a) is what makes this a single comparison: `null` already means «no cargado» on both sides,
+ * so a month with neither stays `null` and drops out of every total, average and denominator
+ * downstream with no flag travelling beside it.
+ */
+export function resolveMonthlyRevenue(
+  fromPyg: readonly (number | null)[],
+  typed: readonly (number | null)[],
+): (number | null)[] {
+  return Array.from(
+    { length: MONTHS_IN_YEAR },
+    (_, month) => fromPyg[month] ?? typed[month] ?? null,
   );
 }
 

@@ -30,7 +30,7 @@ export const GUIDE_REVENUE_GROWTH: ChartGuide = {
     { control: "Ver en", effect: "cambia la unidad entre dólares y porcentaje, no los datos" },
   ],
   reading:
-    "Solo se comparan los meses que los dos años tienen cargados, así que un año a medias nunca se mide contra los doce meses de otro. La caída se dibuja bajo la línea de cero; el color sigue al año base, no al signo.",
+    "Solo se comparan los meses que los dos años tienen cargados, así que un año a medias nunca se mide contra los doce meses de otro. La caída se dibuja bajo la línea de cero; el color sigue al año base, no al signo. Hasta tres meses cada barra lleva su variación escrita; con más, la cifra está en el cursor y en la tabla.",
 };
 
 /** A ratio card's help, composed from its own labels — see `series.ts`. */
@@ -38,14 +38,10 @@ export function ratioGuide(numerator: string, denominator: string): ChartGuide {
   return {
     purpose: `Qué parte de ${denominator} representa ${numerator}, mes a mes y en el periodo.`,
     actions: [
-      {
-        control: "Ver como",
-        effect: "los dos montos en dólares, o la participación en porcentaje",
-      },
       { control: "Mes", effect: "acota el tramo que se lee" },
       { control: "Registrar datos", effect: "abre el cajón donde se escriben las cifras del mes" },
     ],
-    reading: `Un mes solo entra en el porcentaje si tiene ${numerator} y ${denominator}: un mes con venta y sin registrar queda fuera del cálculo, no cuenta como cero.`,
+    reading: `Las dos barras son dólares sobre el mismo eje, y bajo la cifra de ${numerator} va qué parte de ${denominator} representa. Un mes solo entra en ese porcentaje si tiene ${numerator} y ${denominator}: un mes con venta y sin registrar queda fuera del cálculo, no cuenta como cero.`,
   };
 }
 
@@ -56,7 +52,7 @@ export const GUIDE_REVENUE_ANNUAL: ChartGuide = {
     { control: "Año", effect: "una barra por año marcado que tenga meses cargados" },
     { control: "Mes", effect: "acota el tramo, así que el total pasa a ser el del tramo" },
     {
-      control: "Ver como",
+      control: "Cifra",
       effect: "el total del tramo, o el promedio mensual sobre los meses cargados",
     },
   ],

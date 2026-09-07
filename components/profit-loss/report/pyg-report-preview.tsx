@@ -30,6 +30,7 @@ import { reportSections } from "@/lib/profit-loss/report/sections";
 import { describePygReport } from "@/lib/profit-loss/report/summary";
 import type { ReportSection as ReportSectionSpec } from "@/lib/profit-loss/report/types";
 import type { DatosGrid } from "@/lib/profit-loss/datos-types";
+import { is3DOption, type ChartCardSpec } from "@/lib/charts/types";
 import { usePygAnalytics } from "../pyg-analytics-provider";
 import { usePygData } from "../pyg-data-provider";
 import { ReportCards } from "./report-cards";
@@ -74,6 +75,22 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
   const { context, verticalBaseCode } = usePygAnalytics();
 
   const graficos = useMemo(() => buildGraficosCards(context, filters), [context, filters]);
+  /**
+   * Every SHAPE goes to paper —that is the rule, and why the annex prints its bars and its pie— with
+   * one exception, and it is not a control: a 3D option is drawn by `echarts-gl` into a WebGL canvas,
+   * which a printed sheet cannot carry. The card it drops says exactly what the flat one beside it
+   * says, so nothing is lost.
+   *
+   * It is filtered by SHAPE and not by id on purpose: the rule is about the renderer, so a 3D card
+   * added tomorrow is already covered.
+   */
+  const graficosCards = useMemo(
+    () =>
+      graficos.cards.filter(
+        (card): card is ChartCardSpec => card.option === null || !is3DOption(card.option),
+      ),
+    [graficos.cards],
+  );
   const analisis = useMemo(() => buildAnalisisCards(context, filters), [context, filters]);
 
   // Same fallback the Datos tab applies: a freshly loaded coarser file floors the options one
@@ -338,7 +355,7 @@ export function PygReportPreview({ onClose }: { onClose: () => void }) {
         </ReportSection>
 
         <ReportSection section={sectionOf("graficos")}>
-          <ReportCards cards={graficos.cards} />
+          <ReportCards cards={graficosCards} />
         </ReportSection>
 
         <ReportSection section={sectionOf("analisis")}>

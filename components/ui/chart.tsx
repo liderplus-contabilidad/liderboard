@@ -54,8 +54,11 @@ let glRegistration: Promise<void> | null = null;
 
 function registerGl(): Promise<void> {
   glRegistration ??= Promise.all([import("echarts-gl/charts"), import("echarts-gl/components")])
-    .then(([{ Bar3DChart }, { Grid3DComponent }]) => {
-      use([Bar3DChart, Grid3DComponent]);
+    // `SurfaceChart` is what draws the doughnut: gl has no pie, so each slice is a parametric
+    // surface. It travels with the bars because both arrive in the same `import()` — the megabyte is
+    // the package, not the chart type, so registering one and not the other buys nothing.
+    .then(([{ Bar3DChart, SurfaceChart }, { Grid3DComponent }]) => {
+      use([Bar3DChart, SurfaceChart, Grid3DComponent]);
     })
     .catch((error: unknown) => {
       // A failed import must not poison the memo: the next mount gets to try again.
@@ -179,16 +182,27 @@ export function Chart({ option, onSelect, height = 260, ariaLabel, className }: 
 
   // Hidden from assistive tech on purpose: read aloud, an axis of twelve numbers and eight legend
   // entries is noise. The numbers live in the card's table twin.
+  // A 3D option is drawn on the STAGE (`CHART_STAGE`), and the frame is the card's half of it: the
+  // canvas is a dark rectangle inside a white card, so it needs the corner radius of a panel and the
+  // stage's own colour UNDER it — the WebGL layer paints nothing until `gl` lands, and a white box
+  // that turns black is what a card without this does on every mount.
+  const stage = dimension === "3d";
+
   return (
     <div className={cn("w-full", className)}>
       <span className="sr-only">{ariaLabel}</span>
-      <div ref={host} aria-hidden style={{ height }} className="w-full" />
+      <div
+        ref={host}
+        aria-hidden
+        style={{ height }}
+        className={cn("w-full", stage && "overflow-hidden rounded-[9px] bg-chart-stage")}
+      />
       {/* The host keeps its height throughout, so neither the wait nor the failure moves the card:
           what is said is said INSIDE the box the chart was going to occupy. */}
       {!drawable && (
         <div
           style={{ height, marginTop: -height }}
-          className="flex w-full items-center justify-center text-[12px] text-faint"
+          className="flex w-full items-center justify-center px-6 text-center text-[12px] text-faint"
         >
           {gl === "failed"
             ? "No se pudo cargar la vista 3D. Cambia a «Apilado» para ver estos mismos datos."

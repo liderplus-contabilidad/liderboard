@@ -3,6 +3,7 @@ import {
   activeMarkCount,
   describeServiceScope,
   emptyFilters,
+  monthMarkLabel,
   periodLabel,
   sanitizeFilters,
   scopedPeriodLabel,
@@ -13,6 +14,7 @@ import {
   withServiceToggled,
   withServicesCleared,
   withYearToggled,
+  yearMarkLabel,
   type SalesUniverse,
 } from "./filters";
 
@@ -119,6 +121,27 @@ describe("selectedMonths", () => {
 
   it("con marcas suma exactamente esas", () => {
     expect(selectedMonths({ years: [2026], months: [3], services: [] }, UNIVERSE)).toEqual([3]);
+  });
+});
+
+describe("los rótulos de la barra", () => {
+  it("todos los años marcados NO se enumeran", () => {
+    expect(yearMarkLabel(UNIVERSE.years, UNIVERSE.years)).toBe("Todos los años");
+  });
+
+  it("un subconjunto ES la selección y se escribe", () => {
+    expect(yearMarkLabel([2025, 2026], UNIVERSE.years)).toBe("2025, 2026");
+    expect(yearMarkLabel([2026], UNIVERSE.years)).toBe("2026");
+  });
+
+  it("la lista vacía NO es «todos» aquí: sin marcas se resuelve al año más reciente", () => {
+    expect(yearMarkLabel([], UNIVERSE.years)).toBe("—");
+  });
+
+  it("todos los meses cargados marcados se condensan; un subconjunto se enumera", () => {
+    expect(monthMarkLabel(UNIVERSE.months, UNIVERSE.months)).toBe("Todos los meses");
+    expect(monthMarkLabel([], UNIVERSE.months)).toBe("Todos los meses");
+    expect(monthMarkLabel([0, 3], UNIVERSE.months)).toBe("Ene, Abr");
   });
 });
 

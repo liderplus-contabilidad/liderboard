@@ -14,19 +14,26 @@ import {
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
-  CHART_SIGN,
   CHART_SURFACE,
   colorForEntity,
 } from "@/lib/charts/palette";
 import type {
   ChartAxis,
-  ChartLabel,
   ChartLegend,
   ChartMarkLine,
   ChartOption,
   ChartParam,
+  ChartSeries,
   ChartTooltip,
 } from "@/lib/charts/types";
+import { fitBarWidth, GROUPED_BAR_GAP } from "@/lib/charts/bar-fit";
+import {
+  fitDirectLabel,
+  labelDistance,
+  labelHeadroom,
+  type LabelFit,
+} from "@/lib/charts/label-fit";
+export { labelHeadroom };
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { REVENUE_SERIES_ORDER } from "../series";
 
@@ -70,6 +77,15 @@ export function baseOption(
   axis: ChartAxis,
   value: ChartAxis,
   legend: ChartLegend,
+  /**
+   * The rows of figures written over the marks, when the card writes any. `outerBoundsContain` only
+   * reserves for the AXIS' labels, so without this the top row is cropped against the card's edge.
+   *
+   * There is NO twin of this for the bottom, and the reason is worth writing down: what hangs under a
+   * falling bar is reserved by the AXIS' own margin (`categoryAxis`), which `outerBoundsContain`
+   * already accounts for. Adding it here as well took the room twice and left the plot a strip.
+   */
+  labels?: { rows: number; fit: LabelFit },
 ): Omit<ChartOption, "series"> {
   return {
     animationDuration: 260,
@@ -77,7 +93,7 @@ export function baseOption(
     grid: {
       left: 8,
       right: 16,
-      top: 16,
+      top: labels ? labelHeadroom(labels.rows, labels.fit, 16) : 16,
       bottom: legend.show ? 28 : 8,
       outerBoundsMode: "same",
       outerBoundsContain: "axisLabel",
@@ -88,14 +104,123 @@ export function baseOption(
   };
 }
 
-export function categoryAxis(labels: readonly string[]): ChartAxis {
+/**
+ * How many ROWS of figures a card with this many series writes, and `null` where it writes none.
+ *
+ * Past four series a figure per mark stops being read and becomes texture — PyG's same number — and
+ * the rows themselves are what would cost it: eight of them eat a third of a 280 px card. There the
+ * amount stays where it has always been reachable, in the tooltip and in the table twin.
+ */
+export const MAX_LABEL_ROWS = 4;
+
+/**
+ * The figure written over a mark: always written, always FLAT, and one composition of it for the
+ * whole module so five cards cannot end up writing an amount five ways.
+ *
+ * `lib/charts/label-fit` is the shared rule of what shape it takes —body, then cents, never the
+ * figure— and of the ROW each series writes on, which is what lets several series carry their amount
+ * without disputing one strip. It is the same rule PyG and «Ventas por servicio» read.
+ *
+ * `shares` adds a SECOND line under the amount with what that bar is of the one beside it. It is what
+ * replaced this module's «Ver como»: a percentage and an amount are not two readings to switch
+ * between, they are one reading —«esto es tanto, y es tanto por ciento de aquello»— and the switch
+ * made the reader hold one of the halves in their head while looking at the other.
+ */
+export function directLabel(
+  fit: LabelFit,
+  options: {
+    row?: number;
+    unit?: (value: number) => string;
+    shares?: readonly (number | null)[];
+    /**
+     * Where the figure's LEFT EDGE goes, measured from the centre of its mark — which also stops it
+     * being centred there.
+     *
+     * A `"top"` label is centred on its bar, and a figure some 63 px wide over a bar 28 px wide
+     * spills 18 px out of each side. On these grouped cards the bar to its left is the DENOMINATOR's,
+     * ten times taller, so that spill did not merely crowd a neighbour: it was printed across a solid
+     * fill and the first digits stopped being legible. Nudging the whole label rightwards only trades
+     * which neighbour it lands on, because a centred label keeps half its width on each side.
+     *
+     * Anchoring the left edge is what actually answers it: the figure grows RIGHTWARDS from the point
+     * given, so everything it can cover is the plot to its own right. `-barWidth / 2` starts it flush
+     * with its bar's left edge, which is the nearest it can sit without reaching the fill beside it.
+     */
+    startAt?: number;
+  } = {},
+): Pick<ChartSeries, "label" | "labelLayout"> {
+  const { shares } = options;
+  const write = options.unit ?? ((value: number) => formatCurrency(value, { cents: fit.cents }));
+  return {
+    label: {
+      show: true,
+      position: "top",
+      distance: labelDistance(options.row ?? 0, fit),
+      ...(options.startAt === undefined
+        ? {}
+        : { align: "left" as const, offset: [options.startAt, 0] as [number, number] }),
+      color: CHART_INK.strong,
+      fontSize: fit.fontSize,
+      ...(shares
+        ? {
+            // Fainter than the amount: the percentage is an annotation over the bar, not the bar's
+            // own figure — PyG's `SHARE_RICH_KEY`, and the same ink.
+            rich: {
+              share: { color: CHART_INK.muted, fontSize: fit.fontSize - 0.5, lineHeight: 13 },
+            },
+          }
+        : {}),
+      formatter: (param: ChartParam) => {
+        const amount =
+          param.value === null || param.value === undefined ? "" : write(Number(param.value));
+        const share = shares?.[param.dataIndex];
+        if (share === null || share === undefined) {
+          return amount;
+        }
+        const written = `{share|${percent(share)}}`;
+        return amount === "" ? written : `${amount}\n${written}`;
+      },
+    },
+    // The rows keep one series' figures off the next one's; what is left for `hideOverlap` is a
+    // collision INSIDE a row — two adjacent columns on an axis narrower than the fit assumed.
+    labelLayout: { hideOverlap: true },
+  };
+}
+
+/** Re-exported so a card of this module has ONE door to the label rule, the same way it has one
+ *  door to the tooltip and to the axes. */
+export { fitDirectLabel, type LabelFit };
+
+/**
+ * And ONE door to the bar rule, for the same reason.
+ *
+ * `fitBarWidth` is what replaced the four ceilings this module used to write by hand —44 on the
+ * comparativo and on the annual, 30 and 18 on the growth, 28 and 18 on the «vs» cards—: none of them
+ * looked at how much room the column it landed in had, so a year's own column was drawn three
+ * quarters empty while twelve months of two series were drawn right. `GROUPED_BAR_GAP` travels with
+ * it because the two are one arithmetic: the gap is a share of the width the fit hands out.
+ */
+export { fitBarWidth, GROUPED_BAR_GAP };
+
+/**
+ * `margin` is what a chart that writes figures UNDER its bars has to push its own names down by: the
+ * axis' labels are drawn just below the plot's floor, and a falling bar's figure hangs into exactly
+ * that band. It travels with `baseOption`'s `below`, which reserves the room this margin then uses.
+ */
+export function categoryAxis(labels: readonly string[], margin?: number): ChartAxis {
   return {
     type: "category",
     data: [...labels],
     axisLine: { show: true, lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
     axisTick: { show: false },
     splitLine: { show: false },
-    axisLabel: { color: CHART_INK.muted, fontSize: 11, interval: 0, hideOverlap: true },
+    axisLabel: {
+      color: CHART_INK.muted,
+      fontSize: 11,
+      interval: 0,
+      hideOverlap: true,
+      ...(margin === undefined ? {} : { margin }),
+    },
   };
 }
 
@@ -108,9 +233,7 @@ export function currencyAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      // Without cents: an axis is the scale a bar is estimated against, and six labels of
-      // «$337,092.91» eat the drawing's width. The exact figure is in the tooltip and the table.
-      formatter: (value) => formatCurrency(Number(value)),
+      formatter: (value) => axisMoney(Number(value)),
     },
   };
 }
@@ -124,12 +247,16 @@ export function percentAxis(): ChartAxis {
     axisLabel: {
       color: CHART_INK.faint,
       fontSize: 11,
-      formatter: (value) => formatPercent(Number(value), 0),
+      formatter: (value) => axisPercent(Number(value)),
     },
   };
 }
 
-export function legendFor(show: boolean): ChartLegend {
+export function legendFor(
+  show: boolean,
+  /** The skyline draws its legend ON the stage, where the card's ink would not be read. */
+  tone: string = CHART_INK.muted,
+): ChartLegend {
   return {
     show,
     type: "scroll",
@@ -138,7 +265,7 @@ export function legendFor(show: boolean): ChartLegend {
     itemWidth: 10,
     itemHeight: 10,
     itemGap: 14,
-    textStyle: { color: CHART_INK.muted, fontSize: 11.5 },
+    textStyle: { color: tone, fontSize: 11.5 },
   };
 }
 
@@ -187,57 +314,34 @@ export function seriesColor(id: string): string {
   return colorForEntity(id, [...REVENUE_SERIES_ORDER]);
 }
 
-export const money = (value: number) => formatCurrency(value, { cents: true });
+/** The module's amount. `cents` is the only thing a direct label ever takes off it, and only
+ *  where `fitDirectLabel` says the axis no longer holds them. */
+export const money = (value: number, cents = true) => formatCurrency(value, { cents });
 export const percent = (value: number) => formatPercent(value);
+/**
+ * What an AXIS writes, in each of the module's two units — ONE definition, read by the flat axes
+ * above and by the stage's `zAxis3D`, which builds its own labels and cannot call them.
+ *
+ * An axis is the scale a mark is estimated against, not a figure that is read off: without cents,
+ * because six labels of «$337,092.91» eat the drawing's width, and without decimals in percent. The
+ * exact figure is in the tooltip and in the table twin. Written twice, the flat card and its solid
+ * body would end up scaled in two different registers, which is the one thing a «Ver como» must
+ * never change.
+ */
+export const axisMoney = (value: number) => money(value, false);
+export const axisPercent = (value: number) => formatPercent(value, 0);
 export const moneyOrDash = (value: number | null) => (value === null ? null : money(value));
 export const percentOrDash = (value: number | null) => (value === null ? null : percent(value));
-/** A signed amount: a growth reads as a variation, so the `+` has to be written. */
-export const signedMoney = (value: number | null) =>
-  value === null ? null : `${value > 0 ? "+" : ""}${money(value)}`;
+/**
+ * A signed amount: a growth reads as a variation, so the `+` has to be written.
+ *
+ * `cents` is what a direct label takes off it where the rows no longer hold them, and nothing else:
+ * the table always writes them, because that is where a figure is checked.
+ */
+export const signedMoney = (value: number | null, cents = true) =>
+  value === null ? null : `${value > 0 ? "+" : ""}${money(value, cents)}`;
 export const signedPercent = (value: number | null) =>
   value === null ? null : `${value > 0 ? "+" : ""}${percent(value)}`;
-
-/**
- * The SIGN of a variation, written out: the glyph, the signed value, and the sign's own ink.
- *
- * This is the house rule taken literally — `positive`/`negative` are the sign of a VALUE and never a
- * series colour, and they never travel alone: always with a `▲`/`▼` and the signed figure. So the
- * BAR keeps the base year's colour (the entity it belongs to) and the sign lives entirely in the
- * label, where it can carry all three encodings at once.
- *
- * `rich` is what makes that possible: a label's own `color` is a single value for the whole string,
- * and here the ink has to change per DATUM — one column rising, the next falling.
- *
- * **`"top"` here is only the RISING case's position; a falling bar overrides it per datum** — see
- * `signPosition`. The series-level value cannot answer for both, and that is what put every falling
- * label on the zero line.
- */
-export function signLabel(show: boolean, inPercent: boolean): ChartLabel {
-  const write = (value: number) =>
-    inPercent
-      ? `${value > 0 ? "+" : ""}${percent(value)}`
-      : `${value > 0 ? "+" : ""}${money(value)}`;
-  return {
-    show,
-    // The default, which the rising bars keep; `signPosition` overrides it on the falling ones.
-    position: "top",
-    fontSize: 10.5,
-    rich: {
-      pos: { color: CHART_SIGN.positive, fontSize: 10.5, fontWeight: 600 },
-      neg: { color: CHART_SIGN.negative, fontSize: 10.5, fontWeight: 600 },
-    },
-    formatter: (param: ChartParam) => {
-      if (param.value === null || param.value === undefined) {
-        return "";
-      }
-      const value = Number(param.value);
-      if (value === 0) {
-        return "";
-      }
-      return value > 0 ? `{pos|▲ ${write(value)}}` : `{neg|▼ ${write(value)}}`;
-    },
-  };
-}
 
 /** The line every growth is read against. Silent, because its height is not a datum. */
 export function zeroLine(): ChartMarkLine {
@@ -248,25 +352,4 @@ export function zeroLine(): ChartMarkLine {
     lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" },
     data: [{ yAxis: 0 }],
   };
-}
-
-/**
- * Where a variation's label goes, decided by the datum's own SIGN: above a rise, below a fall.
- *
- * It is not cosmetic, it is what stops two labels landing on top of each other. `position: "top"` is
- * the top EDGE of the datum's rect, and a falling bar's rect runs from zero downwards — so its top
- * edge IS the zero line. With every falling bar pinned there, two base years put two ~90px labels
- * ~20px apart at identical height in the same month, and «▼ -$4,5▼-$4,52…12,287.73» is what came out.
- * `hideOverlap` could only answer by dropping one of the two figures, and on a narrow card it drew
- * both.
- *
- * Placed by sign, two falling bars sit at the depth of their OWN values —which differ, or they would
- * not be two readings— so they separate on their own and `hideOverlap` goes back to being the last
- * resort it was meant to be.
- *
- * `null` and `0` take the default: neither draws a label at all (`signLabel`'s formatter returns an
- * empty string for both), so their position is never read.
- */
-export function signPosition(value: number | null): { position?: ChartLabel["position"] } {
-  return value !== null && value < 0 ? { position: "bottom" } : {};
 }

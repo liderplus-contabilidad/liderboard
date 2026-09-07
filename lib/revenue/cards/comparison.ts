@@ -23,6 +23,7 @@ import {
   baseOption,
   categoryAxis,
   currencyAxis,
+  fitBarWidth,
   legendFor,
   money,
   moneyOrDash,
@@ -82,6 +83,17 @@ export function buildComparisonCard(
   const drawnYears = drawn.map((entry) => entry.year);
   const comparing = drawn.length > 1;
 
+  /**
+   * **This card writes NO figure over its marks**, and it is the one card of the module where that is
+   * the reading and not a shortage of room.
+   *
+   * What it answers is the SHAPE of a year — which months rise, which fall, how one year runs above
+   * another — over an axis of twelve columns. Twelve amounts, or twelve per year, do not add a
+   * reading to that: they cover the very trajectory being followed, and the trajectory is the whole
+   * point of drawing months instead of tabulating them. The month's figure is a hover away in the
+   * tooltip and always present in the table twin, which lists every marked year, not only the drawn
+   * ones.
+   */
   const series: ChartSeries[] = comparing
     ? drawn.map((entry) => ({
         id: `year-${entry.year}`,
@@ -109,7 +121,8 @@ export function buildComparisonCard(
               // axis, so April keeps its tone whichever span is being looked at.
               { value, itemStyle: { color: colorForPeriod(month), borderRadius: ROUND_TOP } };
         }),
-        barMaxWidth: CHART_MARK.barMaxWidth,
+        // One bar per month and nothing sharing its column: the fit hands it the whole band it has.
+        barMaxWidth: fitBarWidth(axis.length),
       }));
 
   const covered = drawn.some((entry) => entry.covered);

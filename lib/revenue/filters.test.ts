@@ -6,6 +6,7 @@ import {
   availableSpans,
   emptyFilters,
   markedSpanOf,
+  monthMarkLabel,
   monthSpanLabel,
   namedSpanLabel,
   periodLabel,
@@ -18,6 +19,7 @@ import {
   withMonthsCleared,
   withMonthToggled,
   withYearToggled,
+  yearMarkLabel,
   type RevenueUniverse,
 } from "./filters";
 
@@ -167,6 +169,36 @@ describe("activeMarkCount", () => {
 
   it("NUNCA cuenta los años: la pantalla abre con todos marcados y la tira nacería llena", () => {
     expect(activeMarkCount({ years: [2022, 2023, 2024, 2026], months: [] })).toBe(0);
+  });
+});
+
+describe("yearMarkLabel · el rótulo del selector de años", () => {
+  it("todos los años marcados NO se enumeran: es donde abre la pantalla", () => {
+    expect(yearMarkLabel(UNIVERSE.years, UNIVERSE.years)).toBe("Todos los años");
+  });
+
+  it("sin marcas también es «todos», que es lo que la lista vacía significa", () => {
+    expect(yearMarkLabel([], UNIVERSE.years)).toBe("Todos los años");
+  });
+
+  it("un subconjunto ES la selección del usuario y se escribe", () => {
+    expect(yearMarkLabel([2024, 2026], UNIVERSE.years)).toBe("2024, 2026");
+    expect(yearMarkLabel([2026], UNIVERSE.years)).toBe("2026");
+  });
+});
+
+describe("monthMarkLabel · el rótulo del selector de meses", () => {
+  it("todos los meses cargados marcados NO se enumeran", () => {
+    expect(monthMarkLabel(ALL_MONTHS, ALL_MONTHS)).toBe("Todos los meses");
+  });
+
+  it("sin marcas también es «todos», que es lo que la lista vacía significa", () => {
+    expect(monthMarkLabel([], ALL_MONTHS)).toBe("Todos los meses");
+  });
+
+  it("un subconjunto se enumera marca a marca, sin componer un rango", () => {
+    expect(monthMarkLabel([0, 1, 2], ALL_MONTHS)).toBe("Ene, Feb, Mar");
+    expect(monthMarkLabel([3], ALL_MONTHS)).toBe("Abr");
   });
 });
 

@@ -1,14 +1,10 @@
 "use client";
 
-import { FileSpreadsheet, Table2 } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
 import { useCallback } from "react";
 import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
 import { downloadBlob } from "@/lib/download";
-import {
-  buildExternalWorkbook,
-  buildRevenueWorkbook,
-  revenueExportFilename,
-} from "@/lib/revenue/export";
+import { buildRevenueWorkbook, revenueExportFilename } from "@/lib/revenue/export";
 import { useRevenueData } from "./revenue-data-provider";
 
 /**
@@ -20,23 +16,18 @@ import { useRevenueData } from "./revenue-data-provider";
  * the drawer, so the upload is rendered disabled with the reason in a pill — the primitive's own way
  * of saying what a control is missing, and the missing step here belongs to another module.
  *
- * «Datos externos» is only OFFERED where there is capture. With one option left the primitive falls
- * back to a plain button on its own, without this wrapper declaring the shape.
+ * **ONE download, so «Excel» is a plain button and not a menu** — the primitive derives that shape
+ * from the number of options it gets, which is why this wrapper never declares it. The capture used
+ * to be offered as a second file, «Datos externos», and it earned nothing: its matrix is already the
+ * three «vs» sheets of the comparativo, so the menu asked the user to choose between a file and a
+ * subset of that same file.
  */
 export function RevenueExcelActions() {
-  const { cardsInput, clientName, periodName, canCapture } = useRevenueData();
+  const { cardsInput, clientName, periodName } = useRevenueData();
 
   const downloadComparison = useCallback(async () => {
     const header = { clientName: clientName ?? "Cliente", periodLabel: periodName };
     downloadBlob(await buildRevenueWorkbook(cardsInput, header), revenueExportFilename(header));
-  }, [cardsInput, clientName, periodName]);
-
-  const downloadExternal = useCallback(async () => {
-    const header = { clientName: clientName ?? "Cliente", periodLabel: periodName };
-    downloadBlob(
-      await buildExternalWorkbook(cardsInput.years, header),
-      revenueExportFilename(header, " - datos externos"),
-    );
   }, [cardsInput, clientName, periodName]);
 
   const ready = cardsInput.years.length > 0;
@@ -52,18 +43,6 @@ export function RevenueExcelActions() {
       run: downloadComparison,
     },
   ];
-
-  if (canCapture) {
-    downloads.push({
-      id: "externos",
-      title: "Datos externos",
-      description: "La matriz capturada mes a mes, para conciliar.",
-      icon: Table2,
-      disabled: !ready,
-      disabledReason: "Marca al menos un año con datos.",
-      run: downloadExternal,
-    });
-  }
 
   return (
     // NO `upload`: the revenue is loaded in PyG and the external figures are typed into the drawer,

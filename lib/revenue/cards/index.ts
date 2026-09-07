@@ -30,7 +30,8 @@ import {
   type ComparisonShape,
 } from "./comparison";
 import { buildGrowthCard, DEFAULT_GROWTH_UNIT, growthOf, type GrowthUnit } from "./growth";
-import { buildRatioCard, DEFAULT_RATIO_SHAPE, type RatioShape } from "./ratio";
+import type { SolidView } from "@/lib/charts/solid-bars";
+import { buildRatioCard } from "./ratio";
 
 export { ANNUAL_CARD_ID, buildAnnualCard, DEFAULT_ANNUAL_SHAPE, type AnnualShape } from "./annual";
 export {
@@ -42,7 +43,7 @@ export {
   type ComparisonShape,
 } from "./comparison";
 export { buildGrowthCard, DEFAULT_GROWTH_UNIT, GROWTH_CARD_ID, type GrowthUnit } from "./growth";
-export { buildRatioCard, DEFAULT_RATIO_SHAPE, type RatioShape } from "./ratio";
+export { buildRatioCard } from "./ratio";
 /** Re-exported from its home in `types.ts`, so `@/lib/revenue/cards` keeps being where a consumer
  *  finds it. It lives there and not here because all five builders need it and importing it back
  *  from this file —which imports them— would be a cycle. */
@@ -51,22 +52,36 @@ export type { RevenueCardsInput } from "../types";
 export interface RevenueCardsOptions {
   /** The screen's «Ver en»; the paper prints both and passes neither. */
   growthUnit?: GrowthUnit;
-  /** The screen's «Ver como», per card id. */
-  ratioShape?: (cardId: string) => RatioShape;
   /** The comparison's «Ver como». Omitted, it is flat — see `DEFAULT_COMPARISON_SHAPE`. */
   comparisonShape?: ComparisonShape;
-  /** The annual card's «Ver como». Omitted, it is the total. */
+  /** The annual card's «Cifra» — WHICH figure it draws. Omitted, it is the total. */
   annualShape?: AnnualShape;
+  /**
+   * The BODY the annual reading is drawn in — «Ver como», the same control the three ratios carry.
+   * Omitted it is flat, so the paper and the Excel keep inheriting the shape they can carry.
+   *
+   * The growth has NO field here and no body to choose: a variation is read against the zero line,
+   * and the stage has no line to read it against — see `buildGrowthCard`.
+   */
+  annualView?: SolidView;
+  /**
+   * Which body each ratio card takes, BY DESCRIPTOR ID. It is a record and not three fields for the
+   * reason the three cards come out of one constructor: adding a fourth ratio is an entry in
+   * `RATIO_DESCRIPTORS` and nothing else, and a fourth field here would break that. An id it does
+   * not carry falls back to `SCREEN_SOLID_VIEW`, so the paper —which passes none— keeps printing
+   * flat.
+   */
+  ratioViews?: Readonly<Record<string, SolidView>>;
 }
 
 export interface RevenueCards {
   comparison: ChartCardSpec<ChartOption | Chart3DOption>;
   /** Whether the skyline can be offered at all: it needs a depth axis, so two years at least. */
   skylineAvailable: boolean;
-  annual: ChartCardSpec;
+  annual: ChartCardSpec<ChartOption | Chart3DOption>;
   growth: ChartCardSpec;
   /** Empty where the workspace cannot capture: the cards are NOT DRAWN, not drawn disabled. */
-  ratios: ChartCardSpec[];
+  ratios: ChartCardSpec<ChartOption | Chart3DOption>[];
   /**
    * The workspace CAN capture and not one marked year has anything captured — so all three ratio
    * cards would draw nothing.
@@ -86,21 +101,19 @@ export function buildRevenueCards(
   input: RevenueCardsInput,
   options: RevenueCardsOptions = {},
 ): RevenueCards {
-  const shapeOf = options.ratioShape ?? (() => DEFAULT_RATIO_SHAPE);
   const ratios = input.canCapture
     ? RATIO_DESCRIPTORS.map((descriptor) =>
-        buildRatioCard(descriptor, input, shapeOf(descriptor.id)),
+        buildRatioCard(descriptor, input, options.ratioViews?.[descriptor.id]),
       )
     : [];
 
   return {
     comparison: buildComparisonCard(input, options.comparisonShape ?? DEFAULT_COMPARISON_SHAPE),
     skylineAvailable: skylineAvailableFor(input),
-    annual: buildAnnualCard(input, options.annualShape ?? DEFAULT_ANNUAL_SHAPE),
+    annual: buildAnnualCard(input, options.annualShape ?? DEFAULT_ANNUAL_SHAPE, options.annualView),
     growth: buildGrowthCard(input, options.growthUnit ?? DEFAULT_GROWTH_UNIT),
     ratios,
-    // Every one of them has nothing to draw: the shape is not the question, so it holds whichever
-    // «Ver como» each card happens to be in.
+    // Every one of them has nothing to draw.
     ratiosIdle: ratios.length > 0 && ratios.every((card) => card.option === null),
   };
 }

@@ -3,6 +3,7 @@
 import { ChevronsDownUp, ChevronsUpDown, PanelsTopLeft, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { SOLID_VIEW_OPTIONS } from "@/lib/charts/solid-bars";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -10,7 +11,7 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import type { AnnualShape, ComparisonShape, GrowthUnit, RatioShape } from "@/lib/revenue/cards";
+import type { AnnualShape, ComparisonShape, GrowthUnit } from "@/lib/revenue/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { RevenueCapturePanel } from "./revenue-capture-panel";
 import { RevenueDataProvider, useRevenueData } from "./revenue-data-provider";
@@ -31,16 +32,16 @@ const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
   { value: "skyline", label: "Skyline 3D" },
 ];
 
-/** «Ver como» en «Ventas por año» — el total del tramo, o el promedio mensual. */
-const ANNUAL_SHAPES: { value: AnnualShape; label: string }[] = [
+/**
+ * «Cifra» en «Ventas por año» — el total del tramo, o el promedio mensual.
+ *
+ * No se llama «Ver como» aunque de eso venga: en este módulo «Ver como» elige un CUERPO —plano o de
+ * pie en el escenario— y esta tarjeta lleva las dos cosas. Dos controles con el mismo rótulo en una
+ * cabecera no dicen cuál mueve qué.
+ */
+const ANNUAL_FIGURES: { value: AnnualShape; label: string }[] = [
   { value: "total", label: "Total" },
   { value: "promedio", label: "Promedio mensual" },
-];
-
-/** «Ver como» — a ratio card's shape. */
-const RATIO_SHAPES: { value: RatioShape; label: string }[] = [
-  { value: "montos", label: "Montos" },
-  { value: "participacion", label: "Participación" },
 ];
 
 /**
@@ -74,8 +75,10 @@ function RevenueContent() {
     setComparisonShape,
     annualShape,
     setAnnualShape,
-    ratioShape,
-    setRatioShape,
+    annualView,
+    setAnnualView,
+    ratioViews,
+    setRatioView,
   } = useRevenueData();
   const [captureOpen, setCaptureOpen] = useState(false);
 
@@ -236,12 +239,28 @@ function RevenueContent() {
                 collapsed={isCollapsed(cards.annual.id)}
                 onToggleCollapsed={() => toggle(cards.annual.id)}
                 headerSlot={
-                  <HeaderChoice
-                    label="Ver como"
-                    value={annualShape}
-                    options={ANNUAL_SHAPES}
-                    onChange={setAnnualShape}
-                  />
+                  <span className="flex items-center gap-4">
+                    {/* La CIFRA y el CUERPO son dos preguntas: cualquiera de las dos cifras se lee
+                        en cualquiera de los dos cuerpos, así que son dos controles y no cuatro
+                        opciones de uno. */}
+                    <HeaderChoice
+                      label="Cifra"
+                      value={annualShape}
+                      options={ANNUAL_FIGURES}
+                      onChange={setAnnualShape}
+                    />
+                    {/* Solo donde hay algo que levantar: sin ningún año con meses cargados la
+                        tarjeta no dibuja, y un control que no puede hacer nada enseña a no leer el
+                        de al lado. */}
+                    {cards.annual.option !== null && (
+                      <HeaderChoice
+                        label="Ver como"
+                        value={annualView}
+                        options={SOLID_VIEW_OPTIONS}
+                        onChange={setAnnualView}
+                      />
+                    )}
+                  </span>
                 }
               />
 
@@ -250,6 +269,8 @@ function RevenueContent() {
                 collapsed={isCollapsed(cards.growth.id)}
                 onToggleCollapsed={() => toggle(cards.growth.id)}
                 headerSlot={
+                  /* Solo «Ver en», la UNIDAD: esta tarjeta no ofrece cuerpo sólido — una variación
+                     se lee contra la línea de cero, y el escenario no tiene línea que ofrecer. */
                   <HeaderChoice
                     label="Ver en"
                     value={growthUnit}
@@ -269,8 +290,8 @@ function RevenueContent() {
                   <EmptyState icon={<Wallet size={22} />} className="py-12">
                     <span className="flex flex-col items-center gap-3 text-center">
                       <span className="max-w-[460px]">
-                        Cobros con tarjeta, comisiones TC y publicidad Facebook no están en ningún
-                        estado de resultados: se registran a mano. Sin ellos, las tres lecturas de
+                        Cobros con tarjeta, comisiones TC y publicidad no están en ningún estado de
+                        resultados: se registran a mano. Sin ellos, las tres lecturas de
                         participación no tienen numerador que medir.
                       </span>
                       <Button
@@ -285,19 +306,32 @@ function RevenueContent() {
                 </div>
               ) : (
                 cards.ratios.map((card) => (
+                  /* El «Ver como» de aquí elige un CUERPO, nunca una lectura: el monto y su
+                     participación se leen en la misma gráfica —la barra del numerador escribe debajo
+                     de su cifra qué parte es de la de al lado—, y de pie en el escenario esa cifra se
+                     va al hover y a la tabla. Por eso abre en plano. */
                   <ChartCard
                     key={card.id}
                     {...card}
                     collapsed={isCollapsed(card.id)}
                     onToggleCollapsed={() => toggle(card.id)}
-                    headerSlot={
-                      <HeaderChoice
-                        label="Ver como"
-                        value={ratioShape(card.id)}
-                        options={RATIO_SHAPES}
-                        onChange={(shape) => setRatioShape(card.id, shape)}
-                      />
-                    }
+                    {...(card.option === null
+                      ? {}
+                      : {
+                          headerSlot: (
+                            <span className="flex items-center gap-2">
+                              <span className="text-[11.5px] font-semibold text-faint">
+                                Ver como
+                              </span>
+                              <SegmentedControl
+                                value={ratioViews[card.id] ?? "plano"}
+                                options={SOLID_VIEW_OPTIONS}
+                                onChange={(view) => setRatioView(card.id, view)}
+                                ariaLabel="Ver como"
+                              />
+                            </span>
+                          ),
+                        })}
                   />
                 ))
               )}
