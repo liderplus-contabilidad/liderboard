@@ -237,6 +237,7 @@ function SalesContent() {
                 {...cards.services}
                 collapsed={isCollapsed(cards.services.id)}
                 onToggleCollapsed={() => toggle(cards.services.id)}
+                expandable
                 headerSlot={bodyControl(
                   servicesView,
                   setServicesView,
@@ -247,12 +248,14 @@ function SalesContent() {
                 {...cards.payers}
                 collapsed={isCollapsed(cards.payers.id)}
                 onToggleCollapsed={() => toggle(cards.payers.id)}
+                expandable
                 headerSlot={bodyControl(payersView, setPayersView, cards.payers.option !== null)}
               />
               <ChartCard
                 {...cards.evolution}
                 collapsed={isCollapsed(cards.evolution.id)}
                 onToggleCollapsed={() => toggle(cards.evolution.id)}
+                expandable
                 {...(evolutionControls
                   ? {
                       headerSlot: evolutionControls,

@@ -1,9 +1,10 @@
 "use client";
 
-import { BarChart3, ChevronDown, FileSpreadsheet, Table2 } from "lucide-react";
-import { memo, useId, useState, type ReactNode } from "react";
+import { BarChart3, ChevronDown, FileSpreadsheet, Maximize2, Table2 } from "lucide-react";
+import { memo, useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Chart } from "@/components/ui/chart";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/cn";
 import type { Chart3DOption, ChartCardSpec, ChartOption, ChartTable } from "@/lib/charts/types";
 import { NoticeBanner } from "@/components/ui/notice-banner";
@@ -47,6 +48,19 @@ export interface ChartCardProps extends Omit<
    */
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /**
+   * Default false. Offers «Ampliar», which opens the chart ALONE in a window the size of the screen.
+   *
+   * It is off by default and not on —unlike `tableToggle` and `showGuide`, which the report turns
+   * off— because the split is the other way round: one screen wants it and fifteen do not, and the
+   * three printable reports least of all, where a button is something nobody can press. Off by
+   * default is what makes this card unable to change anything outside the caller that asks for it.
+   *
+   * The state is held HERE and not by the caller (unlike `collapsed`): collapsing has a «Cerrar
+   * todos» that demands a single truth, and enlarging has no equivalent — only one window is open at
+   * a time and nobody else needs to know which.
+   */
+  expandable?: boolean;
   /** A control that shapes ONE chart: in the module filter bar it would read as feeding all. */
   headerSlot?: ReactNode;
   /**
@@ -80,11 +94,14 @@ export const ChartCard = memo(function ChartCard({
   showGuide = true,
   collapsed = false,
   onToggleCollapsed,
+  expandable = false,
   headerSlot,
   footerSlot,
   onSelect,
 }: ChartCardProps) {
   const [asTable, setAsTable] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const close = useCallback(() => setExpanded(false), []);
   const bodyId = useId();
   const collapsible = onToggleCollapsed !== undefined;
   const hasSeries = Boolean(option && option.series.length > 0 && table.rows.length > 0);
@@ -93,6 +110,11 @@ export const ChartCard = memo(function ChartCard({
   // that is not on screen is not an option, it is a trap. The guide stays, because it answers what is
   // inside, which is exactly what one asks of a closed card.
   const showToggle = hasSeries && tableToggle && !isCollapsed;
+  // The same rule the line above applies, and the one the filter bar applies: a control that means
+  // nothing for what is on screen RENDERS NOTHING rather than sitting disabled. Collapsed there is no
+  // drawing to enlarge; with no series there is none either; and over the table twin «Ampliar» would
+  // promise a big table and hand back a chart.
+  const showExpand = expandable && hasSeries && !isCollapsed && !asTable;
   // The guide is drawn even when there is nothing to draw: an empty card is precisely where the
   // reader asks what they would have to mark to fill it.
   const helper = showGuide ? guide : undefined;
@@ -133,7 +155,7 @@ export const ChartCard = memo(function ChartCard({
             {subtitle && <p className="mt-0.5 truncate text-[11.5px] text-muted">{subtitle}</p>}
           </div>
         </div>
-        {((headerSlot && !isCollapsed) || showToggle || helper) && (
+        {((headerSlot && !isCollapsed) || showToggle || showExpand || helper) && (
           <div className="relative z-10 flex shrink-0 items-center gap-2.5">
             {!isCollapsed && headerSlot}
             {helper && <ChartGuideTip title={title} guide={helper} />}
@@ -151,6 +173,18 @@ export const ChartCard = memo(function ChartCard({
               >
                 {asTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
                 {asTable ? "Ver como gráfica" : "Ver como tabla"}
+              </button>
+            )}
+            {/* Next to «Ver como tabla» and not before the ⓘ: the two are the same kind of control
+                —both act on the BODY— and the guide answers what is inside, which is another thing. */}
+            {showExpand && (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:bg-canvas"
+              >
+                <Maximize2 size={13} />
+                Ampliar
               </button>
             )}
           </div>
@@ -200,9 +234,56 @@ export const ChartCard = memo(function ChartCard({
           </>
         )}
       </div>
+
+      {/* The window carries the CHART and nothing else: no «Ver como», no table twin, no ⓘ. The shape
+          is chosen in this header and looked at in there, so what is enlarged is whatever `option`
+          the card is drawing at that moment — the solid if it is standing, the skyline if it is.
+          Its `Chart` is a SECOND instance and not this one moved: an ECharts instance is bound to the
+          node it was initialised on, so moving it would dispose and re-create it anyway, and leave a
+          hole in the card. Mounted only while open, and disposed on close by `Chart` itself. */}
+      {expandable && (
+        <Modal open={expanded} fill title={title} onClose={close}>
+          {expanded && option ? <ExpandedChart option={option} title={title} /> : null}
+        </Modal>
+      )}
     </section>
   );
 });
+
+/**
+ * The enlarged chart, whose height is MEASURED and never computed from the viewport: `Chart` needs a
+ * number, and a formula over `innerHeight` has to guess the window's header and its paddings — two
+ * numbers that drift apart the moment somebody touches the CSS. The body already knows how tall it
+ * is, and it cannot be pushed by what it measures, because the dialog's flex is what fixes it.
+ *
+ * Nothing is drawn until the first measurement lands: mounted at `height: 0` the instance would come
+ * up in a box of nothing and resize a frame later, which is a flash for free. From there on the
+ * `ResizeObserver` inside `Chart` takes over — resizing the browser redraws it without this
+ * component doing anything.
+ */
+function ExpandedChart({ option, title }: { option: ChartOption | Chart3DOption; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    const node = box.current;
+    if (!node) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const measured = entries[0]?.contentRect.height ?? 0;
+      setHeight(Math.round(measured));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={box} className="h-full w-full">
+      {height > 0 && <Chart option={option} height={height} ariaLabel={title} />}
+    </div>
+  );
+}
 
 /**
  * A `ChartCardSpec` mounted. `id` is the key of the list that holds the spec, not something the
