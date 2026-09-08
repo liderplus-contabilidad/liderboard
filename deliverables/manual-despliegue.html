@@ -466,11 +466,8 @@
     max-width: 68ch;
   }
   .check li {
-    display: grid;
-    grid-template-columns: 22px minmax(0, 1fr);
-    gap: 10px;
-    align-items: start;
-    padding: 11px 0;
+    position: relative;
+    padding: 11px 0 11px 32px;
     border-bottom: 1px solid var(--border-soft);
     font-size: 14px;
   }
@@ -479,9 +476,11 @@
   }
   .check li::before {
     content: "";
+    position: absolute;
+    left: 0;
+    top: 15px;
     width: 15px;
     height: 15px;
-    margin-top: 4px;
     border: 1.5px solid var(--faint);
     border-radius: 4px;
   }
@@ -515,7 +514,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 18 ago 2026</span>
+      <span><b>Actualizado</b> 8 sep 2026</span>
       <span><b>Rama de producción</b> main</span>
       <span><b>Plataforma</b> Vercel</span>
     </div>
@@ -903,7 +902,10 @@ app/(dashboard)/payroll/[periodId]/[employeeId]/page.tsx</code></pre>
           que la app descarga vuelve a entrar sin pérdida, comentarios y ajustes incluidos. Conviene
           establecer con la firma la costumbre de descargar al cerrar cada mes. La excepción es
           <em>Ventas por servicio</em>, que no descarga: ahí el Excel es la fuente y lo guardado se
-          reconstruye volviendo a subir los reportes del sistema contable.
+          reconstruye volviendo a subir los reportes del sistema contable. En
+          <em>Reportería de ingresos</em> la descarga sí existe, pero
+          <strong>no se vuelve a subir</strong>: lo que ese módulo guarda se teclea en su cajón de
+          registro, así que su Excel sirve para cotejar y archivar, no para reponer.
         </li>
       </ul>
 
@@ -945,6 +947,13 @@ app/(dashboard)/payroll/[periodId]/[employeeId]/page.tsx</code></pre>
         <li>
           Los gráficos se dibujan y las tipografías de sus ejes se ven correctas, no con una fuente
           de reemplazo.
+        </li>
+        <li>
+          Las lecturas en <strong>tres dimensiones</strong> se dibujan: en Ventas por servicio,
+          poner la evolución en «Skyline 3D», y en Gráficos, el anexo de gastos en «Sólido 3D».
+          Necesitan WebGL y descargan su propio paquete la primera vez, así que si el equipo o el
+          navegador lo tienen deshabilitado la tarjeta lo dice y ofrece volver a la forma plana — el
+          resto de la aplicación no se ve afectado.
         </li>
       </ul>
 

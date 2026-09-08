@@ -11,6 +11,10 @@ el código (identificadores, slugs de rutas) en **inglés**. Es una app **solo p
 - [oxc](https://oxc.rs) para lint y formato (`oxlint` / `oxfmt`) — no ESLint/Prettier.
 - [Apache ECharts](https://echarts.apache.org) 6 para las gráficas, con _imports parciales_
   desde `echarts/core` y renderer SVG.
+- [echarts-gl](https://github.com/ecomfe/echarts-gl) para las lecturas en **tres dimensiones**
+  (WebGL, renderer canvas). Pesa casi tanto como el resto de la app, así que entra por un
+  `import()` memoizado en el **primer montaje 3D** y nunca antes: una pantalla sin tarjeta 3D no
+  lo descarga.
 - Fuentes IBM Plex Sans/Mono vía `next/font`; iconos de `lucide-react`.
 - Gestor de paquetes: **pnpm**.
 
@@ -45,13 +49,20 @@ components/ui/           primitivas reutilizables (Button, Dropdown, SegmentedCo
                          Toolbar, EmptyState, FilterChip, Checkbox, Select, …)
 components/dashboard/    shell: sidebar, header, tabs de módulo
 components/profit-loss/  composiciones específicas de Pérdidas y Ganancias
-  └ charts/              tarjetas y vistas de Gráficos y Análisis
+  ├ charts/              tarjetas y vistas de Gráficos y Análisis
+  ├ sales/               subitem Ventas por servicio (barra, tarjetas, informe)
+  └ revenue/             subitem Reportería de ingresos (barra, tarjetas, cajón, informe)
 components/occupancy/    composiciones específicas de Ocupaciones (tabs, grilla y gráficas)
   └ charts/              vista de Gráficos, mapa de calor y panel del día
 lib/modules.ts           registro de módulos (única fuente de verdad de la navegación)
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
+lib/period.ts            granularidades (mensual…anual) y tramos con nombre (S1, Q1) compartidos
 lib/charts/              paleta categórica y sistema de marcas, comunes a toda la app
+  ├ palette.ts           los sets de color, incluido el ESCENARIO oscuro de las tarjetas 3D
+  ├ solid-bars.ts        la forma «sólida» de un gráfico de barras, compartida por tres tarjetas
+  ├ bar-fit.ts           cuánto puede medir una barra, derivado de la aritmética del eje
+  └ label-fit.ts         cómo se hace caber la cifra escrita sobre una marca
 lib/profit-loss/upload/  registry de estrategias de carga (una por sistema contable) + merge
 lib/profit-loss/analytics/  motor analítico puro (series, transformaciones, Pareto, pastel)
 lib/profit-loss/charts/  traducción pura: selección → consulta → opción de ECharts
@@ -60,6 +71,7 @@ lib/occupancy/analytics/ motor de Ocupaciones (series por métrica, KPIs, canale
 lib/occupancy/charts/    traducción pura: marcas → consulta → opción de ECharts
 lib/payroll/             capa pura de Rol de Pagos (motor, asiento, comprobante, export) + Dexie
 lib/sales/               capa pura de Ventas por servicio (upload, derive, cards, informe) + Dexie
+lib/revenue/             capa pura de Reportería de ingresos (derive, ratio, growth, cards) + Dexie
 lib/report/              lo compartido por los informes imprimibles (qué orientación y qué cuerpo)
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
@@ -190,13 +202,33 @@ doce del periodo, veinte ranuras sin repetir una sola. `CHART_RANKING_MAX` (15) 
 **legibilidad declarado**, no la longitud de la secuencia, y el test fija el invariante que importa
 — que el corte nunca supere a la secuencia, así que ninguna barra dibujada se queda sin tono.
 
+**El ESCENARIO es el único fondo oscuro de la app**, y existe para lo único que lo necesita: un
+`bar3D` es un SÓLIDO, y sobre una tarjeta blanca las caras pálidas de una barra baja se disuelven en
+el fondo. `CHART_STAGE` es el suelo y su cromo; `CHART_STAGE_LIGHT` es el **único aparejo de luz** que
+monta toda tarjeta 3D —y es lo que dibuja el CANTO, porque `bar3D` no tiene borde al que recurrir—; y
+las marcas que se paran encima son `CHART_STAGE_PALETTE`, `CHART_STAGE_SECTION`,
+`CHART_STAGE_SLICE_SEQUENCE` y `CHART_STAGE_NEUTRAL`. Es la única escala de la app que **no** se
+deriva de `CHART_PALETTE`: medidas contra el navy, dos de las ocho ranuras claras caen por debajo de
+3:1. `stageColor` y `stageSliceColor` son la única puerta y traducen **por RANURA**, así que un
+servicio conserva su identidad entre tarjetas 3D — al precio, declarado, de no llevar ahí el mismo
+tono que en las blancas. El token `--color-chart-stage` espeja `CHART_STAGE.sky` en el `@theme`
+porque la tarjeta pinta ese fondo **debajo** del canvas: sin él, un cuadro WebGL que aún no cargó es
+un rectángulo blanco que de golpe se vuelve negro.
+
+**Y hay dos reglas de encaje, una por cada cosa que compite por el ancho de una columna**:
+`lib/charts/bar-fit.ts` decide cuánto puede medir una barra —un techo derivado de la aritmética del
+eje (cuántas columnas comparten el plot y cuántas barras comparten la columna), no un número elegido
+a mano por tarjeta— y `lib/charts/label-fit.ts` decide cómo cabe la cifra escrita encima: cada serie
+escribe su propio RENGLÓN, así que lo que se cuenta son los periodos y no series × periodos, y lo que
+cede es el cuerpo y luego los CENTAVOS —que el tooltip y la tabla gemela conservan—, nunca la cifra.
+
 ## Estado actual
 
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
 **Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Tienen datos reales
-hoy **PyG** (Datos, Gráficos y Análisis, más el subitem **Ventas por servicio**), **Ocupaciones**
-(Datos y Gráficos) y **Rol de Pagos** (períodos, comprobantes, asiento y el subitem **Sueldos por
-Áreas**).
+hoy **PyG** (Datos, Gráficos y Análisis, más los subitems **Ventas por servicio** y **Reportería de
+ingresos**), **Ocupaciones** (Datos y Gráficos) y **Rol de Pagos** (períodos, comprobantes, asiento
+y el subitem **Sueldos por Áreas**).
 
 Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
 `ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
@@ -380,6 +412,18 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   los periodos como columnas, con los valores **ya transformados** (índice 100, variación, YTD)
   y el periodo sin cobertura en blanco. Las advertencias del motor salen **completas** antes de
   la gráfica, y una consulta sin series explica por qué en vez de dibujar un plot vacío.
+- **«Ampliar»** abre la gráfica **sola** en una ventana del tamaño de la pantalla (`Modal fill`),
+  para la lectura de cerca que media tarjeta no da. Es opcional y **apagada por defecto**
+  (`expandable`): la encienden las pantallas del árbol de PyG —Gráficos, Análisis, Ventas por
+  servicio y Reportería de ingresos— y nadie más. No se dibuja en una tarjeta plegada, sin series o
+  mientras se lee la gemela en tabla: el control que no significa nada no se deshabilita, no se
+  dibuja. Lo que se amplía es la forma que la tarjeta tiene puesta; elegir se sigue haciendo en su
+  cabecera, y la ventana es para mirar.
+- **El anexo de gastos se lee con DOS interruptores, no con uno de cuatro opciones**: «Gráfica»
+  (Barras · Pastel) dice QUÉ se dibuja y «Ver como» (Plano · Sólido 3D) en qué CUERPO. Son cuatro
+  tarjetas que la capa pura emite siempre —el mismo reparto, la misma reducción— y estos dos
+  interruptores dicen cuál se ve. El informe imprimible saca las dos que el papel puede llevar: las
+  sólidas son canvas WebGL, y una hoja no lleva uno.
 
 **Renderizado.** `components/ui/chart.tsx` es el **único** que llama a `echarts.init`: monta la
 instancia, aplica cada cambio de opción **sobre la instancia viva** (sin remontar, sin
@@ -387,6 +431,17 @@ parpadeo), la redimensiona con `ResizeObserver` (el sidebar colapsa sin disparar
 ventana) y la destruye al desmontar. Solo se registran `BarChart`, `LineChart`, `PieChart` y
 los componentes de rejilla, tooltip, leyenda, etiquetas y línea de referencia; el paquete
 completo ronda el megabyte y el chunk de `/profit-loss` entero pesa menos que eso.
+
+**La tercera dimensión es un tipo APARTE** (`Chart3DOption`, con `grid3D` obligatorio para que
+`is3DOption` sea total): no ensancha `ChartOption`, así que el invariante «ninguna gráfica declara
+dos `yAxis`» sigue significando lo mismo en las veintitantas opciones planas. El **renderer se elige
+por INSTANCIA** —canvas para 3D, SVG para el resto, y un cambio de dimensión re-crea la instancia
+porque no hay forma de cambiárselo a una viva— y `echarts-gl` se registra una sola vez, en el primer
+montaje 3D, por un `import()` memoizado: hasta que llega no hay instancia, y la tarjeta dice
+«Preparando la vista 3D…» dentro de la caja que el dibujo va a ocupar (o cómo volver a la forma
+plana, si la carga falla). `flatOnly()` es la puerta de todo lo que **no** es un canvas: los informes
+imprimibles y los Excel construyen las mismas tarjetas y lanzan un error si alguna llega en tres
+dimensiones, en vez de imprimir un rectángulo vacío donde estaba la lectura.
 
 ## Acciones de Excel (todos los módulos)
 
@@ -407,6 +462,9 @@ dominio. La galería viva está en `/docs/components#excel-actions`.
   están duplicados por módulo.
 - **`disabled` + `disabledReason`** es cómo un módulo dice que una descarga no está disponible
   (el Consolidado de Ocupaciones, PyG sin dataset); la razón se lee al apuntar el control.
+- **`upload` es opcional.** Un módulo que solo DESCARGA es un caso real —Reportería de ingresos
+  deriva sus cifras de PyG y teclea el resto en un cajón—, y omitiéndolo no se dibuja ningún botón
+  de carga: un control permanentemente deshabilitado es justo lo que la regla de la casa prohíbe.
 - **La barra de tabs alinea el bloque una sola vez** (`ModuleTabs` envuelve el `rightSlot`), de
   modo que el mismo componente sirve fuera de ella — es lo que monta `PygEmptyState`.
 
@@ -685,11 +743,14 @@ las aseguradoras y los particulares que los pagan.
   `clientId` mezcla la facturación de dos empresas en silencio. Borrar un cliente arrastra sus
   ventas en cascada, y esa llamada vive en `PygDataProvider` para que la dependencia apunte del
   módulo nuevo al que ya existía. Nada derivado se persiste.
-- **Barra: Año · Mes, y los dos admiten varias marcas.** Cada **año marcado es una serie** sobre el
-  mismo eje de doce meses, que es lo que responde «abril de 2026 contra abril de 2025»; el **mes es
-  independiente del año** y acota el eje de todos los años marcados. El año se aparta de «ninguna
-  marca es todas» —sin marcas resuelve al **más reciente**, y su atajo «Todos los años» _puebla_ la
-  lista en vez de vaciarla— y no deja chips, porque nunca está vacío.
+- **Barra: Año · Mes · Servicio, y los tres admiten varias marcas.** Cada **año marcado es una
+  serie** sobre el mismo eje de doce meses, que es lo que responde «abril de 2026 contra abril de
+  2025»; el **mes es independiente del año** y acota el eje de todos los años marcados. El año se
+  aparta de «ninguna marca es todas» —sin marcas resuelve al **más reciente**, y su atajo «Todos los
+  años» _puebla_ la lista en vez de vaciarla— y no deja chips, porque nunca está vacío. El servicio
+  se marca por su CÓDIGO verbatim y su universo sale de los años marcados, no del tramo que deja
+  «Mes»; `scopedPeriodLabel` es la única composición del rótulo que leen los tiles, los tres
+  subtítulos y la cabecera del informe.
 - **Tres tarjetas, y cada una tiene dos formas que elige el número de años marcados** (no un
   control): con uno dibuja el reparto del periodo, con varios pone un año por serie. Composición
   por servicio · Concentración por pagador (los diez mayores, con la cola contada y sumada al pie)
@@ -699,14 +760,86 @@ las aseguradoras y los particulares que los pagan.
   única función que decide quién se rotula, y su heurística está **sesgada**: persona por defecto,
   empresa solo con evidencia positiva, porque una aseguradora tomada por paciente sale sin nombre y
   un paciente tomado por aseguradora sale con su nombre en la pantalla y en el papel.
-- **Lecturas de pantalla que no son marcas:** las tres tarjetas **pliegan** (con «Cerrar todos») y
-  la evolución lleva **«Ocultar meses en 0»** en su propia cabecera. Viajan en `SalesCardsOptions`,
-  aparte de `SalesCardsInput`, así que el informe construye las mismas tarjetas sin ellas y el papel
-  saca el eje entero — un interruptor impreso es un botón que nadie puede pulsar.
+- **La evolución se lee desglosada por servicio, y su forma es un control** («Skyline 3D» /
+  «Apilado», `EvolutionView`): la pila responde «cuánto facturó este mes y de qué está hecho» de un
+  vistazo, y el skyline le da a cada servicio su propio eje **arrancando en cero**, que es lo que la
+  pila no puede contestar porque solo su banda de abajo lo hace. Son los mismos números y la misma
+  tabla gemela. El control **no se dibuja** cuando no hay desglose que formar —varios años marcados,
+  o un año sin servicios— ni con un solo mes en el eje, donde no hay meses que seguir. **Con UN mes
+  marcado** la pila se despliega en **una barra por servicio**.
+- **Composición por servicio y Concentración por pagador llevan «Ver como»** (Plano · Sólido 3D):
+  el mismo reparto, plano sobre la tarjeta o de pie en el escenario. Abren **planas** —es el cuerpo
+  que el informe y el Excel pueden llevar— y ahí la elección es del lector, porque de pie los nombres
+  largos se vuelven un eje truncado.
+- **Lecturas de pantalla que no son marcas:** las tres tarjetas **pliegan** (con «Cerrar todos»),
+  llevan **«Ampliar»** y la evolución suma **«Ocultar meses en 0»** en su propia cabecera. Viajan en
+  `SalesCardsOptions`, aparte de `SalesCardsInput`, así que el informe construye las mismas tarjetas
+  sin ellas y el papel saca el eje entero, plano y sin interruptores — un interruptor impreso es un
+  botón que nadie puede pulsar.
 - **Informe PDF** (`ReportLayer`, el tercero de la app) en dos hojas: las dos tablas de tres
   columnas en vertical y la evolución en su propia hoja apaisada. Lo único en que el papel se separa
   de la pantalla es la cola de pagadores, que se **pliega** en una fila con su suma
   (`PAYER_TABLE_PRINT_LIMIT`). **No hay descarga de Excel**: aquí el Excel es la fuente.
+
+## Reportería de ingresos (PyG › subitem)
+
+`/profit-loss/revenue-report` sustituye el libro de Excel con el que la firma comparaba sus ventas
+año contra año y las medía contra lo que cobró con tarjeta, lo que el emisor se llevó en comisión y
+lo que gastó en publicidad. **Todo lo que dibuja es derivado**: el ingreso es la **raíz 4** del
+estado de resultados y se recalcula en cada render.
+
+- **Es subitem de PyG** por lo mismo que Ventas por servicio: lee la raíz 4 del **cliente activo**,
+  y el selector de clientes lo monta el módulo padre en el header. Se ve **siempre** en el sidebar.
+- **Lo único que se guarda es lo que ningún plan de cuentas contiene** (`liderboard-revenue`, tabla
+  `external`, particionada por el `clientId` de PyG): cobros con tarjeta, comisiones TC y
+  publicidad. Ni un porcentaje, ni un total, ni un promedio, ni un crecimiento — una copia guardada
+  envejece al siguiente ajuste en Datos y la pantalla contradiría a los datos. La cuarta cifra,
+  **«Ventas» escritas a mano**, es el _respaldo_ de los años anteriores al workspace:
+  `resolveMonthlyRevenue` es el único sitio donde las dos se encuentran y **solo** la lee donde PyG
+  no tiene nada, nunca por encima.
+- **`null` no es `0`.** Un mes que nunca se cargó no dibuja barra, lleva raya en la tabla y **queda
+  fuera de todo denominador**; un mes cargado que vendió cero es un cero real.
+- **Las cuatro correcciones sobre el libro que sustituye son el mismo defecto**: un cociente cuyos
+  dos términos cubren tramos distintos.
+  1. El **promedio** divide entre los meses CARGADOS, no entre doce.
+  2. Un **porcentaje** solo se calcula sobre los meses en que existen sus DOS términos: julio con
+     ventas y sin cobro registrado no entra en ninguno de los dos totales.
+  3. El **crecimiento** se mide sobre el tramo que los dos años COMPARTEN.
+  4. La marca de **«Mes» acota todos los años marcados a la vez**, así que siete meses no se
+     comparan nunca contra doce.
+     `ratio.ts` y `growth.ts` son las definiciones únicas de una participación y de una variación: las
+     leen las tarjetas, sus gemelas en tabla, el cajón de captura, el Excel y el informe.
+- **Barra: Año · Mes, y nada más.** No hay «Cuenta contable» —la lectura ES una cuenta— ni «Centro
+  de costo» —la lectura es de la EMPRESA, y suma todos los centros como el libro que sustituye—.
+  El año sigue la regla de la casa (ninguna marca = todas) y no deja chips, porque la pantalla abre
+  con todos marcados; el mes sí los deja. Junto a «Mes» hay dos **atajos, no dos filtros**:
+  **Semestre** (S1/S2) y **Quimestre** (Q1/Q2/Q3, el bucket ecuatoriano de cinco meses, con
+  noviembre y diciembre como tercer tramo porque cinco no divide a doce). Marcan los meses del tramo
+  en todos los años marcados, y lo que queda escrito es la marca de «Mes» — los tramos viven en
+  `lib/period.ts` y son un CONJUNTO DE MESES CON NOMBRE, nunca una granularidad.
+- **Seis lecturas en una página**: comparativo de ventas por año (meses en el eje, un año por
+  serie) · ventas por año, con «Cifra» eligiendo entre el **Total** del tramo y el **promedio
+  mensual** —que es la forma bajo la que los años son de verdad comparables, porque un total corto
+  lo es por calendario y no por negocio— · crecimiento contra cada año anterior, con «Ver en»
+  (dólares o porcentaje) · y las **tres tarjetas «vs»**, que salen de UN constructor recorriendo
+  `series.ts`: añadir una cuarta serie externa es una entrada ahí y tres campos en la fila guardada.
+- **Quién puede CAPTURAR lo decide `availability.ts`** y solo eso: MicroPlus, y nunca el consolidado
+  entre clientes —escribir ahí crearía una partición que no es de nadie—. **No es un candado sobre
+  la lectura**: el comparativo y el crecimiento leen la raíz 4, que todo plan de cuentas declara, así
+  que están disponibles en cualquier workspace y también en el consolidado. Donde no se puede
+  capturar, las tres tarjetas «vs» y «Registrar datos» **no se dibujan**.
+- **«Registrar datos» abre un cajón, no un modal**: se escribe la cifra de junio y se ve moverse el
+  porcentaje de la tarjeta detrás, que es la señal de que el número aterrizó donde se quería. El año
+  se **teclea** (una firma con diez años de historia no puede llegar a 2016 a golpe de «atrás»), y
+  qué cuenta como año lo decide `year-input.ts`. Se puede **pegar un bloque copiado de Excel**:
+  `paste.ts` distingue tres cosas y la tercera es la que importa —un número se escribe, una celda
+  vacía **borra** a `null`, y lo que no parsea **deja intacto** el destino—, la misma regla de
+  `NumericInput` aplicada a un bloque.
+- **Un Excel («Comparativo completo») y ningún «Cargar»**: aquí no se sube nada, así que
+  `ExcelActions` no recibe `upload` y el botón no existe. El libro recorre la misma
+  `ChartCardSpec.table` que dibuja la pantalla, una hoja por lectura.
+- **Estado vacío propio**: si el cliente no tiene ningún estado cargado, la pantalla nombra el paso
+  que falta, dice de qué módulo es y lleva ahí — no ofrece una carga que no escribiría nada.
 
 ## Ocupaciones (análisis hotelero)
 
@@ -1035,10 +1168,10 @@ obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaci
 - **Un cliente sin esos datos no bloquea nada**: descarga igual, con el logo y el nombre. Qué falta
   lo dice el diálogo del cliente, que es donde se llena.
 
-## Informes imprimibles (PyG y Sueldos por Áreas)
+## Informes imprimibles (PyG, Sueldos por Áreas, Ventas por servicio y Reportería de ingresos)
 
-Dos módulos ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros: pedir
-un informe no es seleccionar nada) que abre una vista previa a ancho de página y deja que el
+Cuatro pantallas ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros:
+pedir un informe no es seleccionar nada) que abre una vista previa a ancho de página y deja que el
 navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación de PDF en código.
 
 - **Mecanismo compartido** (`components/ui/report-layer.tsx`): `ReportLayer` monta el portal sobre
@@ -1054,6 +1187,20 @@ navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación 
   filtros aplicados (incluidos los que nadie marcó), resumen del periodo, gráficos y análisis,
   análisis vertical, el estado de resultados completo (una tabla por centro y año, apaisada si no
   cabe en vertical) y el anexo de centros de costo.
+- **Ventas por servicio** (`components/profit-loss/sales/report/`) y **Reportería de ingresos**
+  (`components/profit-loss/revenue/report/`) reciben del proveedor la **misma entrada** con la que se
+  construyeron las tarjetas de la pantalla, así que el papel no puede decir una cifra que la pantalla
+  no diga. A qué hoja va cada sección lo decide el **número de columnas** de su tabla (más de seis
+  se lleva su propia hoja apaisada), no una lista escrita a mano. Ambos imprimen tabla y gráfica
+  juntas y **sin ningún interruptor**: el informe de ingresos saca las dos cifras de la lectura anual
+  y las dos unidades del crecimiento, porque lo que en pantalla es una elección en el papel son
+  simplemente dos secciones. Las formas 3D no se imprimen —son canvas WebGL— y `flatOnly()` lo hace
+  cumplir lanzando un error en vez de dejar un hueco.
+- **`ReportTable`** (`components/ui/report-table.tsx`) es la tabla impresa de una sección, construida
+  desde la MISMA `ChartTable` que dibuja la pantalla. No reutiliza la gemela de `ChartCard` —esa
+  tiene columna fija, `hover` y un cuerpo de 12 px que en el papel no significan nada—, y toma el
+  tamaño de letra que dicta `statementFit`. Nació dentro de Ventas por servicio con la nota de que
+  una tercera copia era el momento de unirlas; Reportería de ingresos fue esa tercera.
 - **Sueldos por Áreas** (`components/payroll/salaries/report/`): cabecera compacta —cliente, rango
   de periodos, cuántas áreas y fecha de generación— seguida del **consolidado por área** y **una
   sección por área**, cada una con su tabla y su gráfica impresas JUNTAS (sin el interruptor «Ver

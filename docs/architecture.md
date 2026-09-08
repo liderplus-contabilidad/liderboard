@@ -1712,6 +1712,272 @@ eje entero, la regla del informe de PyG: un interruptor impreso es un botón que
 deriva de cuántas opciones recibe—: aquí el Excel es la FUENTE y la pantalla lee; lo que la firma
 entrega es este PDF.
 
+**REPORTERÍA DE INGRESOS** (`/profit-loss/revenue-report`, subitem del sidebar) sustituye un libro de
+Excel con el que la firma comparaba sus ventas año contra año y las medía contra tres cifras que
+ningún plan de cuentas contiene: lo que cobró con tarjeta, lo que el emisor se llevó en comisión y lo
+que gastó en publicidad. **Cuelga de PyG** por lo mismo que Ventas por servicio: lo que lee es la
+RAÍZ 4 del cliente activo, y el selector de clientes lo monta el módulo padre en el header.
+
+**Lo que se guarda es SOLO lo que ningún estado de resultados puede contestar.** El ingreso es la
+raíz 4 y se recalcula en cada render; ni un porcentaje, ni un total, ni un promedio, ni un
+crecimiento se escriben nunca — una copia guardada envejece al siguiente ajuste en Datos y la
+pantalla acabaría contradiciendo a los datos, que es la regla de la casa desde el consolidado de PyG.
+La cuarta cifra de la fila, **`manualRevenue`**, es el animal distinto y el docstring lo dice a
+propósito: es el RESPALDO de los años anteriores al workspace —historia que nunca se subió y que
+ningún estado puede responder—, y `resolveMonthlyRevenue` es el único sitio donde las dos se
+encuentran. Lee lo guardado **solo donde PyG no tiene nada, jamás por encima**, y eso es lo que
+mantiene «nada derivado se persiste» siendo verdad: un mes que el estado cubre no se consulta aquí,
+así que nada tecleado puede contradecirlo. Las cuatro cifras son `number | null` y no `number`, y el
+módulo entero descansa en esa distinción: `null` es «no se registró» y `0` es «se registró y fue
+cero». Un mes con ventas y sin captura tiene que quedar FUERA de todo porcentaje, y eso es imposible
+de decir si la ausencia se escribe como un cero.
+
+**Base Dexie propia (`liderboard-revenue`), particionada por el `clientId` de PyG**, y `db.ts` es la
+única puerta, por el mismo motivo que en los otros cuatro módulos: con varios clientes en una tabla,
+una consulta sin `clientId` mezcla dos empresas en silencio y nada aguas abajo puede notarlo. Es una
+base APARTE de la de PyG aunque la partición sea el cliente de PyG: lo que se guarda aquí no es una
+cuenta de ningún plan, y meterlo en la base del estado obligaría a esa base a contener algo que no es
+una cuenta. Lo compartido es la identidad del cliente, no el almacén. El índice compuesto es ÚNICO
+(`&[clientId+year+monthIndex]`) porque un cliente no puede tener dos veces el mismo mes: con el `id`
+derivado de esa terna, recargar un mes lo REEMPLAZA por construcción en vez de depender de que
+alguien se acuerde de borrar antes.
+
+**Las cuatro correcciones sobre el libro que sustituye son, todas, el mismo defecto**: un cociente
+cuyos dos términos cubren tramos distintos. El archivo real es la demostración. (a) El **promedio**
+divide entre los meses CARGADOS y no entre doce: 2026 lleva siete meses sumando $1.683.720,41, así
+que su promedio mensual es $240.531,49 y el libro escribe $240.312,73, que no es un redondeo.
+(b) Un **porcentaje** solo se calcula sobre los meses en que existen sus DOS términos: julio de 2026
+tiene ventas ($241.844,03) y ningún cobro registrado, así que la participación del periodo es
+Ene–Jun —$259.028,58 de $1.441.876,38, **18,0 %**— y el libro divide seis meses de tarjeta contra
+siete de ventas y escribe 15,4 %. El caso que prueba el diagnóstico es la comisión: sale **5,0 %** en
+el libro y aquí igual, y es justo la única cuyos dos términos cubren los mismos seis meses. El
+defecto nunca fue la aritmética, fue el TRAMO. (c) El **crecimiento** se mide sobre el tramo que los
+dos años comparten: el libro compara $1.683.720,41 —siete meses de 2026— contra $1.915.467,90 —los
+doce de 2024— y concluye `+19 %`; sobre Ene–Jul la respuesta es `+$706.189,26` y `+72,2 %`. (d) Y la
+marca de **«Mes» acota todos los años marcados a la vez**, que es lo que hace que la comparación no
+pueda volver a ser siete meses contra doce. `ratio.ts` y `growth.ts` son las definiciones ÚNICAS de
+una participación y de una variación —las leen las tarjetas, sus gemelas, el cajón, el Excel y el
+informe—, porque dos sitios calculando el mismo número se separan y después ninguna cifra puede decir
+cuál de las dos tiene razón, que es exactamente cómo el libro acabó con cuatro números mal.
+
+**La barra es Año · Mes y nada más, y las dos ausencias son decisiones.** No hay «Cuenta contable»
+porque la lectura ES una cuenta, y no hay «Centro de costo» porque la lectura es de la EMPRESA: el
+libro que sustituye compara lo que facturó la firma, no lo que hizo un centro, así que el módulo suma
+todos (`mergeCenters`) y nunca ofrece acotarlo. **El año sigue la regla de la casa** —ninguna marca es
+TODAS— y no la excepción declarada de Ventas por servicio, y la diferencia está en qué hace cada
+pantalla con varios años: allí se SUMAN en un total, así que cinco ejercicios dan una cifra que nadie
+pidió; aquí cada año es su propia serie y la comparación ES la lectura — el libro que se sustituye es
+precisamente una matriz de todos los años uno al lado del otro. Lo que la regla sigue garantizando es
+que la lista nunca quede VACÍA: desmarcar el último año resuelve otra vez a todos. Los años **no
+dejan chip** —la pantalla abre con todos marcados, y una franja llena antes de que el usuario toque
+nada no dice nada—, los meses sí. Y junto a «Mes» hay dos ATAJOS y no dos filtros —«Semestre» y
+«Quimestre», el bucket ecuatoriano de cinco meses—: marcan los meses de su tramo en todos los años
+marcados y lo que queda escrito es la marca de «Mes», que es lo que impide que existan dos sitios
+donde acotar el eje. Un tramo no es una `Frequency` y esa
+distinción sostiene el grid de Datos: una `Frequency` AGREGA, y `12 / 5 = 2,4` construiría dos buckets
+y noviembre y diciembre desaparecerían sin que nada lo dijera. Un tramo es un CONJUNTO DE MESES CON
+NOMBRE, y quien lo consume marca esos meses; el resto —Q3, dos meses— viaja explícito en el dato.
+
+**Seis lecturas descritas como DATOS** (`cards/`: `option` + `table`), que es lo que deja al informe
+leer exactamente la misma construcción que la pantalla. Son un archivo por lectura con `chrome.ts`
+para lo que comparten e `index.ts` como única puerta, y esa división no es estética: era un módulo de
+1.244 líneas, y así fue como el eje del crecimiento y la nota del propio crecimiento acabaron
+nombrando dos tramos distintos sin que nadie lo viera. **«Ventas por año» es el eslabón que faltaba**
+—el comparativo lee un año mes a mes y el crecimiento lee un año contra otro; entre los dos nadie
+dibujaba el año como una sola cifra, que es lo primero que a la firma le piden—, y su control
+«Cifra» no es decoración sino la corrección: una barra de «Total» hace de 2026 —siete meses— el peor
+año del tablero, que es justo el defecto que este módulo existe para arreglar, mientras que el
+«Promedio mensual» divide entre los meses cargados y es la forma bajo la que los cuatro años son de
+verdad comparables. Las dos son dólares, así que UN eje lleva cualquiera de las dos — la app prohíbe
+un segundo `yAxis`, y dibujar total y promedio juntos dejaría al promedio un muñón un orden de
+magnitud por debajo. **Las tres tarjetas «vs» salen de UN constructor** recorriendo
+`REVENUE_SERIES_ORDER`, que es un orden de IDENTIDAD y no de presentación: «cobros con tarjeta» es el
+mismo naranja siendo el numerador de una tarjeta y el denominador de la de abajo, y sin un orden fijo
+el lector tendría que re-aprender la leyenda en cada scroll. Añadir una cuarta serie externa
+—efectivo, transferencias— es una entrada ahí más sus tres campos en la fila guardada, y ningún
+cambio en el constructor. Y esas tarjetas **ya no llevan «Ver como»**: la pregunta que hacen es «qué
+parte de aquello es esto», que es un monto Y su porcentaje a la vez, y partida en un interruptor la
+mitad en pantalla había que leerla contra la mitad que el lector llevaba en la cabeza mientras el eje
+del porcentaje se re-escalaba en silencio. Ahora se dibujan los dos montos —son conmensurables, que
+es por lo que un solo `yAxis` los lleva— y la barra del numerador escribe su participación debajo de
+su cifra, en tinta más floja.
+
+**Quién puede CAPTURAR lo decide `availability.ts`, y son DOS reglas de las que solo una es un
+candado.** El comparativo y el crecimiento leen la raíz 4, que todo plan de cuentas declara, así que
+están disponibles en cualquier workspace —MicroPlus, Dingoo, estado único, mensual por centros— y
+también dentro del consolidado entre clientes: esa regla es ESTRUCTURAL —¿tiene el plan cuentas de
+ingreso?— y no se decide aquí, se decide por haber algo que leer. Es la lección que
+`EXPENSE_DISTRIBUTION_PRESET` ya aprendió, donde un candado atado al sistema resultó ser un problema
+de legibilidad y no de cálculo. Lo que SÍ está cerrado es la captura, por dos motivos independientes:
+MicroPlus, porque cobros, comisiones y pauta son cifras que lleva este cliente y ofrecer el cajón a
+una firma que no las lleva es ofrecer un formulario vacío; y nunca el consolidado, porque no es un
+cliente sino la SUMA de todos, y escribir ahí crearía una partición que no es de nadie, que ninguna
+pantalla lista y a la que ningún borrado llega — la misma defensa que `assertRealClient` monta en la
+base de PyG. Donde devuelve `false`, las tres tarjetas «vs» y «Registrar datos» **no se dibujan**; no
+se pintan deshabilitados, que es la regla que la barra de filtros ya sostiene en todas partes.
+
+**«Registrar datos» abre un CAJÓN y no un modal**, que es la regla que `side-panel.tsx` vs
+`modal.tsx` enuncia: el modal interrumpe y apaga el fondo para algo que se lee SOLO, y esto se lee
+JUNTO a lo que lo abrió — se teclea la cifra de junio y se ve moverse el porcentaje de la tarjeta
+detrás. Eso no es una gentileza: es la señal de que el número aterrizó donde se quería. El año se
+**teclea** en vez de elegirse en una tira, porque una firma con diez años de historia tiene que llegar
+a 2016 sin pulsar «atrás» ocho veces y un control segmentado que crece un botón por año deja de caber
+mucho antes de dejar de ser útil; qué cuenta como año lo decide `year-input.ts`, en la capa pura y no
+en línea dentro del componente, porque una validación escrita en el componente es una regla que nada
+puede testear y que el siguiente que la necesite va a escribir un poco distinta. El techo es el año
+SIGUIENTE al actual, deliberadamente: un presupuesto se carga antes de que empiece su ejercicio, y
+cortar en «hoy» rechazaría el único año futuro que sirve. Y se puede **pegar un bloque copiado de
+Excel** —el gesto que el contador ya tiene en las manos—: `paste.ts` resuelve cada celda a una de
+tres cosas y la tercera es la que importa. Un número se escribe; una celda VACÍA borra el destino a
+`null`, porque una celda vacía en el origen es «no se registró» y pegar tiene que poder decir eso
+también; y lo que NO parsea deja el destino **intacto**. Es la regla de `NumericInput` —«el texto que
+no parsea no se compromete: revertir es más honesto que escribir un cero que nadie tecleó»— aplicada
+a un bloque en vez de a una celda: una palabra suelta en mitad de una columna no puede borrar el mes
+donde cae, ni impedir que las once cifras buenas de alrededor aterricen.
+
+**Un Excel y ningún «Cargar»**. Aquí no se sube nada —el ingreso lo carga PyG y lo externo se teclea
+en el cajón—, así que `ExcelActions` no recibe `upload` y el botón sencillamente no existe: un
+control permanentemente deshabilitado es justo lo que la regla de la casa prohíbe, y por eso el
+primitivo pasó a tener el `upload` OPCIONAL en vez de que este módulo pintara uno muerto. La descarga
+es UNA, así que el primitivo la rinde como botón plano y no como menú — la forma se deriva de cuántas
+opciones recibe, y este envoltorio nunca la declara. La captura llegó a ofrecerse como un segundo
+archivo, «Datos externos», y no ganaba nada: su matriz ya son las tres hojas «vs» del comparativo, así
+que el menú le pedía al usuario elegir entre un archivo y un subconjunto de ese mismo archivo. El
+libro recorre la MISMA `ChartCardSpec.table` que dibuja la pantalla, que es lo único que garantiza que
+el archivo y la pantalla no puedan discrepar: la firma coteja la descarga contra su propio libro celda
+por celda.
+
+**El informe es el CUARTO sobre `ReportLayer`** y tampoco estrena nada — la capa `.report-layer` va
+atada a la CLASE y no a un id, que es exactamente lo que permite un cuarto sin que imprima a los
+otros detrás. Recibe del proveedor la MISMA entrada con la que se construyeron las tarjetas
+(`cardsInput`), así que el papel no puede decir una cifra que la pantalla no diga, y quien recibe el
+PDF ya no tiene la pantalla al lado para cotejar. **En el papel no hay controles**: ignora «Ver en»,
+«Cifra» y «Ver como», e imprime las DOS cifras de la lectura anual y las DOS unidades del
+crecimiento, siempre en el único cuerpo que el papel tiene — lo que en pantalla es una elección, en
+el papel son simplemente dos secciones. A qué hoja va cada sección lo decide el NÚMERO DE COLUMNAS de
+su tabla y no una lista escrita a mano: la del crecimiento lleva dos columnas por año base, así que
+con tres bases llega a seis y se lleva su propia hoja apaisada, y la regla sigue valiendo si mañana
+una lectura cambia de forma.
+
+**Y el estado vacío que esta pantalla puede tener no lo llena ningún archivo suyo**: que el PyG del
+cliente esté vacío. Aquí no hay nada que subir, así que el vacío nombra el paso que falta, dice de
+qué módulo es y lleva ahí, en vez de ofrecer una carga que no escribiría nada — la misma regla por la
+que Ventas por servicio manda a PyG cuando no hay cliente: ninguna pantalla se queda muda, ni siquiera
+cuando el paso que espera es de otro módulo.
+
+**LA TERCERA DIMENSIÓN llegó como una FORMA MÁS y nunca como un reemplazo**, y esa es la única regla
+que la sostiene. Las lecturas 3D del panel son cinco —el skyline de la evolución de Ventas, el
+skyline del comparativo de ingresos, el sólido y la rosca del anexo de gastos, y el sólido de las
+tarjetas «vs»—, y todas son la MISMA reducción que ya dibujaba su gemela plana: los mismos números,
+la misma tabla gemela, la forma plana a un clic. Lo que el eje de profundidad compra en los skylines
+es concreto y se puede decir en una frase: **cada serie vuelve a descansar en CERO**. Apiladas, solo
+la banda de abajo lo hace, y las de arriba se apoyan en un suelo que se mueve con los meses, así que
+su altura es comparable contra la banda de al lado y contra nada más — y menos aún contra sí misma en
+otro mes, que es justo para lo que se lee una evolución.
+
+**Y donde el 3D NO es neutral, se dice.** Un ángulo en perspectiva no es el ángulo que representa: una
+tarta se lee comparando ángulos, y una cámara inclinada hace que las porciones cercanas abarquen más
+pantalla que las lejanas — la distorsión cae exactamente sobre la codificación. Por eso la rosca del
+anexo es una ADICIÓN y jamás un reemplazo: «Pastel» queda a un clic, la tarjeta conserva su gemela en
+tabla con todas las cifras, y la cámara abre ALTA —casi en planta— que es lo que mantiene la cara
+superior, donde viven los ángulos, cerca de la verdad. Se lee para ver la forma del reparto; la cifra
+se comprueba en la tabla. `echarts-gl` además no tiene tarta, así que cada porción es una SUPERFICIE
+paramétrica barrida desde una sección; el detalle —por qué el barrido incluye las dos caras del corte
+radial, y qué pasaba cuando no las incluía: una rosca de tubos abiertos que se leía como cáscaras
+separadas— vive en el docstring de `solid-pie.ts`, que es donde vincula.
+
+**El ESCENARIO es el único fondo oscuro de la app y existe para lo único que lo necesita.** Un `bar3D`
+es un SÓLIDO: lo que dice dónde termina es su silueta, y sobre una tarjeta blanca las caras pálidas de
+una barra baja se disuelven en el fondo mientras las altas se leen como recortes. Contra un cielo
+nocturno toda barra tiene canto, que es la razón entera de dibujar la forma en tres dimensiones — y
+es lo que el nombre de la tarjeta venía diciendo desde el principio: un skyline se lee contra un
+cielo. **Es un escenario enmarcado dentro de una tarjeta blanca, nunca un modo oscuro**, y ninguna
+lectura 2D toma sus valores. Las marcas que se paran encima son `CHART_STAGE_PALETTE` y no la escala
+clara: medidas contra `sky`, las ocho ranuras de identidad dan 3,14 · 5,02 · 8,12 · 7,87 · 5,90 ·
+3,17 · **2,36** · 4,16, y esa séptima no la salva ningún fondo oscuro (contra negro puro sigue en
+2,82). Re-escalonar los mismos tonos arreglaba la lectura y dejaba el aspecto intacto, que no era lo
+que se pedía: lo que el cuadro 3D quería era el REGISTRO de la referencia —turquesa, coral, morado,
+ámbar, naranja— sobre navy, y esos tonos están muestreados de ella, no adivinados. **Lo que cuesta,
+dicho en claro: en el escenario un servicio NO lleva el tono que lleva en las tarjetas blancas.**
+`stageColor` traduce por RANURA, así que la identidad se conserva donde se puede —el mismo servicio es
+el mismo color en todas las tarjetas 3D, y la leyenda y el eje de profundidad lo nombran—, pero el
+azul de «Composición por servicio» aquí es turquesa. Es el trueque que este registro pide.
+
+**Lo que separa dos caras es la RAZÓN, no la presencia de la luz.** El primer escenario se dibujó
+plano, solo ambiente, sobre la regla de que una cara iluminada convierte un color en tres. Sobre una
+tarjeta blanca esa regla era correcta; sobre esta dejaba quince sólidos leyéndose como una cinta
+continua, porque sin luz todas las caras de todas las barras devuelven el mismo píxel y dónde termina
+una y empieza la siguiente no está dibujado en ninguna parte — y `bar3D` no tiene borde al que
+recurrir: renderiza una sola malla fusionada con colores por vértice, e `itemStyle.borderWidth` no es
+una propiedad que lea. El aparejo que hay ahora (`CHART_STAGE_LIGHT`, uno solo, montado por TODA
+tarjeta 3D) está fijado desde las tres caras que el lector realmente ve, y su piso es la cara
+LATERAL y no el mínimo teórico, porque una cámara fija nunca enseña la trasera. Todas las mediciones
+—por ranura, por sección, por porción, iluminadas y en sombra— quedan escritas en los docstrings de
+`palette.ts`, junto al set que gobiernan: **se miden con el validador de la skill `dataviz`, nunca a
+ojo**. La única comprobación que el escenario no pasa es la BANDA DE LUMINOSIDAD, y es el registro y
+no un descuido: un ámbar solo sostiene croma por encima de L 0,70, así que dentro de la banda el
+`#f7bf57` de la referencia sale un dorado sucio y su naranja uno quemado — medido, dibujado y
+comparado al lado antes de elegirlo. Ese techo protege contra una marca que DESLUMBRA sobre fondo
+oscuro; todo lo que protege la LECTURA —contraste, separación, croma— pasa con holgura, y este suelo
+es un navy, no un negro.
+
+**El megabyte entra tarde y por su propia puerta.** `echarts-gl` pesa casi tanto como el resto de la
+app, así que no entra por el grafo de módulos sino por un `import()` **memoizado a nivel de módulo** —
+no por componente: `use()` es un registro GLOBAL, y dos tarjetas montándose a la vez lo descargarían y
+lo registrarían dos veces. Hasta que llega no hay instancia en absoluto: inicializar una y dibujar
+dentro dos veces es exactamente lo que hace parpadear el primer pintado, así que la tarjeta dice
+«Preparando la vista 3D…» DENTRO de la caja que el dibujo va a ocupar, y si la carga falla dice cómo
+volver a la forma plana. Un import fallido no envenena el memo: el siguiente montaje puede reintentar.
+El renderer se elige por INSTANCIA —canvas para 3D, SVG para el resto— porque `echarts-gl` dibuja por
+WebGL y sencillamente no produce nada bajo SVG, y no hay forma de cambiarle el renderer a una
+instancia viva: un cambio de dimensión la re-crea. Y `--color-chart-stage` espeja `CHART_STAGE.sky` en
+el `@theme` porque la tarjeta pinta ese fondo DEBAJO del canvas: sin él, un cuadro WebGL que aún no
+cargó es un rectángulo blanco que de golpe se vuelve negro.
+
+**`Chart3DOption` es un tipo APARTE y no una extensión de `ChartOption`, y ahí está el punto**: todo lo
+que trae una gráfica 3D —una tercera escala, una cámara, una luz— sería peso muerto sobre las
+veintitantas opciones planas que la app ya escribe, y el invariante «ninguna gráfica declara dos
+`yAxis`» tiene que seguir significando lo mismo allí. `is3DOption` es la ÚNICA forma de distinguirlas y
+`grid3D` es obligatorio para que esa comprobación sea total. `ChartCardSpec<O>` se ensancha **por
+tarjeta** y no para todos, por lo mismo: un constructor que nunca devuelve un `grid3D` no debería
+tener que demostrarlo en cada lectura. Y `flatOnly()` es la puerta de todo lo que no es un canvas de
+navegador: es UNA función y no una por consumidor porque la regla es una —ni una hoja de papel ni una
+hoja de cálculo tienen WebGL—, y lanza en vez de castear, así que si algún día se invierte un valor
+por omisión falla AHÍ y a gritos, en lugar de imprimir un rectángulo vacío donde estaba la lectura.
+
+**Y de ahí sale la asimetría de los valores por omisión**: la forma que un llamador recibe SIN pedir
+nada es siempre la plana (`SCREEN_SOLID_VIEW`, `stacked`), y la pantalla es quien pide la otra. El
+informe y el Excel construyen las mismas tarjetas con la misma entrada y sin opciones, así que lo que
+los mantiene correctos es la omisión y no una regla que alguien tenga que recordar. La excepción son
+las dos tarjetas de barras horizontales de Ventas —composición y pagadores—, que abren PLANAS por un
+motivo que pertenece a la forma: ahí el nombre entero de un servicio y su cifra caben al lado de cada
+barra, y de pie en el escenario los nombres se vuelven un eje truncado y las cifras se van al hover —
+mejor estampa y peor lectura, así que la pide el lector.
+
+**`lib/charts/solid-bars.ts` es la forma sólida compartida**, y vive en `lib/charts/` y no en un
+módulo porque la dibujan tres tarjetas de dos módulos —el anexo de gastos, «Composición por servicio»
+y «Concentración por pagador»— y una cuarta serían cuatro copias. Es el caso de la paleta otra vez: lo
+compartido es la forma y su cromo, nunca el dominio, así que lo que entra ya son rótulos, valores y
+colores, y los dos formateadores los entrega quien posee las cifras. **No es un tercer eje**: con una
+fila la profundidad es el grosor de la barra y nada más; con varias lleva lo que la gráfica plana
+dibujaba como series AGRUPADAS. Nada se codifica ahí que la forma plana no codificara ya. Los dos
+skylines deliberadamente NO se construyen sobre ella: su eje de profundidad lleva una lectura propia
+—cada servicio, cada año, descansando en cero— y su cámara y su caja están medidas para eso. Este es
+un friso.
+
+**Y las tres decisiones que mantienen a un sólido siendo lectura y no efecto son las mismas en los
+cinco sitios**: el aparejo es el que dibuja el CANTO; **la cifra NO se escribe sobre cada barra**
+—una tarjeta plana puede ponerla al lado de cada fila, pero quince rótulos flotando en perspectiva
+aterrizan a quince profundidades y dejan de alinearse con nada—, así que va en la barra apuntada y la
+forma plana está a un clic; y **una barra ocupa poco más de la MITAD de su celda**, porque lo que
+deja es el hueco y el hueco es lo que dice que son dos: en perspectiva la cara lateral de la barra
+más cercana se come casi todo.
+
+**Un mes que nunca llegó no produce dato**, así que el suelo queda vacío ahí; un mes cargado que
+vendió cero recibe `minHeight`, una losa a ras. Es la misma distinción `null` ≠ `0` que gobierna todo
+el panel, dicha en el único lenguaje que un sólido tiene: ausencia de cuerpo contra cuerpo de altura
+cero.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind
@@ -1880,3 +2146,39 @@ acabarían poniéndolo en cuatro sitios. Centra con dos columnas `1fr` iguales a
 el número de columnas— vive por eso en `lib/report/page-fit.ts` y no en `profit-loss/`, y
 `formatTimestampEs` —la fecha «18 de agosto de 2026, 14:05» que sella la cabecera de los dos
 informes— vive en `lib/date.ts`, para que ninguno de los dos pueda decir la fecha de dos maneras.
+
+**«AMPLIAR» es la lectura de cerca que media tarjeta no da.** En una retícula de dos columnas cada
+dibujo mide media pantalla de ancho y entre 260 y 320 px de alto, y a ese tamaño una ratio mes a mes
+de dos ejercicios se lee como tendencia pero no como lectura fina: doce puntos comparten un cuadro
+donde ninguno se distingue de su vecino y la única salida era cazar un punto de 6 px con el tooltip.
+El botón vive en la cabecera **junto a «Ver como tabla»** y no antes de la ⓘ, porque los dos son el
+mismo tipo de control —actúan sobre el CUERPO— y la guía contesta otra cosa; separarlos con ella los
+desemparejaba. Es `expandable` y está **apagado por defecto**, al revés que `tableToggle` y
+`showGuide`, que el informe apaga: aquí el reparto es el contrario —una pantalla lo quiere y quince
+no, y los cuatro informes imprimibles menos que ninguna, donde un botón es algo que nadie puede
+pulsar—, así que apagado por omisión es lo que deja a esta tarjeta sin poder cambiar nada fuera de
+quien lo pide. El estado vive en la TARJETA y no en el llamador —al contrario que `collapsed`, que
+tiene un «Cerrar todos» exigiendo una sola verdad—: solo hay una ventana abierta a la vez y nadie más
+necesita saber cuál. No se dibuja plegada, ni sin series, ni sobre la gemela en tabla, donde
+prometería una tabla grande y devolvería una gráfica. **La ventana lleva la GRÁFICA sola** —sin «Ver
+como», sin gemela, sin ⓘ—: la forma se elige en la cabecera y se mira ahí dentro, así que lo que se
+amplía es la `option` que la tarjeta tiene puesta en ese momento. Su `Chart` es una SEGUNDA instancia
+y no esta movida: una instancia de ECharts está atada al nodo donde se inicializó, así que moverla la
+destruiría y la re-crearía igual, dejando además un hueco en la tarjeta. Y su alto se **mide** con un
+`ResizeObserver` en vez de calcularse sobre `innerHeight`, que obligaría a adivinar la cabecera del
+diálogo y sus rellenos —dos números que se separan en cuanto alguien toca el CSS—; nada se dibuja
+hasta que llega la primera medida, porque montar en una caja de cero y redimensionar un frame después
+es un parpadeo regalado. Para todo eso `Modal` ganó `fill`, una variante que toma la PANTALLA en vez
+de ceñirse a un ancho: escribir un segundo `<dialog>` habría repetido por tercera vez la capa
+superior, la trampa de foco, Escape y el velo, que es la deuda que `ConfirmDialog` ya arrastra.
+
+**`ReportTable` es la tabla impresa de una sección, y vive en `components/ui/` porque es el TERCER
+informe que la necesita.** Se construye desde la MISMA `ChartTable` que ya arma la pantalla —nunca una
+segunda lectura de los datos— y no reutiliza la gemela de `chart-card.tsx`: esa tiene afordancias de
+PANTALLA —columna pegajosa, `hover`, un cuerpo fijo de 12 px— que en el papel no significan nada, y no
+acepta el tamaño de letra que dicta `statementFit`. Nació dentro de Ventas por servicio con la nota de
+que una tercera copia sería el momento de plegarlas juntas, y Reportería de ingresos fue esa tercera:
+dos copias son una coincidencia, tres son un componente. `SalesReportTable` queda como un alias
+delgado para que sus llamadores se lean igual que antes. La de Sueldos por Áreas **no** se pliega aquí
+todavía, y es deliberado: difiere en qué hace con las filas largas, y aplanar esa diferencia es un
+cambio en cómo se lee ese informe, no una mudanza.
