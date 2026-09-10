@@ -45,7 +45,7 @@ const ANNUAL_FIGURES: { value: AnnualShape; label: string }[] = [
 ];
 
 /**
- * «Reportería de ingresos»: the six sheets the firm keeps in a workbook, as five cards on ONE page.
+ * «Reportería de ingresos»: the sheets the firm keeps in a workbook, as six cards on ONE page.
  *
  * Everything it shows is DERIVED. The revenue is the raíz 4 of the estado de resultados and is
  * recomputed on every render; the only thing persisted are the three figures no chart of accounts

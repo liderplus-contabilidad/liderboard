@@ -618,7 +618,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 26 ago 2026</span>
+      <span><b>Actualizado</b> 8 sep 2026</span>
       <span><b>Rama</b> main</span>
       <span><b>Repositorio</b> liderplboard</span>
     </div>
@@ -672,8 +672,10 @@
           <h4>Pérdidas y Ganancias</h4>
           <p>
             Estados de resultados por cliente, centro de costo y año. Datos, Gráficos, Análisis
-            vertical e informe imprimible. Su subitem <b>Ventas por servicio</b> lee el reporte de
-            facturación, con base propia.
+            vertical e informe imprimible. Sus dos subitems tienen base propia:
+            <b>Ventas por servicio</b> lee el reporte de facturación, y
+            <b>Reportería de ingresos</b> compara las ventas año contra año y las mide contra tres
+            cifras que ningún plan de cuentas contiene.
           </p>
         </div>
         <div class="mod cost">
@@ -957,6 +959,16 @@
                 </td>
               </tr>
               <tr>
+                <td class="k">echarts-gl</td>
+                <td class="t">^2.1.0</td>
+                <td>
+                  Las lecturas en <strong>tres dimensiones</strong> (skylines, sólidos y rosca), por
+                  WebGL y renderizador canvas. Pesa casi tanto como el resto de la aplicación, así
+                  que entra por un <code>import()</code> memoizado en el primer montaje 3D: una
+                  pantalla sin tarjeta 3D no lo descarga.
+                </td>
+              </tr>
+              <tr>
                 <td class="k">tailwindcss</td>
                 <td class="t">^4</td>
                 <td>
@@ -1037,7 +1049,12 @@
           El proyecto usa <strong>oxc</strong>, no ESLint/Prettier: ejecutar <code>eslint</code> o
           <code>prettier</code> falla porque no están instalados. ECharts mide texto en canvas,
           donde una variable CSS no resuelve; <code>components/ui/chart.tsx</code> lee la familia
-          generada desde <code>:root</code> y la sustituye antes de <code>setOption</code>.
+          generada desde <code>:root</code> y la sustituye antes de <code>setOption</code>. Ese
+          mismo archivo es el único que llama a <code>echarts.init</code> y elige el renderizador
+          <strong>por instancia</strong> —canvas para 3D, SVG para el resto—:
+          <code>echarts-gl</code>
+          dibuja por WebGL y no produce nada bajo SVG, y a una instancia viva no se le puede cambiar
+          el renderizador, así que un cambio de dimensión la re-crea.
         </p>
       </div>
     </section>
@@ -1046,10 +1063,11 @@
     <section id="datos">
       <h2><span class="num">04</span> Modelo de datos</h2>
       <p class="section-note">
-        Cuatro bases IndexedDB independientes. No comparten tablas ni claves: un cliente de P&amp;G
-        y un cliente de Rol de Pagos son entidades distintas aunque se llamen igual. La única que
-        comparte una <em>identidad</em> con otra es <code>liderboard-sales</code>, particionada por
-        el <code>clientId</code> de P&amp;G — lo compartido es el cliente, nunca el almacén.
+        Cinco bases IndexedDB independientes. No comparten tablas ni claves: un cliente de P&amp;G y
+        un cliente de Rol de Pagos son entidades distintas aunque se llamen igual. Las dos que
+        comparten una <em>identidad</em> con otra son <code>liderboard-sales</code> y
+        <code>liderboard-revenue</code>, ambas particionadas por el <code>clientId</code> de P&amp;G
+        — lo compartido es el cliente, nunca el almacén.
       </p>
 
       <div class="card">
@@ -1088,17 +1106,26 @@
                 <td class="t">months</td>
                 <td><code>clientId</code> (el de P&amp;G)</td>
               </tr>
+              <tr>
+                <td class="k">liderboard-revenue</td>
+                <td class="t">1</td>
+                <td class="t">external</td>
+                <td><code>clientId</code> (el de P&amp;G)</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
       <p>
-        <code>liderboard-sales</code> es la excepción a las dos frases siguientes: no tiene
-        <code>active</code> —qué cliente está abierto lo decide P&amp;G, que es de donde toma la
-        partición— y su única tabla no guarda ninguna entidad propia. Base separada porque su grano
-        es la <strong>línea de factura</strong>: meterla en la base del estado obligaría a esa base
-        a guardar algo que no es una cuenta.
+        <code>liderboard-sales</code> y <code>liderboard-revenue</code> son la excepción a las dos
+        frases siguientes: ninguna tiene <code>active</code> —qué cliente está abierto lo decide
+        P&amp;G, que es de donde toman la partición— y sus tablas no guardan ninguna entidad propia.
+        Están separadas por el mismo motivo: el grano de una es la
+        <strong>línea de factura</strong> y el de la otra son
+        <strong>cifras que no son cuentas</strong> —un cobro con tarjeta, una comisión del emisor,
+        un gasto de publicidad—, y meterlas en la base del estado obligaría a esa base a guardar
+        algo que no es una cuenta.
       </p>
 
       <p>
@@ -1568,6 +1595,123 @@
           <strong>reemplaza</strong> por construcción en vez de dejar dos filas del mismo periodo.
           Nada derivado se guarda: el reparto por servicio, la concentración por pagador y la
           evolución se recalculan en cada lectura.
+        </figcaption>
+      </figure>
+
+      <h3>Diagrama ER — Reportería de ingresos</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 830 300"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-revenue"
+          >
+            <g class="er-line">
+              <path d="M 240 140 L 300 140" />
+            </g>
+            <text x="270" y="132" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="270" y="162" text-anchor="middle" class="er-card">particiona</text>
+
+            <rect
+              x="30"
+              y="80"
+              width="210"
+              height="100"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="30"
+              y="80"
+              width="210"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="30" y1="108" x2="240" y2="108" class="er-rule" />
+            <text x="44" y="99" class="er-title">clients</text>
+            <text x="44" y="127" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="44" y="145" class="er-field">name : string</text>
+            <text x="44" y="163" class="er-field" style="font-size: 10px">
+              otra base — liderboard-pyg
+            </text>
+
+            <rect x="300" y="30" width="300" height="250" rx="10" class="er-box" />
+            <rect x="300" y="30" width="300" height="28" rx="10" class="er-box er-box-head" />
+            <rect x="300" y="48" width="300" height="10" class="er-box er-box-head" stroke="none" />
+            <line x1="300" y1="58" x2="600" y2="58" class="er-rule" />
+            <text x="314" y="49" class="er-title">external</text>
+            <text x="314" y="77" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : "clientId:AAAA-MM"
+            </text>
+            <text x="314" y="95" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              clientId : uuid
+            </text>
+            <text x="314" y="113" class="er-field">
+              <tspan class="er-key">UQ</tspan>
+              [clientId + year + monthIndex]
+            </text>
+            <text x="314" y="131" class="er-field">year : number</text>
+            <text x="314" y="149" class="er-field">monthIndex : 0–11</text>
+            <text x="314" y="167" class="er-field">manualRevenue : number | null</text>
+            <text x="314" y="185" class="er-field">cardRevenue : number | null</text>
+            <text x="314" y="203" class="er-field">cardFees : number | null</text>
+            <text x="314" y="221" class="er-field">adSpend : number | null</text>
+            <text x="314" y="245" class="er-field" style="font-size: 10px">
+              un registro = cliente · año · mes
+            </text>
+            <text x="314" y="263" class="er-field" style="font-size: 10px">
+              null = «no se registró» · 0 = «fue cero»
+            </text>
+
+            <rect
+              x="650"
+              y="80"
+              width="160"
+              height="170"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="650"
+              y="80"
+              width="160"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="650" y1="108" x2="810" y2="108" class="er-rule" />
+            <text x="664" y="99" class="er-title">no se guarda</text>
+            <text x="664" y="127" class="er-field">ventas : raíz 4 de P&amp;G</text>
+            <text x="664" y="145" class="er-field">promedio mensual</text>
+            <text x="664" y="163" class="er-field">participación %</text>
+            <text x="664" y="181" class="er-field">crecimiento</text>
+            <text x="664" y="199" class="er-field">totales del tramo</text>
+            <text x="664" y="223" class="er-field" style="font-size: 10px">
+              derivado en cada render
+            </text>
+            <line x1="600" y1="156" x2="650" y2="156" class="er-line" stroke-dasharray="4 3" />
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-revenue</code> v1. Una sola tabla y ninguna entidad propia: la partición
+          es el <code>clientId</code> de <strong>otra base</strong>, la de P&amp;G. Guarda
+          <strong>solo lo que ningún plan de cuentas contiene</strong> —cobro con tarjeta, comisión
+          del emisor y publicidad—; la venta es la <strong>raíz 4</strong> del estado de resultados
+          y se recalcula en cada lectura. <code>manualRevenue</code> es la excepción y es un
+          <em>respaldo</em>, no una anulación: solo se lee en los años anteriores al espacio de
+          trabajo, donde P&amp;G no tiene nada que decir. El índice compuesto es
+          <strong>único</strong>, así que reescribir un mes lo <strong>reemplaza</strong> por
+          construcción.
         </figcaption>
       </figure>
     </section>
@@ -2532,6 +2676,99 @@
         </div>
       </div>
 
+      <h3>liderboard-revenue</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>external</h4>
+          <span>
+            Cliente × año × mes · <code>id</code>, índices <code>clientId</code>,
+            <code>&amp;[clientId+year+monthIndex]</code>, <code>[clientId+year]</code>
+          </span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>
+                  <code>&lt;clientId&gt;:&lt;año&gt;-&lt;mes&gt;</code>. Derivado de la terna, así
+                  que reescribir un mes lo reemplaza por <code>put</code> en vez de depender de que
+                  alguien recuerde borrar antes.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">clientId <span class="ix">IX</span></td>
+                <td class="t">string (uuid)</td>
+                <td>
+                  El cliente de <code>liderboard-pyg</code>. Ninguna consulta de este módulo va sin
+                  él: con varios clientes en una tabla, una lectura sin acotar mezcla dos empresas
+                  en silencio y nada aguas abajo puede notarlo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">year · monthIndex</td>
+                <td class="t">number · 0–11</td>
+                <td>
+                  El mes al que pertenecen las cifras. El año se <strong>teclea</strong> en el cajón
+                  de captura y se valida aparte (<code>year-input.ts</code>): cuatro dígitos, desde
+                  2000 y hasta el año siguiente al actual —un presupuesto se carga antes de que
+                  empiece su ejercicio—.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">manualRevenue</td>
+                <td class="t">number | null</td>
+                <td>
+                  Ventas escritas a mano. Es la única cifra de esta tabla que también existe en otro
+                  sitio, y por eso es un <strong>respaldo y nunca una anulación</strong>: un mes que
+                  P&amp;G declara cargado se lee de la raíz 4 y este valor no se consulta. Sirve
+                  para los años anteriores al espacio de trabajo, que ningún estado puede responder.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cardRevenue</td>
+                <td class="t">number | null</td>
+                <td>Ingresos por cobro con tarjeta del mes.</td>
+              </tr>
+              <tr>
+                <td class="k">cardFees</td>
+                <td class="t">number | null</td>
+                <td>Comisión y retenciones que se llevó el emisor.</td>
+              </tr>
+              <tr>
+                <td class="k">adSpend</td>
+                <td class="t">number | null</td>
+                <td>Gasto de publicidad del mes.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span class="label">Por qué las cuatro cifras admiten <code>null</code></span>
+        <p>
+          <code>null</code> es «no se registró» y <code>0</code> es «se registró y fue cero», y el
+          módulo entero descansa en esa distinción. Un mes con ventas y sin captura tiene que quedar
+          <strong>fuera de todo denominador</strong> —un porcentaje solo se calcula sobre los meses
+          en que existen sus dos términos, y un crecimiento solo sobre el tramo que los dos años
+          comparten—, y eso es imposible de decir si la ausencia se escribe como un cero. Es la
+          misma regla que <code>loadedMonthsByYear</code> sostiene en P&amp;G y
+          <code>monthHasData</code>
+          en Ocupaciones. Una fila que se queda sin ninguna de las cuatro cifras se
+          <strong>borra</strong>, en vez de quedar como un registro de cuatro nulos.
+        </p>
+      </div>
+
       <div class="callout">
         <span class="label">Lo que no se persiste</span>
         <p>
@@ -2539,10 +2776,14 @@
           cuentas, los consolidados de P&amp;G y Ocupaciones, y todo indicador hotelero (ADR,
           ocupación, RevPAR, PAX) son <strong>derivados en cada render</strong>. También lo son las
           tres lecturas de Ventas por servicio —reparto por servicio, concentración por pagador y
-          evolución del año—: lo único que guarda ese módulo son las líneas que trajo cada Excel.
-          Los parámetros del cálculo de nómina (SBU, tasas del IESS, multiplicadores de hora extra)
-          hoy son la constante <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para
-          guardarse junto al período cuando cambien por año, pero todavía no tienen columna.
+          evolución del año—: lo único que guarda ese módulo son las líneas que trajo cada Excel. Y
+          en Reportería de ingresos <strong>todo lo que se ve es derivado</strong>: la venta es la
+          raíz 4 del estado, y el promedio mensual, las tres participaciones y el crecimiento contra
+          cada año anterior se recalculan en cada render — lo único guardado son las tres cifras que
+          ningún plan de cuentas contiene. Los parámetros del cálculo de nómina (SBU, tasas del
+          IESS, multiplicadores de hora extra) hoy son la constante
+          <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para guardarse junto al período
+          cuando cambien por año, pero todavía no tienen columna.
         </p>
       </div>
     </section>
@@ -2648,6 +2889,18 @@
                   Base nueva, una sola tabla <code>months</code>. Sin migración que correr: nació
                   después de que la partición por cliente fuera la norma, así que su índice único
                   <code>[clientId+year+monthIndex]</code> está desde la v1.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">revenue</td>
+                <td class="t">1</td>
+                <td>
+                  Base nueva, una sola tabla <code>external</code>, con el mismo índice único desde
+                  la v1. <code>manualRevenue</code> se agregó a la fila
+                  <strong>sin subir de versión</strong>, y a propósito: Dexie versiona
+                  <em>índices</em>, no campos, y ese campo no está indexado por nada. Lo que una
+                  fila escrita antes necesita no es una migración sino un valor por omisión, y
+                  <code>db.ts</code> se lo da en la puerta.
                 </td>
               </tr>
             </tbody>

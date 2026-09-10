@@ -112,6 +112,10 @@ Learn it once and four modules read the same way:
 - **One definition per figure.** Two places computing the same number drift apart and nothing can say
   which is right: `rootSign`, `shareOf`, `computeLinePayroll`, `letterheadLines`, `monthHasData`,
   `sameToTheCentavo`, `costCenterHeading`, `payer.ts`, `periodRangeLabel`.
+- **How wide a bar is and how a figure fits over it are ONE answer each**, not a number per card:
+  `lib/charts/bar-fit.ts` (a ceiling derived from the axis' arithmetic) and `lib/charts/label-fit.ts`
+  (each series writes its own ROW, and what gives way is the body and then the cents — never the
+  figure itself).
 - **A control read by ONE card lives in that card's header** (Ocupaciones' «Ver por», Análisis'
   «Base», «Ocultar ceros», «Ver como»); a control read by every card lives in the filter bar, where
   it leaves a chip. In the filter bar a control that means nothing for the open data RENDERS NOTHING
@@ -207,6 +211,39 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
   chooses it**, never a control. `payer.ts` is the one place that decides whether a payer is named.
 - The bar is Año · Mes · Servicio; `scopedPeriodLabel` (`filters.ts`) is the ONE composition of the
   label the tiles, the three subtitles and the report header read.
+- Two cards carry a **body switch** («Ver como»: `plano` / `solido`, `lib/charts/solid-bars.ts`) and
+  the evolution a **shape switch** («Apilada» / «Skyline 3D», `EvolutionView`) — the second is two
+  READINGS and not two bodies, so it renders nothing where there is no breakdown to shape. With ONE
+  month marked the stack spreads into one bar per SERVICE.
+
+**Reportería de ingresos** · `/profit-loss/revenue-report` (submodule of PyG) · `lib/revenue/` · its
+own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
+
+- **The revenue IS the raíz 4 of the estado de resultados**, derived on every render. What is stored
+  is only what no chart of accounts holds — `cardRevenue`, `cardFees`, `adSpend` — plus
+  `manualRevenue`, the FALLBACK for the years that predate the workspace.
+  `resolveMonthlyRevenue` (`derive.ts`) is the ONE place the two meet, and it reads the stored value
+  only where PyG has nothing, never over it.
+- **Four corrections over the workbook it replaces, and all four are the same defect** — a quotient
+  whose two terms cover different spans: the average divides by the LOADED months and not by twelve
+  (`derive.ts`); a percentage is computed only over the months where BOTH terms exist (`ratio.ts`);
+  a growth is measured over the span the two years SHARE (`growth.ts`); and «Mes» narrows every
+  marked year at once, so seven months can never be measured against twelve (`filters.ts`).
+- `ratio.ts` and `growth.ts` are THE definitions of a share and of a variation — the cards, the table
+  twins, the capture drawer, the Excel and the report all ask them. A builder that divided would be
+  the second definition.
+- **The bar is Año · Mes and nothing else.** The reading is one account and it is of the COMPANY, so
+  every center is summed and no «Centro de costo» is offered. `years` follows the house rule (no mark
+  = ALL), which is Ventas' declared exception inverted on purpose: there several years are SUMMED,
+  here each year is a series and the comparison IS the reading.
+- **`availability.ts` is the one place that says who can CAPTURE** (MicroPlus, never the
+  consolidado), and it is not a lock on the reading: comparativo and crecimiento read the raíz 4,
+  which every chart of accounts declares. Where it returns `false` the three «vs» cards and
+  «Registrar datos» are NOT DRAWN — never disabled.
+- `cards/` is one file per reading (`comparison` · `annual` · `growth` · `ratio` · `skyline`), with
+  `chrome.ts` for what they share and `index.ts` as the only door. `paste.ts` is what a block copied
+  out of Excel means; `year-input.ts` is what counts as a typed year. **Nothing is uploaded here**,
+  so `ExcelActions` gets no `upload` at all.
 
 ### Shared UI
 
@@ -221,9 +258,20 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
   `@media print` isolates (a CLASS, not an id — that is what allows a third report), Escape, the
   print title and the toolbar. `ReportSheet` is the A4 sheet; `ReportBand` is the paper letterhead
   (client logo left, title centered, center logo right — the same split the Excels use).
+- **`report-table.tsx` is the printed table of a report section**, built from the SAME `ChartTable`
+  the screen builds. It is NOT `TableTwin`: that one carries screen affordances and a fixed body
+  size, and this one takes the type size `statementFit` dictates. `SalesReportTable` is a thin alias.
 - **`chart.tsx` is the sole `echarts.init` caller** (partial imports, SVG renderer). `ChartCard`
   pairs an `option` with its table twin, capped to the chart's height, and offers `headerSlot` /
-  `footerSlot`.
+  `footerSlot`, plus `expandable` — «Ampliar», which opens the chart ALONE in a `Modal fill`.
+  `expandable` is **off by default** (one screen wants it, fifteen do not) and renders nothing when
+  the card is collapsed, has no series, or is showing its table twin.
+- **The third dimension is a SEPARATE type.** `Chart3DOption` (`grid3D` required, `is3DOption`
+  discriminates) never widens `ChartOption`, so «no chart declares two `yAxis`» keeps meaning what it
+  means. `chart.tsx` chooses the renderer per INSTANCE —canvas for 3D, SVG for the rest— and loads
+  `echarts-gl` through a memoised `import()` on the first 3D mount, never before. `flatOnly()` is the
+  door for everything that is not a browser canvas: the printed reports and the Excels throw rather
+  than print an empty rectangle.
 
 ## Design system
 
@@ -263,6 +311,16 @@ duplication. The sets are DISJOINT and each answers a different job:
 | `CHART_SLICE_SEQUENCE` (18)             | Composition's six then the decorative twelve: a breakdown that names ALL its parts (annex doughnut, Ventas' payers).     |
 | `CHART_RANKING_SEQUENCE` (20)           | The expense ranking's fifteen bars: identity first, decorative tail.                                                     |
 | `CHART_HEAT_RAMP`                       | Sequential, one hue, monotonic in lightness. Never categorical.                                                          |
+| `CHART_STAGE_*` (+ `stageColor`)        | The 3D STAGE: the app's ONE dark ground, and the only scale not derived from `CHART_PALETTE`. Never for a 2D card.       |
+
+**The stage is a set of its own** because the light scale cannot do its job: measured on navy two of
+its eight slots fall under 3:1. `CHART_STAGE` is the ground and its chrome, `CHART_STAGE_LIGHT` the
+one rig every 3D card mounts (it is what draws the EDGE — `bar3D` has no border), and
+`CHART_STAGE_PALETTE` / `CHART_STAGE_SECTION` / `CHART_STAGE_SLICE_SEQUENCE` / `CHART_STAGE_NEUTRAL`
+the marks that stand on it. `stageColor` and `stageSliceColor` are the ONLY way in, and they map BY
+SLOT — so a service keeps its identity across the 3D cards, at the declared cost of not wearing the
+same hue it wears on the white ones. `--color-chart-stage` mirrors `CHART_STAGE.sky` in `@theme`
+because the card paints that ground BEHIND the canvas.
 
 Two invariants are load-bearing: **no chart declares two `yAxis`** (the `ChartOption` type forbids
 it), and **the palette never cycles** — a slot past the set falls back to `CHART_NEUTRAL`.

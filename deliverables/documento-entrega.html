@@ -623,7 +623,7 @@
       <div class="card">
         <div class="card-head">
           <h4>Módulos entregados</h4>
-          <span>3 módulos · 2 submódulos</span>
+          <span>3 módulos · 3 submódulos</span>
         </div>
         <div class="scroller">
           <table>
@@ -678,6 +678,18 @@
                   estado de resultados.
                 </td>
               </tr>
+              <tr>
+                <td class="k">Reportería de ingresos</td>
+                <td>
+                  Submódulo de Pérdidas y Ganancias: comparativo de ventas año contra año, lectura
+                  anual (total y promedio mensual), crecimiento contra cada ejercicio anterior y
+                  tres lecturas de participación —cobros con tarjeta, comisiones y publicidad sobre
+                  la venta—, con descarga a Excel e informe imprimible. La venta es la
+                  <strong>raíz 4 del propio estado de resultados</strong> y se recalcula siempre; lo
+                  único que se captura a mano son las tres cifras que ningún plan de cuentas
+                  contiene, en un cajón de registro por año.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -693,7 +705,9 @@
           <strong>borrar los datos del sitio en el navegador borra el trabajo guardado</strong>. El
           respaldo es la descarga a Excel, disponible en cada módulo salvo en
           <em>Ventas por servicio</em>, donde el Excel es la fuente y el respaldo son los reportes
-          originales.
+          originales. En <em>Reportería de ingresos</em> la descarga existe y es un respaldo
+          parcial: lo capturado a mano viaja en ella, pero la venta que la acompaña se vuelve a
+          derivar del estado de resultados cargado en Pérdidas y Ganancias.
         </p>
       </div>
     </section>
@@ -752,7 +766,7 @@
 
       <div class="card">
         <div class="card-head">
-          <h4>Evidencia al 18 de agosto de 2026</h4>
+          <h4>Evidencia al 8 de septiembre de 2026</h4>
           <span>rama main</span>
         </div>
         <div class="scroller">
@@ -767,7 +781,7 @@
               <tr>
                 <td class="k">Pruebas automatizadas</td>
                 <td>
-                  <strong>2.376 pruebas en 111 archivos, todas pasan</strong> (<code>pnpm test</code
+                  <strong>3.054 pruebas en 138 archivos, todas pasan</strong> (<code>pnpm test</code
                   >). Cubren la capa de cálculo: motor de nómina, análisis financiero, consolidados,
                   lectura y escritura de Excel.
                 </td>
@@ -1009,6 +1023,11 @@
                 <td class="k">ECharts</td>
                 <td>Gráficos</td>
                 <td class="t">Apache-2.0</td>
+              </tr>
+              <tr>
+                <td class="k">ECharts GL</td>
+                <td>Gráficos en tres dimensiones</td>
+                <td class="t">MIT</td>
               </tr>
               <tr>
                 <td class="k">SheetJS (xlsx)</td>
