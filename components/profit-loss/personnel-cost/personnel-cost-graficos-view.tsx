@@ -46,9 +46,11 @@ type SolidCard = keyof NonNullable<PersonnelCardsInput["solidViews"]>;
  * different half of the question, which is why it is not the same control.
  */
 const SHAPED: { card: "sections" | "ratio" | "groups" | "concepts"; solid: SolidCard | null }[] = [
+  // The evolution right under «Planta vs Externos»: the two are the same stack read at two
+  // resolutions —two sections, then the groups inside them— so they are read one after the other.
   { card: "sections", solid: "sections" },
-  { card: "ratio", solid: "ratio" },
   { card: "groups", solid: null },
+  { card: "ratio", solid: "ratio" },
   { card: "concepts", solid: "concepts" },
 ];
 

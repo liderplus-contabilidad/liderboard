@@ -374,30 +374,36 @@ function columnTotals(series: readonly ChartSeries[], columns: number): (number 
 }
 
 /**
- * Which band WRITES the total: the last one that has a figure anywhere on the axis.
+ * The total's LINE over a stack — PyG's `stackedTotalOption` same mark, in ink and not in a palette
+ * slot, because it is not one more entity of the comparison. ONE definition for the two stacked
+ * cards («Planta vs Externos» and the evolution), so they cannot draw the same idea two ways.
  *
- * A stack's label sits at the top edge of the band carrying it, so the topmost band is where the
- * column's total belongs. But a client with no outside fees reads `externos` as `null` the whole
- * exercise, and hanging the figure there would have left the card with no figures at all — so the
- * choice falls back down the stack instead of onto silence. Returns `-1` when nothing is drawn.
+ * Here it IS the stack's ceiling, since every band is a positive cost. It earns its place anyway,
+ * and for the reason the reader gave: a ceiling is not a TRAJECTORY. The eye follows a coloured
+ * band, not the top edge of separate bars, so «subió o bajó» costs a comparison of heights across
+ * gaps. The line answers it without one.
+ *
+ * It is also the one mark that WRITES the column's figure: it already is the total, so hanging the
+ * label on it instead of on a band means no band ever needs choosing as the carrier.
  */
-function labelCarrier(series: readonly ChartSeries[]): number {
-  return series.reduce(
-    (found, entry, index) => (entry.data.some((value) => value !== null) ? index : found),
-    -1,
-  );
-}
-
-/** The same series with the total's figure hung off the band that has to write it. */
-function writingTotals(
-  series: readonly ChartSeries[],
-  totals: readonly (number | null)[],
-  fit: LabelFit,
-): ChartSeries[] {
-  const carrier = labelCarrier(series);
-  return series.map((entry, index) =>
-    index === carrier ? { ...entry, ...columnTotalLabel(fit, totals) } : entry,
-  );
+function totalLine(id: string, totals: readonly (number | null)[], fit: LabelFit): ChartSeries {
+  return {
+    id,
+    type: "line",
+    name: "Total",
+    data: [...totals],
+    lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth, type: "solid" },
+    itemStyle: { color: CHART_INK.strong },
+    symbol: "circle",
+    symbolSize: CHART_MARK.symbolSize,
+    smooth: false,
+    // Measured as ONE series and not as one more band: what decides the figure's shape is its own
+    // row over the columns, not the stack below it.
+    ...columnTotalLabel(fit, totals),
+    // Over the bars, never under: a line hidden behind the stack it measures is a line that is not
+    // there.
+    z: 3,
+  };
 }
 
 /**
@@ -627,7 +633,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
             yAxis: valueAxis(money),
             legend: legendFor(true),
             tooltip: axisTooltip(moneyExact),
-            series: writingTotals(series, totals, fit),
+            series: [...series, totalLine("sections-total", totals, fit)],
           },
     table,
     note: sentence(
@@ -925,33 +931,7 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     emphasis: { focus: "series" },
   }));
 
-  /**
-   * The total's LINE over the stack — PyG's `stackedTotalOption` same mark, in ink and not in a
-   * palette slot, because it is not a fourth entity of the comparison.
-   *
-   * Unlike over there it IS the stack's ceiling, since every group is a positive cost. It earns its
-   * place anyway, and for the reason the reader gave: a ceiling is not a TRAJECTORY. The eye follows a
-   * coloured band, not the top edge of six separate bars, so «subió o bajó» costs a comparison of
-   * heights across gaps. The line answers it without one.
-   */
-  const totalSeries: ChartSeries = {
-    id: "evolution-total",
-    type: "line",
-    name: "Total",
-    data: totals,
-    lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth, type: "solid" },
-    itemStyle: { color: CHART_INK.strong },
-    symbol: "circle",
-    symbolSize: CHART_MARK.symbolSize,
-    smooth: false,
-    // It is the one mark of the card that already IS the column's total, so it is the one that writes
-    // it. Measured as ONE series and not as the fourth: what decides the figure's shape is its own
-    // row over the columns, not the stack below it.
-    ...columnTotalLabel(labelFit, totals),
-    // Over the bars, never under: a line hidden behind the stack it measures is a line that is not
-    // there.
-    z: 3,
-  };
+  const totalSeries = totalLine("evolution-total", totals, labelFit);
 
   const table: ChartTable = {
     columns: [...rows.map((row) => row.name), "Total"],

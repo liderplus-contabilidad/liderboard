@@ -79,9 +79,21 @@ describe("Un año pone los MESES en el eje; varios, los ejercicios", () => {
 describe("Planta vs Externos", () => {
   const { sections } = cards();
 
-  it("apila las dos secciones sobre el total del mes", () => {
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Externos"]);
-    expect(sections.option?.series.every((entry) => entry.stack === "costo")).toBe(true);
+  it("apila las dos secciones y les pone encima la línea del total, como la evolución", () => {
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
+    const bars = sections.option?.series.filter((entry) => entry.type === "bar") ?? [];
+    expect(bars.every((entry) => entry.stack === "costo")).toBe(true);
+    const total = sections.option?.series.find((entry) => entry.name === "Total");
+    expect(total?.type).toBe("line");
+    // La línea ES el techo de la pila: enero suma 55,989.00 + 48,214.12.
+    expect(total?.data[0]).toBeCloseTo(104203.12, 2);
+    // Y es la única que escribe la cifra: las bandas no llevan rótulo.
+    expect(total?.label).toBeDefined();
+    expect(bars.every((entry) => entry.label === undefined)).toBe(true);
   });
 
   it("la tabla gemela cierra en el total real de cada mes", () => {
@@ -95,7 +107,7 @@ describe("Planta vs Externos", () => {
 
   it("una marca de «Grupo» acota cada sección a sus grupos marcados y calla la que no tiene ninguno", () => {
     const { sections, groups } = cards([goldenYear()], ["afiliados"]);
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Total"]);
     // Planta acotada a Afiliados es la serie de Afiliados de la evolución, cifra por cifra.
     const afiliados = flat(groups.option).series.find((entry) => entry.name === "Afiliados");
     expect(sections.option?.series[0].data).toEqual(afiliados?.data);
@@ -105,7 +117,7 @@ describe("Planta vs Externos", () => {
 
   it("marcar Honorarios médicos deja solo Externos", () => {
     const { sections } = cards([goldenYear()], ["honorarios-medicos"]);
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Externos"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Externos", "Total"]);
   });
 
   it("un ejercicio tipeado no tiene grupos, así que la marca no le quita ninguna sección", () => {
@@ -117,6 +129,7 @@ describe("Planta vs Externos", () => {
     expect(marked.sections.option?.series.map((entry) => entry.name)).toEqual([
       "Planta",
       "Externos",
+      "Total",
     ]);
   });
 });
@@ -421,24 +434,24 @@ describe("La cifra sobre la columna", () => {
   const writing = (option: ChartOption | null) =>
     (option?.series ?? []).filter((entry) => entry.label?.show);
 
-  it("la pila escribe el TOTAL del mes y no el de la banda que la lleva", () => {
+  it("la pila escribe el TOTAL del mes, y lo escribe la línea del total y no una banda", () => {
     const { sections } = cards();
     const written = writing(sections.option);
-    expect(written.map((entry) => entry.name)).toEqual(["Externos"]);
+    expect(written.map((entry) => entry.name)).toEqual(["Total"]);
     const label = written[0].label;
     expect(label?.position).toBe("top");
-    // Enero: 55,989.00 de planta + 48,214.12 de externos. La banda que la lleva vale lo segundo.
-    expect(label?.formatter?.(param(0, 48214.12))).toBe("$104,203.12");
+    // Enero: 55,989.00 de planta + 48,214.12 de externos.
+    expect(label?.formatter?.(param(0, 104203.12))).toBe("$104,203.12");
     expect(label?.formatter?.(param(5, 0))).toBe("$144,277.59");
   });
 
-  it("la lleva la última sección CON datos: sin externos, la escribe planta", () => {
+  it("sin externos la línea sigue siendo la que escribe, y vale lo que planta", () => {
     const soloPlanta = new Map(
       [...GOLDEN_ACCOUNTS].filter(([code]) => !code.startsWith("5.3.03.")),
     );
     const { sections } = cards([goldenYear({ accounts: soloPlanta })]);
     const written = writing(sections.option);
-    expect(written.map((entry) => entry.name)).toEqual(["Planta"]);
+    expect(written.map((entry) => entry.name)).toEqual(["Total"]);
     expect(written[0].label?.formatter?.(param(0, 55989))).toBe("$55,989.00");
   });
 
@@ -601,7 +614,11 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
 
   it("«Planta vs Externos» se dibuja igual: las dos secciones existen en las dos formas", () => {
     const { sections } = typed();
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Externos"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
     expect(sections.table.rows[0].values).toEqual(["$1,750.00", "$2,000.00", "$3,750.00"]);
   });
 
