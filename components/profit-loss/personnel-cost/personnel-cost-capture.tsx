@@ -34,6 +34,7 @@ export function PersonnelCostCapture() {
     captureYear,
     captureSeries,
     captureRevenue,
+    datosMonths,
     removeCaptureYear,
     typedMonthsIn,
     saveLegacy,
@@ -63,17 +64,18 @@ export function PersonnelCostCapture() {
     [saveLegacyBlock],
   );
 
-  // The COST of the year, and «Ventas» is deliberately not in it: the line is a divisor, not a fifth
-  // concept, so summing it here would inflate the very figure the percentage beside it divides.
+  // The COST of the span the bar resolves —all twelve months, or the marked ones—, and «Ventas» is
+  // deliberately not in it: the line is a divisor, not a fifth concept, so summing it here would
+  // inflate the very figure the percentage beside it divides.
   const total = useMemo(() => {
     let sum = 0;
     for (const row of PERSONNEL_LEGACY_COST_ROWS) {
-      for (const value of captureSeries[row.id]) {
-        sum += value ?? 0;
+      for (const month of datosMonths) {
+        sum += captureSeries[row.id][month] ?? 0;
       }
     }
     return sum;
-  }, [captureSeries]);
+  }, [captureSeries, datosMonths]);
 
   const typed = typedMonthsIn(captureYear);
 
@@ -90,17 +92,18 @@ export function PersonnelCostCapture() {
           </p>
         </div>
         {/* El borrado actúa sobre el año ABIERTO y por eso vive aquí: es el que el lector ya está
-            mirando, y una papelera por pestaña convertiría la tira de arriba en un campo de minas. */}
-        {typed > 0 && (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Trash2 size={14} />}
-            onClick={() => setPendingRemoval(captureYear)}
-          >
-            Borrar {captureYear}
-          </Button>
-        )}
+            mirando, y una papelera por pestaña convertiría la tira de arriba en un campo de minas.
+            SIEMPRE visible, con o sin cifras: un año recién agregado y vacío es una pestaña que de otro
+            modo nadie podría cerrar, y uno con datos se borra igual —la confirmación dice cuántos
+            meses se van. */}
+        <Button
+          size="sm"
+          variant="danger"
+          icon={<Trash2 size={14} />}
+          onClick={() => setPendingRemoval(captureYear)}
+        >
+          Borrar {captureYear}
+        </Button>
       </header>
 
       <div className="flex flex-col gap-4 px-[18px] py-4">
@@ -114,6 +117,7 @@ export function PersonnelCostCapture() {
 
         <PersonnelCostCaptureGrid
           series={captureSeries}
+          months={datosMonths}
           revenue={captureRevenue}
           onCommit={commit}
           onPasteMonths={pasteMonths}
@@ -123,7 +127,11 @@ export function PersonnelCostCapture() {
       <ConfirmDialog
         open={pendingRemoval !== null}
         title={`Borrar el ejercicio ${pendingRemoval ?? ""}`}
-        description="Se borran los doce meses de las cuatro líneas. No se puede deshacer."
+        description={
+          typed > 0
+            ? `Se borran ${typed === 1 ? "el mes escrito" : `los ${typed} meses escritos`} de las cuatro líneas y el año desaparece de la tira. No se puede deshacer.`
+            : "El año no tiene cifras: solo desaparece de la tira."
+        }
         confirmLabel="Borrar"
         variant="destructive"
         busy={removing}

@@ -11,6 +11,7 @@ import {
   PersonnelCostForeignSystem,
   PersonnelCostNoData,
 } from "./personnel-cost-empty-state";
+import { PersonnelCostExcelActions } from "./personnel-cost-excel-actions";
 import { PersonnelCostToolbar } from "./personnel-cost-toolbar";
 
 /**
@@ -111,12 +112,16 @@ function PersonnelCostContent() {
       return <div className="px-7 py-5">{gap}</div>;
     }
     // With no exercise at all the strip is still the way IN: it carries no tab yet and its «Agregar
-    // año» is the only thing on the page that can create one.
+    // año» is the only thing on the page that can create one — and so is the Excel, which is how a
+    // backup comes back before the first estado de resultados does.
     return (
       <div className="flex h-full flex-col">
         <YearTabs />
         <div className="flex flex-1 flex-col gap-4 overflow-auto bg-canvas px-7 py-5">
           {gap}
+          <div className="flex justify-end">
+            <PersonnelCostExcelActions />
+          </div>
           <Capture />
         </div>
       </div>
@@ -135,11 +140,11 @@ function PersonnelCostContent() {
       />
 
       {/* Los EJERCICIOS del cliente, y SÓLO sobre Datos: abrir un año dice qué tabla se ve, y en
-          Gráficos no hay ninguna que cambie. La tira abre uno; la barra de abajo marca cuáles se
-          comparan — dos gestos distintos, dos controles. */}
+          Gráficos no hay ninguna que cambie. Allí la tira es el único selector de año —el chip «Año»
+          de la barra se esconde— y en Gráficos es al revés: el chip marca cuáles se comparan. */}
       {tab === "datos" && <YearTabs />}
 
-      <PersonnelCostToolbar />
+      <PersonnelCostToolbar tab={tab} actions={<PersonnelCostExcelActions />} />
 
       <div
         id="personnel-cost-panel"

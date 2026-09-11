@@ -16,8 +16,14 @@
  *
  * It returns a result and does not throw: each file of a batch needs to be able to explain itself
  * without bringing the others down.
+ *
+ * A workbook is read SHEET BY SHEET, each one a month: the accounting system's report carries one
+ * and the app's own download (`../export.ts`) carries one per month loaded. There is no sheet the
+ * reading skips — one that is not a month rejects the file naming the sheet, because silently
+ * dropping it is exactly how a month of a backup would go missing with nothing saying so.
  */
 import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
+import { MONTHS_FULL_ES } from "@/lib/date";
 import { toCalendarMonth, type DateRange } from "@/lib/profit-loss/upload/date-range";
 import type { ParsedSalesMonth, SalesLine } from "../types";
 import {
@@ -30,8 +36,14 @@ import {
   type SalesHeader,
 } from "./grid";
 
+/** One sheet's reading. */
 export type SalesParseResult =
   | { ok: true; month: ParsedSalesMonth }
+  | { ok: false; message: string };
+
+/** A whole workbook's reading: every sheet, in the workbook's order. */
+export type SalesWorkbookResult =
+  | { ok: true; months: ParsedSalesMonth[] }
   | { ok: false; message: string };
 
 /** One cent: below that, the difference against the file's total is floating-point noise and not an
@@ -42,16 +54,48 @@ const WRONG_FORMAT =
   "No parece el reporte «Venta de Servicios por FACTURA»: falta su título o su cabecera " +
   "CODIGO · NOMBRE · CANTIDAD · VENTA TOTAL. Sube el reporte de ventas por servicio del mes.";
 
-export function parseSalesWorkbook(data: ArrayBuffer): SalesParseResult {
+export function parseSalesWorkbook(data: ArrayBuffer): SalesWorkbookResult {
   const workbook = readWorkbook(data);
   if (!workbook) {
     return { ok: false, message: "El archivo no es un Excel que se pueda leer." };
   }
-  const grid = readGrid(workbook, workbook.SheetNames[0]);
-  if (!grid) {
+  if (workbook.SheetNames.length === 0) {
     return { ok: false, message: "El archivo no tiene ninguna hoja legible." };
   }
-  return parseSalesGrid(grid);
+
+  const months: ParsedSalesMonth[] = [];
+  // Which sheet declared each period, so a repeat can name BOTH: within one file there is no «the
+  // last one wins» — two sheets of the same month would silently halve a backup.
+  const sheetByPeriod = new Map<string, string>();
+  // The sheet is named only when there is more than one: with a single sheet the message is the
+  // file's, as it was before the reading learnt to walk them all.
+  const several = workbook.SheetNames.length > 1;
+  for (const sheetName of workbook.SheetNames) {
+    const grid = readGrid(workbook, sheetName);
+    if (!grid) {
+      return { ok: false, message: `La hoja «${sheetName}» no se puede leer.` };
+    }
+    const result = parseSalesGrid(grid);
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: several ? `Hoja «${sheetName}»: ${result.message}` : result.message,
+      };
+    }
+    const period = `${MONTHS_FULL_ES[result.month.monthIndex].toLowerCase()} ${result.month.year}`;
+    const previous = sheetByPeriod.get(period);
+    if (previous !== undefined) {
+      return {
+        ok: false,
+        message:
+          `Las hojas «${previous}» y «${sheetName}» declaran el mismo periodo (${period}). ` +
+          "Cada hoja tiene que ser un mes distinto.",
+      };
+    }
+    sheetByPeriod.set(period, sheetName);
+    months.push(result.month);
+  }
+  return { ok: true, months };
 }
 
 export function parseSalesGrid(grid: readonly Cell[][]): SalesParseResult {

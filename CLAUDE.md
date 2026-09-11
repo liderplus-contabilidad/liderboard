@@ -242,8 +242,12 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   «Registrar datos» are NOT DRAWN — never disabled.
 - `cards/` is one file per reading (`comparison` · `annual` · `growth` · `ratio` · `skyline`), with
   `chrome.ts` for what they share and `index.ts` as the only door. `paste.ts` is what a block copied
-  out of Excel means; `year-input.ts` is what counts as a typed year. **Nothing is uploaded here**,
-  so `ExcelActions` gets no `upload` at all.
+  out of Excel means; `year-input.ts` is what counts as a typed year. **The bar uploads nothing**
+  (its `ExcelActions` gets no `upload`); the one Excel that comes back in is the CAPTURE's own,
+  `capture-workbook.ts`, mounted inside the drawer: one flat sheet `Año · Mes · …` for every year of
+  the drawer, located by label, and loading it back REPLACES each year it names whole
+  (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
+  The builder's input is the parser's output, so the round-trip test is a structural equality.
 
 ### Shared UI
 

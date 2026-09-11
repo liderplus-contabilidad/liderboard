@@ -14,31 +14,51 @@ import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { MONTHS_FULL_ES } from "@/lib/date";
 import { PERSONNEL_GROUPS } from "@/lib/personnel-cost/accounts";
-import { monthMarkLabel, yearMarkLabel } from "@/lib/personnel-cost/filters";
+import {
+  activeMarkCount,
+  monthMarkLabel,
+  withGroupsCleared,
+  yearMarkLabel,
+} from "@/lib/personnel-cost/filters";
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
  * The module's ONE selection surface: **Año · Mes · Grupo**, the active marks, and the actions on the
  * right.
  *
- * It hangs under the tab bar and is read IDENTICALLY by the two tabs, which is what makes them two
- * views of one selection instead of two screens. A control read by every card lives here, where it
- * leaves a chip; a control read by ONE card lives in that card's header — which is where «Ocultar
- * filas en cero» sits, because only the grid has rows to hide.
+ * It hangs under the tab bar and serves the tab that is open (`tab`). «Año» is Gráficos' alone:
+ * Datos takes its year from the strip of exercises above the bar and hides the chip, so no tab shows
+ * two selectors of the same thing; Mes and Grupo are the same marks on both tabs, read through each
+ * tab's own universe. A control read by every card lives here, where it leaves a chip; a control read
+ * by ONE card lives in that card's header — which is where «Ocultar filas en cero» sits, because only
+ * the grid has rows to hide.
  */
-export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
-  const {
-    universe,
-    filters,
-    markCount,
-    toggleYear,
-    selectAllYears,
-    toggleMonth,
-    clearMonths,
-    toggleGroup,
-    clearGroups,
-    groupsAvailable,
-  } = usePersonnelCostData();
+export function PersonnelCostToolbar({
+  actions,
+  tab,
+}: {
+  actions?: ReactNode;
+  /**
+   * Which tab the bar is serving. Datos hides «Año»: there the year is the strip's, and a chip that
+   * said «2026» over a table the strip had opened on 2025 would be two answers to one question. Its
+   * Mes and Grupo read the OPEN year's universe — a typed year offers all twelve months and no
+   * groups — while Gráficos' read the marked years'.
+   */
+  tab: "graficos" | "datos";
+}) {
+  const data = usePersonnelCostData();
+  const { toggleYear, selectAllYears, clearMonths, toggleGroup, clearGroups } = data;
+  const hideYears = tab === "datos";
+  const universe = hideYears ? data.datosUniverse : data.universe;
+  const toggleMonth = hideYears ? data.toggleDatosMonth : data.toggleMonth;
+  const groupsAvailable = hideYears ? data.datosGroupsAvailable : data.groupsAvailable;
+  // A group mark where there are no groups is not shown as a chip either: the control that means
+  // nothing is not drawn, and neither is the mark it would have left.
+  const filters = (() => {
+    const scoped = hideYears ? data.datosFilters : data.filters;
+    return groupsAvailable ? scoped : withGroupsCleared(scoped);
+  })();
+  const markCount = activeMarkCount(filters);
 
   const markedYears = new Set(filters.years);
   const markedMonths = new Set(filters.months);
@@ -54,42 +74,44 @@ export function PersonnelCostToolbar({ actions }: { actions?: ReactNode }) {
           <>
             <ToolbarLabel icon={<SlidersHorizontal size={15} />}>Filtros</ToolbarLabel>
 
-            <Dropdown>
-              <DropdownTrigger active icon={<CalendarDays size={15} />}>
-                {`Año · ${yearMarkLabel(filters.years, universe.years)}`}
-              </DropdownTrigger>
-              <DropdownPanel width={230}>
-                {universe.years.length > 1 && (
-                  <div className="-mx-1 mb-1">
-                    {/* It POPULATES the list, it does not empty it: here «no mark» means «the most
+            {!hideYears && (
+              <Dropdown>
+                <DropdownTrigger active icon={<CalendarDays size={15} />}>
+                  {`Año · ${yearMarkLabel(filters.years, universe.years)}`}
+                </DropdownTrigger>
+                <DropdownPanel width={230}>
+                  {universe.years.length > 1 && (
+                    <div className="-mx-1 mb-1">
+                      {/* It POPULATES the list, it does not empty it: here «no mark» means «the most
                         recent», so the shortcut has to mark them all for real. */}
-                    <DropdownChoice
-                      selected={markedYears.size === universe.years.length}
-                      onSelect={selectAllYears}
-                    >
-                      Todos los años
-                    </DropdownChoice>
-                  </div>
-                )}
-                <div className="-mx-1 max-h-72 overflow-auto border-t border-border-soft pt-1.5">
-                  {[...universe.years]
-                    .sort((a, b) => b - a)
-                    .map((year) => (
-                      <DropdownOption
-                        key={year}
-                        selected={markedYears.has(year)}
-                        onToggle={() => toggleYear(year)}
+                      <DropdownChoice
+                        selected={markedYears.size === universe.years.length}
+                        onSelect={selectAllYears}
                       >
-                        <span className="font-mono tabular-nums">{year}</span>
-                      </DropdownOption>
-                    ))}
-                </div>
-                <DropdownNote>
-                  Marca varios para comparar: cada ejercicio suma su propio bloque de columnas sobre
-                  los mismos meses.
-                </DropdownNote>
-              </DropdownPanel>
-            </Dropdown>
+                        Todos los años
+                      </DropdownChoice>
+                    </div>
+                  )}
+                  <div className="-mx-1 max-h-72 overflow-auto border-t border-border-soft pt-1.5">
+                    {[...universe.years]
+                      .sort((a, b) => b - a)
+                      .map((year) => (
+                        <DropdownOption
+                          key={year}
+                          selected={markedYears.has(year)}
+                          onToggle={() => toggleYear(year)}
+                        >
+                          <span className="font-mono tabular-nums">{year}</span>
+                        </DropdownOption>
+                      ))}
+                  </div>
+                  <DropdownNote>
+                    Marca varios para comparar: cada ejercicio suma su propio bloque de columnas
+                    sobre los mismos meses.
+                  </DropdownNote>
+                </DropdownPanel>
+              </Dropdown>
+            )}
 
             {universe.months.length > 0 && (
               <Dropdown>

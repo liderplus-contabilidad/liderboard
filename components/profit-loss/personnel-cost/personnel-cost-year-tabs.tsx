@@ -21,10 +21,10 @@ import { usePersonnelCostData } from "./personnel-cost-data-provider";
  * be a control whose effect the reader cannot see: the rule this app already holds up everywhere, that
  * a control which means nothing for what is open renders nothing at all.
  *
- * **It does not narrow anything either.** The bar still marks years to COMPARE them, which is the
- * whole point of a comparativo; this strip picks the one year that is OPEN. The two gestures are
- * deliberately independent, and that is also why this is a tab strip and the filter is a dropdown:
- * exactly one can be open, and any number can be marked.
+ * **On Datos it is the ONLY selector of years.** The bar still marks years to COMPARE them, but that
+ * is Gráficos' reading and the chip is hidden here: a strip open on 2025 under a chip that said «Año ·
+ * 2026», over one table, was two answers to one question. The two gestures stay independent —
+ * exactly one can be open, any number can be marked— and each tab shows the one it reads.
  */
 export function PersonnelCostYearTabs() {
   const { universe, captureYear, setCaptureYear } = usePersonnelCostData();

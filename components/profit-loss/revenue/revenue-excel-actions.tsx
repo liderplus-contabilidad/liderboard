@@ -12,11 +12,12 @@ import { useRevenueData } from "./revenue-data-provider";
  * its own button markup. The download's FORM is derived by the primitive from how many options it
  * receives, and `busy`, the errors and the reentrancy guard live there.
  *
- * **Here nothing is uploaded**: the revenue comes from PyG and the external figures are typed into
- * the drawer, so no `upload` is passed at all and no upload button is drawn. It was rendered
- * disabled with the reason in a pill first, and that is precisely what the house rule forbids — a
- * control that means nothing for the open data does not render; the missing step belongs to another
- * module, and the empty state is where it is named.
+ * **Here nothing is uploaded**: the revenue comes from PyG, so no `upload` is passed at all and no
+ * upload button is drawn. It was rendered disabled with the reason in a pill first, and that is
+ * precisely what the house rule forbids — a control that means nothing for the open data does not
+ * render; the missing step belongs to another module, and the empty state is where it is named. The
+ * one Excel that DOES come back in —the capture's own, «Datos registrados»— has its `ExcelActions`
+ * inside the drawer that owns those figures, not in this bar.
  *
  * **ONE download, so «Excel» is a plain button and not a menu** — the primitive derives that shape
  * from the number of options it gets, which is why this wrapper never declares it. The capture used

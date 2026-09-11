@@ -1,18 +1,23 @@
 "use client";
 
 import { AlertTriangle, X } from "lucide-react";
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ExcelActions } from "@/components/ui/excel-actions";
+import { NoticeBanner } from "@/components/ui/notice-banner";
 import { SidePanel } from "@/components/ui/side-panel";
 import { cn } from "@/lib/cn";
+import { downloadBlob } from "@/lib/download";
 import { formatPercent } from "@/lib/format";
 import { maxCaptureYear, parseYearInput } from "@/lib/year-input";
+import type { CaptureYearRows } from "@/lib/revenue/capture-workbook";
 import { monthSpanLabel } from "@/lib/revenue/filters";
 import { scopeToMonths } from "@/lib/revenue/derive";
 import { readRatio } from "@/lib/revenue/ratio";
 import { RATIO_DESCRIPTORS, SERIES_LABELS, seriesOf } from "@/lib/revenue/series";
 import {
+  hasAnyAmount,
   MONTHS_IN_YEAR,
   type RevenueExternalAmounts,
   type RevenueYearInput,
@@ -21,6 +26,14 @@ import { RevenueCaptureGrid } from "./revenue-capture-grid";
 import { useRevenueData } from "./revenue-data-provider";
 
 const ALL_MONTHS = Array.from({ length: MONTHS_IN_YEAR }, (_, index) => index);
+
+/** «2022, 2023 y 2024» — how the confirmation names the years a file brings. */
+function joinYears(years: readonly number[]): string {
+  if (years.length <= 1) {
+    return years.join("");
+  }
+  return `${years.slice(0, -1).join(", ")} y ${years[years.length - 1]}`;
+}
 
 /**
  * Where the three external figures are written.
@@ -33,6 +46,12 @@ const ALL_MONTHS = Array.from({ length: MONTHS_IN_YEAR }, (_, index) => index);
  * The year has its OWN selector, independent of the bar's marks: what is being written is a year's
  * ledger, and having to unmark a comparison in order to fill in a month would make the two gestures
  * fight each other.
+ *
+ * It also carries the capture's OWN Excel («Descargar Excel» / «Cargar Excel»): every year of the
+ * drawer out as one flat sheet, and that same sheet back in replacing each year it names whole —
+ * never a «Ventas» the estado de resultados answers. The rule lives in the provider
+ * (`replaceCaptureYears`) and the file in `lib/revenue/capture-workbook.ts`; this panel only wires
+ * the pick, the error and the confirmation.
  */
 export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
   const {
@@ -49,6 +68,8 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
     captureCoverage,
     saveCapture,
     saveCaptureMonths,
+    captureRowsForExport,
+    replaceCaptureYears,
   } = useRevenueData();
 
   const commit = useCallback(
@@ -133,6 +154,79 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
   const removalMonths = pendingRemoval === null ? 0 : storedMonthsIn(pendingRemoval);
 
   /**
+   * The Excel of the capture: what is on this drawer, out as a file, and back in as the same rows.
+   *
+   * No staging modal as in Ventas —one file, one format, one yes/no— so the file input is hidden and
+   * the parse runs straight off the pick. What it read WAITS in `pendingImport` behind a
+   * `ConfirmDialog`, the same one «Quitar año» uses, because replacing a year that holds figures is
+   * as destructive as removing it. A rejected file shows its message here and opens nothing.
+   */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<CaptureYearRows[] | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const downloadCapture = useCallback(async () => {
+    // Dynamic import: ExcelJS does not go into the drawer's bundle for a button most sessions never
+    // press.
+    const { buildCaptureWorkbook, captureWorkbookFilename } =
+      await import("@/lib/revenue/capture-workbook");
+    const header = { clientName: clientName ?? "Cliente" };
+    const buffer = await buildCaptureWorkbook(captureRowsForExport(), header).xlsx.writeBuffer();
+    downloadBlob(
+      new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      captureWorkbookFilename(header),
+    );
+  }, [captureRowsForExport, clientName]);
+
+  const pickFile = useCallback(async (list: FileList | null) => {
+    // Materialized BEFORE the first `await`: the input's value is cleared right afterwards, and that
+    // empties the live `FileList`.
+    const file = list?.[0];
+    if (!file) {
+      return;
+    }
+    setImportError(null);
+    try {
+      const { parseCaptureWorkbook } = await import("@/lib/revenue/capture-workbook");
+      const result = parseCaptureWorkbook(await file.arrayBuffer());
+      if (!result.ok) {
+        setImportError(result.message);
+        return;
+      }
+      if (result.years.length === 0) {
+        setImportError("El archivo tiene la cabecera pero ninguna fila de datos.");
+        return;
+      }
+      setPendingImport(result.years);
+    } catch {
+      setImportError("El archivo no es un Excel que se pueda leer.");
+    }
+  }, []);
+
+  const confirmImport = useCallback(async () => {
+    if (pendingImport === null) {
+      return;
+    }
+    setImporting(true);
+    try {
+      await replaceCaptureYears(pendingImport);
+    } finally {
+      setImporting(false);
+      setPendingImport(null);
+    }
+  }, [pendingImport, replaceCaptureYears]);
+
+  const importYears = pendingImport?.map((entry) => entry.year) ?? [];
+  const importMonths =
+    pendingImport?.reduce(
+      (count, entry) => count + entry.months.filter((amounts) => hasAnyAmount(amounts)).length,
+      0,
+    ) ?? 0;
+
+  /**
    * The three figures the capture produces, recomputed live from the SAME `ratio.ts` the cards read.
    * Nothing is stored: a percentage written down would go stale at the next adjustment in Datos.
    */
@@ -183,6 +277,64 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
       onClose={onClose}
     >
       <div className="flex flex-col gap-4">
+        {/* The drawer's own Excel: the capture out as a file and back in as the same rows. It is the
+            app's ONE Excel control and not a pair of buttons of its own — and it lives HERE and not in
+            the bar, because what it moves is what this drawer owns. FIRST, above the years: it acts on
+            every year at once, and a control that sits under the strip of years reads as belonging to
+            the one that is marked. */}
+        <div className="flex items-center justify-between gap-3">
+          <ExcelActions
+            upload={{ label: "Cargar Excel", onClick: () => fileInputRef.current?.click() }}
+            downloads={[
+              {
+                id: "capture",
+                title: "Datos registrados",
+                description: "Todos los años del panel, tal cual, listos para volver a cargar.",
+                disabled: captureYears.length === 0,
+                disabledReason: "Agrega un año primero.",
+                run: downloadCapture,
+              },
+            ]}
+            downloadLabel="Descargar Excel"
+            info={{
+              title: "¿Qué archivo acepta?",
+              children: (
+                <div className="flex flex-col gap-2">
+                  <p>
+                    El Excel que descarga este mismo panel: una hoja con la cabecera{" "}
+                    <strong>Año · Mes · Ventas · Cobros TC · Comis. TC · Publicidad</strong> y una
+                    fila por mes. Se puede editar en Excel antes de volver a subirlo; la cabecera se
+                    busca donde esté y el nombre del archivo no participa.
+                  </p>
+                  <p>
+                    <strong>Cada año que trae el archivo se reemplaza completo.</strong> Una celda
+                    vacía es «no se registró»; los años que el archivo no trae no se tocan.
+                  </p>
+                  <p>
+                    Los meses de «{SERIES_LABELS.ventas}» que ya vienen del estado de resultados
+                    nunca se escriben desde el archivo: esa cifra la manda Datos.
+                  </p>
+                </div>
+              ),
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            className="hidden"
+            aria-label="Cargar el Excel de datos registrados"
+            onChange={(event) => {
+              void pickFile(event.target.files);
+              event.target.value = "";
+            }}
+          />
+        </div>
+
+        {importError && (
+          <NoticeBanner onDismiss={() => setImportError(null)}>{importError}</NoticeBanner>
+        )}
+
         {/* Two ROWS and not one. The list of years grows with the client's history, so anything sharing
             its line —a button, a counter— gets pushed out of the panel the moment a fifth year
             appears, which is exactly what a strip of five years did. Here the field and the counter
@@ -321,9 +473,29 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
           onCancel={() => setPendingRemoval(null)}
         />
 
+        <ConfirmDialog
+          open={pendingImport !== null}
+          title={
+            importYears.length === 1
+              ? `¿Reemplazar ${importYears[0]} con el archivo?`
+              : `¿Reemplazar ${importYears.length} años con el archivo?`
+          }
+          description={`Se ${importYears.length === 1 ? "reemplazará" : "reemplazarán"} ${
+            importYears.length === 1 ? importYears[0] : joinYears(importYears)
+          } por completo con los ${importMonths} ${
+            importMonths === 1 ? "mes registrado" : "meses registrados"
+          } que trae el archivo. Los meses de «${SERIES_LABELS.ventas}» que vienen del estado de resultados no cambian. No se puede deshacer.`}
+          confirmLabel="Cargar"
+          variant="destructive"
+          busy={importing}
+          onConfirm={() => void confirmImport()}
+          onCancel={() => setPendingImport(null)}
+        />
+
         <p className="text-[11.5px] leading-snug text-faint">
           Se guarda al salir de la celda. Para cargar un año entero, copia la columna en Excel, haz
-          clic en el mes donde empieza y pega con Ctrl+V. Los meses de «{SERIES_LABELS.ventas}» que
+          clic en el mes donde empieza y pega con Ctrl+V; para llevarte todos los años o traerlos de
+          vuelta, usa «Descargar Excel» y «Cargar Excel». Los meses de «{SERIES_LABELS.ventas}» que
           ya vienen del estado de resultados se muestran en gris y no se escriben.
         </p>
       </div>

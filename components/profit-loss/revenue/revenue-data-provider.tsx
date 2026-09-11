@@ -22,9 +22,11 @@ import {
   type RevenueCardsInput,
   type RevenueSummary,
 } from "@/lib/revenue/cards";
+import type { CaptureYearRows } from "@/lib/revenue/capture-workbook";
 import {
   deleteRevenueYear,
   externalForClient,
+  replaceExternalYears,
   saveExternalMonth,
   saveExternalMonths,
 } from "@/lib/revenue/db";
@@ -155,6 +157,16 @@ interface RevenueDataValue {
   saveCaptureMonths: (
     months: readonly { monthIndex: number; amounts: RevenueExternalAmounts }[],
   ) => Promise<void>;
+  /**
+   * Every year of the drawer as the Excel of «Datos registrados» writes it: twelve rows, «Ventas»
+   * RESOLVED (the raíz 4 where the estado de resultados covers the month, the typed one where not).
+   */
+  captureRowsForExport: () => CaptureYearRows[];
+  /**
+   * What loading that Excel back does: each year the file names is replaced WHOLE, in one transaction,
+   * and a «Ventas» the estado de resultados answers is never written — the stored value is kept.
+   */
+  replaceCaptureYears: (years: readonly CaptureYearRows[]) => Promise<void>;
 }
 
 const RevenueDataContext = createContext<RevenueDataValue | null>(null);
@@ -489,6 +501,63 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
     [clientId, captureYear, canCapture],
   );
 
+  const captureRowsForExport = useCallback(
+    () =>
+      captureYears.map((year) => {
+        const resolved =
+          revenueByYear.find((entry) => entry.year === year)?.monthlyRevenue ?? NO_MONTHS;
+        const external = externalByYear.get(year) ?? emptyExternalSeries();
+        return {
+          year,
+          months: Array.from({ length: MONTHS_IN_YEAR }, (_, month) => ({
+            // The RESOLVED ventas and not the stored one: the file must say what the grid shows, and a
+            // month PyG covers left empty would read as «no sales» where there were.
+            manualRevenue: resolved[month],
+            cardRevenue: external.cardRevenue[month],
+            cardFees: external.cardFees[month],
+            adSpend: external.adSpend[month],
+          })),
+        };
+      }),
+    [captureYears, revenueByYear, externalByYear],
+  );
+
+  const replaceCaptureYears = useCallback(
+    async (years: readonly CaptureYearRows[]) => {
+      if (!clientId || !canCapture || years.length === 0) {
+        return;
+      }
+      // The coverage is read PER YEAR off `pygRevenueByYear`, not off `captureCoverage`, which is a
+      // view of the one open year: the file may carry five.
+      const guarded = years.map(({ year, months }) => {
+        const fromPyg = pygRevenueByYear.get(year);
+        const stored = externalByYear.get(year);
+        return {
+          year,
+          months: months.map((amounts, month) =>
+            (fromPyg?.[month] ?? null) !== null
+              ? // The file carries the raíz 4 there by construction (it is what the export wrote),
+                // and storing it would put a number nobody reads under a figure Datos owns. The same
+                // rule the paste applies: that cell keeps what was stored, and the other three land.
+                { ...amounts, manualRevenue: stored?.manualRevenue[month] ?? null }
+              : amounts,
+          ),
+        };
+      });
+      await replaceExternalYears(clientId, guarded);
+      // The years the file brought are now the drawer's too —a year of twelve empty rows holds no
+      // stored row, so without this it would vanish from the list— and the drawer opens on the most
+      // recent one, which is what the user is about to check.
+      const brought = years.map((entry) => entry.year);
+      setAddedYearsRaw((current) => {
+        const kept = current.clientId === clientId ? current.years : NO_YEARS;
+        return { clientId, years: [...new Set([...kept, ...brought])] };
+      });
+      setCaptureYear(Math.max(...brought));
+    },
+    [clientId, canCapture, pygRevenueByYear, externalByYear],
+  );
+
   /**
    * Every mark goes through here, and it sanitizes BEFORE applying: the marks are pruned on read, so
    * a toggle has to act on the pruned list and not on whatever a previous client left behind.
@@ -563,6 +632,8 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       captureCoverage,
       saveCapture,
       saveCaptureMonths,
+      captureRowsForExport,
+      replaceCaptureYears,
     }),
     [
       marks,
@@ -594,6 +665,8 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
       captureCoverage,
       saveCapture,
       saveCaptureMonths,
+      captureRowsForExport,
+      replaceCaptureYears,
     ],
   );
 

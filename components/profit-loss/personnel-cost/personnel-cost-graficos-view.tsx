@@ -129,7 +129,7 @@ export function PersonnelCostGraficosView() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="flex flex-col gap-4">
         {SHAPED.map(({ card: which, solid }) => {
           const card = cards[which];
           return (
@@ -144,9 +144,9 @@ export function PersonnelCostGraficosView() {
               height={card.height}
               collapsed={isCollapsed(card.id)}
               onToggleCollapsed={() => toggle(card.id)}
-              // Las cuatro ofrecen «Ampliar»: en una rejilla de dos columnas un dibujo mide media
-              // pantalla, y la ratio mes a mes y el ranking de conceptos se leen como tendencia pero
-              // no de cerca. La forma se sigue eligiendo aquí; la ventana es para mirar.
+              // Las cuatro ofrecen «Ampliar»: apiladas a ancho completo la ratio mes a mes y el
+              // ranking de conceptos se leen como tendencia pero no de cerca. La forma se sigue
+              // eligiendo aquí; la ventana es para mirar.
               expandable
               // «Ver como» belongs to THIS card and to no other, so it lives in its header and not in
               // the filter bar. And a control that means nothing for the open data RENDERS NOTHING
