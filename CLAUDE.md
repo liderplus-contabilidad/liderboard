@@ -219,7 +219,7 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
 - The bar is Año · Mes · Servicio; `scopedPeriodLabel` (`filters.ts`) is the ONE composition of the
   label the tiles, the three subtitles and the report header read.
 - Two cards carry a **body switch** («Ver como»: `plano` / `solido`, `lib/charts/solid-bars.ts`) and
-  the evolution a **shape switch** («Apilada» / «Skyline 3D», `EvolutionView`) — the second is two
+  the evolution a **shape switch** («2D» / «3D», `EvolutionView`) — the second is two
   READINGS and not two bodies, so it renders nothing where there is no breakdown to shape. With ONE
   month marked the stack spreads into one bar per SERVICE.
 

@@ -27,8 +27,8 @@ const GROWTH_UNITS: { value: GrowthUnit; label: string }[] = [
 
 /** «Ver como» en el comparativo — plano, o el año con su propio eje de fondo. */
 const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "skyline", label: "Skyline 3D" },
+  { value: "plano", label: "2D" },
+  { value: "skyline", label: "3D" },
 ];
 
 /**

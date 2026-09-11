@@ -420,7 +420,7 @@ capa de traducción pura y testeada; ya no muestran "próximamente".
   dibuja. Lo que se amplía es la forma que la tarjeta tiene puesta; elegir se sigue haciendo en su
   cabecera, y la ventana es para mirar.
 - **El anexo de gastos se lee con DOS interruptores, no con uno de cuatro opciones**: «Gráfica»
-  (Barras · Pastel) dice QUÉ se dibuja y «Ver como» (Plano · Sólido 3D) en qué CUERPO. Son cuatro
+  (Barras · Pastel) dice QUÉ se dibuja y «Ver como» (2D · 3D) en qué CUERPO. Son cuatro
   tarjetas que la capa pura emite siempre —el mismo reparto, la misma reducción— y estos dos
   interruptores dicen cuál se ve. El informe imprimible saca las dos que el papel puede llevar: las
   sólidas son canvas WebGL, y una hoja no lleva uno.
@@ -766,14 +766,14 @@ las aseguradoras y los particulares que los pagan.
   única función que decide quién se rotula, y su heurística está **sesgada**: persona por defecto,
   empresa solo con evidencia positiva, porque una aseguradora tomada por paciente sale sin nombre y
   un paciente tomado por aseguradora sale con su nombre en la pantalla y en el papel.
-- **La evolución se lee desglosada por servicio, y su forma es un control** («Skyline 3D» /
-  «Apilado», `EvolutionView`): la pila responde «cuánto facturó este mes y de qué está hecho» de un
+- **La evolución se lee desglosada por servicio, y su forma es un control** («3D» /
+  «2D», `EvolutionView`): la pila responde «cuánto facturó este mes y de qué está hecho» de un
   vistazo, y el skyline le da a cada servicio su propio eje **arrancando en cero**, que es lo que la
   pila no puede contestar porque solo su banda de abajo lo hace. Son los mismos números y la misma
   tabla gemela. El control **no se dibuja** cuando no hay desglose que formar —varios años marcados,
   o un año sin servicios— ni con un solo mes en el eje, donde no hay meses que seguir. **Con UN mes
   marcado** la pila se despliega en **una barra por servicio**.
-- **Composición por servicio y Concentración por pagador llevan «Ver como»** (Plano · Sólido 3D):
+- **Composición por servicio y Concentración por pagador llevan «Ver como»** (2D · 3D):
   el mismo reparto, plano sobre la tarjeta o de pie en el escenario. Abren **planas** —es el cuerpo
   que el informe y el Excel pueden llevar— y ahí la elección es del lector, porque de pie los nombres
   largos se vuelven un eje truncado.

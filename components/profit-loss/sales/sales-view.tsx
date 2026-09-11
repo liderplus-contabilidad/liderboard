@@ -26,8 +26,8 @@ import { SalesToolbar } from "./sales-toolbar";
 
 /** The two shapes of the broken-down evolution, as the header names them — see `EvolutionView`. */
 const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
-  { value: "skyline", label: "Skyline 3D" },
-  { value: "stacked", label: "Apilado" },
+  { value: "skyline", label: "3D" },
+  { value: "stacked", label: "2D" },
 ];
 
 /**

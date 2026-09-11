@@ -39,7 +39,7 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
 /**
  * The two GRAPHICS of the same breakdown: the length of a bar, or the angle of a slice.
  *
- * They were four options in one strip —«Barras · Sólido 3D · Pastel · Rosca 3D»— and that strip
+ * They were four options in one strip —«Barras · 3D · Pastel · Rosca 3D»— and that strip
  * mixed two questions: WHICH graphic and in WHICH BODY. They are not four readings but two, each
  * available flat or standing on the stage, so they are two controls and the four cards are their
  * product. It is the same split «Ventas por año» carries between «Cifra» and «Ver como», and what it

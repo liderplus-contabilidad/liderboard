@@ -24,8 +24,8 @@ import { usePersonnelCostData } from "./personnel-cost-data-provider";
  */
 /** «Ver como» de la evolución: la pila con su línea, o el skyline con un eje por entidad. */
 const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
-  { value: "apilada", label: "Apilada" },
-  { value: "skyline", label: "Skyline 3D" },
+  { value: "apilada", label: "2D" },
+  { value: "skyline", label: "3D" },
 ];
 
 /**
@@ -33,8 +33,8 @@ const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
  * para las dos porque son la misma pregunta dos veces, la misma que hacen Ventas e Ingresos.
  */
 const SOLID_VIEWS: { value: SolidView; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "solido", label: "Sólido 3D" },
+  { value: "plano", label: "2D" },
+  { value: "solido", label: "3D" },
 ];
 
 /** Cuál de las dos tarjetas planas es cada una, para el control de su cabecera. */

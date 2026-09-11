@@ -300,7 +300,7 @@ export function Chart({ option, onSelect, height = 260, ariaLabel, className }: 
           className="flex w-full items-center justify-center px-6 text-center text-[12px] text-faint"
         >
           {gl === "failed"
-            ? "No se pudo cargar la vista 3D. Cambia a «Apilado» para ver estos mismos datos."
+            ? "No se pudo cargar la vista 3D. Cambia a «2D» para ver estos mismos datos."
             : "Preparando la vista 3D…"}
         </div>
       )}
