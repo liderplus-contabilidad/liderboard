@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SidePanel } from "@/components/ui/side-panel";
 import { cn } from "@/lib/cn";
 import { formatPercent } from "@/lib/format";
-import { maxCaptureYear, parseYearInput } from "@/lib/revenue/year-input";
+import { maxCaptureYear, parseYearInput } from "@/lib/year-input";
 import { monthSpanLabel } from "@/lib/revenue/filters";
 import { scopeToMonths } from "@/lib/revenue/derive";
 import { readRatio } from "@/lib/revenue/ratio";

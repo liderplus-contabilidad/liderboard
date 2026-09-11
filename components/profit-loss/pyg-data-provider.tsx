@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { deletePersonnelCostForClient } from "@/lib/personnel-cost/db";
 import { deleteRevenueForClient } from "@/lib/revenue/db";
 import { deleteSalesForClient } from "@/lib/sales/db";
 import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
@@ -949,15 +950,16 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     ) => updateClientRow(clientId, name, logo, centerLogos),
     [],
   );
-  // Deleting a client takes EVERYTHING that hangs off it, including the billing «Ventas por servicio»
-  // stores and the figures «Reportería de ingresos» captures, each in its own database partitioned by
-  // this same id. The calls go from here and not from `lib/profit-loss/db.ts` so the dependency
+  // Deleting a client takes EVERYTHING that hangs off it: the billing «Ventas por servicio» stores,
+  // the figures «Reportería de ingresos» captures and the nómina de familia «Análisis costo personal»
+  // holds, each in its own database partitioned by this same id. The calls go from here and not from `lib/profit-loss/db.ts` so the dependency
   // points from the new modules to the one that already existed and never the other way round;
   // without them, that data would be left in a partition no screen lists and no deletion reaches.
   const deleteClient = useCallback(async (clientId: string) => {
     await deleteClientRow(clientId);
     await deleteSalesForClient(clientId);
     await deleteRevenueForClient(clientId);
+    await deletePersonnelCostForClient(clientId);
   }, []);
   const selectClient = useCallback((clientId: string) => setActiveClient(clientId), []);
 

@@ -8,6 +8,7 @@ import {
   Table2,
   TrendingUp,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -90,6 +91,21 @@ export const MODULES: DashboardModule[] = [
         label: "Reportería de ingresos",
         title: "Reportería de ingresos",
         icon: TrendingUp,
+      },
+      // Análisis costo personal hangs off here for the same reason as the other two: what it reads
+      // are twenty-one accounts of this module's ACTIVE CLIENT, so it needs the selector the parent
+      // already mounts in the header.
+      //
+      // It is ALWAYS visible too, and here that costs something worth paying: the análisis is written
+      // against the MicroPlus chart of accounts, so for a Dingoo client the page has nothing to draw.
+      // A sidebar entry that appeared and disappeared with the open client could not be DISCOVERED —
+      // nobody looks for a menu item they have never seen — so the entry stays and it is the page that
+      // says which system the open workspace came from (`lib/personnel-cost/availability.ts`).
+      {
+        slug: "personnel-cost",
+        label: "Análisis costo personal",
+        title: "Análisis costo personal",
+        icon: UsersRound,
       },
     ],
   },

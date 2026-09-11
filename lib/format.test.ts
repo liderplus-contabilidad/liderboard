@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, formatCurrency, formatNumber, formatPercent, parseCurrency } from "./format";
+import {
+  formatAmount,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  formatPercentOrDash,
+  parseCurrency,
+} from "./format";
 
 describe("formatCurrency", () => {
   it("groups thousands with a comma and separates cents with a dot", () => {
@@ -66,5 +73,16 @@ describe("parseCurrency", () => {
     for (const value of [17338.85, 1234.56, 80.75, -20.4, 0, 1234, 1005, 1.005]) {
       expect(parseCurrency(formatNumber(value))).toBeCloseTo(value, 3);
     }
+  });
+});
+
+describe("formatPercentOrDash", () => {
+  it("pinta el cero como ausencia, igual que su gemela de moneda", () => {
+    expect(formatPercentOrDash(0)).toBe("–");
+    expect(formatPercentOrDash(null)).toBe("–");
+  });
+
+  it("un porcentaje real conserva su decimal y su espacio", () => {
+    expect(formatPercentOrDash(27.48)).toBe("27.5 %");
   });
 });
