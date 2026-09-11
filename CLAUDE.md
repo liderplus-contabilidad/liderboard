@@ -321,23 +321,23 @@ README's "Sistema visual" has the full table.
 `@theme` on purpose (a canvas cannot resolve a CSS var); that mirror is the single allowed
 duplication. The sets are DISJOINT and each answers a different job:
 
-| Set                                     | Job                                                                                                                                              |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `CHART_PALETTE` (8)                     | IDENTITY. `colorForEntity` is the only way in; the slots never re-order or cycle.                                                                |
-| `CHART_SECTION`                         | The statement's ROOTS — a green means «ingresos» in the chart and in the table. Only when every compared code is a root.                         |
-| `CHART_COMPOSITION_PALETTE` (6)         | A breakdown's PART, by size. Warm; `CHART_COMPOSITION_MAX` is also the fold cut.                                                                 |
-| `CHART_DISTRIBUTION_RAMP` (5 + neutral) | A STACK's segments: parts of one figure, so colour follows size, not identity.                                                                   |
-| `CHART_PERIOD_PALETTE` (12)             | DECORATIVE — one series with many marks (a bar per month). **Never for series.**                                                                 |
-| `CHART_SLICE_SEQUENCE` (18)             | Composition's six then the decorative twelve: a breakdown that names ALL its parts (annex doughnut, Ventas' payers).                             |
-| `CHART_RANKING_SEQUENCE` (20)           | The expense ranking's fifteen bars: identity first, decorative tail.                                                                             |
-| `CHART_HEAT_RAMP`                       | Sequential, one hue, monotonic in lightness. Never categorical.                                                                                  |
-| `CHART_STAGE_*` (+ `stageColor`)        | The STAGE: the app's ONE dark ground, the only scale not derived from `CHART_PALETTE`. 3D cards and the three TRAJECTORY cards (`CHART_GROUND`). |
+| Set                                     | Job                                                                                                                                            |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CHART_PALETTE` (8)                     | IDENTITY. `colorForEntity` is the only way in; the slots never re-order or cycle.                                                              |
+| `CHART_SECTION`                         | The statement's ROOTS — a green means «ingresos» in the chart and in the table. Only when every compared code is a root.                       |
+| `CHART_COMPOSITION_PALETTE` (6)         | A breakdown's PART, by size. Warm; `CHART_COMPOSITION_MAX` is also the fold cut.                                                               |
+| `CHART_DISTRIBUTION_RAMP` (5 + neutral) | A STACK's segments: parts of one figure, so colour follows size, not identity.                                                                 |
+| `CHART_PERIOD_PALETTE` (12)             | DECORATIVE — one series with many marks (a bar per month). **Never for series.**                                                               |
+| `CHART_SLICE_SEQUENCE` (18)             | Composition's six then the decorative twelve: a breakdown that names ALL its parts (annex doughnut, Ventas' payers).                           |
+| `CHART_RANKING_SEQUENCE` (20)           | The expense ranking's fifteen bars: identity first, decorative tail.                                                                           |
+| `CHART_HEAT_RAMP`                       | Sequential, one hue, monotonic in lightness. Never categorical.                                                                                |
+| `CHART_STAGE_*` (+ `stageColor`)        | The STAGE: the app's ONE dark ground, the only scale not derived from `CHART_PALETTE`. 3D cards and the two TRAJECTORY cards (`CHART_GROUND`). |
 
-**The three TRAJECTORY cards stand on the stage** (`CHART_GROUND`, `CHART_TRAJECTORY_GROUND`) — the
-cards that follow a year month by month: Reportería's comparativo, Ventas' Evolución and Costo de
-personal's «vs ventas». ALWAYS: one year or several, lines or bars, the stack or the spread — thin
-strokes on white were told apart by hue alone, and a ground that came and went with the count of
-years read as a different card. Each module's chrome helpers (`categoryAxis` · `valueAxis` ·
+**The two TRAJECTORY cards stand on the stage** (`CHART_GROUND`, `CHART_TRAJECTORY_GROUND`) — the
+cards that follow a year month by month: Reportería's comparativo and Ventas' Evolución. ALWAYS: one
+year or several, lines or bars, the stack or the spread — thin strokes on white were told apart by
+hue alone, and a ground that came and went with the count of years read as a different card. Each
+module's chrome helpers (`categoryAxis` · `valueAxis` ·
 `legendFor` · tooltips · labels) take a `ground`, the option declares `backgroundColor`, and what
 stands on it is translated by slot (`stageColor`, `stageSliceColor`) while the table twin, on white,
 keeps the light one. `Chart` frames a flat option with a `backgroundColor` the way it frames a 3D one.

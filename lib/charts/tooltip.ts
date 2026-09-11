@@ -4,8 +4,8 @@
  * ECharts hands a formatter the marker of the hovered datum and nothing else, so a box that lists
  * a series' whole run — the year's months under the line the pointer is on — builds its own rows.
  * The construction lives here and not in each module's chrome because the layout is the reading's,
- * not the module's: Reportería's comparativo and Costo de personal's «vs ventas» are the same box
- * with a different unit, and two copies would drift in the gutter or in the bold.
+ * not the module's: Reportería's comparativo opens it today, and a second trajectory card would be
+ * the same box with a different unit — two copies would drift in the gutter or in the bold.
  */
 
 /** The colour dot a row carries — ECharts' own `marker`, rebuilt for the rows the renderer did not

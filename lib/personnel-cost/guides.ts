@@ -23,17 +23,6 @@ export const GUIDE_SECTIONS: ChartGuide = {
     "Las dos barras suman el total del mes, así que lo que se lee es la proporción. El porcentaje del encabezado es sobre ventas, no sobre el costo.",
 };
 
-export const GUIDE_REVENUE_RATIO: ChartGuide = {
-  purpose:
-    "Qué proporción de lo facturado se va en personal, mes a mes — la métrica que la firma arrastra desde 2021.",
-  actions: [
-    { control: "Año", effect: "Con varios, cada ejercicio es una serie sobre los mismos meses." },
-    { control: "Personal", effect: "Mide sólo lo que quede marcado contra las mismas ventas." },
-  ],
-  reading:
-    "Un mes sin estado de resultados cargado no dibuja punto: no es un cero, es que no hay con qué dividir.",
-};
-
 export const GUIDE_GROUPS: ChartGuide = {
   purpose: "Cómo se mueven los tres grupos del comparativo a lo largo del ejercicio.",
   actions: [

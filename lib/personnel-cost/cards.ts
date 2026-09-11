@@ -1,6 +1,6 @@
 /**
- * The screen's FOUR readings, described as DATA (`option` + `table`) and not as markup: the partition
- * planta/externos, the ratio against ventas, the evolution by group and the ranking of concepts.
+ * The screen's THREE readings, described as DATA (`option` + `table`) and not as markup: the partition
+ * planta/externos, the evolution by group and the ranking of concepts.
  *
  * That they are data is what lets the Datos tab, the Gráficos tab and any future printable report read
  * the same construction instead of each rebuilding its figures — two computations of one question
@@ -32,7 +32,6 @@ import {
   CHART_SURFACE,
   colorForEntity,
   colorForSliceSlot,
-  CHART_TRAJECTORY_GROUND,
   figureInk,
   stageColor,
   stageSliceColor,
@@ -55,7 +54,6 @@ import type {
 } from "@/lib/charts/types";
 import {
   fitDirectLabel,
-  fitPercentLabel,
   labelDistance,
   labelHeadroom,
   type LabelFit,
@@ -66,7 +64,6 @@ import {
   type SolidBarRow,
   type SolidView,
 } from "@/lib/charts/solid-bars";
-import { seriesRunTooltip, tooltipMarker } from "@/lib/charts/tooltip";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
@@ -77,7 +74,7 @@ import {
   type PersonnelSectionId,
 } from "./accounts";
 import { shareOf, type PersonnelCostReading, type PersonnelYearReading } from "./derive";
-import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_REVENUE_RATIO, GUIDE_SECTIONS } from "./guides";
+import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_SECTIONS } from "./guides";
 
 /**
  * **The module's ONE colour universe**, and it deliberately does not list the sections: `planta`, plus
@@ -118,7 +115,6 @@ export type EvolutionView = "apilada" | "skyline";
 export const DEFAULT_EVOLUTION_VIEW: EvolutionView = "apilada";
 
 const SECTIONS_HEIGHT = 300;
-const RATIO_HEIGHT = 280;
 const GROUPS_HEIGHT = 300;
 /** The same card in three dimensions: perspective spends height a flat plot does not. */
 const GROUPS_HEIGHT_3D = 400;
@@ -134,24 +130,22 @@ export interface PersonnelCardsInput {
   /** «Evolución»'s shape. `apilada` when not given. */
   evolutionView?: EvolutionView;
   /**
-   * Which of the other three cards are standing on the stage. Flat when not given.
+   * Which of the other two cards are standing on the stage. Flat when not given.
    *
-   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly three, they are
+   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly two, they are
    * fixed, and a typo in a key would silently draw a flat card forever. «Evolución» is not among them
    * because its second shape is a skyline and not a frieze — a different reading, with a control of
    * its own (`evolutionView`).
    */
   solidViews?: {
     sections?: SolidView;
-    ratio?: SolidView;
     concepts?: SolidView;
   };
 }
 
 export interface PersonnelCards {
-  /** All four can come out in three dimensions — hence the widened option type on every one. */
+  /** All three can come out in three dimensions — hence the widened option type on every one. */
   sections: ChartCardSpec<ChartOption | Chart3DOption>;
-  ratio: ChartCardSpec<ChartOption | Chart3DOption>;
   groups: ChartCardSpec<ChartOption | Chart3DOption>;
   concepts: ChartCardSpec<ChartOption | Chart3DOption>;
   /**
@@ -167,9 +161,9 @@ export interface PersonnelCards {
 // ---------------------------------------------------------------------------
 
 /**
- * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: the
- * ratio comparing several exercises stands on the stage (`CHART_GROUND`), and there the light
- * chrome's greys are invisible.
+ * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: a card
+ * standing on the stage (`CHART_GROUND`) cannot use the light chrome's greys, which are invisible
+ * there.
  */
 function valueAxis(unit: (value: number) => string, ground: ChartGround = "surface"): ChartAxis {
   const tones = CHART_GROUND[ground];
@@ -334,8 +328,8 @@ function cell(value: number | null, unit: (value: number) => string): string | n
  *
  * `read` is what the label SAYS, and it is deliberately not `param.value`: over a stack the value under
  * the label is the band's and what belongs there is the column's total. `row` is which strip of figures
- * the series writes on — one figure per column per series is what buys the width, and it is what lets
- * the ratio's exercises carry their percentage without disputing one strip.
+ * the series writes on — one figure per column per series is what buys the width, so two series can
+ * carry their figure without disputing one strip.
  */
 function directLabel(
   fit: LabelFit,
@@ -652,7 +646,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
             yAxis: valueAxis(money),
             legend: legendFor(true),
             // The column's ventas: the exercise's over the span when comparing, that month's with
-            // one year — the same divisor the ratio card plots.
+            // one year — the same divisor the «% vs ventas» tile reads.
             tooltip: axisTooltip(moneyExact, "surface", (_series, index) =>
               comparing
                 ? (years[index]?.revenue ?? null)
@@ -677,167 +671,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
 }
 
 // ---------------------------------------------------------------------------
-// 2 · Costo de personal vs ventas
-// ---------------------------------------------------------------------------
-
-function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
-  const { reading, period } = input;
-  const years = reading.years.filter((year) => year.covered);
-  const months = [...new Set(years.flatMap((year) => year.months))].sort((a, b) => a - b);
-  const order = years.map((year) => year.year);
-
-  /**
-   * A month's ratio inside one exercise. It divides the month's cost by the SAME month's ventas —
-   * never by the tramo's — so a point is a real monthly reading and not the year's average redrawn
-   * twelve times.
-   */
-  const ratioAt = (year: PersonnelYearReading, month: number): number | null => {
-    const cost = year.monthly[month];
-    const revenue = year.revenueMonthly[month];
-    if (cost === null || revenue === null) {
-      return null;
-    }
-    return shareOf(cost, revenue);
-  };
-
-  // **The card stands on the STAGE** (`CHART_TRAJECTORY_GROUND`), one exercise or several: a thin
-  // line over a white plot has nothing but its hue to be found by, and it is the ground the solid
-  // body of this same reading already has. There the year wears `stageColor`'s slot —the solid's
-  // same rule— and the table twin, on the white, keeps the light one.
-  const ground = CHART_TRAJECTORY_GROUND;
-  const lineColor = (year: number) =>
-    ground === "stage" ? stageColor(yearColor(year, order)) : yearColor(year, order);
-
-  // With SEVERAL exercises this card writes NO figure over its points: what a ratio is read for is
-  // the trajectory, and a percentage over every mark of every exercise turns the line into texture.
-  // The amount stays where it is never missing — in the tooltip on hover and in the table twin.
-  // ALONE, an exercise has nothing to be read against but its own months, and the percentage over
-  // each point is what turns «abril subió» into «abril fue 43.4 %» — Reportería's comparativo's
-  // same rule, one row of figures in the ground's ink.
-  const comparing = years.length > 1;
-  // A percent's own fit: six characters where an amount has eleven, so it reads two points larger.
-  const labelFit = fitPercentLabel(months.length);
-  const series: ChartSeries[] = years.map((year) => ({
-    id: `ratio-${year.year}`,
-    type: "line",
-    name: String(year.year),
-    data: months.map((month) => ratioAt(year, month)),
-    smooth: false,
-    symbol: "circle",
-    symbolSize: CHART_MARK.symbolSize,
-    lineStyle: { color: lineColor(year.year), width: CHART_MARK.lineWidth },
-    itemStyle: { color: lineColor(year.year) },
-    ...(comparing
-      ? {}
-      : directLabel(
-          labelFit,
-          (param) =>
-            param.value === null || param.value === undefined ? null : Number(param.value),
-          percent,
-          0,
-          ground,
-        )),
-    emphasis: { focus: "series" },
-    // Comparing, a line is read ONE at a time: the exercise under the pointer comes forward, the
-    // others blur, and the stroke itself answers (`triggerEvent`) — not only its dots.
-    ...(comparing ? { triggerEvent: "line" as const } : {}),
-  }));
-
-  // The line's box, comparing: the exercise as the head and its months as the body, in the same
-  // two columns Reportería's comparativo opens (`seriesRunTooltip`). A column of six exercises
-  // under one month is not what a line is followed for; the run of the one under the pointer is.
-  // Alone, the column tooltip stays: one figure per month, already written over the point.
-  const lineTooltip = itemTooltip((param) => {
-    const year = years.find((candidate) => `ratio-${candidate.year}` === param.seriesId);
-    if (!year) return "";
-    const rows = months.flatMap((month) => {
-      const value = ratioAt(year, month);
-      return value === null ? [] : [{ label: MONTHS_SHORT_ES[month], figure: percent(value) }];
-    });
-    return seriesRunTooltip(
-      `${tooltipMarker(lineColor(year.year))}${year.year}`,
-      rows,
-      param.name,
-      CHART_GROUND[ground].inkMuted,
-    );
-  }, ground);
-
-  const table: ChartTable = {
-    columns: [...months.map((month) => MONTHS_SHORT_ES[month]), "Tramo"],
-    rows: years.map((year) => ({
-      id: `ratio-${year.year}`,
-      label: String(year.year),
-      color: yearColor(year.year, order),
-      values: [
-        ...months.map((month) => cell(ratioAt(year, month), percent)),
-        cell(year.share, percent),
-      ],
-    })),
-  };
-
-  // Standing up, the trajectory gives way to a comparison of HEIGHTS from a common floor: one solid
-  // per month and one row per exercise, on the same percentage scale. It is a second shape and not a
-  // replacement — what a line draws and a bar cannot is exactly where the ratio is going.
-  const solid = solidBody(
-    months.map((month) => MONTHS_SHORT_ES[month]),
-    years.map((year) => ({
-      id: `ratio-${year.year}`,
-      name: String(year.year),
-      color: stageColor(yearColor(year.year, order)),
-      values: months.map((month) => ratioAt(year, month)),
-    })),
-    { value: percent, axis: percent },
-    // One row per EXERCISE, so they keep their order: the oldest at the back, never the shortest.
-    { order: "given" },
-  );
-  const asSolid = standing(input.solidViews?.ratio, solid);
-
-  return {
-    id: "personnel-ratio",
-    title: "Costo de personal vs ventas",
-    subtitle: period,
-    option: asSolid
-      ? solid
-      : months.length === 0
-        ? null
-        : {
-            animationDuration: 300,
-            textStyle: { fontFamily: CHART_FONT },
-            ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
-            grid: {
-              left: 8,
-              right: 12,
-              // Comparing, no figure is written and the plot keeps the room; a lone exercise writes
-              // one row and the grid opens what it needs — `outerBoundsContain` only reserves for
-              // the axis' labels.
-              top: comparing ? 12 : labelHeadroom(1, labelFit, 12),
-              bottom: 34,
-              outerBoundsMode: "same",
-              outerBoundsContain: "axisLabel",
-            },
-            xAxis: categoryAxis(
-              months.map((month) => MONTHS_SHORT_ES[month]),
-              { ground },
-            ),
-            yAxis: valueAxis(percent, ground),
-            legend: legendFor(years.length > 1, ground),
-            tooltip: comparing ? lineTooltip : axisTooltip(percent, ground),
-            series,
-          },
-    table,
-    note: sentence(
-      reading.share === null
-        ? undefined
-        : `En el tramo completo: ${percent(reading.share)} de ${moneyExact(reading.revenue)} facturados.`,
-      asSolid,
-    ),
-    guide: GUIDE_REVENUE_RATIO,
-    height: asSolid ? SOLID_BARS_HEIGHT : RATIO_HEIGHT,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 3 · Evolución mensual por grupo
+// 2 · Evolución mensual por grupo
 // ---------------------------------------------------------------------------
 
 /** One row of the evolution: an entity, its colour and what it cost month by month. */
@@ -1254,7 +1088,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 4 · Composición por concepto
+// 3 · Composición por concepto
 // ---------------------------------------------------------------------------
 
 interface ConceptTotal {
@@ -1419,7 +1253,6 @@ export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards 
   const groups = buildGroupsCard(input);
   return {
     sections: buildSectionsCard(input),
-    ratio: buildRatioCard(input),
     groups: groups.card,
     concepts: buildConceptsCard(input),
     skylineAvailable: groups.skylineAvailable,

@@ -111,10 +111,9 @@ export const CHART_LINES = {
  * night sky every bar has an edge, which is the whole reason the shape is drawn in three dimensions
  * — and it is what the card's own name has been saying all along: a skyline is read against a sky.
  *
- * Its consumers are the skyline cards and the three TRAJECTORY cards (`CHART_GROUND`,
- * `CHART_TRAJECTORY_GROUND`): Reportería's «Comparativo de ventas por año», Ventas' «Evolución» and
- * Costo de personal's «vs ventas» — where a two-pixel stroke over a white plot had nothing but its
- * hue to be found by. Nothing else 2D takes these values: the app is a light dashboard, and this is
+ * Its consumers are the skyline cards and the two TRAJECTORY cards (`CHART_GROUND`,
+ * `CHART_TRAJECTORY_GROUND`): Reportería's «Comparativo de ventas por año» and Ventas' «Evolución»
+ * — where a two-pixel stroke over a white plot had nothing but its hue to be found by. Nothing else 2D takes these values: the app is a light dashboard, and this is
  * a framed stage inside a white card, never a dark mode.
  *
  * The marks that stand on it are `CHART_STAGE_PALETTE` and never the light scale: measured against
@@ -424,7 +423,7 @@ export function figureInk(
 
 /**
  * The ground of a TRAJECTORY card — one that follows a year month by month (Reportería's
- * comparativo, Ventas' evolución, Costo de personal's «vs ventas»): the stage, with one year marked
+ * comparativo, Ventas' evolución): the stage, with one year marked
  * or several, drawn as lines or as bars. It is a constant and not a function of the marks on
  * purpose: a ground that came and went with the count of years was read as a different card.
  */

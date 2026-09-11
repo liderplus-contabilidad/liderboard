@@ -13,7 +13,7 @@ import type { EvolutionView, PersonnelCardsInput } from "@/lib/personnel-cost/ca
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
- * The Gráficos tab: the four figures as tiles, and the four readings as cards.
+ * The Gráficos tab: the four figures as tiles, and the three readings as cards.
  *
  * The tiles are here and not in Datos because there the table already states every one of them, and a
  * number said twice on one screen makes the reader look for a difference between two figures that have
@@ -37,24 +37,23 @@ const SOLID_VIEWS: { value: SolidView; label: string }[] = [
   { value: "solido", label: "Sólido 3D" },
 ];
 
-/** Cuál de las tres tarjetas planas es cada una, para el control de su cabecera. */
+/** Cuál de las dos tarjetas planas es cada una, para el control de su cabecera. */
 type SolidCard = keyof NonNullable<PersonnelCardsInput["solidViews"]>;
 
 /**
- * The four cards in reading order, and which control each one's header carries: three offer the
+ * The three cards in reading order, and which control each one's header carries: two offer the
  * stage's frieze, and the evolution offers its own skyline instead — a different shape answering a
  * different half of the question, which is why it is not the same control.
  */
-const SHAPED: { card: "sections" | "ratio" | "groups" | "concepts"; solid: SolidCard | null }[] = [
+const SHAPED: { card: "sections" | "groups" | "concepts"; solid: SolidCard | null }[] = [
   // The evolution right under «Planta vs Externos»: the two are the same stack read at two
   // resolutions —two sections, then the groups inside them— so they are read one after the other.
   { card: "sections", solid: "sections" },
   { card: "groups", solid: null },
-  { card: "ratio", solid: "ratio" },
   { card: "concepts", solid: "concepts" },
 ];
 
-/** «Ver como» y su control, que es el mismo en las cuatro cabeceras. */
+/** «Ver como» y su control, que es el mismo en las tres cabeceras. */
 function HeaderChoice<T extends string>({
   value,
   options,
@@ -77,8 +76,8 @@ export function PersonnelCostGraficosView() {
     usePersonnelCostData();
 
   const ids = useMemo(
-    () => [cards.sections.id, cards.ratio.id, cards.groups.id, cards.concepts.id],
-    [cards.sections.id, cards.ratio.id, cards.groups.id, cards.concepts.id],
+    () => [cards.sections.id, cards.groups.id, cards.concepts.id],
+    [cards.sections.id, cards.groups.id, cards.concepts.id],
   );
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(ids);
 
@@ -146,7 +145,7 @@ export function PersonnelCostGraficosView() {
               height={card.height}
               collapsed={isCollapsed(card.id)}
               onToggleCollapsed={() => toggle(card.id)}
-              // Las cuatro ofrecen «Ampliar»: apiladas a ancho completo la ratio mes a mes y el
+              // Las tres ofrecen «Ampliar»: apiladas a ancho completo la evolución mes a mes y el
               // ranking de conceptos se leen como tendencia pero no de cerca. La forma se sigue
               // eligiendo aquí; la ventana es para mirar.
               expandable

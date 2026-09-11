@@ -197,76 +197,11 @@ describe("El tooltip de las dos pilas dice el porcentaje sobre ventas", () => {
   });
 });
 
-describe("Costo vs ventas", () => {
-  it("divide cada mes por las ventas de ESE mes, no por las del tramo", () => {
-    const { ratio } = cards();
-    const row = ratio.table.rows[0];
-    // Enero: 104,203.12 / 240,314.07 = 43.4 %; el tramo entero es 50.1 %.
-    expect(row.values[0]).toBe("43.4 %");
-    expect(row.values.at(-1)).toBe("50.1 %");
-  });
-
-  it("un año es una serie: dos años son dos", () => {
-    expect(cards().ratio.option?.series).toHaveLength(1);
-    expect(cards([goldenYear({ year: 2025 }), goldenYear()]).ratio.option?.series).toHaveLength(2);
-  });
-
-  it("la ratio está sobre el ESCENARIO con varios ejercicios y también con uno", () => {
-    const one = cards().ratio.option;
-    const several = cards([goldenYear({ year: 2025 }), goldenYear()]).ratio;
-    expect(one?.backgroundColor).toBe(CHART_STAGE.sky);
-    expect(several.option?.backgroundColor).toBe(CHART_STAGE.sky);
-    expect(several.option?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
-    // La línea de 2026 sobre el escenario es la traducción por ranura de su color en blanco: el
-    // que lleva su fila en la tabla gemela, y el mismo que lleva en el cuerpo sólido.
-    const light = several.table.rows[1].color ?? "";
-    expect(several.option?.series[1].lineStyle?.color).toBe(stageColor(light));
-  });
-
-  it("un mes sin cargar no dibuja punto: no es un cero", () => {
-    const { ratio } = cards([goldenYear({ coverage: [0, 1, 2] })], [], [0, 1, 2, 3, 4, 5]);
-    const values = ratio.option?.series[0].data;
-    expect(values).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
-  });
-
-  describe("se lee UNA línea a la vez", () => {
-    it("el tooltip es de la línea y lista los MESES de ese ejercicio en dos columnas", () => {
-      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
-      const tooltip = ratio.option?.tooltip;
-
-      expect(tooltip?.trigger).toBe("item");
-      const html = tooltip?.formatter?.({
-        name: "Ene",
-        seriesId: "ratio-2026",
-        seriesName: "2026",
-        value: 43.4,
-        dataIndex: 0,
-      });
-      expect(html).toContain("2026");
-      expect(html).toContain("Ene");
-      expect(html).toContain("43.4 %");
-      expect(html).toContain("Jun");
-      expect(html).not.toContain("2025");
-      expect(html).toMatch(/grid-template-columns:\s*auto auto auto auto/);
-    });
-
-    it("al pasar por el trazo la línea responde, no solo sus puntos", () => {
-      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
-
-      for (const serie of ratio.option?.series ?? []) {
-        expect(serie.emphasis?.focus).toBe("series");
-        expect(serie.triggerEvent).toBe("line");
-      }
-    });
-  });
-});
-
 describe("Cada gemela tiene tantas columnas como valores lleva cada fila", () => {
   // `ChartCard` encabeza la columna de la etiqueta por su cuenta («Serie»), así que una columna de
   // más deja la última vacía y corre todas las cifras una posición a la izquierda. Pasó, y se veía.
   it.each([
     ["sections", cards().sections],
-    ["ratio", cards().ratio],
     ["groups", cards().groups],
     ["concepts", cards().concepts],
   ])("%s", (_name, card) => {
@@ -353,7 +288,6 @@ describe("Sin nada que dibujar", () => {
   it("la card no inventa un gráfico vacío: devuelve `null` y dice por qué", () => {
     const built = cards([goldenYear()], [], [10, 11]);
     expect(built.sections.option).toBeNull();
-    expect(built.ratio.option).toBeNull();
     expect(built.concepts.option).toBeNull();
   });
 });
@@ -524,36 +458,6 @@ describe("La cifra sobre la columna", () => {
     expect(label?.formatter?.(param(9, null))).toBe("");
   });
 
-  it("la ratio de VARIOS ejercicios no escribe cifra sobre ningún punto: la lleva el tooltip y la gemela", () => {
-    for (const built of [
-      cards([goldenYear({ year: 2025 }), goldenYear()]),
-      cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year }))),
-    ]) {
-      expect(writing(built.ratio.option)).toHaveLength(0);
-      // Y sin cifras no hay fila que reservar: el techo es el del dibujo solo.
-      expect(built.ratio.option?.grid?.top).toBe(12);
-      // El tooltip es el de la LÍNEA (los meses del ejercicio), no el de la columna.
-      expect(built.ratio.option?.tooltip?.trigger).toBe("item");
-    }
-  });
-
-  it("con UN ejercicio la ratio escribe el porcentaje sobre cada punto, en la tinta del escenario", () => {
-    const { ratio } = cards();
-    const [written] = writing(ratio.option);
-    expect(written?.name).toBe("2026");
-    expect(written.label?.position).toBe("top");
-    // Tinta FUERTE y en seminegrita: la apagada medía 8.77 sobre el navy y se leía como marca de
-    // agua. Y con la talla de un porcentaje, dos puntos por encima de la de un importe.
-    expect(written.label?.color).toBe(CHART_STAGE.ink);
-    expect(written.label?.fontWeight).toBe(600);
-    expect(written.label?.fontSize).toBe(12.5);
-    // Lo que dice es el porcentaje del punto —enero: 43.4 %— y nada donde no hay mes cargado.
-    expect(written.label?.formatter?.(param(0, 43.36))).toBe("43.4 %");
-    expect(written.label?.formatter?.(param(9, null))).toBe("");
-    // Y la rejilla abre arriba la fila que esas cifras necesitan.
-    expect(ratio.option?.grid?.top).toBeGreaterThan(12);
-  });
-
   it("en la evolución la lleva la LÍNEA del total, que ya es la cifra de la columna", () => {
     const { groups } = cards();
     const written = writing(flat(groups.option));
@@ -578,8 +482,8 @@ describe("La cifra sobre la columna", () => {
   });
 });
 
-describe("Las cuatro lecturas pueden ponerse de pie", () => {
-  const solid = (which: "sections" | "ratio" | "concepts", years = [goldenYear()]) => {
+describe("Las tres lecturas pueden ponerse de pie", () => {
+  const solid = (which: "sections" | "concepts", years = [goldenYear()]) => {
     const built = buildPersonnelCards({
       reading: readPersonnelCost(years, SPAN),
       groups: [],
@@ -595,7 +499,6 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
   it("por omisión ninguna lo está: el plano es lo que abre", () => {
     const built = cards();
     expect(is3DOption(built.sections.option as ChartOption)).toBe(false);
-    expect(is3DOption(built.ratio.option as ChartOption)).toBe(false);
     expect(is3DOption(built.concepts.option as ChartOption)).toBe(false);
   });
 
@@ -616,25 +519,6 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
     expect(option.yAxis3D.data).toEqual(["Externos", "Planta"]);
   });
 
-  it("la ratio se pone de pie en PORCENTAJE, con una fila por ejercicio", () => {
-    const { option } = solid("ratio", [goldenYear({ year: 2025 }), goldenYear()]);
-    expect(option.series.map((entry) => entry.name).sort()).toEqual(["2025", "2026"]);
-    // Y en ORDEN: los ejercicios no se ordenan por altura como las secciones.
-    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
-    expect(option.zAxis3D.axisLabel?.formatter?.(43.36)).toBe("43.4 %");
-    expect(option.xAxis3D.data).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun"]);
-  });
-
-  it("la ratio deja los ejercicios en orden aunque el más reciente pique más alto", () => {
-    const { option } = solid("ratio", [
-      goldenYear({ year: 2025, coverage: [0, 1] }),
-      goldenYear({ coverage: [5] }),
-    ]);
-    expect(depthOf(option, "2025")).toBe(1);
-    expect(depthOf(option, "2026")).toBe(0);
-    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
-  });
-
   it("el ranking es UNA fila y el color lo lleva cada columna, traducido al escenario", () => {
     const { option } = solid("concepts");
     expect(option.series).toHaveLength(1);
@@ -649,10 +533,9 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
       reading: readPersonnelCost([goldenYear()], [10, 11]),
       groups: [],
       period: "Nov–Dic 2026",
-      solidViews: { sections: "solido", ratio: "solido", concepts: "solido" },
+      solidViews: { sections: "solido", concepts: "solido" },
     });
     expect(built.sections.option).toBeNull();
-    expect(built.ratio.option).toBeNull();
     expect(built.concepts.option).toBeNull();
   });
 });
@@ -695,13 +578,6 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
       "Factura familia",
       "Total costo de personal",
     ]);
-  });
-
-  it("la ratio divide por las ventas tecleadas, mes contra el MISMO mes", () => {
-    const { ratio } = typed();
-    // Enero: 3,750 de 10,000; febrero: 1,100 de 12,000.
-    expect(ratio.table.rows[0].values[0]).toBe("37.5 %");
-    expect(ratio.table.rows[0].values[1]).toBe("9.2 %");
   });
 
   it("una marca de «Grupo» no puede esconder unas líneas que no tienen grupo", () => {
