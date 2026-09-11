@@ -184,7 +184,6 @@ export const ChartCard = memo(function ChartCard({
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11.5px] font-semibold text-muted transition-colors hover:bg-canvas"
               >
                 <Maximize2 size={13} />
-                Ampliar
               </button>
             )}
           </div>

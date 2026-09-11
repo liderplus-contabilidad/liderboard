@@ -144,14 +144,7 @@ export function PersonnelCostGraficosView() {
               height={card.height}
               collapsed={isCollapsed(card.id)}
               onToggleCollapsed={() => toggle(card.id)}
-              // Las cuatro ofrecen «Ampliar»: en una rejilla de dos columnas un dibujo mide media
-              // pantalla, y la ratio mes a mes y el ranking de conceptos se leen como tendencia pero
-              // no de cerca. La forma se sigue eligiendo aquí; la ventana es para mirar.
               expandable
-              // «Ver como» belongs to THIS card and to no other, so it lives in its header and not in
-              // the filter bar. And a control that means nothing for the open data RENDERS NOTHING
-              // rather than sitting disabled: with no plot there is no second shape of it either, and
-              // the evolution's skyline needs something to put on its depth axis.
               {...(card.option === null
                 ? {}
                 : solid === null
