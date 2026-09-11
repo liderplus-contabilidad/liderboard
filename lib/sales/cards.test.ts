@@ -3,6 +3,7 @@ import {
   CHART_NEUTRAL,
   CHART_PALETTE,
   CHART_SLICE_SEQUENCE,
+  CHART_STAGE,
   CHART_STAGE_LIGHT,
   CHART_STAGE_MATERIAL,
   CHART_STAGE_PALETTE,
@@ -523,6 +524,23 @@ describe("barras CON línea en la evolución", () => {
     expect(series[0].itemStyle?.color).not.toBe(series[2].itemStyle?.color);
   });
 
+  it("la evolución está sobre el ESCENARIO con varios años y también con uno", () => {
+    const several = buildSalesCards(spec([2025, 2026], 12)).evolution.option;
+    const one = buildSalesCards(spec([2026], 12)).evolution.option;
+    // Trazos finos sobre un plano blanco se distinguían solo por el tono: el navy les da borde. Y
+    // no va y viene con las marcas: un suelo que cambiaba con el número de años se leía como otra
+    // tarjeta.
+    for (const option of [several, one]) {
+      expect(option?.backgroundColor).toBe(CHART_STAGE.sky);
+      expect(option?.tooltip?.backgroundColor).toBe(CHART_STAGE.panel);
+      // Sobre el escenario el año viste su ranura de la escala del escenario, la regla del skyline.
+      const line = option?.series.find((entry) => entry.type === "line");
+      expect(CHART_STAGE_PALETTE).toContain(line?.itemStyle?.color);
+      expect(CHART_PALETTE).not.toContain(line?.itemStyle?.color);
+    }
+    expect(several?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
+  });
+
   it("las dos series de un año comparten NOMBRE, así que la leyenda saca un ítem por año", () => {
     // And switching it off takes its bar and its line at once.
     const series = seriesOf([2025, 2026], 12);
@@ -709,15 +727,23 @@ describe("la evolución se desglosa por servicio", () => {
     expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
   });
 
-  it("un servicio lleva el MISMO color que en la composición", () => {
+  it("un servicio lleva el color de la composición, traducido al escenario por ranura", () => {
     const cards = buildSalesCards(stacked());
     const segment = cards.evolution.option?.series.find((entry) => entry.name === "HONORARIOS");
-    expect(segment?.itemStyle?.color).toBe(datumColor(cards.services.option?.series[0], 0));
+    // La evolución está sobre el escenario y la composición sobre el blanco: la IDENTIDAD (la
+    // ranura) es la misma, el tono es el de cada suelo — la misma regla del skyline.
+    expect(segment?.itemStyle?.color).toBe(
+      stageColor(datumColor(cards.services.option?.series[0], 0) ?? ""),
+    );
   });
 
   it("la línea del total es de TINTA, no un paso de la paleta de servicios", () => {
-    const series = buildSalesCards(stacked()).evolution.option?.series ?? [];
+    const option = buildSalesCards(stacked()).evolution.option;
+    const series = option?.series ?? [];
     const total = series.find((entry) => entry.type === "line");
+    // La pila también está sobre el escenario, así que la tinta es la del escenario.
+    expect(option?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(total?.itemStyle?.color).toBe(CHART_STAGE.ink);
     const colors = series
       .filter((entry) => entry.type === "bar")
       .map((entry) => entry.itemStyle?.color);
@@ -820,10 +846,10 @@ describe("con un solo mes la evolución se abre en barras por servicio", () => {
     ]);
   });
 
-  it("un servicio conserva el color que lleva en la composición", () => {
+  it("un servicio conserva la ranura que lleva en la composición, en la escala del escenario", () => {
     const cards = buildSalesCards(january());
     expect(datumColor(cards.evolution.option?.series[0], 0)).toBe(
-      datumColor(cards.services.option?.series[0], 0),
+      stageColor(datumColor(cards.services.option?.series[0], 0) ?? ""),
     );
   });
 

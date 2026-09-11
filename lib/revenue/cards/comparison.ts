@@ -5,12 +5,13 @@
  * are drawn and written.
  */
 import {
+  CHART_GROUND,
   CHART_MARK,
   CHART_MAX_SERIES,
-  CHART_STAGE,
-  colorForPeriod,
+  CHART_TRAJECTORY_GROUND,
   stageColor,
 } from "@/lib/charts/palette";
+import { seriesRunTooltip, tooltipMarker } from "@/lib/charts/tooltip";
 import { is3DOption } from "@/lib/charts/types";
 import type {
   Chart3DOption,
@@ -29,11 +30,12 @@ import {
   baseOption,
   categoryAxis,
   currencyAxis,
-  fitBarWidth,
+  directLabel,
+  fitDirectLabel,
   legendFor,
   money,
+  itemTooltip,
   moneyOrDash,
-  ROUND_TOP,
   yearColor,
   type Ground,
 } from "./chrome";
@@ -56,12 +58,12 @@ export const DEFAULT_COMPARISON_SHAPE: ComparisonShape = "plano";
 export const COMPARISON_CARD_ID = "comparativo";
 
 /**
- * **Two shapes, and the number of MARKED YEARS chooses it — there is no control.**
+ * **A year is a TRAJECTORY and is drawn as a line — one year or several, and no control.**
  *
- * With ONE year the axis already carries the month under every bar, so identity is not the colour's
- * job: `colorForPeriod` does its only job, keeping twelve bars from being a wall of one tone. With
- * SEVERAL, a year is a TRAJECTORY and is drawn as a line — with five years, grouped bars would be
- * sixty bars.
+ * One year used to be twelve bars in the decorative scale, and the card changed shape under the
+ * reader when the marks went from two years to one. It is one reading with one mark: what the count
+ * of years decides is only what is WRITTEN — with ONE year every point carries its figure, with
+ * several none does (see `series`).
  *
  * The chart cuts at `CHART_MAX_SERIES` and says so in `warnings`; the table twin lists every marked
  * year, which is what makes the cut safe: nothing marked ever loses its figure.
@@ -91,64 +93,63 @@ export function buildComparisonCard(
   const comparing = drawn.length > 1;
 
   /**
-   * **The lines stand on the STAGE; the bars stay on the surface.**
+   * **The card stands on the STAGE**, with one year or several (`CHART_TRAJECTORY_GROUND`).
    *
    * With several years the reading is a bundle of two-pixel strokes over one plot, and on the white
    * card what tells one year from the next is its hue alone — a pale grid, a pale axis and four thin
    * lines were read as one tangle. On `CHART_STAGE`'s navy every line has an edge and every year is
    * found at a glance, which is the same reason the skyline stands on a sky: it is the SAME reading
-   * in its two shapes, so «Ver como» does not flip the ground under the reader. With one year the
-   * bars are twelve solids in the decorative scale, measured against white, and they keep the card.
+   * in its two shapes, so «Ver como» does not flip the ground under the reader — and neither does
+   * unmarking years down to one, which was the first rule here and read as a different card.
    *
    * The years wear `stageColor`'s translation, never the light scale: measured against the navy, two
    * of the eight identity slots fall under 3:1. It is the skyline's same slot-for-slot rule, so the
    * line of 2024 and its row in the 3D box are ONE colour — and the growth card, which draws on the
    * white, keeps the slot in the light scale. That is the trade `CHART_STAGE_PALETTE` declares.
    */
-  const ground: Ground = comparing ? "stage" : "surface";
+  const ground: Ground = CHART_TRAJECTORY_GROUND;
   const lineColor = (year: number) => stageColor(yearColor(year, drawnYears));
 
   /**
-   * **This card writes NO figure over its marks**, and it is the one card of the module where that is
-   * the reading and not a shortage of room.
+   * **With several years this card writes NO figure over its marks; with ONE it writes all twelve.**
    *
-   * What it answers is the SHAPE of a year — which months rise, which fall, how one year runs above
-   * another — over an axis of twelve columns. Twelve amounts, or twelve per year, do not add a
+   * Comparing, what it answers is the SHAPE of a year — which months rise, which fall, how one year
+   * runs above another — over an axis of twelve columns. Twelve amounts per year do not add a
    * reading to that: they cover the very trajectory being followed, and the trajectory is the whole
    * point of drawing months instead of tabulating them. The month's figure is a hover away in the
    * tooltip and always present in the table twin, which lists every marked year, not only the drawn
    * ones.
+   *
+   * Alone, a year has nothing to be read against but its own months, and the figure over each point
+   * is what turns «abril subió» into «abril fue $337,092.91»: one row of twelve, in the ground's ink,
+   * shaped by `fitDirectLabel` like every other figure of the module.
+   *
+   * **And it is read ONE LINE AT A TIME.** With several years the pointer follows a stroke, so the
+   * tooltip answers for the YEAR under it — its run of months, the hovered one in bold — instead
+   * of the column of six years under one month; and the line under the pointer comes forward while
+   * the others blur (`emphasis.focus`), which is what lets a single year be picked out of the
+   * bundle without unmarking the rest. `triggerEvent` is what makes the stroke itself answer,
+   * not only its twelve dots. With ONE year the column tooltip stays: there is one figure per month
+   * either way, and it is already written over the point.
    */
-  const series: ChartSeries[] = comparing
-    ? drawn.map((entry) => ({
-        id: `year-${entry.year}`,
-        name: String(entry.year),
-        type: "line" as const,
-        data: axis.map((month) => entry.monthly[month]),
-        itemStyle: { color: lineColor(entry.year) },
-        lineStyle: { color: lineColor(entry.year), width: CHART_MARK.lineWidth },
-        symbol: "circle",
-        symbolSize: CHART_MARK.symbolSize,
-        // Straight, never `smooth`: a curve invents values between two months nobody measured. And a
-        // gap BREAKS the line, which is right — joining July with December would draw the months in
-        // between.
-        smooth: false,
-      }))
-    : drawn.map((entry) => ({
-        id: `year-${entry.year}`,
-        name: String(entry.year),
-        type: "bar" as const,
-        data: axis.map((month) => {
-          const value = entry.monthly[month];
-          return value === null
-            ? { value: null }
-            : // The DECORATIVE slot is taken from the month itself and not from its place on the
-              // axis, so April keeps its tone whichever span is being looked at.
-              { value, itemStyle: { color: colorForPeriod(month), borderRadius: ROUND_TOP } };
-        }),
-        // One bar per month and nothing sharing its column: the fit hands it the whole band it has.
-        barMaxWidth: fitBarWidth(axis.length),
-      }));
+  const labelFit = fitDirectLabel(axis.length);
+  const series: ChartSeries[] = drawn.map((entry) => ({
+    id: `year-${entry.year}`,
+    name: String(entry.year),
+    type: "line" as const,
+    data: axis.map((month) => entry.monthly[month]),
+    itemStyle: { color: lineColor(entry.year) },
+    lineStyle: { color: lineColor(entry.year), width: CHART_MARK.lineWidth },
+    symbol: "circle",
+    symbolSize: CHART_MARK.symbolSize,
+    emphasis: { focus: "series" as const },
+    triggerEvent: "line" as const,
+    // Straight, never `smooth`: a curve invents values between two months nobody measured. And a
+    // gap BREAKS the line, which is right — joining July with December would draw the months in
+    // between.
+    smooth: false,
+    ...(comparing ? {} : directLabel(labelFit, { ground })),
+  }));
 
   const covered = drawn.some((entry) => entry.covered);
   // The skyline needs a DEPTH axis, so it needs at least two years; with one there is nothing to put
@@ -163,11 +164,14 @@ export function buildComparisonCard(
           ...baseOption(
             categoryAxis(labels, undefined, ground),
             currencyAxis(ground),
-            legendFor(comparing, ground === "stage" ? CHART_STAGE.inkMuted : undefined),
-            undefined,
+            legendFor(comparing, CHART_GROUND[ground].inkMuted),
+            // The row of figures a lone year writes is what the grid has to open room for at the top.
+            comparing ? undefined : { rows: 1, fit: labelFit },
             ground,
           ),
-          tooltip: axisTooltip(money, undefined, ground),
+          tooltip: comparing
+            ? yearTooltip(drawn, axis, lineColor, ground)
+            : axisTooltip(money, undefined, ground),
           series,
         };
 
@@ -187,6 +191,36 @@ export function buildComparisonCard(
     guide: GUIDE_REVENUE_COMPARISON,
     height: skyline ? SKYLINE_HEIGHT : 280,
   };
+}
+
+/**
+ * The line's box: the year as the head, its months as the body — the axis tooltip's same box with
+ * the other reading in it (`seriesRunTooltip` says how it is laid out). A month not loaded is
+ * OMITTED, never written as `$0.00` — the table's rule.
+ */
+function yearTooltip(
+  drawn: readonly RevenueYearReading[],
+  axis: readonly number[],
+  lineColor: (year: number) => string,
+  ground: Ground,
+) {
+  const tones = CHART_GROUND[ground];
+  return itemTooltip((param) => {
+    const entry = drawn.find((candidate) => `year-${candidate.year}` === param.seriesId);
+    if (!entry) return "";
+    const rows = axis
+      .filter((month) => entry.monthly[month] !== null)
+      .map((month) => ({
+        label: MONTHS_SHORT_ES[month],
+        figure: money(entry.monthly[month] as number),
+      }));
+    return seriesRunTooltip(
+      `${tooltipMarker(lineColor(entry.year))}${entry.year}`,
+      rows,
+      param.name,
+      tones.inkMuted,
+    );
+  }, ground);
 }
 
 /**

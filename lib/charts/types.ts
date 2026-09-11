@@ -174,6 +174,13 @@ export interface ChartSeries {
   /** `hideOverlap` is how a label that does not fit is dropped instead of clipped. */
   labelLayout?: { hideOverlap?: boolean };
   emphasis?: { focus?: "series"; itemStyle?: ChartItemStyle };
+  /**
+   * Line only. ECharts fires hover on a line's SYMBOLS and not on its stroke, so a card that wants
+   * «pass over the line» to mean anything has to say so — without it the reader has to land on a
+   * six-pixel dot for the year to answer. `chart.tsx` reads it too: the stroke has no `dataIndex`,
+   * so the tooltip has to be ASKED for the nearest mark, and that is done there.
+   */
+  triggerEvent?: "line";
   symbol?: string;
   symbolSize?: number;
   smooth?: boolean;

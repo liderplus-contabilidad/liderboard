@@ -11,12 +11,14 @@
  */
 import {
   CHART_FONT,
+  CHART_GROUND,
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
-  CHART_STAGE,
   CHART_SURFACE,
   colorForEntity,
+  figureInk,
+  type ChartGround,
 } from "@/lib/charts/palette";
 import type {
   ChartAxis,
@@ -55,36 +57,8 @@ export const TOOLTIP_CHROME = {
   confine: true,
 } as const;
 
-/**
- * The GROUND a flat card is painted on, and the only two there are.
- *
- * `surface` is the card's white, where every card of the app draws. `stage` is `CHART_STAGE`'s
- * navy — the ground the skyline stands on — and the comparison's LINES stand on it too: several
- * years drawn as two-pixel strokes over a white plot and a pale grid are told apart by hue alone,
- * and against the navy each line has an edge and every year is found at a glance. It is the same
- * reason the 3D box has a sky, applied to the flat shape of the SAME reading, so «Ver como» does
- * not flip the ground under the reader.
- *
- * The tones travel together on purpose: an axis that kept the light chrome's grey on the navy would
- * be invisible (measured at 1.09 against it), and a white tooltip a hole punched in the night. What
- * stands ON the stage is translated by `stageColor`, never drawn in the light scale.
- */
-export type Ground = "surface" | "stage";
-
-const GROUND_TONES = {
-  surface: {
-    ink: CHART_INK.muted,
-    inkFaint: CHART_INK.faint,
-    axis: CHART_LINES.axis,
-    grid: CHART_LINES.grid,
-  },
-  stage: {
-    ink: CHART_STAGE.inkMuted,
-    inkFaint: CHART_STAGE.inkFaint,
-    axis: CHART_STAGE.axis,
-    grid: CHART_STAGE.grid,
-  },
-} as const;
+/** The module's ground — `CHART_GROUND`'s two, read by every axis, legend and tooltip below. */
+export type Ground = ChartGround;
 
 /** The tooltip's chrome on either ground — `TOOLTIP_CHROME` for the surface, and on the stage the
  *  panel of the stage, so the box is drawn INSIDE the night and not over it. */
@@ -94,14 +68,13 @@ export function tooltipChrome(
   ChartTooltip,
   "backgroundColor" | "borderColor" | "borderWidth" | "padding" | "textStyle" | "confine"
 > {
-  return ground === "surface"
-    ? TOOLTIP_CHROME
-    : {
-        ...TOOLTIP_CHROME,
-        backgroundColor: CHART_STAGE.panel,
-        borderColor: CHART_STAGE.panelBorder,
-        textStyle: { color: CHART_STAGE.ink, fontSize: 12 },
-      };
+  const tones = CHART_GROUND[ground];
+  return {
+    ...TOOLTIP_CHROME,
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
+    textStyle: { color: tones.ink, fontSize: 12 },
+  };
 }
 
 export const ROUND_TOP = [CHART_MARK.radius, CHART_MARK.radius, 0, 0] as [
@@ -143,7 +116,7 @@ export function baseOption(
     textStyle: { fontFamily: CHART_FONT },
     // The ground is written ONLY where it is the stage: on the surface the option declares nothing
     // and the card's white shows through, which is what every other card of the app does.
-    ...(ground === "stage" ? { backgroundColor: CHART_STAGE.sky } : {}),
+    ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
     grid: {
       left: 8,
       right: 16,
@@ -201,9 +174,12 @@ export function directLabel(
      * with its bar's left edge, which is the nearest it can sit without reaching the fill beside it.
      */
     startAt?: number;
+    /** The ground the figure is written on: on the stage it takes the stage's ink. */
+    ground?: Ground;
   } = {},
 ): Pick<ChartSeries, "label" | "labelLayout"> {
   const { shares } = options;
+  const tones = CHART_GROUND[options.ground ?? "surface"];
   const write = options.unit ?? ((value: number) => formatCurrency(value, { cents: fit.cents }));
   return {
     label: {
@@ -213,14 +189,14 @@ export function directLabel(
       ...(options.startAt === undefined
         ? {}
         : { align: "left" as const, offset: [options.startAt, 0] as [number, number] }),
-      color: CHART_INK.strong,
+      ...figureInk(options.ground ?? "surface", CHART_INK.strong),
       fontSize: fit.fontSize,
       ...(shares
         ? {
             // Fainter than the amount: the percentage is an annotation over the bar, not the bar's
             // own figure — PyG's `SHARE_RICH_KEY`, and the same ink.
             rich: {
-              share: { color: CHART_INK.muted, fontSize: fit.fontSize - 0.5, lineHeight: 13 },
+              share: { color: tones.inkMuted, fontSize: fit.fontSize - 0.5, lineHeight: 13 },
             },
           }
         : {}),
@@ -266,7 +242,7 @@ export function categoryAxis(
   margin?: number,
   ground: Ground = "surface",
 ): ChartAxis {
-  const tones = GROUND_TONES[ground];
+  const tones = CHART_GROUND[ground];
   return {
     type: "category",
     data: [...labels],
@@ -274,7 +250,7 @@ export function categoryAxis(
     axisTick: { show: false },
     splitLine: { show: false },
     axisLabel: {
-      color: tones.ink,
+      color: tones.inkMuted,
       fontSize: 11,
       interval: 0,
       hideOverlap: true,
@@ -284,7 +260,7 @@ export function categoryAxis(
 }
 
 export function currencyAxis(ground: Ground = "surface"): ChartAxis {
-  const tones = GROUND_TONES[ground];
+  const tones = CHART_GROUND[ground];
   return {
     type: "value",
     axisLine: { show: false },
@@ -344,7 +320,7 @@ export function axisTooltip(
   span?: string,
   ground: Ground = "surface",
 ): ChartTooltip {
-  const tones = GROUND_TONES[ground];
+  const tones = CHART_GROUND[ground];
   return {
     ...tooltipChrome(ground),
     trigger: "axis",
@@ -361,9 +337,27 @@ export function axisTooltip(
         )
         .join("");
       return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${
-        body || `<div style="color:${tones.ink}">Sin cargar</div>`
+        body || `<div style="color:${tones.inkMuted}">Sin cargar</div>`
       }`;
     },
+  };
+}
+
+/**
+ * The tooltip of the MARK the pointer is on, with the body the card decides.
+ *
+ * `axisTooltip` lists the column under a month; this one fires on one series and hands the card the
+ * param, because what the box should say about one line is the card's reading and not the
+ * chrome's — the comparativo answers with the year's whole run of months.
+ */
+export function itemTooltip(
+  body: (param: ChartParam) => string,
+  ground: Ground = "surface",
+): ChartTooltip {
+  return {
+    ...tooltipChrome(ground),
+    trigger: "item",
+    formatter: (params) => body(Array.isArray(params) ? params[0] : params),
   };
 }
 

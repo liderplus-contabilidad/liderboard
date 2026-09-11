@@ -50,12 +50,13 @@ function input(years: RevenueYearInput[], overrides: Partial<RevenueCardsInput> 
   } satisfies RevenueCardsInput;
 }
 
-describe("buildComparisonCard · las dos formas", () => {
-  it("con UN año marcado dibuja barras por mes", () => {
+describe("buildComparisonCard · una línea por año", () => {
+  it("con UN año marcado dibuja UNA línea, no barras", () => {
     const card = buildComparisonCard(input([yearInput(2026, REVENUE_2026)]));
 
     expect(card.option?.series).toHaveLength(1);
-    expect(card.option?.series[0].type).toBe("bar");
+    expect(card.option?.series[0].type).toBe("line");
+    expect(card.option?.series[0].symbol).toBe("circle");
   });
 
   it("con VARIOS años marcados dibuja una línea por año", () => {
@@ -71,14 +72,17 @@ describe("buildComparisonCard · las dos formas", () => {
     ]);
   });
 
-  it("ninguna forma la elige un control: solo cuántos años están marcados", () => {
+  it("la forma no cambia con las marcas: un año y dos años son la misma línea", () => {
     const one = buildComparisonCard(input([yearInput(2024, REVENUE_2024)]));
     const two = buildComparisonCard(
       input([yearInput(2022, REVENUE_2022), yearInput(2024, REVENUE_2024)]),
     );
 
-    expect(one.option?.series[0].type).toBe("bar");
+    expect(one.option?.series[0].type).toBe("line");
     expect(two.option?.series[0].type).toBe("line");
+    // Con un año no hay leyenda: el subtítulo ya lo nombra.
+    expect(one.option?.legend?.show).toBe(false);
+    expect(two.option?.legend?.show).toBe(true);
   });
 
   it("con nueve años el gráfico corta en ocho y la tabla trae los nueve", () => {
@@ -132,6 +136,59 @@ describe("buildComparisonCard · las dos formas", () => {
     const card = flatComparisonCard(input(loadedYears()));
 
     expect(Array.isArray(card.option?.yAxis)).toBe(false);
+  });
+
+  describe("con varios años se lee UNA línea a la vez", () => {
+    it("el tooltip es de la línea y lista los MESES de ese año, no los años del mes", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+      const tooltip = card.option?.tooltip;
+
+      expect(tooltip?.trigger).toBe("item");
+      const html = tooltip?.formatter?.({
+        name: "Jul",
+        seriesId: "year-2026",
+        seriesName: "2026",
+        value: REVENUE_2026[6],
+        dataIndex: 6,
+      });
+      expect(html).toContain("2026");
+      // Los siete meses cargados de 2026, en orden, y ninguno de los otros años.
+      expect(html).toContain("Ene");
+      expect(html).toContain("$247,053.11");
+      expect(html).toContain("Jul");
+      expect(html).toContain("$241,844.03");
+      expect(html).not.toContain("2024");
+      // Agosto no está cargado: raya, no cero.
+      expect(html).not.toContain("$0.00");
+    });
+
+    it("el recuadro reparte los meses en DOS columnas, no en una lista de doce", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+      const html = card.option?.tooltip?.formatter?.({
+        name: "Ene",
+        seriesId: "year-2024",
+        seriesName: "2024",
+        value: REVENUE_2024[0],
+        dataIndex: 0,
+      });
+
+      expect(html).toMatch(/grid-template-columns:\s*auto auto auto auto/);
+    });
+
+    it("al pasar por el trazo la línea se resalta y las demás se atenúan", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+
+      for (const serie of card.option?.series ?? []) {
+        expect(serie.emphasis?.focus).toBe("series");
+        expect(serie.triggerEvent).toBe("line");
+      }
+    });
+
+    it("con UN año las barras conservan el tooltip de columna", () => {
+      const card = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+
+      expect(card.option?.tooltip?.trigger).toBe("axis");
+    });
   });
 });
 
@@ -209,14 +266,23 @@ describe("cada gráfica del módulo escribe su cifra sobre la marca, tumbada", (
     expect(wrote(card.option?.series[0] ?? {})).toBe("$100,000.00");
   });
 
-  it("el comparativo NO escribe ninguna: doce cifras tapan la trayectoria que se va a leer", () => {
-    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+  it("el comparativo de VARIOS años no escribe ninguna: doce cifras por año tapan la trayectoria", () => {
     const several = flatComparisonCard(input(loadedYears()));
 
-    expect(one.option?.series.every((serie) => !serie.label?.show)).toBe(true);
     expect(several.option?.series.every((serie) => !serie.label?.show)).toBe(true);
     // Y sin cifras arriba la rejilla no gasta margen en alojarlas.
-    expect(one.option?.grid?.top).toBe(16);
+    expect(several.option?.grid?.top).toBe(16);
+  });
+
+  it("con UN año escribe la cifra sobre cada punto, en la tinta del escenario", () => {
+    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+    const [serie] = one.option?.series ?? [];
+
+    expect(wrote(serie)).toBe("$100,000.00");
+    expect(serie.label?.position).toBe("top");
+    expect(serie.label?.color).toBe(CHART_STAGE.ink);
+    // Y la rejilla abre arriba la fila que esas cifras necesitan.
+    expect(one.option?.grid?.top).toBeGreaterThan(16);
   });
 
   it("la rejilla abre arriba lo que la fila más alta necesita", () => {
@@ -624,7 +690,7 @@ describe("el comparativo en tres dimensiones", () => {
     );
   });
 
-  it("las LÍNEAS están sobre el escenario; las barras de un solo año, sobre la superficie", () => {
+  it("el comparativo está sobre el escenario con varios años y también con uno", () => {
     const several = flatComparisonCard(input(loadedYears()));
     const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
     const growth = buildGrowthCard(input(loadedYears()), "dolares");
@@ -633,8 +699,10 @@ describe("el comparativo en tres dimensiones", () => {
     expect(several.option?.backgroundColor).toBe(CHART_STAGE.sky);
     expect(several.option?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
     expect(several.option?.tooltip?.backgroundColor).toBe(CHART_STAGE.panel);
-    // Un año son doce sólidos de la escala decorativa, medida contra blanco: conservan la tarjeta.
-    expect(one.option?.backgroundColor).toBeUndefined();
+    // Un año es una línea sola, y el suelo no va y viene con las marcas: la misma escala del
+    // escenario, por ranura.
+    expect(one.option?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(CHART_STAGE_PALETTE).toContain(one.option?.series[0].lineStyle?.color);
     // Y ninguna otra tarjeta del módulo hereda el escenario por omisión.
     expect(growth.option?.backgroundColor).toBeUndefined();
   });

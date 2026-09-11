@@ -52,6 +52,16 @@ export function fitDirectLabel(columns: number): LabelFit {
 }
 
 /**
+ * The same fit for a PERCENT — «43.4 %», six characters against an amount's eleven — which is why
+ * it takes two points more at every step: measured against the same 83 px column, a percent at
+ * 12.5 px is some 42 px, narrower than the amount the step was cut for. `cents` travels unused.
+ */
+export function fitPercentLabel(columns: number): LabelFit {
+  const fit = fitDirectLabel(columns);
+  return { ...fit, fontSize: fit.fontSize + 2 };
+}
+
+/**
  * Which row a series writes on: the first one rides on its own mark, and each of the following ones
  * clears the line height of the one under it.
  *

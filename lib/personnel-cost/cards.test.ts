@@ -108,10 +108,53 @@ describe("Costo vs ventas", () => {
     expect(cards([goldenYear({ year: 2025 }), goldenYear()]).ratio.option?.series).toHaveLength(2);
   });
 
+  it("la ratio está sobre el ESCENARIO con varios ejercicios y también con uno", () => {
+    const one = cards().ratio.option;
+    const several = cards([goldenYear({ year: 2025 }), goldenYear()]).ratio;
+    expect(one?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(several.option?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(several.option?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
+    // La línea de 2026 sobre el escenario es la traducción por ranura de su color en blanco: el
+    // que lleva su fila en la tabla gemela, y el mismo que lleva en el cuerpo sólido.
+    const light = several.table.rows[1].color ?? "";
+    expect(several.option?.series[1].lineStyle?.color).toBe(stageColor(light));
+  });
+
   it("un mes sin cargar no dibuja punto: no es un cero", () => {
     const { ratio } = cards([goldenYear({ coverage: [0, 1, 2] })], [], [0, 1, 2, 3, 4, 5]);
     const values = ratio.option?.series[0].data;
     expect(values).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
+  });
+
+  describe("se lee UNA línea a la vez", () => {
+    it("el tooltip es de la línea y lista los MESES de ese ejercicio en dos columnas", () => {
+      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
+      const tooltip = ratio.option?.tooltip;
+
+      expect(tooltip?.trigger).toBe("item");
+      const html = tooltip?.formatter?.({
+        name: "Ene",
+        seriesId: "ratio-2026",
+        seriesName: "2026",
+        value: 43.4,
+        dataIndex: 0,
+      });
+      expect(html).toContain("2026");
+      expect(html).toContain("Ene");
+      expect(html).toContain("43.4 %");
+      expect(html).toContain("Jun");
+      expect(html).not.toContain("2025");
+      expect(html).toMatch(/grid-template-columns:\s*auto auto auto auto/);
+    });
+
+    it("al pasar por el trazo la línea responde, no solo sus puntos", () => {
+      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
+
+      for (const serie of ratio.option?.series ?? []) {
+        expect(serie.emphasis?.focus).toBe("series");
+        expect(serie.triggerEvent).toBe("line");
+      }
+    });
   });
 });
 
@@ -378,17 +421,34 @@ describe("La cifra sobre la columna", () => {
     expect(label?.formatter?.(param(9, null))).toBe("");
   });
 
-  it("la ratio no escribe cifra sobre ningún punto: la lleva el tooltip y la gemela", () => {
+  it("la ratio de VARIOS ejercicios no escribe cifra sobre ningún punto: la lleva el tooltip y la gemela", () => {
     for (const built of [
-      cards(),
       cards([goldenYear({ year: 2025 }), goldenYear()]),
       cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year }))),
     ]) {
       expect(writing(built.ratio.option)).toHaveLength(0);
       // Y sin cifras no hay fila que reservar: el techo es el del dibujo solo.
       expect(built.ratio.option?.grid?.top).toBe(12);
-      expect(built.ratio.option?.tooltip?.trigger).toBe("axis");
+      // El tooltip es el de la LÍNEA (los meses del ejercicio), no el de la columna.
+      expect(built.ratio.option?.tooltip?.trigger).toBe("item");
     }
+  });
+
+  it("con UN ejercicio la ratio escribe el porcentaje sobre cada punto, en la tinta del escenario", () => {
+    const { ratio } = cards();
+    const [written] = writing(ratio.option);
+    expect(written?.name).toBe("2026");
+    expect(written.label?.position).toBe("top");
+    // Tinta FUERTE y en seminegrita: la apagada medía 8.77 sobre el navy y se leía como marca de
+    // agua. Y con la talla de un porcentaje, dos puntos por encima de la de un importe.
+    expect(written.label?.color).toBe(CHART_STAGE.ink);
+    expect(written.label?.fontWeight).toBe(600);
+    expect(written.label?.fontSize).toBe(12.5);
+    // Lo que dice es el porcentaje del punto —enero: 43.4 %— y nada donde no hay mes cargado.
+    expect(written.label?.formatter?.(param(0, 43.36))).toBe("43.4 %");
+    expect(written.label?.formatter?.(param(9, null))).toBe("");
+    // Y la rejilla abre arriba la fila que esas cifras necesitan.
+    expect(ratio.option?.grid?.top).toBeGreaterThan(12);
   });
 
   it("en la evolución la lleva la LÍNEA del total, que ya es la cifra de la columna", () => {

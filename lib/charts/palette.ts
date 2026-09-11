@@ -111,11 +111,11 @@ export const CHART_LINES = {
  * night sky every bar has an edge, which is the whole reason the shape is drawn in three dimensions
  * — and it is what the card's own name has been saying all along: a skyline is read against a sky.
  *
- * Its consumers are the two skyline cards and ONE flat reading: the lines of Reportería's
- * «Comparativo de ventas por año», where several years as two-pixel strokes over a white plot were
- * told apart by hue alone — the same reading the skyline draws, kept on the same ground. Nothing
- * else 2D takes these values: the app is a light dashboard, and this is a framed stage inside a
- * white card, never a dark mode.
+ * Its consumers are the skyline cards and the three TRAJECTORY cards (`CHART_GROUND`,
+ * `CHART_TRAJECTORY_GROUND`): Reportería's «Comparativo de ventas por año», Ventas' «Evolución» and
+ * Costo de personal's «vs ventas» — where a two-pixel stroke over a white plot had nothing but its
+ * hue to be found by. Nothing else 2D takes these values: the app is a light dashboard, and this is
+ * a framed stage inside a white card, never a dark mode.
  *
  * The marks that stand on it are `CHART_STAGE_PALETTE` and never the light scale: measured against
  * `sky`, `CHART_PALETTE` comes out (slots 1-8) 3.14 · 5.02 · 8.12 · 7.87 · 5.90 · 3.17 · 2.36 · 4.16,
@@ -351,6 +351,84 @@ export const CHART_STAGE_SKY = {
     { offset: 1, color: CHART_STAGE.sky },
   ],
 } as const;
+
+/**
+ * The GROUND a FLAT card is painted on, and the only two there are.
+ *
+ * `surface` is the card's white, where every card of the app draws. `stage` is `CHART_STAGE`'s navy
+ * — the ground the skyline stands on — and it is where the cards that follow a year MONTH BY MONTH
+ * stand too, whatever they draw: a thin stroke over a white plot and a pale grid has nothing but its
+ * hue to be found by, and against the navy every line has an edge and every point a place. It is
+ * the same reason the 3D box has a sky, applied to the flat shape of the SAME reading, so neither
+ * «Ver como» nor marking one year instead of three flips the ground under the reader. What stands
+ * on it is translated by slot (`stageColor`, `stageSliceColor`), never drawn in the light scale.
+ *
+ * The tones travel together on purpose: an axis that kept the light chrome's grey on the navy would
+ * be invisible (measured at 1.09 against it), and a white tooltip a hole punched in the night. What
+ * stands ON the stage —the years' lines— is translated by `stageColor`, never drawn in the light
+ * scale. `sky` is what the option declares as `backgroundColor`, and `undefined` on the surface so
+ * the card's own white shows through, like every other card.
+ */
+export type ChartGround = "surface" | "stage";
+
+export const CHART_GROUND = {
+  surface: {
+    sky: undefined,
+    ink: CHART_INK.strong,
+    inkMuted: CHART_INK.muted,
+    inkFaint: CHART_INK.faint,
+    axis: CHART_LINES.axis,
+    grid: CHART_LINES.grid,
+    panel: CHART_SURFACE,
+    panelBorder: CHART_LINES.axis,
+  },
+  stage: {
+    sky: CHART_STAGE.sky,
+    ink: CHART_STAGE.ink,
+    inkMuted: CHART_STAGE.inkMuted,
+    inkFaint: CHART_STAGE.inkFaint,
+    axis: CHART_STAGE.axis,
+    grid: CHART_STAGE.grid,
+    panel: CHART_STAGE.panel,
+    panelBorder: CHART_STAGE.panelBorder,
+  },
+} as const satisfies Record<
+  ChartGround,
+  {
+    sky: string | undefined;
+    ink: string;
+    inkMuted: string;
+    inkFaint: string;
+    axis: string;
+    grid: string;
+    panel: string;
+    panelBorder: string;
+  }
+>;
+
+/**
+ * How a FIGURE written over a mark is inked on each ground.
+ *
+ * On white each module keeps its own step — muted where the figure must not compete with the axis,
+ * strong where it is the reading — and that step is what `onSurface` carries. On the stage there is
+ * ONE answer: the strong ink at semibold. The muted step measures 8.77 against the navy, which
+ * passes every check and still read as a watermark: a figure over a dark ground is found by its
+ * weight, not by its contrast alone, and a 10 px regular of a mid tone has none.
+ */
+export function figureInk(
+  ground: ChartGround,
+  onSurface: string,
+): { color: string; fontWeight?: number } {
+  return ground === "stage" ? { color: CHART_STAGE.ink, fontWeight: 600 } : { color: onSurface };
+}
+
+/**
+ * The ground of a TRAJECTORY card — one that follows a year month by month (Reportería's
+ * comparativo, Ventas' evolución, Costo de personal's «vs ventas»): the stage, with one year marked
+ * or several, drawn as lines or as bars. It is a constant and not a function of the marks on
+ * purpose: a ground that came and went with the count of years was read as a different card.
+ */
+export const CHART_TRAJECTORY_GROUND: ChartGround = "stage";
 
 /** Stroke weights and gaps shared by every mark. */
 export const CHART_MARK = {
