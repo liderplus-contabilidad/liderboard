@@ -22,7 +22,13 @@ import { cn } from "@/lib/cn";
 export interface TabBarItem<Id extends string = string> {
   id: Id;
   label: string;
-  icon: LucideIcon;
+  /**
+   * OPTIONAL, and left out where the label already is the whole identity — a strip of YEARS is the
+   * case that asked for it. A glyph earns its place by telling two tabs apart at a glance; repeated
+   * identically down a list of «2019 · 2020 · 2021» it tells nothing and is only noise, so the rule
+   * is all of them or none.
+   */
+  icon?: LucideIcon;
 }
 
 interface TabBarProps<Id extends string> {
@@ -77,7 +83,7 @@ export function TabBar<Id extends string>({
                 active ? "text-brand" : "text-faint hover:text-muted",
               )}
             >
-              <Icon size={16} strokeWidth={1.9} />
+              {Icon && <Icon size={16} strokeWidth={1.9} />}
               {item.label}
               {active && (
                 <span className="absolute inset-x-0 -bottom-px h-[2.5px] rounded-[3px] bg-brand" />

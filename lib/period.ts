@@ -6,7 +6,7 @@
  * the raw inputs and recomputes ADR, ocupación and RevPAR as ratios OF THOSE SUMS. Only the shape
  * of the buckets is shared.
  */
-import { MONTHS_SHORT_ES } from "@/lib/date";
+import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 
 export type Frequency = "mensual" | "trimestral" | "semestral" | "anual";
 
@@ -195,4 +195,104 @@ export function namedSpans(kind: SpanKind): NamedSpan[] {
 /** How a span kind is NAMED in a control: «Semestre», «Quimestre». */
 export function spanKindLabel(kind: SpanKind): string {
   return kind === "semestre" ? "Semestre" : "Quimestre";
+}
+
+/**
+ * **THE rótulo of a set of months**: «Abril», «Ene–Jul», «Ene, Mar, Abr». Every subtitle, tile, note,
+ * chip and report header of a module that reads a SPAN composes on top of it.
+ *
+ * A set with gaps is ENUMERATED instead of asserting a range: «Ene–Abr» would claim February is
+ * included. `null` for the empty set, so whoever composes has to say out loud what «no months» reads
+ * as — a shared «Sin meses» is exactly how a subtitle ended up saying «Sin meses 2026».
+ *
+ * It lives HERE and not in the module that wrote it first («Reportería de ingresos», which still
+ * re-exports it) because a second module now reads the same figure, and two rules for one rótulo is
+ * the class of debt this vocabulary exists to prevent.
+ */
+export function monthSpanLabel(months: readonly number[]): string | null {
+  if (months.length === 0) {
+    return null;
+  }
+  const sorted = [...new Set(months)].sort((a, b) => a - b);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (first === last) {
+    return MONTHS_FULL_ES[first];
+  }
+  const contiguous = last - first === sorted.length - 1;
+  return contiguous
+    ? `${MONTHS_SHORT_ES[first]}–${MONTHS_SHORT_ES[last]}`
+    : sorted.map((month) => MONTHS_SHORT_ES[month]).join(", ");
+}
+
+/**
+ * The period in plain Spanish — what the tiles, each card's subtitle and the report's header say, so
+ * nothing on a screen names a different span from the one beside it.
+ *
+ * The months come from `monthSpanLabel`; with SEVERAL years they are written once and the years
+ * behind them («Abr · 2025, 2026»), because repeating «abril» per year is what makes a comparison
+ * label illegible.
+ *
+ * It receives the RESOLVED span and not the marks: with no month marked the reading still covers a
+ * tramo —every loaded month of the marked years— and a header that wrote only «2024, 2025, 2026»
+ * left the reader to guess which months the figures under it were measured over.
+ */
+export function periodLabel(months: readonly number[], years: readonly number[]): string {
+  if (years.length === 0) {
+    return "Sin datos";
+  }
+  const yearsLabel = [...years].sort((a, b) => a - b).join(", ");
+  const monthsLabel = monthSpanLabel(months);
+  if (monthsLabel === null) {
+    return yearsLabel;
+  }
+  return years.length === 1 ? `${monthsLabel} ${yearsLabel}` : `${monthsLabel} · ${yearsLabel}`;
+}
+
+/**
+ * **THE rótulo of a set of YEAR MARKS**, which is what a filter bar's «Año» trigger reads: every year
+ * of the universe marked is written «Todos los años» instead of enumerated, because a control that
+ * spells six exercises out is wider than the reading it describes and says no more than the shortcut
+ * that set it.
+ *
+ * The EMPTY list comes out «—» and is deliberately NOT called «todos». That is the reading of the
+ * modules whose declared exception makes no mark resolve to the MOST RECENT year («Ventas por
+ * servicio», «Análisis costo personal»), and their `sanitizeFilters` hands the bar the already
+ * resolved list, so the dash is a state the trigger never actually draws. A module where no mark
+ * means ALL of them —«Reportería de ingresos»— names its own empty case before delegating here.
+ *
+ * It lives HERE, beside `monthSpanLabel`, for the same reason that one moved: three bars now read
+ * this figure, and three rules for one rótulo is the class of debt this vocabulary exists to prevent.
+ */
+export function yearMarkLabel(years: readonly number[], universe: readonly number[]): string {
+  if (universe.length > 0 && years.length >= universe.length) {
+    return "Todos los años";
+  }
+  return [...years].sort((a, b) => a - b).join(", ") || "\u2014";
+}
+
+/**
+ * The months' twin, read by a bar's «Mes» trigger: marking every loaded month is the same reading as
+ * marking none, so it is written «Todos los meses» rather than spelling twelve abbreviations into the
+ * widest control of the bar.
+ *
+ * It ENUMERATES and does not compose a range —«Ene, Feb, Mar», never «Ene–Mar»— because the trigger
+ * says what is MARKED, one entry per checkbox, while `monthSpanLabel` says what the reading COVERS.
+ */
+export function monthMarkLabel(months: readonly number[], universe: readonly number[]): string {
+  return months.length === 0 || months.length >= universe.length
+    ? "Todos los meses"
+    : [...months]
+        .sort((a, b) => a - b)
+        .map((month) => MONTHS_SHORT_ES[month])
+        .join(", ");
+}
+
+/**
+ * A reading's period with a narrowing IN FRONT — the one composition of the two, read by the
+ * subtitles and by a report's header. Two of them would let the screen and the paper name the same
+ * reading differently.
+ */
+export function scopedPeriodLabel(scope: string | null, period: string): string {
+  return scope ? `${scope} · ${period}` : period;
 }

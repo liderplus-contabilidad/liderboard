@@ -117,6 +117,21 @@ export function formatCurrencyOrDash(value: number | null): string {
   return formatCurrency(value, { cents: true });
 }
 
+/**
+ * A table percentage: with one decimal, and a DASH when there is nothing to say.
+ *
+ * It is `formatCurrencyOrDash`'s twin and paints zero the same way, for the same reason: in a grid a
+ * row whose amount already reads «–» cannot then claim «0.0 %», because the two would be describing
+ * the same absence in two different voices and the reader looks for the difference. Where zero IS a
+ * claim —a reconciled share, a deliberate nothing— `formatPercent` is used directly.
+ */
+export function formatPercentOrDash(value: number | null): string {
+  if (value === null || value === 0) {
+    return "–";
+  }
+  return formatPercent(value);
+}
+
 /** Percentage with one decimal, Spanish spacing ("12.4 %"). */
 export function formatPercent(value: number, fractionDigits = 1): string {
   return `${formatPoints(value, fractionDigits)} %`;

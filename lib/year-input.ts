@@ -1,5 +1,9 @@
 /**
- * **What counts as a year somebody can type**, and the one place that decides it.
+ * **What counts as a year somebody can type**, and the app's one answer to it.
+ *
+ * It started in `lib/revenue/` and moved here the day «Análisis costo personal» grew a drawer of its
+ * own: two captures typing a year would be two rules about what a year is, and the second would be
+ * written slightly differently from the first.
  *
  * The drawer's year is TYPED rather than picked off a strip: a firm that has been keeping these
  * figures for a decade needs to reach 2016 without clicking «atrás» eight times, and a segmented
