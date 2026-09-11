@@ -1,6 +1,6 @@
 /**
- * The screen's FOUR readings, described as DATA (`option` + `table`) and not as markup: the partition
- * planta/externos, the evolution by group, the ranking of concepts and the share of ventas by level.
+ * The screen's THREE readings, described as DATA (`option` + `table`) and not as markup: the partition
+ * planta/externos, the evolution by group and the share of ventas by level.
  *
  * That they are data is what lets the Datos tab, the Gráficos tab and any future printable report read
  * the same construction instead of each rebuilding its figures — two computations of one question
@@ -24,7 +24,6 @@ import {
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
-  CHART_NEUTRAL,
   CHART_STAGE,
   CHART_STAGE_LIGHT,
   CHART_STAGE_MATERIAL,
@@ -75,7 +74,7 @@ import {
   type PersonnelSectionId,
 } from "./accounts";
 import { shareOf, type PersonnelCostReading, type PersonnelYearReading } from "./derive";
-import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_SECTIONS, GUIDE_SHARES } from "./guides";
+import { GUIDE_GROUPS, GUIDE_SECTIONS, GUIDE_SHARES } from "./guides";
 
 /**
  * **The module's ONE colour universe**, and it deliberately does not list the sections: `planta`, plus
@@ -97,9 +96,6 @@ function colorForPersonnel(id: string): string {
   return colorForEntity(resolved, COLOR_UNIVERSE);
 }
 
-/** How many concepts the ranking DRAWS before folding the tail into one bar. */
-export const CONCEPT_SLICES = 8;
-
 /**
  * The two shapes «Evolución» can take, and they answer two different questions.
  *
@@ -119,7 +115,6 @@ const SECTIONS_HEIGHT = 300;
 const GROUPS_HEIGHT = 300;
 /** The same card in three dimensions: perspective spends height a flat plot does not. */
 const GROUPS_HEIGHT_3D = 400;
-const CONCEPTS_HEIGHT = 340;
 
 /** Exactly what the cards were built from — the provider exposes it so nothing recomposes it. */
 export interface PersonnelCardsInput {
@@ -133,14 +128,13 @@ export interface PersonnelCardsInput {
   /**
    * Which of the other two cards are standing on the stage. Flat when not given.
    *
-   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly three, they are
+   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly two, they are
    * fixed, and a typo in a key would silently draw a flat card forever. «Evolución» is not among them
    * because its second shape is a skyline and not a frieze — a different reading, with a control of
    * its own (`evolutionView`).
    */
   solidViews?: {
     sections?: SolidView;
-    concepts?: SolidView;
     shares?: SolidView;
   };
   /**
@@ -182,7 +176,6 @@ export interface PersonnelCards {
   /** All three can come out in three dimensions — hence the widened option type on every one. */
   sections: ChartCardSpec<ChartOption | Chart3DOption>;
   groups: ChartCardSpec<ChartOption | Chart3DOption>;
-  concepts: ChartCardSpec<ChartOption | Chart3DOption>;
   /** Can stand on the stage like the others; a bar is clicked the same way in both dimensions. */
   shares: ChartCardSpec<ChartOption | Chart3DOption>;
   /** The bars of `shares` in axis order — what a click's `dataIndex` names. */
@@ -1125,167 +1118,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 3 · Composición por concepto
-// ---------------------------------------------------------------------------
-
-interface ConceptTotal {
-  id: string;
-  label: string;
-  total: number;
-}
-
-/** Every concept in scope, summed across the marked years, largest first and zeros dropped. */
-function conceptTotals(input: PersonnelCardsInput): ConceptTotal[] {
-  const marked = new Set(input.groups);
-  const totals = new Map<string, ConceptTotal>();
-  const add = (id: string, label: string, total: number) => {
-    const current = totals.get(id);
-    totals.set(id, { id, label, total: (current?.total ?? 0) + total });
-  };
-  for (const year of input.reading.years) {
-    for (const group of year.groups) {
-      if (marked.size > 0 && !marked.has(group.group.id)) {
-        continue;
-      }
-      for (const row of group.rows) {
-        add(row.concept.id, row.concept.label, row.total);
-      }
-    }
-    // The typed lines are NOT narrowed by «Grupo»: a legacy exercise has no groups, so a mark that
-    // means nothing for it must not make it disappear — the grid's same rule.
-    for (const row of year.legacyRows) {
-      add(`legacy:${row.row.id}`, row.row.label, row.total);
-    }
-  }
-  return [...totals.values()]
-    .filter((entry) => entry.total !== 0)
-    .sort((a, b) => b.total - a.total);
-}
-
-function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
-  const { period } = input;
-  const all = conceptTotals(input);
-  const grandTotal = all.reduce((sum, entry) => sum + entry.total, 0);
-  const drawn = all.slice(0, CONCEPT_SLICES);
-  const tail = all.slice(CONCEPT_SLICES);
-  const tailTotal = tail.reduce((sum, entry) => sum + entry.total, 0);
-
-  // The tail is FOLDED and never truncated: a chart whose bars do not add up to the total it is a
-  // breakdown of is exactly what makes a figure untrustworthy. The table twin lists every concept.
-  const bars = [
-    ...drawn,
-    ...(tail.length > 0
-      ? [{ id: "resto", label: `Otros ${tail.length} conceptos`, total: tailTotal }]
-      : []),
-  ];
-
-  const option: ChartOption | null =
-    bars.length === 0
-      ? null
-      : {
-          animationDuration: 300,
-          textStyle: { fontFamily: CHART_FONT },
-          grid: { left: 8, right: 90, top: 6, bottom: 6, outerBoundsMode: "same" },
-          // Inverted so the largest sits on TOP, which is where a ranking is read from.
-          yAxis: categoryAxis(
-            bars.map((entry) => entry.label),
-            { inverse: true },
-          ),
-          xAxis: valueAxis(money),
-          legend: legendFor(false),
-          // The amount alone: «% del costo» stays in the table twin, which is where a percentage
-          // measured against another denominator than the rest of the screen says so in its header.
-          tooltip: itemTooltip(
-            (param) =>
-              `<div style="font-weight:600;margin-bottom:4px">${param.name}</div>` +
-              `<div><b>${moneyExact(Number(param.value))}</b></div>`,
-          ),
-          series: [
-            {
-              id: "concepts",
-              type: "bar",
-              data: bars.map((entry, index) => ({
-                value: entry.total,
-                itemStyle: {
-                  // The head of the ranking takes the saturated slice sequence; the folded tail is
-                  // NEUTRAL, because it is not one entity and must not read as the ninth.
-                  color: entry.id === "resto" ? CHART_NEUTRAL : colorForSliceSlot(index),
-                  borderRadius: ROUND_RIGHT,
-                },
-              })),
-              barMaxWidth: 22,
-              label: {
-                show: true,
-                position: "right",
-                distance: 8,
-                color: CHART_INK.muted,
-                fontSize: 11,
-                fontWeight: 600,
-                formatter: (param) => money(Number(param.value)),
-              },
-              labelLayout: { hideOverlap: true },
-            },
-          ],
-        };
-
-  const rows: ChartTableRow[] = all.map((entry, index) => ({
-    id: entry.id,
-    label: entry.label,
-    color: index < CONCEPT_SLICES ? colorForSliceSlot(index) : undefined,
-    values: [moneyExact(entry.total), cell(shareOf(entry.total, grandTotal), percent)],
-  }));
-  if (rows.length > 0) {
-    rows.push({
-      id: "total",
-      label: "Total costo de personal",
-      emphasis: true,
-      values: [moneyExact(grandTotal), percent(100)],
-    });
-  }
-
-  // The ranking standing up is `solid-bars`' own case: ONE row, and the colour belongs to the COLUMN
-  // because there it is the concept's identity and not the row's. Translated by slot, so a concept is
-  // the same hue here and in every other 3D card.
-  const solid = solidBody(
-    bars.map((entry) => entry.label),
-    [
-      {
-        id: "concepts",
-        name: "Conceptos",
-        color: stageSliceColor(colorForSliceSlot(0)),
-        values: bars.map((entry) => entry.total),
-      },
-    ],
-    { value: moneyExact, axis: money },
-    {
-      colors: bars.map((entry, index) =>
-        entry.id === "resto"
-          ? stageColor(CHART_NEUTRAL)
-          : stageSliceColor(colorForSliceSlot(index)),
-      ),
-    },
-  );
-  const asSolid = standing(input.solidViews?.concepts, solid);
-
-  return {
-    id: "personnel-concepts",
-    title: "Composición por concepto",
-    subtitle: period,
-    option: asSolid ? solid : option,
-    table: { columns: ["Monto", "% del costo"], rows },
-    note: sentence(
-      tail.length > 0
-        ? `${tail.length} conceptos más suman ${moneyExact(tailTotal)} y se dibujan en una sola barra; la tabla los lista todos.`
-        : undefined,
-      asSolid,
-    ),
-    guide: GUIDE_CONCEPTS,
-    height: asSolid ? SOLID_BARS_HEIGHT : CONCEPTS_HEIGHT,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 4 · % vs ventas por nivel
+// 3 · % vs ventas por nivel
 // ---------------------------------------------------------------------------
 
 const SHARES_HEIGHT = 300;
@@ -1480,8 +1313,7 @@ function buildSharesCard(input: PersonnelCardsInput): {
     figures.get(id)?.get(year) ?? null;
   // Sections and groups wear their own entity colour. At the last level every bar is a different
   // account, and painting all of them in the group's colour left nine bars nobody could tell apart:
-  // there each one takes its slot of the slice sequence, translated by position exactly as the
-  // ranking does, so a concept keeps one hue in both cards.
+  // there each one takes its slot of the slice sequence, by position.
   const colorOf = (entry: SharesEntry, index: number): string =>
     path.group === null ? colorForPersonnel(entry.id) : colorForSliceSlot(index);
   const drawn = entries.filter((entry) =>
@@ -1631,7 +1463,6 @@ export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards 
   return {
     sections: buildSectionsCard(input),
     groups: groups.card,
-    concepts: buildConceptsCard(input),
     shares: shares.card,
     sharesEntries: shares.entries,
     sharesCrumbs: shares.crumbs,

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { Fragment, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ChartCard } from "@/components/ui/chart-card";
@@ -13,7 +13,7 @@ import type { EvolutionView, PersonnelCardsInput, SharesCrumb } from "@/lib/pers
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
- * The Gráficos tab: the four figures as tiles, and the four readings as cards.
+ * The Gráficos tab: the four figures as tiles, and the three readings as cards.
  *
  * The tiles are here and not in Datos because there the table already states every one of them, and a
  * number said twice on one screen makes the reader look for a difference between two figures that have
@@ -29,9 +29,8 @@ const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
 ];
 
 /**
- * «Ver como» en las otras tres — el dibujo llano, o el mismo de pie en el escenario. Es UNA lista
- * para las tres porque son la misma pregunta tres veces, la misma que hacen Ventas e Ingresos.
- * «% vs ventas por nivel» la comparte también.
+ * «Ver como» en las dos planas — el dibujo llano, o el mismo de pie en el escenario. Es UNA lista
+ * para las dos porque son la misma pregunta dos veces, la misma que hacen Ventas e Ingresos.
  */
 const SOLID_VIEWS: { value: SolidView; label: string }[] = [
   { value: "plano", label: "Plano" },
@@ -42,52 +41,43 @@ const SOLID_VIEWS: { value: SolidView; label: string }[] = [
 type SolidCard = keyof NonNullable<PersonnelCardsInput["solidViews"]>;
 
 /**
- * The three cards in reading order, and which control each one's header carries: two offer the
+ * The two shaped cards in reading order, and which control each one's header carries: one offers the
  * stage's frieze, and the evolution offers its own skyline instead — a different shape answering a
  * different half of the question, which is why it is not the same control.
  */
-const SHAPED: { card: "sections" | "groups" | "concepts"; solid: SolidCard | null }[] = [
+const SHAPED: { card: "sections" | "groups"; solid: SolidCard | null }[] = [
   // The evolution right under «Planta vs Externos»: the two are the same stack read at two
   // resolutions —two sections, then the groups inside them— so they are read one after the other.
   { card: "sections", solid: "sections" },
   { card: "groups", solid: null },
-  { card: "concepts", solid: "concepts" },
 ];
 
 /**
- * Las migas de «% vs ventas por nivel»: dónde está el lector y por dónde vuelve. Van en la cabecera de
- * ESA tarjeta y no en la barra de filtros porque solo ella las lee — la regla de la casa para todo
- * control que da forma a una sola tarjeta.
+ * Los niveles de «% vs ventas por nivel» como pestañas: el abierto resaltado y los de arriba pulsables,
+ * con el mismo control que «Ver como», para que un nivel se vea igual de bien que una forma. Van en
+ * la cabecera de ESA tarjeta y no en la barra de filtros porque solo ella los lee — la regla de la
+ * casa para todo control que da forma a una sola tarjeta. Solo hay pestaña para lo ya recorrido: el
+ * nivel de abajo se abre con un clic en su barra, y una pestaña por adelantado tendría que elegir
+ * cuál de ellas.
  */
-function SharesCrumbs({
+function SharesLevels({
   crumbs,
   onGo,
 }: {
   crumbs: SharesCrumb[];
   onGo: (crumb: SharesCrumb) => void;
 }) {
+  const current = String(crumbs.length - 1);
   return (
-    <nav aria-label="Nivel" className="flex items-center gap-1 text-[11.5px]">
-      {crumbs.map((crumb, index) => {
-        const last = index === crumbs.length - 1;
-        return (
-          <span key={crumb.label} className="flex items-center gap-1">
-            {index > 0 && <ChevronRight size={12} className="text-faint" />}
-            {last ? (
-              <span className="font-semibold text-ink">{crumb.label}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onGo(crumb)}
-                className="font-semibold text-faint hover:text-ink hover:underline"
-              >
-                {crumb.label}
-              </button>
-            )}
-          </span>
-        );
-      })}
-    </nav>
+    <span className="flex items-center gap-2">
+      <span className="text-[11.5px] font-semibold text-faint">Nivel</span>
+      <SegmentedControl
+        value={current}
+        options={crumbs.map((crumb, index) => ({ value: String(index), label: crumb.label }))}
+        onChange={(value) => onGo(crumbs[Number(value)])}
+        ariaLabel="Nivel"
+      />
+    </span>
   );
 }
 
@@ -122,8 +112,8 @@ export function PersonnelCostGraficosView() {
   } = usePersonnelCostData();
 
   const ids = useMemo(
-    () => [cards.sections.id, cards.groups.id, cards.shares.id, cards.concepts.id],
-    [cards.sections.id, cards.groups.id, cards.shares.id, cards.concepts.id],
+    () => [cards.sections.id, cards.groups.id, cards.shares.id],
+    [cards.sections.id, cards.groups.id, cards.shares.id],
   );
   // Un clic en una barra abre lo que hay dentro; en una hoja no hay nada que abrir y no hace nada.
   const openSharesLevel = useCallback(
@@ -142,10 +132,9 @@ export function PersonnelCostGraficosView() {
   const share = (value: number | null | undefined) =>
     value === null || value === undefined ? null : formatPercent(value);
 
-  // Penúltima, justo antes del ranking de conceptos: es la lectura que el libro deja en sus tres
-  // columnas de porcentaje, y se lee después de saber cuánto costó y cómo evoluciona, pero antes de
-  // bajar al detalle de cada cuenta. Dos controles en su cabecera, y los dos son suyos: las migas del
-  // nivel y el mismo «Ver como» de las otras dos planas.
+  // La última: es la lectura que el libro deja en sus tres columnas de porcentaje, y se lee después
+  // de saber cuánto costó y cómo evoluciona. Dos controles en su cabecera, y los dos son suyos: las
+  // pestañas del nivel y el mismo «Ver como» de «Planta vs Externos».
   const sharesCard = (
     <ChartCard
       key={cards.shares.id}
@@ -165,7 +154,7 @@ export function PersonnelCostGraficosView() {
         : {
             headerSlot: (
               <span className="flex items-center gap-4">
-                <SharesCrumbs
+                <SharesLevels
                   crumbs={cards.sharesCrumbs}
                   onGo={(crumb) => setSharesPath(crumb.path)}
                 />
@@ -225,11 +214,10 @@ export function PersonnelCostGraficosView() {
       </div>
 
       <div className="flex flex-col gap-4">
-        {SHAPED.map(({ card: which, solid }, index) => {
+        {SHAPED.map(({ card: which, solid }) => {
           const card = cards[which];
           return (
             <Fragment key={card.id}>
-              {index === SHAPED.length - 1 && sharesCard}
               <ChartCard
                 title={card.title}
                 subtitle={card.subtitle}
@@ -275,6 +263,7 @@ export function PersonnelCostGraficosView() {
             </Fragment>
           );
         })}
+        {sharesCard}
       </div>
     </div>
   );

@@ -34,16 +34,6 @@ export const GUIDE_GROUPS: ChartGuide = {
     "Las bandas se apilan hasta el total del mes. Una banda plana no es un error: la nómina propia varía poco y lo que mueve el total son los honorarios.",
 };
 
-export const GUIDE_CONCEPTS: ChartGuide = {
-  purpose: "Qué conceptos pesan dentro del costo de personal del tramo.",
-  actions: [
-    { control: "Personal", effect: "Acota el ranking a los grupos marcados." },
-    { control: "Ver como tabla", effect: "La lista completa, incluida la cola que no se dibuja." },
-  ],
-  reading:
-    "El porcentaje de cada barra es sobre el COSTO DE PERSONAL y no sobre las ventas — es la única cifra de la pantalla medida contra otro denominador, y por eso lo dice la columna.",
-};
-
 export const GUIDE_SHARES: ChartGuide = {
   purpose:
     "Cuánto de las ventas del tramo se va en cada nivel del comparativo: las tres columnas de porcentaje del libro, leídas de fuera hacia dentro.",
