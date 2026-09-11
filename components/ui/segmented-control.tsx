@@ -1,10 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 interface SegmentOption<T extends string> {
   value: T;
+  /** What the segment says — or, with `icon`, what it is called: the label then becomes the
+   *  accessible name and the hover title, so a glyph never leaves the option unnamed. */
   label: string;
+  /** Drawn INSTEAD of the label, for options whose shape says it faster than a word (bar · pie). */
+  icon?: ReactNode;
   /** Renders the segment non-interactive (e.g. frequency below the file's base). */
   disabled?: boolean;
 }
@@ -49,6 +54,8 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             type="button"
             aria-pressed={active}
+            aria-label={option.icon ? option.label : undefined}
+            title={option.icon ? option.label : undefined}
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
@@ -56,7 +63,8 @@ export function SegmentedControl<T extends string>({
               option.disabled && "cursor-not-allowed opacity-40",
               variant === "bar" &&
                 cn(
-                  "px-3 py-[7px] text-xs",
+                  // A glyph keeps the bar's height and gets the width its box needs, no more.
+                  option.icon ? "flex items-center px-2.5 py-[6px]" : "px-3 py-[7px] text-xs",
                   index < options.length - 1 && "border-r border-border",
                   active ? "bg-brand text-white" : "bg-surface text-muted hover:bg-canvas",
                 ),
@@ -74,7 +82,7 @@ export function SegmentedControl<T extends string>({
                 ),
             )}
           >
-            {option.label}
+            {option.icon ?? option.label}
           </button>
         );
       })}
