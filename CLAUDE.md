@@ -230,8 +230,8 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   a growth is measured over the span the two years SHARE (`growth.ts`); and «Mes» narrows every
   marked year at once, so seven months can never be measured against twelve (`filters.ts`).
 - `ratio.ts` and `growth.ts` are THE definitions of a share and of a variation — the cards, the table
-  twins, the capture drawer, the Excel and the report all ask them. A builder that divided would be
-  the second definition.
+  twins, the capture drawer and the report all ask them. A builder that divided would be the second
+  definition.
 - **The comparativo stands on the stage** (`CHART_TRAJECTORY_GROUND`), with one year or several: the
   house rule below, and the skyline —the same reading's other shape— already stands on
   `CHART_STAGE`. The years wear `stageColor`'s slot, as in the 3D box, so the growth card (on
@@ -247,8 +247,8 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   «Registrar datos» are NOT DRAWN — never disabled.
 - `cards/` is one file per reading (`comparison` · `annual` · `growth` · `ratio` · `skyline`), with
   `chrome.ts` for what they share and `index.ts` as the only door. `paste.ts` is what a block copied
-  out of Excel means; `year-input.ts` is what counts as a typed year. **The bar uploads nothing**
-  (its `ExcelActions` gets no `upload`); the one Excel that comes back in is the CAPTURE's own,
+  out of Excel means; `year-input.ts` is what counts as a typed year. **The bar has NO Excel** —
+  what leaves the module is the printed report. The module's one Excel is the CAPTURE's own,
   `capture-workbook.ts`, mounted inside the drawer: one flat sheet `Año · Mes · …` for every year of
   the drawer, located by label, and loading it back REPLACES each year it names whole
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.

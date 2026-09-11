@@ -17,9 +17,20 @@
  * **The GROUP is a mark of the BAR and not a control in a card's header**, because it narrows the
  * whole screen at once: the grid, the four tiles and the four cards. A control read by every card
  * lives here, where it leaves a chip — the rule the app already holds up everywhere else.
+ *
+ * **The SECTION is the other axis of the same narrowing, not a second one.** Planta IS Afiliados +
+ * No afiliados and Externos IS Honorarios médicos, so a section mark is a shorthand for its groups:
+ * `groups` stays the ONE list the engine reads, and `sections` records that the marks were set by
+ * section — which is what lets the bar lock the other column while one is in use, and the chips say
+ * «Planta» instead of its two halves. `groupAxis` is the one answer to which column is in use.
  */
 import { monthMarkLabel, periodLabel, scopedPeriodLabel, yearMarkLabel } from "@/lib/period";
-import { PERSONNEL_GROUPS, type PersonnelGroupId } from "./accounts";
+import {
+  PERSONNEL_GROUPS,
+  PERSONNEL_SECTIONS,
+  type PersonnelGroupId,
+  type PersonnelSectionId,
+} from "./accounts";
 
 /**
  * The rótulos this module composes with. `yearMarkLabel` and `monthMarkLabel` are what the bar's
@@ -38,8 +49,13 @@ export interface PersonnelCostFilters {
   years: number[];
   /** Indices 0–11, in order. Empty = every LOADED month of the marked years. */
   months: number[];
-  /** Marked groups, in the map's order. Empty is ALL of them — the house rule. */
+  /**
+   * Marked groups, in the map's order. Empty is ALL of them — the house rule. When `sections` is
+   * marked this is DERIVED from it: the union of the sections' groups.
+   */
   groups: PersonnelGroupId[];
+  /** Marked sections, in the map's order. Empty when the marks were set by group (or not at all). */
+  sections: PersonnelSectionId[];
 }
 
 /** What the client has, and what the marked years allow choosing. */
@@ -59,8 +75,18 @@ export const PERSONNEL_GROUP_IDS: readonly PersonnelGroupId[] = PERSONNEL_GROUPS
   (group) => group.id,
 );
 
+export const PERSONNEL_SECTION_IDS: readonly PersonnelSectionId[] = PERSONNEL_SECTIONS.map(
+  (section) => section.id,
+);
+
 export function emptyFilters(): PersonnelCostFilters {
-  return { years: [], months: [], groups: [] };
+  return { years: [], months: [], groups: [], sections: [] };
+}
+
+/** The groups a set of sections stands for, in the map's order. */
+function groupsOfSections(sections: readonly PersonnelSectionId[]): PersonnelGroupId[] {
+  const marked = new Set(sections);
+  return PERSONNEL_GROUPS.filter((group) => marked.has(group.section)).map((group) => group.id);
 }
 
 /**
@@ -74,12 +100,18 @@ export function sanitizeFilters(
   const marked = universe.years.filter((year) => filters.years.includes(year));
   const years = marked.length > 0 ? marked : universe.years.slice(-1);
   const available = new Set(universe.months);
+  // The section wins over the groups it was recorded with: the two cannot disagree on read.
+  const sections = PERSONNEL_SECTION_IDS.filter((id) => filters.sections.includes(id));
   return {
     years,
     months: universe.months.filter(
       (month) => available.has(month) && filters.months.includes(month),
     ),
-    groups: PERSONNEL_GROUP_IDS.filter((id) => filters.groups.includes(id)),
+    groups:
+      sections.length > 0
+        ? groupsOfSections(sections)
+        : PERSONNEL_GROUP_IDS.filter((id) => filters.groups.includes(id)),
+    sections,
   };
 }
 
@@ -139,8 +171,34 @@ export function withGroupToggled(
   return { ...filters, groups: PERSONNEL_GROUP_IDS.filter((entry) => marked.has(entry)) };
 }
 
+export function withSectionToggled(
+  filters: PersonnelCostFilters,
+  id: PersonnelSectionId,
+): PersonnelCostFilters {
+  const marked = new Set(filters.sections);
+  if (marked.has(id)) {
+    marked.delete(id);
+  } else {
+    marked.add(id);
+  }
+  const sections = PERSONNEL_SECTION_IDS.filter((entry) => marked.has(entry));
+  return { ...filters, sections, groups: groupsOfSections(sections) };
+}
+
+/** Clears BOTH axes: they are one narrowing, and the chip bar's «Limpiar» means all of it. */
 export function withGroupsCleared(filters: PersonnelCostFilters): PersonnelCostFilters {
-  return { ...filters, groups: [] };
+  return { ...filters, groups: [], sections: [] };
+}
+
+/**
+ * Which column of «Grupo» is in use — the ONE rule the bar locks the other column by. `null` with no
+ * mark, when both are open.
+ */
+export function groupAxis(filters: PersonnelCostFilters): "group" | "section" | null {
+  if (filters.sections.length > 0) {
+    return "section";
+  }
+  return filters.groups.length > 0 ? "group" : null;
 }
 
 /** Whether a group is inside the narrowing. No mark is ALL of them. */
@@ -171,6 +229,13 @@ export function describeGroupScope(filters: PersonnelCostFilters): string | null
   if (filters.groups.length === 0 || filters.groups.length === PERSONNEL_GROUP_IDS.length) {
     return null;
   }
+  // Set by section, named by section: «Planta» says more than «2 de 3 grupos».
+  if (filters.sections.length > 0) {
+    const labels = PERSONNEL_SECTIONS.filter((section) =>
+      filters.sections.includes(section.id),
+    ).map((section) => section.label);
+    return labels.join(" y ");
+  }
   const labels = PERSONNEL_GROUPS.filter((group) => filters.groups.includes(group.id)).map(
     (group) => group.label,
   );
@@ -183,5 +248,7 @@ export function describeGroupScope(filters: PersonnelCostFilters): string | null
  * dropdown already shows the whole selection in its label.
  */
 export function activeMarkCount(filters: PersonnelCostFilters): number {
-  return filters.months.length + filters.groups.length;
+  // A section is ONE chip, not one per group it stands for.
+  const narrowing = filters.sections.length > 0 ? filters.sections.length : filters.groups.length;
+  return filters.months.length + narrowing;
 }

@@ -215,20 +215,30 @@ export function DropdownOption({
   selected,
   onToggle,
   code,
+  disabled = false,
   children,
 }: {
   selected: boolean;
   onToggle: () => void;
   code?: string;
+  /**
+   * A row that cannot be marked RIGHT NOW because a sibling axis is in use (Costo de personal's
+   * «Grupo» locks its «Sección» column and vice versa). Unlike a control that means nothing, which
+   * is not drawn, this one is drawn dimmed: the row exists, and what is missing is clearing the other
+   * column first.
+   */
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
       className={cn(
         "flex w-full items-center gap-[9px] rounded-lg px-2 py-1.5 text-left text-[12.5px] transition-colors",
         selected ? "bg-brand-soft font-medium text-brand" : "text-ink hover:bg-canvas",
+        disabled && "cursor-not-allowed opacity-45 hover:bg-transparent",
       )}
     >
       <Checkbox checked={selected} size={17} />

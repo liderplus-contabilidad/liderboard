@@ -13,9 +13,11 @@ import {
 import { ChipBar, FilterChip } from "@/components/ui/filter-chip";
 import { Toolbar, ToolbarLabel } from "@/components/ui/toolbar";
 import { MONTHS_FULL_ES } from "@/lib/date";
-import { PERSONNEL_GROUPS } from "@/lib/personnel-cost/accounts";
+import { PERSONNEL_GROUPS, PERSONNEL_SECTIONS } from "@/lib/personnel-cost/accounts";
 import {
   activeMarkCount,
+  describeGroupScope,
+  groupAxis,
   monthMarkLabel,
   withGroupsCleared,
   yearMarkLabel,
@@ -47,7 +49,7 @@ export function PersonnelCostToolbar({
   tab: "graficos" | "datos";
 }) {
   const data = usePersonnelCostData();
-  const { toggleYear, selectAllYears, clearMonths, toggleGroup, clearGroups } = data;
+  const { toggleYear, selectAllYears, clearMonths, toggleGroup, toggleSection, clearGroups } = data;
   const hideYears = tab === "datos";
   const universe = hideYears ? data.datosUniverse : data.universe;
   const toggleMonth = hideYears ? data.toggleDatosMonth : data.toggleMonth;
@@ -63,7 +65,13 @@ export function PersonnelCostToolbar({
   const markedYears = new Set(filters.years);
   const markedMonths = new Set(filters.months);
   const markedGroups = new Set(filters.groups);
+  const markedSections = new Set(filters.sections);
+  // Which column of «Grupo» is in use: the other one is drawn LOCKED until this one is cleared, because
+  // a section is its groups and marking on both would be marking the same thing twice.
+  const axis = groupAxis(filters);
   const groupName = (id: string) => PERSONNEL_GROUPS.find((group) => group.id === id)?.label ?? id;
+  const sectionName = (id: string) =>
+    PERSONNEL_SECTIONS.find((section) => section.id === id)?.label ?? id;
 
   return (
     // EDGE TO EDGE and not a card: it is the same bar PyG hangs under its tabs, so it reads as a
@@ -151,32 +159,58 @@ export function PersonnelCostToolbar({
                 misma regla con la que este bar oculta «Mes» cuando no hay meses que acotar. */}
             {groupsAvailable && (
               <Dropdown>
-                <DropdownTrigger active={markedGroups.size > 0} icon={<Layers size={15} />}>
-                  {markedGroups.size === 0
-                    ? "Grupo"
-                    : markedGroups.size === 1
-                      ? `Grupo · ${groupName(filters.groups[0])}`
-                      : `Grupo · ${markedGroups.size} de ${PERSONNEL_GROUPS.length}`}
+                <DropdownTrigger active={axis !== null} icon={<Layers size={15} />}>
+                  {(() => {
+                    // `describeGroupScope` is the one wording of the narrowing; it is `null` for
+                    // «all», which here includes both sections marked.
+                    const scope = describeGroupScope(filters);
+                    return scope === null ? "Grupo" : `Grupo · ${scope}`;
+                  })()}
                 </DropdownTrigger>
-                <DropdownPanel width={260}>
+                <DropdownPanel width={400}>
                   <div className="-mx-1 mb-1">
-                    <DropdownChoice selected={markedGroups.size === 0} onSelect={clearGroups}>
+                    <DropdownChoice selected={axis === null} onSelect={clearGroups}>
                       Todos los grupos
                     </DropdownChoice>
                   </div>
-                  <div className="-mx-1 border-t border-border-soft pt-1.5">
-                    {PERSONNEL_GROUPS.map((group) => (
-                      <DropdownOption
-                        key={group.id}
-                        selected={markedGroups.has(group.id)}
-                        onToggle={() => toggleGroup(group.id)}
-                      >
-                        {group.label}
-                      </DropdownOption>
-                    ))}
+                  {/* Two columns, one per axis of the same narrowing. Marking in one LOCKS the other
+                      —dimmed, not hidden— because Planta IS Afiliados + No afiliados: the row exists
+                      and what is missing is clearing the column in use. */}
+                  <div className="-mx-1 grid grid-cols-2 gap-x-3 border-t border-border-soft pt-1.5">
+                    <div>
+                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+                        Grupo
+                      </p>
+                      {PERSONNEL_GROUPS.map((group) => (
+                        <DropdownOption
+                          key={group.id}
+                          selected={markedGroups.has(group.id) && axis === "group"}
+                          disabled={axis === "section"}
+                          onToggle={() => toggleGroup(group.id)}
+                        >
+                          {group.label}
+                        </DropdownOption>
+                      ))}
+                    </div>
+                    <div className="border-l border-border-soft pl-3">
+                      <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+                        Sección
+                      </p>
+                      {PERSONNEL_SECTIONS.map((section) => (
+                        <DropdownOption
+                          key={section.id}
+                          selected={markedSections.has(section.id)}
+                          disabled={axis === "group"}
+                          onToggle={() => toggleSection(section.id)}
+                        >
+                          {section.label}
+                        </DropdownOption>
+                      ))}
+                    </div>
                   </div>
                   <DropdownNote>
-                    Acota toda la pantalla: la tabla, los indicadores y las cuatro lecturas.
+                    Acota toda la pantalla: la tabla, los indicadores y las cuatro lecturas. Una
+                    sección es sus grupos, así que marcar en una columna bloquea la otra.
                   </DropdownNote>
                 </DropdownPanel>
               </Dropdown>
@@ -202,9 +236,14 @@ export function PersonnelCostToolbar({
               onRemove={() => toggleMonth(month)}
             />
           ))}
-          {filters.groups.map((id) => (
-            <FilterChip key={id} label={groupName(id)} onRemove={() => toggleGroup(id)} />
-          ))}
+          {/* Set by section, one chip per section — never its two halves. */}
+          {axis === "section"
+            ? filters.sections.map((id) => (
+                <FilterChip key={id} label={sectionName(id)} onRemove={() => toggleSection(id)} />
+              ))
+            : filters.groups.map((id) => (
+                <FilterChip key={id} label={groupName(id)} onRemove={() => toggleGroup(id)} />
+              ))}
         </ChipBar>
       )}
     </div>

@@ -58,7 +58,7 @@ export interface RevenueCardsOptions {
   annualShape?: AnnualShape;
   /**
    * The BODY the annual reading is drawn in — «Ver como», the same control the three ratios carry.
-   * Omitted it is flat, so the paper and the Excel keep inheriting the shape they can carry.
+   * Omitted it is flat, so the paper keeps inheriting the shape it can carry.
    *
    * The growth has NO field here and no body to choose: a variation is read against the zero line,
    * and the stage has no line to read it against — see `buildGrowthCard`.

@@ -92,6 +92,33 @@ describe("Planta vs Externos", () => {
   it("la nota dice los dos porcentajes sobre ventas, que es la conclusión del reporte", () => {
     expect(sections.note).toBe("Sobre ventas: planta 27.5 %, externos 22.6 %.");
   });
+
+  it("una marca de «Grupo» acota cada sección a sus grupos marcados y calla la que no tiene ninguno", () => {
+    const { sections, groups } = cards([goldenYear()], ["afiliados"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta"]);
+    // Planta acotada a Afiliados es la serie de Afiliados de la evolución, cifra por cifra.
+    const afiliados = flat(groups.option).series.find((entry) => entry.name === "Afiliados");
+    expect(sections.option?.series[0].data).toEqual(afiliados?.data);
+    expect(sections.table.columns).toEqual(["Planta", "Total"]);
+    expect(sections.note).toMatch(/^Sobre ventas: planta [\d.]+ %\.$/);
+  });
+
+  it("marcar Honorarios médicos deja solo Externos", () => {
+    const { sections } = cards([goldenYear()], ["honorarios-medicos"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Externos"]);
+  });
+
+  it("un ejercicio tipeado no tiene grupos, así que la marca no le quita ninguna sección", () => {
+    const marked = buildPersonnelCards({
+      reading: readPersonnelCost([legacyYear()], [0, 1]),
+      groups: ["afiliados"],
+      period: "Ene–Feb 2019",
+    });
+    expect(marked.sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+    ]);
+  });
 });
 
 describe("Costo vs ventas", () => {

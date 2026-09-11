@@ -10,7 +10,7 @@ import type { SolidView } from "@/lib/charts/solid-bars";
 import { externalForClient } from "@/lib/revenue/db";
 import { resolveMonthlyRevenue } from "@/lib/revenue/derive";
 import type { RevenueExternalMonth } from "@/lib/revenue/types";
-import type { PersonnelGroupId } from "@/lib/personnel-cost/accounts";
+import type { PersonnelGroupId, PersonnelSectionId } from "@/lib/personnel-cost/accounts";
 import { PERSONNEL_ACCOUNT_CODES } from "@/lib/personnel-cost/accounts";
 import { canReadPersonnelCost } from "@/lib/personnel-cost/availability";
 import {
@@ -50,6 +50,7 @@ import {
   withAllYears,
   withGroupsCleared,
   withGroupToggled,
+  withSectionToggled,
   withMonthsCleared,
   withMonthToggled,
   withYearToggled,
@@ -167,6 +168,8 @@ interface PersonnelCostDataValue {
   toggleMonth: (monthIndex: number) => void;
   clearMonths: () => void;
   toggleGroup: (id: PersonnelGroupId) => void;
+  /** The other axis of the same narrowing — see `filters.ts`. */
+  toggleSection: (id: PersonnelSectionId) => void;
   clearGroups: () => void;
   /** Writes one month of the nómina de familia. `null` clears it. */
   saveFamily: (year: number, monthIndex: number, amount: number | null) => Promise<void>;
@@ -479,6 +482,10 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     (id: PersonnelGroupId) => setRawFilters((current) => withGroupToggled(current, id)),
     [],
   );
+  const toggleSection = useCallback(
+    (id: PersonnelSectionId) => setRawFilters((current) => withSectionToggled(current, id)),
+    [],
+  );
   const clearGroups = useCallback(() => setRawFilters(withGroupsCleared), []);
 
   const saveFamily = useCallback(
@@ -718,6 +725,7 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     toggleMonth,
     clearMonths,
     toggleGroup,
+    toggleSection,
     clearGroups,
     saveFamily,
     saveFamilyBlock,

@@ -16,7 +16,6 @@ import { PygEmptyState } from "../pyg-empty-state";
 import { RevenueCapturePanel } from "./revenue-capture-panel";
 import { RevenueDataProvider, useRevenueData } from "./revenue-data-provider";
 import { RevenueEmptyState } from "./revenue-empty-state";
-import { RevenueExcelActions } from "./revenue-excel-actions";
 import { RevenueReportButton } from "./report/revenue-report-button";
 import { RevenueToolbar } from "./revenue-toolbar";
 
@@ -127,7 +126,6 @@ function RevenueContent() {
                   Registrar datos
                 </Button>
               )}
-              <RevenueExcelActions />
               <RevenueReportButton />
             </>
           }

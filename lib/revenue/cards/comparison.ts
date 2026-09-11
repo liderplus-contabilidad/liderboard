@@ -224,7 +224,7 @@ function yearTooltip(
 }
 
 /**
- * The comparison as PAPER and Excel can carry it: flat, always.
+ * The comparison as PAPER can carry it: flat, always.
  *
  * Writing the check down rather than casting is the whole point — a 3D box is a WebGL canvas no
  * printed sheet renders and a camera nobody can press, so if the default is ever flipped this has to

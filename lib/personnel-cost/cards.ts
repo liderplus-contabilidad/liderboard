@@ -465,25 +465,64 @@ function sentence(note: string | undefined, asSolid: boolean): string | undefine
 // 1 · Planta vs Externos
 // ---------------------------------------------------------------------------
 
+/**
+ * A section's figures under the bar's «Grupo» marks: the section whole with no mark, and otherwise
+ * the SUM of its marked groups — Planta narrowed to Afiliados is the Afiliados series, figure by
+ * figure. A typed exercise has no groups, so a mark means nothing for it and the section stays whole,
+ * the same rule the evolution and the concepts already hold. `null` when the section has no marked
+ * group at all: it is then not drawn, because a stack of zeros would claim the section cost nothing.
+ */
+function narrowedSection(
+  year: PersonnelYearReading,
+  sectionId: PersonnelSectionId,
+  marked: ReadonlySet<PersonnelGroupId>,
+): { total: number; monthly: (number | null)[] } | null {
+  const whole = year.sections.find((entry) => entry.section.id === sectionId);
+  if (!whole) {
+    return null;
+  }
+  if (marked.size === 0 || year.groups.length === 0) {
+    return { total: whole.total, monthly: whole.monthly };
+  }
+  const groups = year.groups.filter(
+    (entry) => entry.group.section === sectionId && marked.has(entry.group.id),
+  );
+  if (groups.length === 0) {
+    return null;
+  }
+  return {
+    total: groups.reduce((sum, entry) => sum + entry.total, 0),
+    monthly: whole.monthly.map((_, month) =>
+      groups.every((entry) => entry.monthly[month] === null)
+        ? null
+        : groups.reduce((sum, entry) => sum + (entry.monthly[month] ?? 0), 0),
+    ),
+  };
+}
+
 function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
   const { reading, period } = input;
   const years = reading.years.filter((year) => year.covered);
   const comparing = years.length > 1;
+  const marked = new Set(input.groups);
   // ONE year puts the months on the axis; several put the exercises. What the reader compares is what
   // they marked, and no control chooses between the two.
   const categories = comparing
     ? years.map((year) => String(year.year))
     : (years[0]?.months ?? []).map((month) => MONTHS_SHORT_ES[month]);
 
-  const series: ChartSeries[] = PERSONNEL_SECTIONS.map((section, index, all) => {
+  // The sections the marks leave standing: a section none of whose groups is marked is not drawn,
+  // and its column leaves the table twin with it.
+  const drawn = PERSONNEL_SECTIONS.filter((section) =>
+    years.some((year) => narrowedSection(year, section.id, marked) !== null),
+  );
+
+  const series: ChartSeries[] = drawn.map((section, index, all) => {
     const data = comparing
-      ? years.map(
-          (year) => year.sections.find((entry) => entry.section.id === section.id)?.total ?? null,
-        )
+      ? years.map((year) => narrowedSection(year, section.id, marked)?.total ?? null)
       : (years[0]?.months ?? []).map(
           (month) =>
-            years[0]?.sections.find((entry) => entry.section.id === section.id)?.monthly[month] ??
-            null,
+            (years[0] && narrowedSection(years[0], section.id, marked)?.monthly[month]) ?? null,
         );
     return {
       id: `section-${section.id}`,
@@ -511,12 +550,12 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
   const table: ChartTable = {
     // `columns` nombra sólo las columnas de VALORES: la de la etiqueta la encabeza `ChartCard`
     // («Serie»), y anteponerla aquí corría toda la fila una posición.
-    columns: [...PERSONNEL_SECTIONS.map((s) => s.label), "Total"],
+    columns: [...drawn.map((s) => s.label), "Total"],
     rows: categories.map((label, index) => ({
       id: `sections-${label}`,
       label,
       values: [
-        ...PERSONNEL_SECTIONS.map((section) => {
+        ...drawn.map((section) => {
           const found = series.find((entry) => entry.id === `section-${section.id}`);
           return cell((found?.data[index] as number | null) ?? null, moneyExact);
         }),
@@ -525,15 +564,31 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
     })),
   };
 
-  const planta = reading.sections.find((entry) => entry.section.id === "planta");
-  const externos = reading.sections.find((entry) => entry.section.id === "externos");
+  // The note's shares follow the narrowing: what is drawn is what is measured against ventas. With
+  // no mark they are the reading's own —the same figures the tiles say—, and `shareOf` is the one
+  // definition of a share either way.
+  const shareOfSection = (sectionId: PersonnelSectionId): number | null | undefined => {
+    if (!drawn.some((section) => section.id === sectionId)) {
+      return undefined;
+    }
+    if (marked.size === 0) {
+      return reading.sections.find((entry) => entry.section.id === sectionId)?.share;
+    }
+    const total = years.reduce(
+      (sum, year) => sum + (narrowedSection(year, sectionId, marked)?.total ?? 0),
+      0,
+    );
+    return shareOf(total, reading.revenue);
+  };
+  const planta = shareOfSection("planta");
+  const externos = shareOfSection("externos");
 
   // On the stage the two sections stop being a pile and become two ROWS: what the stack says by
   // accumulating, the depth axis says by standing them one behind the other, and each is then read
   // from the floor instead of from wherever the one below it ended.
   const solid = solidBody(
     categories,
-    PERSONNEL_SECTIONS.map((section) => ({
+    drawn.map((section) => ({
       id: section.id,
       name: section.label,
       color: stageColor(colorForPersonnel(section.id)),
@@ -576,11 +631,13 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
           },
     table,
     note: sentence(
-      planta && externos
-        ? `Sobre ventas: planta ${planta.share === null ? "—" : percent(planta.share)}, externos ${
-            externos.share === null ? "—" : percent(externos.share)
-          }.`
-        : undefined,
+      (() => {
+        const parts = [
+          planta === undefined ? null : `planta ${planta === null ? "—" : percent(planta)}`,
+          externos === undefined ? null : `externos ${externos === null ? "—" : percent(externos)}`,
+        ].filter((part): part is string => part !== null);
+        return parts.length > 0 ? `Sobre ventas: ${parts.join(", ")}.` : undefined;
+      })(),
       asSolid,
     ),
     guide: GUIDE_SECTIONS,
