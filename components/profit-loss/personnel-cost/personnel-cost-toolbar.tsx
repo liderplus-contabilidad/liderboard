@@ -25,12 +25,12 @@ import {
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
- * The module's ONE selection surface: **Año · Mes · Grupo**, the active marks, and the actions on the
+ * The module's ONE selection surface: **Año · Mes · Personal**, the active marks, and the actions on the
  * right.
  *
  * It hangs under the tab bar and serves the tab that is open (`tab`). «Año» is Gráficos' alone:
  * Datos takes its year from the strip of exercises above the bar and hides the chip, so no tab shows
- * two selectors of the same thing; Mes and Grupo are the same marks on both tabs, read through each
+ * two selectors of the same thing; Mes and Personal are the same marks on both tabs, read through each
  * tab's own universe. A control read by every card lives here, where it leaves a chip; a control read
  * by ONE card lives in that card's header — which is where «Ocultar filas en cero» sits, because only
  * the grid has rows to hide.
@@ -43,7 +43,7 @@ export function PersonnelCostToolbar({
   /**
    * Which tab the bar is serving. Datos hides «Año»: there the year is the strip's, and a chip that
    * said «2026» over a table the strip had opened on 2025 would be two answers to one question. Its
-   * Mes and Grupo read the OPEN year's universe — a typed year offers all twelve months and no
+   * Mes and Personal read the OPEN year's universe — a typed year offers all twelve months and no
    * groups — while Gráficos' read the marked years'.
    */
   tab: "graficos" | "datos";
@@ -66,7 +66,7 @@ export function PersonnelCostToolbar({
   const markedMonths = new Set(filters.months);
   const markedGroups = new Set(filters.groups);
   const markedSections = new Set(filters.sections);
-  // Which column of «Grupo» is in use: the other one is drawn LOCKED until this one is cleared, because
+  // Which column of «Personal» is in use: the other one is drawn LOCKED until this one is cleared, because
   // a section is its groups and marking on both would be marking the same thing twice.
   const axis = groupAxis(filters);
   const groupName = (id: string) => PERSONNEL_GROUPS.find((group) => group.id === id)?.label ?? id;
@@ -164,13 +164,15 @@ export function PersonnelCostToolbar({
                     // `describeGroupScope` is the one wording of the narrowing; it is `null` for
                     // «all», which here includes both sections marked.
                     const scope = describeGroupScope(filters);
-                    return scope === null ? "Grupo" : `Grupo · ${scope}`;
+                    // «Personal» and not «Grupo»: the control narrows WHO —a type of staff or a
+                    // section of it—, and «Grupo» named only one of its two columns.
+                    return scope === null ? "Personal" : `Personal · ${scope}`;
                   })()}
                 </DropdownTrigger>
                 <DropdownPanel width={400}>
                   <div className="-mx-1 mb-1">
                     <DropdownChoice selected={axis === null} onSelect={clearGroups}>
-                      Todos los grupos
+                      Todo el personal
                     </DropdownChoice>
                   </div>
                   {/* Two columns, one per axis of the same narrowing. Marking in one LOCKS the other

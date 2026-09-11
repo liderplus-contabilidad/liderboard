@@ -134,6 +134,69 @@ describe("Planta vs Externos", () => {
   });
 });
 
+describe("El tooltip de las dos pilas dice el porcentaje sobre ventas", () => {
+  const row = (seriesId: string, seriesName: string, value: number | null, dataIndex = 0) => ({
+    name: "Ene",
+    seriesId,
+    seriesName,
+    value,
+    dataIndex,
+  });
+
+  it("«Planta vs Externos», un año: cada sección y el total contra las ventas de ESE mes", () => {
+    const { sections } = cards();
+    const html = sections.option?.tooltip?.formatter?.([
+      row("section-planta", "Planta", 55989),
+      row("section-externos", "Externos", 48214.12),
+      row("sections-total", "Total", 104203.12),
+    ]);
+    // Enero: 55,989.00 / 240,314.07 = 23.3 %; 48,214.12 → 20.1 %; el total 43.4 %.
+    expect(html).toContain("$55,989.00");
+    expect(html).toContain("23.3 % de ventas");
+    expect(html).toContain("20.1 % de ventas");
+    expect(html).toContain("43.4 % de ventas");
+  });
+
+  it("comparando ejercicios divide por las ventas del ejercicio de la columna", () => {
+    const { sections } = cards([goldenYear({ year: 2025 }), goldenYear()]);
+    const html = sections.option?.tooltip?.formatter?.([
+      row("sections-total", "Total", 723857.09, 1),
+    ]);
+    // Ene–Jun 2026: 723,857.09 / (6 × 240,314.07) = 50.2 %.
+    expect(html).toContain("50.2 % de ventas");
+  });
+
+  it("la evolución por grupo hace lo mismo, y por ejercicio divide cada línea por SUS ventas", () => {
+    const one = cards();
+    const html = flat(one.groups.option).tooltip?.formatter?.([
+      row("evolution-total", "Total", 104203.12),
+    ]);
+    expect(html).toContain("43.4 % de ventas");
+
+    const several = cards([goldenYear({ year: 2025 }), goldenYear()]);
+    const compared = flat(several.groups.option).tooltip?.formatter?.([
+      row("evolution-2026", "2026", 104203.12),
+    ]);
+    expect(compared).toContain("43.4 % de ventas");
+  });
+
+  it("sin ventas conocidas no escribe porcentaje: nunca «0 %»", () => {
+    const typed = buildPersonnelCards({
+      reading: readPersonnelCost(
+        [legacyYear({ revenue: Array.from({ length: 12 }, () => 0) })],
+        [0, 1],
+      ),
+      groups: [],
+      period: "Ene–Feb 2019",
+    });
+    const html = typed.sections.option?.tooltip?.formatter?.([
+      row("sections-total", "Total", 3750),
+    ]);
+    expect(html).toContain("$3,750.00");
+    expect(html).not.toContain("de ventas");
+  });
+});
+
 describe("Costo vs ventas", () => {
   it("divide cada mes por las ventas de ESE mes, no por las del tramo", () => {
     const { ratio } = cards();

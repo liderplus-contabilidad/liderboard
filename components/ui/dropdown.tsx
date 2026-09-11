@@ -223,9 +223,9 @@ export function DropdownOption({
   code?: string;
   /**
    * A row that cannot be marked RIGHT NOW because a sibling axis is in use (Costo de personal's
-   * «Grupo» locks its «Sección» column and vice versa). Unlike a control that means nothing, which
-   * is not drawn, this one is drawn dimmed: the row exists, and what is missing is clearing the other
-   * column first.
+   * «Personal» locks its «Grupo» and «Sección» columns against each other). Unlike a control that
+   * means nothing, which is not drawn, this one is drawn dimmed: the row exists, and what is missing
+   * is clearing the other column first.
    */
   disabled?: boolean;
   children: ReactNode;

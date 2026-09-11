@@ -14,7 +14,10 @@ export const GUIDE_SECTIONS: ChartGuide = {
   actions: [
     { control: "Año", effect: "Con uno el eje son los meses; con varios, los ejercicios." },
     { control: "Mes", effect: "Acota el tramo que se suma y el de las ventas que lo dividen." },
-    { control: "Grupo", effect: "Deja fuera un grupo entero: la partición se recalcula sin él." },
+    {
+      control: "Personal",
+      effect: "Deja fuera un grupo entero: la partición se recalcula sin él.",
+    },
   ],
   reading:
     "Las dos barras suman el total del mes, así que lo que se lee es la proporción. El porcentaje del encabezado es sobre ventas, no sobre el costo.",
@@ -25,7 +28,7 @@ export const GUIDE_REVENUE_RATIO: ChartGuide = {
     "Qué proporción de lo facturado se va en personal, mes a mes — la métrica que la firma arrastra desde 2021.",
   actions: [
     { control: "Año", effect: "Con varios, cada ejercicio es una serie sobre los mismos meses." },
-    { control: "Grupo", effect: "Mide sólo lo que quede marcado contra las mismas ventas." },
+    { control: "Personal", effect: "Mide sólo lo que quede marcado contra las mismas ventas." },
   ],
   reading:
     "Un mes sin estado de resultados cargado no dibuja punto: no es un cero, es que no hay con qué dividir.",
@@ -35,7 +38,7 @@ export const GUIDE_GROUPS: ChartGuide = {
   purpose: "Cómo se mueven los tres grupos del comparativo a lo largo del ejercicio.",
   actions: [
     { control: "Mes", effect: "Acota el eje a los meses marcados." },
-    { control: "Grupo", effect: "Quita una banda de la pila." },
+    { control: "Personal", effect: "Quita una banda de la pila." },
     { control: "Ver como tabla", effect: "Las mismas cifras, con sus totales." },
   ],
   reading:
@@ -45,7 +48,7 @@ export const GUIDE_GROUPS: ChartGuide = {
 export const GUIDE_CONCEPTS: ChartGuide = {
   purpose: "Qué conceptos pesan dentro del costo de personal del tramo.",
   actions: [
-    { control: "Grupo", effect: "Acota el ranking a los grupos marcados." },
+    { control: "Personal", effect: "Acota el ranking a los grupos marcados." },
     { control: "Ver como tabla", effect: "La lista completa, incluida la cola que no se dibuja." },
   ],
   reading:

@@ -233,11 +233,30 @@ const TOOLTIP_CHROME = {
   confine: true,
 };
 
+/**
+ * The VENTAS a tooltip row is measured against — the divisor of «% sobre ventas» for the series and
+ * the column under the cursor. `null` where no ventas are known, and the row then writes no
+ * percentage at all: `shareOf`'s rule, never «0 %».
+ */
+type TooltipRevenue = (seriesId: string, dataIndex: number) => number | null;
+
 function axisTooltip(
   unit: (value: number) => string,
   ground: ChartGround = "surface",
+  revenueOf?: TooltipRevenue,
 ): ChartTooltip {
   const tones = CHART_GROUND[ground];
+  // Beside the figure and not in a column of its own: the box is read one row at a time, and the
+  // percentage is what the reader asked the figure for.
+  const shareText = (row: ChartParam): string => {
+    if (!revenueOf) {
+      return "";
+    }
+    const share = shareOf(Number(row.value), revenueOf(row.seriesId ?? "", row.dataIndex) ?? 0);
+    return share === null
+      ? ""
+      : ` <span style="color:${tones.inkMuted}">· ${percent(share)} de ventas</span>`;
+  };
   return {
     trigger: "axis",
     ...TOOLTIP_CHROME,
@@ -254,7 +273,7 @@ function axisTooltip(
         .filter((row) => row.value !== null && row.value !== undefined)
         .map(
           (row) =>
-            `<div>${row.marker ?? ""} ${row.seriesName ?? ""}: <b>${unit(Number(row.value))}</b></div>`,
+            `<div>${row.marker ?? ""} ${row.seriesName ?? ""}: <b>${unit(Number(row.value))}</b>${shareText(row)}</div>`,
         )
         .join("");
       return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${
@@ -632,7 +651,13 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
             xAxis: categoryAxis(categories),
             yAxis: valueAxis(money),
             legend: legendFor(true),
-            tooltip: axisTooltip(moneyExact),
+            // The column's ventas: the exercise's over the span when comparing, that month's with
+            // one year — the same divisor the ratio card plots.
+            tooltip: axisTooltip(moneyExact, "surface", (_series, index) =>
+              comparing
+                ? (years[index]?.revenue ?? null)
+                : (years[0]?.revenueMonthly[years[0].months[index] ?? -1] ?? null),
+            ),
             series: [...series, totalLine("sections-total", totals, fit)],
           },
     table,
@@ -961,7 +986,27 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     xAxis: categoryAxis(labels),
     yAxis: valueAxis(money),
     legend: legendFor(true),
-    tooltip: axisTooltip(moneyExact),
+    // Comparing exercises each row is a year, so each divides by ITS ventas of that month; with one
+    // year every band and the total divide by the same month's.
+    tooltip: axisTooltip(moneyExact, "surface", (seriesId, index) => {
+      const month = months[index];
+      const covered = input.reading.years.filter((year) => year.covered);
+      if (month === undefined) {
+        return null;
+      }
+      // The total of several exercises in one month is measured against their ventas summed — the
+      // one divisor under which the parts' percentages add up to the whole's.
+      if (comparing && seriesId === "evolution-total") {
+        const known = covered
+          .map((entry) => entry.revenueMonthly[month])
+          .filter((value): value is number => value !== null);
+        return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) : null;
+      }
+      const year = comparing
+        ? covered.find((entry) => `evolution-${entry.year}` === seriesId)
+        : covered[0];
+      return year?.revenueMonthly[month] ?? null;
+    }),
     series: [...barSeries, totalSeries],
   };
 
