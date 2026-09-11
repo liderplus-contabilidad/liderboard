@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
-import { useMemo } from "react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Fragment, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ChartCard } from "@/components/ui/chart-card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -9,11 +9,11 @@ import { StatTile } from "@/components/ui/stat-tile";
 import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { SCREEN_SOLID_VIEW, type SolidView } from "@/lib/charts/solid-bars";
-import type { EvolutionView, PersonnelCardsInput } from "@/lib/personnel-cost/cards";
+import type { EvolutionView, PersonnelCardsInput, SharesCrumb } from "@/lib/personnel-cost/cards";
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 
 /**
- * The Gráficos tab: the four figures as tiles, and the three readings as cards.
+ * The Gráficos tab: the four figures as tiles, and the four readings as cards.
  *
  * The tiles are here and not in Datos because there the table already states every one of them, and a
  * number said twice on one screen makes the reader look for a difference between two figures that have
@@ -31,6 +31,7 @@ const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
 /**
  * «Ver como» en las otras tres — el dibujo llano, o el mismo de pie en el escenario. Es UNA lista
  * para las tres porque son la misma pregunta tres veces, la misma que hacen Ventas e Ingresos.
+ * «% vs ventas por nivel» la comparte también.
  */
 const SOLID_VIEWS: { value: SolidView; label: string }[] = [
   { value: "plano", label: "Plano" },
@@ -53,6 +54,43 @@ const SHAPED: { card: "sections" | "groups" | "concepts"; solid: SolidCard | nul
   { card: "concepts", solid: "concepts" },
 ];
 
+/**
+ * Las migas de «% vs ventas por nivel»: dónde está el lector y por dónde vuelve. Van en la cabecera de
+ * ESA tarjeta y no en la barra de filtros porque solo ella las lee — la regla de la casa para todo
+ * control que da forma a una sola tarjeta.
+ */
+function SharesCrumbs({
+  crumbs,
+  onGo,
+}: {
+  crumbs: SharesCrumb[];
+  onGo: (crumb: SharesCrumb) => void;
+}) {
+  return (
+    <nav aria-label="Nivel" className="flex items-center gap-1 text-[11.5px]">
+      {crumbs.map((crumb, index) => {
+        const last = index === crumbs.length - 1;
+        return (
+          <span key={crumb.label} className="flex items-center gap-1">
+            {index > 0 && <ChevronRight size={12} className="text-faint" />}
+            {last ? (
+              <span className="font-semibold text-ink">{crumb.label}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onGo(crumb)}
+                className="font-semibold text-faint hover:text-ink hover:underline"
+              >
+                {crumb.label}
+              </button>
+            )}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
+
 /** «Ver como» y su control, que es el mismo en las tres cabeceras. */
 function HeaderChoice<T extends string>({
   value,
@@ -72,12 +110,30 @@ function HeaderChoice<T extends string>({
 }
 
 export function PersonnelCostGraficosView() {
-  const { cards, reading, periodName, evolutionView, setEvolutionView, solidViews, setSolidView } =
-    usePersonnelCostData();
+  const {
+    cards,
+    reading,
+    periodName,
+    evolutionView,
+    setEvolutionView,
+    solidViews,
+    setSolidView,
+    setSharesPath,
+  } = usePersonnelCostData();
 
   const ids = useMemo(
-    () => [cards.sections.id, cards.groups.id, cards.concepts.id],
-    [cards.sections.id, cards.groups.id, cards.concepts.id],
+    () => [cards.sections.id, cards.groups.id, cards.shares.id, cards.concepts.id],
+    [cards.sections.id, cards.groups.id, cards.shares.id, cards.concepts.id],
+  );
+  // Un clic en una barra abre lo que hay dentro; en una hoja no hay nada que abrir y no hace nada.
+  const openSharesLevel = useCallback(
+    (dataIndex: number) => {
+      const next = cards.sharesEntries[dataIndex]?.next;
+      if (next) {
+        setSharesPath(next);
+      }
+    },
+    [cards.sharesEntries, setSharesPath],
   );
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(ids);
 
@@ -85,6 +141,44 @@ export function PersonnelCostGraficosView() {
   const externos = reading.sections.find((entry) => entry.section.id === "externos");
   const share = (value: number | null | undefined) =>
     value === null || value === undefined ? null : formatPercent(value);
+
+  // Penúltima, justo antes del ranking de conceptos: es la lectura que el libro deja en sus tres
+  // columnas de porcentaje, y se lee después de saber cuánto costó y cómo evoluciona, pero antes de
+  // bajar al detalle de cada cuenta. Dos controles en su cabecera, y los dos son suyos: las migas del
+  // nivel y el mismo «Ver como» de las otras dos planas.
+  const sharesCard = (
+    <ChartCard
+      key={cards.shares.id}
+      title={cards.shares.title}
+      subtitle={cards.shares.subtitle}
+      option={cards.shares.option}
+      table={cards.shares.table}
+      note={cards.shares.note}
+      guide={cards.shares.guide}
+      height={cards.shares.height}
+      collapsed={isCollapsed(cards.shares.id)}
+      onToggleCollapsed={() => toggle(cards.shares.id)}
+      onSelect={openSharesLevel}
+      expandable
+      {...(cards.shares.option === null
+        ? {}
+        : {
+            headerSlot: (
+              <span className="flex items-center gap-4">
+                <SharesCrumbs
+                  crumbs={cards.sharesCrumbs}
+                  onGo={(crumb) => setSharesPath(crumb.path)}
+                />
+                <HeaderChoice
+                  value={solidViews?.shares ?? SCREEN_SOLID_VIEW}
+                  options={SOLID_VIEWS}
+                  onChange={(view) => setSolidView("shares", view)}
+                />
+              </span>
+            ),
+          })}
+    />
+  );
 
   return (
     <div className="px-7 py-5">
@@ -131,52 +225,54 @@ export function PersonnelCostGraficosView() {
       </div>
 
       <div className="flex flex-col gap-4">
-        {SHAPED.map(({ card: which, solid }) => {
+        {SHAPED.map(({ card: which, solid }, index) => {
           const card = cards[which];
           return (
-            <ChartCard
-              key={card.id}
-              title={card.title}
-              subtitle={card.subtitle}
-              option={card.option}
-              table={card.table}
-              note={card.note}
-              guide={card.guide}
-              height={card.height}
-              collapsed={isCollapsed(card.id)}
-              onToggleCollapsed={() => toggle(card.id)}
-              // Las tres ofrecen «Ampliar»: apiladas a ancho completo la evolución mes a mes y el
-              // ranking de conceptos se leen como tendencia pero no de cerca. La forma se sigue
-              // eligiendo aquí; la ventana es para mirar.
-              expandable
-              // «Ver como» belongs to THIS card and to no other, so it lives in its header and not in
-              // the filter bar. And a control that means nothing for the open data RENDERS NOTHING
-              // rather than sitting disabled: with no plot there is no second shape of it either, and
-              // the evolution's skyline needs something to put on its depth axis.
-              {...(card.option === null
-                ? {}
-                : solid === null
-                  ? cards.skylineAvailable
-                    ? {
+            <Fragment key={card.id}>
+              {index === SHAPED.length - 1 && sharesCard}
+              <ChartCard
+                title={card.title}
+                subtitle={card.subtitle}
+                option={card.option}
+                table={card.table}
+                note={card.note}
+                guide={card.guide}
+                height={card.height}
+                collapsed={isCollapsed(card.id)}
+                onToggleCollapsed={() => toggle(card.id)}
+                // Las tres ofrecen «Ampliar»: apiladas a ancho completo la evolución mes a mes y el
+                // ranking de conceptos se leen como tendencia pero no de cerca. La forma se sigue
+                // eligiendo aquí; la ventana es para mirar.
+                expandable
+                // «Ver como» belongs to THIS card and to no other, so it lives in its header and not in
+                // the filter bar. And a control that means nothing for the open data RENDERS NOTHING
+                // rather than sitting disabled: with no plot there is no second shape of it either, and
+                // the evolution's skyline needs something to put on its depth axis.
+                {...(card.option === null
+                  ? {}
+                  : solid === null
+                    ? cards.skylineAvailable
+                      ? {
+                          headerSlot: (
+                            <HeaderChoice
+                              value={evolutionView}
+                              options={EVOLUTION_VIEWS}
+                              onChange={setEvolutionView}
+                            />
+                          ),
+                        }
+                      : {}
+                    : {
                         headerSlot: (
                           <HeaderChoice
-                            value={evolutionView}
-                            options={EVOLUTION_VIEWS}
-                            onChange={setEvolutionView}
+                            value={solidViews?.[solid] ?? SCREEN_SOLID_VIEW}
+                            options={SOLID_VIEWS}
+                            onChange={(view) => setSolidView(solid, view)}
                           />
                         ),
-                      }
-                    : {}
-                  : {
-                      headerSlot: (
-                        <HeaderChoice
-                          value={solidViews?.[solid] ?? SCREEN_SOLID_VIEW}
-                          options={SOLID_VIEWS}
-                          onChange={(view) => setSolidView(solid, view)}
-                        />
-                      ),
-                    })}
-            />
+                      })}
+              />
+            </Fragment>
           );
         })}
       </div>

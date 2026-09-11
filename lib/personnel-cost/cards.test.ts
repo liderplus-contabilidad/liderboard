@@ -33,7 +33,13 @@ function depthOf(option: Chart3DOption, name: string): number {
 }
 
 import { readPersonnelCost } from "./derive";
-import { GOLDEN_ACCOUNTS, GOLDEN_COVERAGE, goldenYear, legacyYear } from "./fixtures";
+import {
+  GOLDEN_ACCOUNTS,
+  GOLDEN_CONCEPT_TOTALS,
+  GOLDEN_COVERAGE,
+  goldenYear,
+  legacyYear,
+} from "./fixtures";
 
 const SPAN = GOLDEN_COVERAGE;
 
@@ -587,5 +593,156 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
       period: "Ene–Feb 2019",
     });
     expect(marked.concepts.table.rows).toHaveLength(5);
+  });
+});
+
+describe("«% vs ventas por nivel» se navega de fuera hacia dentro", () => {
+  const revenue = 240314.07 * 6;
+  const planta =
+    GOLDEN_CONCEPT_TOTALS.familia +
+    GOLDEN_CONCEPT_TOTALS.administracion +
+    GOLDEN_CONCEPT_TOTALS["mano-obra-directa"] +
+    GOLDEN_CONCEPT_TOTALS["mano-obra-indirecta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-medicos-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-imagenologia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-enfermeria-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-laboratorio-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-fisioterapia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-farmacia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-otros-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-asesoria-contable"] +
+    GOLDEN_CONCEPT_TOTALS["servicios-prestados-planta"];
+
+  function shares(
+    sharesPath?: PersonnelCardsInput["sharesPath"],
+    groups: PersonnelCardsInput["groups"] = [],
+  ) {
+    return buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups,
+      period: "Ene–Jun 2026",
+      sharesPath,
+    });
+  }
+
+  it("arranca en el total: las dos secciones, cada una sobre las ventas del MISMO tramo", () => {
+    const { shares: card, sharesEntries, sharesCrumbs } = shares();
+    expect(sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total"]);
+    expect(sharesEntries.map((entry) => entry.id)).toEqual(["planta", "externos"]);
+    expect(flat(card.option).yAxis).toMatchObject({ data: ["Planta", "Externos"], inverse: true });
+    const [series] = flat(card.option).series;
+    expect((series.data[0] as { value: number }).value).toBeCloseTo((planta / revenue) * 100, 6);
+    // La fila en negrita es el nivel de arriba: el total del costo sobre las ventas.
+    const total = card.table.rows.at(-1);
+    expect(total).toMatchObject({ id: "parent", label: "Total costo de personal", emphasis: true });
+  });
+
+  it("Planta abre sus dos grupos; Externos, hecho de UN grupo, salta directo a sus conceptos", () => {
+    const { sharesEntries } = shares();
+    expect(sharesEntries[0].next).toEqual({ section: "planta", group: null });
+    expect(sharesEntries[1].next).toEqual({ section: "externos", group: "honorarios-medicos" });
+
+    const groups = shares({ section: "planta", group: null });
+    expect(groups.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total", "Planta"]);
+    expect(groups.sharesEntries.map((entry) => entry.id)).toEqual(["afiliados", "no-afiliados"]);
+    expect(groups.shares.table.rows.at(-1)).toMatchObject({ label: "Planta", emphasis: true });
+
+    const concepts = shares({ section: "planta", group: "afiliados" });
+    expect(concepts.sharesCrumbs.map((crumb) => crumb.label)).toEqual([
+      "Total",
+      "Planta",
+      "Afiliados",
+    ]);
+    expect(concepts.sharesEntries.every((entry) => entry.next === null)).toBe(true);
+    expect(concepts.shares.subtitle).toBe("Ene–Jun 2026 · Afiliados");
+    const familia = concepts.shares.table.rows.find((row) => row.id === "familia");
+    expect(familia?.values[0]).toBe("$104,483.50");
+  });
+
+  it("una marca de «Personal» acota el nivel y devuelve al lector si su nivel se quedó sin barras", () => {
+    // Con solo Afiliados marcado, Planta ES Afiliados: se salta el nivel de grupos.
+    const narrowed = shares(undefined, ["afiliados"]);
+    expect(narrowed.sharesEntries.map((entry) => entry.id)).toEqual(["planta"]);
+    expect(narrowed.sharesEntries[0].next).toEqual({ section: "planta", group: "afiliados" });
+    // Parado en No afiliados cuando la marca lo deja fuera: vuelve al nivel de arriba válido.
+    const fallen = shares({ section: "planta", group: "no-afiliados" }, ["afiliados"]);
+    expect(fallen.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total", "Planta"]);
+    // Y parado en Externos cuando ningún grupo suyo está marcado: vuelve al total.
+    const root = shares({ section: "externos", group: "honorarios-medicos" }, ["afiliados"]);
+    expect(root.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total"]);
+  });
+
+  it("con varios años, una barra por ejercicio y ninguna suma de porcentajes", () => {
+    const { shares: card } = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear({ year: 2025 }), goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun · 2025 y 2026",
+    });
+    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2025", "2026"]);
+    expect(flat(card.option).legend).toMatchObject({ show: true });
+    expect(card.table.columns).toEqual([
+      "Monto 2025",
+      "% vs ventas 2025",
+      "Monto 2026",
+      "% vs ventas 2026",
+    ]);
+  });
+
+  it("un ejercicio tipeado no tiene ventas: no se dibuja y la nota lo dice", () => {
+    const { shares: card } = buildPersonnelCards({
+      reading: readPersonnelCost([legacyYear(), goldenYear()], [0, 1]),
+      groups: [],
+      period: "Ene–Feb",
+    });
+    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2026"]);
+    expect(card.note).toContain("tipeado");
+  });
+});
+
+describe("«% vs ventas por nivel» pinta el último nivel cuenta por cuenta", () => {
+  it("las secciones y los grupos llevan su color de entidad; las cuentas, uno por posición", () => {
+    const built = (sharesPath?: PersonnelCardsInput["sharesPath"]) =>
+      buildPersonnelCards({
+        reading: readPersonnelCost([goldenYear()], SPAN),
+        groups: [],
+        period: "Ene–Jun 2026",
+        sharesPath,
+      });
+    const colorsOf = (option: ChartOption | null) =>
+      (flat(option).series[0].data as { itemStyle?: { color?: string } }[]).map(
+        (datum) => datum.itemStyle?.color,
+      );
+    // Dos secciones, dos colores distintos — y los mismos que «Planta vs Externos» usa.
+    expect(new Set(colorsOf(built().shares.option)).size).toBe(2);
+    // Cuatro cuentas de Afiliados: cuatro colores distintos, por su posición en la secuencia.
+    const accounts = colorsOf(built({ section: "planta", group: "afiliados" }).shares.option);
+    expect(accounts).toEqual([0, 1, 2, 3].map(colorForSliceSlot));
+  });
+});
+
+describe("«% vs ventas por nivel» también se pone de pie", () => {
+  it("con «solido» sale en tres dimensiones, un color por columna, y sigue sabiendo bajar", () => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun 2026",
+      solidViews: { shares: "solido" },
+    });
+    expect(is3DOption(built.shares.option as ChartOption | Chart3DOption)).toBe(true);
+    expect(built.shares.note).toContain("Arrastra");
+    // Las barras del escenario van en el mismo orden que las entradas: el clic sigue nombrándolas.
+    expect((built.shares.option as Chart3DOption).xAxis3D).toMatchObject({
+      data: ["Planta", "Externos"],
+    });
+    expect(built.sharesEntries.map((entry) => entry.id)).toEqual(["planta", "externos"]);
+  });
+
+  it("plano por omisión, como las otras", () => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun 2026",
+    });
+    expect(is3DOption(built.shares.option as ChartOption | Chart3DOption)).toBe(false);
   });
 });

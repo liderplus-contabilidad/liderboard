@@ -1,6 +1,6 @@
 /**
- * The screen's THREE readings, described as DATA (`option` + `table`) and not as markup: the partition
- * planta/externos, the evolution by group and the ranking of concepts.
+ * The screen's FOUR readings, described as DATA (`option` + `table`) and not as markup: the partition
+ * planta/externos, the evolution by group, the ranking of concepts and the share of ventas by level.
  *
  * That they are data is what lets the Datos tab, the Gráficos tab and any future printable report read
  * the same construction instead of each rebuilding its figures — two computations of one question
@@ -67,6 +67,7 @@ import {
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
+  conceptsOfGroup,
   groupsOfSection,
   PERSONNEL_GROUPS,
   PERSONNEL_SECTIONS,
@@ -74,7 +75,7 @@ import {
   type PersonnelSectionId,
 } from "./accounts";
 import { shareOf, type PersonnelCostReading, type PersonnelYearReading } from "./derive";
-import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_SECTIONS } from "./guides";
+import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_SECTIONS, GUIDE_SHARES } from "./guides";
 
 /**
  * **The module's ONE colour universe**, and it deliberately does not list the sections: `planta`, plus
@@ -132,7 +133,7 @@ export interface PersonnelCardsInput {
   /**
    * Which of the other two cards are standing on the stage. Flat when not given.
    *
-   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly two, they are
+   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly three, they are
    * fixed, and a typo in a key would silently draw a flat card forever. «Evolución» is not among them
    * because its second shape is a skyline and not a frieze — a different reading, with a control of
    * its own (`evolutionView`).
@@ -140,7 +141,41 @@ export interface PersonnelCardsInput {
   solidViews?: {
     sections?: SolidView;
     concepts?: SolidView;
+    shares?: SolidView;
   };
+  /**
+   * Where the reader stands in «% vs ventas por nivel». The total when not given. It is held by the
+   * provider for the same reason `evolutionView` is, and it is SANITIZED on read (`resolveSharesPath`)
+   * and never in an effect: a level the bar's marks just emptied falls back to the nearest one that
+   * still has bars, so an unrelated click cannot leave the card standing on nothing.
+   */
+  sharesPath?: SharesPath;
+}
+
+/**
+ * The level «% vs ventas por nivel» is open at: nothing (the two sections), a section (its groups) or
+ * a group (its concepts) — the three levels of percentage the workbook writes in columns Q, R and S,
+ * walked from the outside in. A `group` always carries its `section`, so the crumbs never have to
+ * look it up.
+ */
+export interface SharesPath {
+  section: PersonnelSectionId | null;
+  group: PersonnelGroupId | null;
+}
+
+export const SHARES_ROOT: SharesPath = { section: null, group: null };
+
+/** One bar of «% vs ventas por nivel», and where clicking it leads — `null` on a leaf. */
+export interface SharesEntry {
+  id: string;
+  label: string;
+  next: SharesPath | null;
+}
+
+/** One step of the card's breadcrumb, root first. The last one is the level on screen. */
+export interface SharesCrumb {
+  label: string;
+  path: SharesPath;
 }
 
 export interface PersonnelCards {
@@ -148,6 +183,12 @@ export interface PersonnelCards {
   sections: ChartCardSpec<ChartOption | Chart3DOption>;
   groups: ChartCardSpec<ChartOption | Chart3DOption>;
   concepts: ChartCardSpec<ChartOption | Chart3DOption>;
+  /** Can stand on the stage like the others; a bar is clicked the same way in both dimensions. */
+  shares: ChartCardSpec<ChartOption | Chart3DOption>;
+  /** The bars of `shares` in axis order — what a click's `dataIndex` names. */
+  sharesEntries: SharesEntry[];
+  /** The breadcrumb of `shares`, root first, always at least the root. */
+  sharesCrumbs: SharesCrumb[];
   /**
    * Whether the skyline has anything to put on its depth axis. With ONE entity to compare it has
    * none, and the control is NOT DRAWN — a control that means nothing for the open data does not
@@ -1249,12 +1290,355 @@ function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
   };
 }
 
+// ---------------------------------------------------------------------------
+// 4 · % vs ventas por nivel
+// ---------------------------------------------------------------------------
+
+const SHARES_HEIGHT = 300;
+
+/** The groups the bar leaves in scope, in universe order — no mark is all of them. */
+function groupsInScope(marked: readonly PersonnelGroupId[]): PersonnelGroupId[] {
+  const set = new Set(marked);
+  return PERSONNEL_GROUPS.filter((group) => set.size === 0 || set.has(group.id)).map(
+    (group) => group.id,
+  );
+}
+
+/**
+ * The deepest level of `path` the marks still allow. A section with no group in scope, or a group
+ * that is not marked, cannot be stood on: the path falls back one level at a time, and the root is
+ * always valid.
+ */
+export function resolveSharesPath(
+  path: SharesPath | undefined,
+  marked: readonly PersonnelGroupId[],
+): SharesPath {
+  if (!path || path.section === null) {
+    return SHARES_ROOT;
+  }
+  const scope = groupsInScope(marked);
+  const sectionGroups = groupsOfSection(path.section).filter((group) => scope.includes(group.id));
+  if (sectionGroups.length === 0) {
+    return SHARES_ROOT;
+  }
+  if (path.group !== null && sectionGroups.some((group) => group.id === path.group)) {
+    return path;
+  }
+  return { section: path.section, group: null };
+}
+
+/**
+ * Where clicking a section leads: to its groups, unless ONE is in scope — then that group IS the
+ * section (Externos is Honorarios médicos, and Planta narrowed to Afiliados is Afiliados), and a level
+ * with a single bar that only repeats the one just clicked is a step with nothing to show.
+ */
+function sectionNext(section: PersonnelSectionId, scope: readonly PersonnelGroupId[]): SharesPath {
+  const groups = groupsOfSection(section).filter((group) => scope.includes(group.id));
+  return groups.length === 1 ? { section, group: groups[0].id } : { section, group: null };
+}
+
+/** A bar's figure in ONE year: the amount and its share of that year's ventas over the span. */
+interface SharesFigure {
+  total: number;
+  share: number | null;
+}
+
+/**
+ * The bars of the level `path` names, and the figure each one has in each PyG year.
+ *
+ * The share is always the entity's total over the span DIVIDED BY THE VENTAS OF THE SAME SPAN — a
+ * section is the sum of its marked groups over the year's raíz 4, which is `narrowedSection` measured
+ * by `shareOf`, so «Planta» here and «Planta» in the tile are the same number. A typed exercise has no
+ * ventas and therefore no share: it is not a bar, and the note says so.
+ */
+function sharesLevel(
+  input: PersonnelCardsInput,
+  path: SharesPath,
+): {
+  entries: SharesEntry[];
+  figures: Map<string, Map<number, SharesFigure>>;
+  parent: { label: string; figures: Map<number, SharesFigure> };
+} {
+  const marked = new Set(input.groups);
+  const scope = groupsInScope(input.groups);
+  const years = input.reading.years.filter((year) => year.covered && year.groups.length > 0);
+  const figures = new Map<string, Map<number, SharesFigure>>();
+  const put = (id: string, year: number, figure: SharesFigure | null) => {
+    if (figure === null) {
+      return;
+    }
+    const byYear = figures.get(id) ?? new Map<number, SharesFigure>();
+    byYear.set(year, figure);
+    figures.set(id, byYear);
+  };
+  const parent = new Map<number, SharesFigure>();
+
+  if (path.section === null) {
+    const entries = PERSONNEL_SECTIONS.filter((section) =>
+      groupsOfSection(section.id).some((group) => scope.includes(group.id)),
+    ).map<SharesEntry>((section) => ({
+      id: section.id,
+      label: section.label,
+      next: sectionNext(section.id, scope),
+    }));
+    for (const year of years) {
+      let total = 0;
+      for (const entry of entries) {
+        const narrowed = narrowedSection(year, entry.id as PersonnelSectionId, marked);
+        if (narrowed) {
+          total += narrowed.total;
+          put(entry.id, year.year, {
+            total: narrowed.total,
+            share: shareOf(narrowed.total, year.revenue),
+          });
+        }
+      }
+      parent.set(year.year, { total, share: shareOf(total, year.revenue) });
+    }
+    return { entries, figures, parent: { label: "Total costo de personal", figures: parent } };
+  }
+
+  const section = PERSONNEL_SECTIONS.find((entry) => entry.id === path.section);
+  if (path.group === null) {
+    const groups = groupsOfSection(path.section).filter((group) => scope.includes(group.id));
+    const entries = groups.map<SharesEntry>((group) => ({
+      id: group.id,
+      label: group.label,
+      next: { section: group.section, group: group.id },
+    }));
+    for (const year of years) {
+      const narrowed = narrowedSection(year, path.section, marked);
+      if (narrowed) {
+        parent.set(year.year, {
+          total: narrowed.total,
+          share: shareOf(narrowed.total, year.revenue),
+        });
+      }
+      for (const group of year.groups) {
+        if (group.group.section === path.section && scope.includes(group.group.id)) {
+          put(group.group.id, year.year, { total: group.total, share: group.share });
+        }
+      }
+    }
+    return { entries, figures, parent: { label: section?.label ?? "", figures: parent } };
+  }
+
+  const group = PERSONNEL_GROUPS.find((entry) => entry.id === path.group);
+  const entries = conceptsOfGroup(path.group).map<SharesEntry>((concept) => ({
+    id: concept.id,
+    label: concept.label,
+    next: null,
+  }));
+  for (const year of years) {
+    const read = year.groups.find((entry) => entry.group.id === path.group);
+    if (!read) {
+      continue;
+    }
+    parent.set(year.year, { total: read.total, share: read.share });
+    for (const row of read.rows) {
+      put(row.concept.id, year.year, { total: row.total, share: row.share });
+    }
+  }
+  return { entries, figures, parent: { label: group?.label ?? "", figures: parent } };
+}
+
+function sharesCrumbs(path: SharesPath): SharesCrumb[] {
+  const crumbs: SharesCrumb[] = [{ label: "Total", path: SHARES_ROOT }];
+  if (path.section !== null) {
+    const section = PERSONNEL_SECTIONS.find((entry) => entry.id === path.section);
+    crumbs.push({
+      label: section?.label ?? path.section,
+      path: { section: path.section, group: null },
+    });
+  }
+  if (path.group !== null) {
+    const group = PERSONNEL_GROUPS.find((entry) => entry.id === path.group);
+    crumbs.push({ label: group?.label ?? path.group, path });
+  }
+  return crumbs;
+}
+
+/**
+ * «% vs ventas por nivel»: every bar is the entity's total over the span as a percentage of the SAME
+ * span's ventas — the workbook's three percentage columns, read one level at a time. It is the one card
+ * whose bars are measured against ventas and not against the cost, and the one whose reading is
+ * navigated: a click on a bar opens what is inside it, and the crumbs walk back out.
+ *
+ * With ONE year the bars are the entities, each in its own colour; with SEVERAL every entity carries
+ * one bar per exercise, because two years' shares are compared side by side and never summed — a
+ * percentage of two different denominators has no sum.
+ */
+function buildSharesCard(input: PersonnelCardsInput): {
+  card: ChartCardSpec<ChartOption | Chart3DOption>;
+  entries: SharesEntry[];
+  crumbs: SharesCrumb[];
+} {
+  const path = resolveSharesPath(input.sharesPath, input.groups);
+  const { entries, figures, parent } = sharesLevel(input, path);
+  const years = input.reading.years
+    .filter((year) => year.covered && year.groups.length > 0)
+    .map((year) => year.year);
+  const typed = input.reading.years.filter((year) => year.covered && year.legacyRows.length > 0);
+  const crumbs = sharesCrumbs(path);
+  const level = crumbs[crumbs.length - 1].label;
+
+  const figureOf = (id: string, year: number): SharesFigure | null =>
+    figures.get(id)?.get(year) ?? null;
+  // Sections and groups wear their own entity colour. At the last level every bar is a different
+  // account, and painting all of them in the group's colour left nine bars nobody could tell apart:
+  // there each one takes its slot of the slice sequence, translated by position exactly as the
+  // ranking does, so a concept keeps one hue in both cards.
+  const colorOf = (entry: SharesEntry, index: number): string =>
+    path.group === null ? colorForPersonnel(entry.id) : colorForSliceSlot(index);
+  const drawn = entries.filter((entry) =>
+    years.some(
+      (year) => figureOf(entry.id, year)?.share !== null && figureOf(entry.id, year) !== null,
+    ),
+  );
+  const single = years.length === 1;
+
+  const option: ChartOption | null =
+    drawn.length === 0
+      ? null
+      : {
+          animationDuration: 300,
+          textStyle: { fontFamily: CHART_FONT },
+          grid: { left: 8, right: 70, top: 6, bottom: single ? 6 : 28, outerBoundsMode: "same" },
+          yAxis: categoryAxis(
+            drawn.map((entry) => entry.label),
+            { inverse: true },
+          ),
+          xAxis: valueAxis(percent),
+          legend: legendFor(!single),
+          tooltip: itemTooltip((param) => {
+            const entry = drawn[param.dataIndex];
+            const year = single ? years[0] : Number(param.seriesName);
+            const figure = entry ? figureOf(entry.id, year) : null;
+            const body =
+              figure === null || figure.share === null
+                ? "Sin ventas en el tramo"
+                : `<b>${percent(figure.share)}</b> de ventas · ${moneyExact(figure.total)}`;
+            const hint = entry?.next
+              ? `<div style="color:${CHART_INK.muted}">Clic para abrir</div>`
+              : "";
+            return (
+              `<div style="font-weight:600;margin-bottom:4px">${param.name}${single ? "" : ` · ${year}`}</div>` +
+              `<div>${body}</div>${hint}`
+            );
+          }),
+          series: years.map((year) => ({
+            id: `shares-${year}`,
+            type: "bar",
+            name: String(year),
+            data: drawn.map((entry, index) => {
+              const figure = figureOf(entry.id, year);
+              return {
+                value: figure?.share ?? null,
+                itemStyle: {
+                  color: single ? colorOf(entry, index) : yearColor(year, years),
+                  borderRadius: ROUND_RIGHT,
+                },
+              };
+            }),
+            barMaxWidth: 22,
+            label: {
+              show: true,
+              position: "right",
+              distance: 8,
+              color: CHART_INK.muted,
+              fontSize: 11,
+              fontWeight: 600,
+              formatter: (param) =>
+                param.value === null || param.value === undefined
+                  ? ""
+                  : percent(Number(param.value)),
+            },
+            labelLayout: { hideOverlap: true },
+          })),
+        };
+
+  const columns = single
+    ? ["Monto", "% vs ventas"]
+    : years.flatMap((year) => [`Monto ${year}`, `% vs ventas ${year}`]);
+  const valuesOf = (byYear: (year: number) => SharesFigure | null): (string | null)[] =>
+    years.flatMap((year) => {
+      const figure = byYear(year);
+      return [figure ? moneyExact(figure.total) : null, cell(figure?.share ?? null, percent)];
+    });
+  const rows: ChartTableRow[] = entries.map((entry, index) => ({
+    id: entry.id,
+    label: entry.label,
+    color: colorOf(entry, index),
+    values: valuesOf((year) => figureOf(entry.id, year)),
+  }));
+  if (rows.length > 0) {
+    rows.push({
+      id: "parent",
+      label: parent.label,
+      emphasis: true,
+      values: valuesOf((year) => parent.figures.get(year) ?? null),
+    });
+  }
+
+  // On the stage: with ONE year a single row whose colour belongs to the COLUMN — the entity's, or the
+  // account's slot at the last level, exactly as flat. With several, one row per exercise in the order
+  // they arrive, because a year is looked for by its position and the height must not move it.
+  const solid = solidBody(
+    drawn.map((entry) => entry.label),
+    years.map((year) => ({
+      id: `shares-${year}`,
+      name: String(year),
+      color: single ? stageSliceColor(colorForSliceSlot(0)) : stageColor(yearColor(year, years)),
+      values: drawn.map((entry) => figureOf(entry.id, year)?.share ?? null),
+    })),
+    { value: percent, axis: percent },
+    {
+      order: single ? "peak" : "given",
+      colors: drawn.map((entry, index) =>
+        path.group === null
+          ? stageColor(colorOf(entry, index))
+          : stageSliceColor(colorForSliceSlot(index)),
+      ),
+    },
+  );
+  const asSolid = standing(input.solidViews?.shares, solid);
+
+  const notes: string[] = [];
+  if (typed.length > 0) {
+    notes.push(
+      `${typed.map((year) => year.year).join(", ")} ${typed.length === 1 ? "es un ejercicio tipeado sin ventas y no se dibuja" : "son ejercicios tipeados sin ventas y no se dibujan"}.`,
+    );
+  }
+  if (path.section !== null && drawn.length > 0 && drawn.every((entry) => entry.next === null)) {
+    notes.push("Es el último nivel: cada barra es una cuenta del comparativo.");
+  }
+
+  return {
+    card: {
+      id: "personnel-shares",
+      title: "% vs ventas por nivel",
+      subtitle: `${input.period} · ${level}`,
+      option: asSolid ? solid : option,
+      table: { columns, rows },
+      note: sentence(notes.length > 0 ? notes.join(" ") : undefined, asSolid),
+      guide: GUIDE_SHARES,
+      height: asSolid ? SOLID_BARS_HEIGHT : SHARES_HEIGHT,
+    },
+    entries: drawn,
+    crumbs,
+  };
+}
+
 export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards {
   const groups = buildGroupsCard(input);
+  const shares = buildSharesCard(input);
   return {
     sections: buildSectionsCard(input),
     groups: groups.card,
     concepts: buildConceptsCard(input),
+    shares: shares.card,
+    sharesEntries: shares.entries,
+    sharesCrumbs: shares.crumbs,
     skylineAvailable: groups.skylineAvailable,
   };
 }

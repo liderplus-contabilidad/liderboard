@@ -17,8 +17,10 @@ import {
   buildPersonnelCards,
   DEFAULT_EVOLUTION_VIEW,
   type EvolutionView,
+  SHARES_ROOT,
   type PersonnelCards,
   type PersonnelCardsInput,
+  type SharesPath,
 } from "@/lib/personnel-cost/cards";
 import {
   deleteLegacyYear,
@@ -128,6 +130,12 @@ interface PersonnelCostDataValue {
     card: keyof NonNullable<PersonnelCardsInput["solidViews"]>,
     view: SolidView,
   ) => void;
+  /**
+   * The level «% vs ventas por nivel» is open at — held here like `evolutionView`, and for the same
+   * reason. What is stored is what the reader CLICKED; the card resolves it against the marks on read.
+   */
+  sharesPath: SharesPath;
+  setSharesPath: (path: SharesPath) => void;
   /**
    * Gráficos' grid: the comparativo of the MARKED years. Datos does not read it — see `datosGrid`.
    */
@@ -255,6 +263,7 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
       setSolidViews((current) => ({ ...current, [card]: view })),
     [],
   );
+  const [sharesPath, setSharesPath] = useState<SharesPath>(SHARES_ROOT);
 
   const canRead = canReadPersonnelCost({ sourceSystemId, isConsolidated });
   // The capture writes into a REAL client and never into the consolidado, so the partition it uses is
@@ -455,8 +464,15 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   }, [inputs, filters.years, months]);
 
   const cardsInput = useMemo<PersonnelCardsInput>(
-    () => ({ reading, groups: filters.groups, period: periodName, evolutionView, solidViews }),
-    [reading, filters.groups, periodName, evolutionView, solidViews],
+    () => ({
+      reading,
+      groups: filters.groups,
+      period: periodName,
+      evolutionView,
+      solidViews,
+      sharesPath,
+    }),
+    [reading, filters.groups, periodName, evolutionView, solidViews, sharesPath],
   );
   const cards = useMemo(() => buildPersonnelCards(cardsInput), [cardsInput]);
   const grid = useMemo(
@@ -707,6 +723,8 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     setEvolutionView,
     solidViews,
     setSolidView,
+    sharesPath,
+    setSharesPath,
     grid,
     datosUniverse,
     datosFilters,

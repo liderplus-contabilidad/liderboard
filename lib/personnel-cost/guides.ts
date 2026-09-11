@@ -43,3 +43,20 @@ export const GUIDE_CONCEPTS: ChartGuide = {
   reading:
     "El porcentaje de cada barra es sobre el COSTO DE PERSONAL y no sobre las ventas — es la única cifra de la pantalla medida contra otro denominador, y por eso lo dice la columna.",
 };
+
+export const GUIDE_SHARES: ChartGuide = {
+  purpose:
+    "Cuánto de las ventas del tramo se va en cada nivel del comparativo: las tres columnas de porcentaje del libro, leídas de fuera hacia dentro.",
+  actions: [
+    { control: "Clic en una barra", effect: "Abre lo que hay dentro: sección → grupo → concepto." },
+    {
+      control: "Total · Planta · …",
+      effect: "Las migas del encabezado vuelven al nivel de arriba.",
+    },
+    { control: "Año", effect: "Con uno, una barra por entidad; con varios, una por ejercicio." },
+    { control: "Mes", effect: "Acota el tramo que se suma y el de las ventas que lo dividen." },
+    { control: "Personal", effect: "Deja fuera un grupo: sus barras y su parte de la sección." },
+  ],
+  reading:
+    "Cada barra es el total del tramo dividido entre las ventas del MISMO tramo — nunca mes a mes. Las barras de un nivel suman la fila en negrita de la tabla, que es el nivel de arriba.",
+};
