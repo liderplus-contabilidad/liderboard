@@ -10,8 +10,6 @@ import { computeLinePayroll } from "@/lib/payroll/employee-input";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
 import { buildJournalEntry } from "@/lib/payroll/journal";
 import { journalAmountsFor } from "@/lib/payroll/journal-amounts";
-import { downloadPayslipZip } from "@/lib/payroll/payslip/download";
-import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import {
   computePeriodFinancials,
   computeReconciliationCounts,
@@ -23,7 +21,7 @@ import { DeletePeriodDialog } from "../delete-period-dialog";
 import { usePayrollData } from "../payroll-data-provider";
 import { EmployeeTable } from "./employee-table";
 import { JournalEntryCard } from "./journal-entry-card";
-import { PayrollExcelActions } from "./payroll-excel-actions";
+import { PayrollExportActions } from "./payroll-export-actions";
 import { PeriodHeader } from "./period-header";
 import { PeriodKpiCard } from "./period-kpi-card";
 import { PeriodNotFound } from "./period-not-found";
@@ -101,44 +99,6 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
     [lines],
   );
 
-  /**
-   * The payslips of the whole nómina, one per page and in the order the table reads.
-   *
-   * `buildPeriodPayslips` is the SAME builder the history row uses, which downloads this same .zip
-   * without opening the período. Nothing is persisted — every figure comes out of the engine at this
-   * instant.
-   */
-  const [downloading, setDownloading] = useState(false);
-  const downloadPayslipsForPeriod = useCallback(async () => {
-    if (!period || lines.length === 0) {
-      return;
-    }
-    setDownloading(true);
-    try {
-      await downloadPayslipZip(
-        buildPeriodPayslips({
-          period,
-          lines,
-          parameters: DEFAULT_PAYROLL_PARAMETERS,
-          clientName: activeClient?.name ?? "",
-          ...(activeClient?.logo ? { clientLogo: activeClient.logo } : {}),
-          ...(activeClient?.company ? { clientCompany: activeClient.company } : {}),
-          ...(activeClient?.costCenter ? { clientCostCenter: activeClient.costCenter } : {}),
-        }),
-        period,
-      );
-    } finally {
-      setDownloading(false);
-    }
-  }, [
-    activeClient?.name,
-    activeClient?.logo,
-    activeClient?.company,
-    activeClient?.costCenter,
-    lines,
-    period,
-  ]);
-
   const confirmDelete = useCallback(async () => {
     if (!period) {
       return;
@@ -174,8 +134,6 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
           employeeCount={lines.length}
           financials={financials}
           onDelete={() => setDeleting(true)}
-          onDownloadPayslips={() => void downloadPayslipsForPeriod()}
-          downloading={downloading}
         />
 
         <PeriodKpiCard
@@ -194,7 +152,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
         className="px-7 pt-[18px]"
         rightSlot={
           tab === "empleados" ? (
-            <PayrollExcelActions
+            <PayrollExportActions
               period={period}
               periods={periods}
               lines={lines}

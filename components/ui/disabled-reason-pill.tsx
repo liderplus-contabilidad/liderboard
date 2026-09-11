@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 /**
  * The "why is this switched off" pill that sits beside a disabled control — a control switched
  * off with no visible reason forces the reader to point at it to find out what's missing. Born as
- * `ExcelActions`' upload pill (see README/CLAUDE.md); shared here so any module's own disabled
+ * `ExportActions`' upload pill (see README/CLAUDE.md); shared here so any module's own disabled
  * action reads the same way instead of falling back to a tooltip nobody hovers over.
  */
 export function DisabledReasonPill({ children }: { children: ReactNode }) {

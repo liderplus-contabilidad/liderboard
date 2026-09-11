@@ -4,11 +4,14 @@ import { makeSource } from "./analytics/fixtures";
 import {
   CONSOLIDADO_ID,
   canEditActiveCenter,
+  canEditActiveYear,
   clearFilters,
   emptyFilters,
   resolveActiveCenterId,
+  resolveVisibleYears,
   sanitizeFilters,
   seedCenterIds,
+  withAllYears,
   withCenterToggled,
   withCentersCleared,
   withCodesCleared,
@@ -17,6 +20,8 @@ import {
   withPresetSelected,
   withPeriodsCleared,
   withPeriodToggled,
+  withYearsCleared,
+  withYearToggled,
   type FilterView,
   type PygFilters,
 } from "./filters";
@@ -329,5 +334,65 @@ describe("una vista que se deja ACOTAR por cuentas", () => {
 
     expect(apagada.preset).toBeNull();
     expect(apagada.codes).toEqual([]);
+  });
+});
+
+describe("el año a la vista", () => {
+  const LOADED = [2024, 2025, 2026];
+
+  it("sin marcas resuelve al más reciente, no a todos", () => {
+    // The declared exception Ventas and Costo de personal already make: Datos speaks in columns
+    // that carry their year, and three exercises side by side is a table nobody opens on.
+    expect(resolveVisibleYears(makeFilters(), LOADED)).toEqual([2026]);
+  });
+
+  it("una marca huérfana cuenta como ninguna", () => {
+    expect(resolveVisibleYears(makeFilters({ years: [2023] }), LOADED)).toEqual([2026]);
+  });
+
+  it("varias marcas se tienden ascendentes, sin sumar", () => {
+    expect(resolveVisibleYears(makeFilters({ years: [2026, 2024] }), LOADED)).toEqual([2024, 2026]);
+  });
+
+  it("sin años cargados no hay nada a la vista", () => {
+    expect(resolveVisibleYears(makeFilters(), [])).toEqual([]);
+    expect(resolveVisibleYears(makeFilters({ years: [2026] }), [])).toEqual([]);
+  });
+
+  it("«Todos los años» MARCA todos, porque vacío ya no significa todos", () => {
+    const all = withAllYears(makeFilters(), LOADED);
+    expect(all.years).toEqual(LOADED);
+    expect(resolveVisibleYears(all, LOADED)).toEqual(LOADED);
+    // Clearing goes back to the most recent, not to «all».
+    expect(resolveVisibleYears(withYearsCleared(all), LOADED)).toEqual([2026]);
+  });
+
+  it("marcar un segundo año se hace SOBRE el resuelto", () => {
+    // The bar toggles against what its checkboxes show (the resolved list), so marking 2025 while
+    // 2026 is resolved ADDS it instead of replacing what was already on screen.
+    const visible = resolveVisibleYears(makeFilters(), LOADED);
+    const next = makeFilters({
+      years: withYearToggled({ ...makeFilters(), years: visible }, 2025, LOADED).years,
+    });
+    expect(resolveVisibleYears(next, LOADED)).toEqual([2025, 2026]);
+    // And unmarking the only visible year cannot leave zero: it resolves right back.
+    const none = withYearToggled({ ...makeFilters(), years: [2026] }, 2026, LOADED);
+    expect(none.years).toEqual([]);
+    expect(resolveVisibleYears(none, LOADED)).toEqual([2026]);
+  });
+
+  it("el saneamiento NO resuelve el año: sin nada que podar devuelve el mismo objeto", () => {
+    // The resolution lives in `resolveVisibleYears` and not here on purpose: this runs against a
+    // context rebuilt on every edit, and a resolved `[2026]` in place of `[]` would be a new object
+    // on every edit — which is exactly what re-renders the whole statement.
+    const vacio = makeFilters();
+    expect(sanitizeFilters(vacio, makeContext({ loadedYears: LOADED }))).toBe(vacio);
+    expect(sanitizeFilters(vacio, makeContext({ loadedYears: LOADED })).years).toEqual([]);
+  });
+
+  it("Datos abre editable: exactamente un año a la vista sin marcar ninguno", () => {
+    expect(canEditActiveYear(makeFilters(), LOADED)).toBe(true);
+    expect(canEditActiveYear(makeFilters({ years: [2025, 2026] }), LOADED)).toBe(false);
+    expect(canEditActiveYear(makeFilters(), [])).toBe(false);
   });
 });

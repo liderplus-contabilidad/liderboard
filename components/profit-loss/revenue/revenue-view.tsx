@@ -16,7 +16,7 @@ import { PygEmptyState } from "../pyg-empty-state";
 import { RevenueCapturePanel } from "./revenue-capture-panel";
 import { RevenueDataProvider, useRevenueData } from "./revenue-data-provider";
 import { RevenueEmptyState } from "./revenue-empty-state";
-import { RevenueReportButton } from "./report/revenue-report-button";
+import { RevenueExportActions } from "./revenue-export-actions";
 import { RevenueToolbar } from "./revenue-toolbar";
 
 /** «Ver en» — the growth's unit, as the header names it. */
@@ -126,7 +126,7 @@ function RevenueContent() {
                   Registrar datos
                 </Button>
               )}
-              <RevenueReportButton />
+              <RevenueExportActions />
             </>
           }
         />

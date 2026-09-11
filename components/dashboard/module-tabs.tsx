@@ -3,11 +3,11 @@
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
 import { ComingSoon } from "@/components/dashboard/coming-soon";
-import { OccupancyExcelActions } from "@/components/occupancy/occupancy-excel-actions";
+import { OccupancyExportActions } from "@/components/occupancy/occupancy-export-actions";
 import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
+import { PygChartYearNotice } from "@/components/profit-loss/pyg-chart-year-notice";
 import { PygDriftNotice } from "@/components/profit-loss/pyg-drift-notice";
-import { PygExcelActions } from "@/components/profit-loss/pyg-excel-actions";
-import { PygReportButton } from "@/components/profit-loss/report/pyg-report-button";
+import { PygExportActions } from "@/components/profit-loss/pyg-export-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
 import { TabBar } from "@/components/ui/tab-bar";
 import { findModuleBySlug, type ModuleTabId } from "@/lib/modules";
@@ -55,16 +55,13 @@ interface ModuleViews {
 
 const MODULE_VIEWS: Record<string, ModuleViews> = {
   "profit-loss": {
-    // The report covers the THREE tabs, so its button is on all three; the Excel actions still live
-    // only in Datos, which is where loading and downloading happen.
-    rightSlot: (tab) => (
-      <div className="flex items-center gap-2.5">
-        {tab === "datos" && <PygExcelActions />}
-        <PygReportButton />
-      </div>
-    ),
+    // «Exportar» is the same on the THREE tabs — the Excels export the workspace and the report covers
+    // every tab —; «Cargar Excel» and the ⓘ mount only over Datos, which is where loading happens.
+    rightSlot: (tab) => <PygExportActions upload={tab === "datos"} />,
     toolbar: () => <PygToolbar />,
-    notice: (tab) => (tab === "datos" ? <PygDriftNotice /> : null),
+    // Datos warns about a drift in the Utilidad; the two chart tabs, which read ONE year, say which
+    // one when several are on screen. Both render nothing in the common case.
+    notice: (tab) => (tab === "datos" ? <PygDriftNotice /> : <PygChartYearNotice />),
     panel: (tab) => {
       switch (tab) {
         case "datos":
@@ -77,7 +74,7 @@ const MODULE_VIEWS: Record<string, ModuleViews> = {
     },
   },
   occupancy: {
-    rightSlot: (tab) => (tab === "datos" ? <OccupancyExcelActions /> : null),
+    rightSlot: (tab) => (tab === "datos" ? <OccupancyExportActions /> : null),
     toolbar: (tab) => (tab === "graficos" ? <OccupancyToolbar /> : null),
     panel: (tab) => {
       switch (tab) {

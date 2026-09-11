@@ -28,7 +28,10 @@ export function DashboardSidebar() {
   return (
     <aside
       className={cn(
-        "flex flex-col border-r border-border bg-surface transition-[width] duration-200 ease-out",
+        // The width SNAPS, on purpose: animating it re-lays out the whole page on every frame — with
+        // Datos open that is thirty thousand nodes, twelve times — and each chart on screen relayouts
+        // its SVG along with it. On the office laptops a 200 ms transition cost a full second.
+        "flex flex-col border-r border-border bg-surface",
         collapsed ? "w-[72px]" : "w-[264px]",
       )}
     >

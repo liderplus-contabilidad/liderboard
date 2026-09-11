@@ -21,8 +21,7 @@ import { SOLID_VIEW_OPTIONS } from "@/lib/charts/solid-bars";
 import type { EvolutionView, SolidView } from "@/lib/sales/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
-import { SalesExcelActions } from "./sales-excel-actions";
-import { SalesReportButton } from "./report/sales-report-button";
+import { SalesExportActions } from "./sales-export-actions";
 import { SalesToolbar } from "./sales-toolbar";
 
 /** The two shapes of the broken-down evolution, as the header names them — see `EvolutionView`. */
@@ -170,12 +169,7 @@ function SalesContent() {
           precisely what is marked up here. */}
       <div className="sticky top-0 z-20">
         <SalesToolbar
-          actions={
-            <>
-              <SalesExcelActions open={uploadOpen} onOpenChange={setUploadOpen} />
-              <SalesReportButton />
-            </>
-          }
+          actions={<SalesExportActions open={uploadOpen} onOpenChange={setUploadOpen} />}
         />
       </div>
 

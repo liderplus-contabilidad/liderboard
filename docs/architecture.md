@@ -27,7 +27,7 @@ a static page at `app/(dashboard)/<slug>/page.tsx`.
 
 **Module registry is the single source of truth.** `lib/modules.ts` exports the
 ordered `MODULES` array (`{ slug, label, title, icon, tabs }`) plus `DEFAULT_MODULE`
-and `findModuleBySlug()`. Both the sidebar nav and the header breadcrumb/title derive
+and `findModuleBySlug()`. Both the sidebar nav and the header title derive
 from it — there is no duplicated module list. **To add a module:** add an entry to
 `MODULES` and create the matching `app/(dashboard)/<slug>/page.tsx`. Route slugs are
 English; the Spanish name goes in `label`/`title`. A module may declare `children`
@@ -39,9 +39,11 @@ pliegue por el mismo motivo —un hijo escondido sin control a la vista es inalc
 colapsada, donde no hay dónde poner el chevron, y el padre de la página ABIERTA, que se borraría del
 menú justo cuando estás en ella. The nesting is ONE level: this nav is a list, not a tree, and a second level has
 nowhere to render in the 72 px collapsed rail (where a child keeps its icon and `title` and drops
-the indent). The header's breadcrumb grows a third level ONLY when the second segment matches a
-declared child (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that
-check its identifier would land in the breadcrumb and the `<h1>`. The entity selector still
+the indent). The header's `<h1>` names the child ONLY when the second segment matches a declared
+one (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that check its
+identifier would land in the `<h1>`. The header once carried a breadcrumb («Módulos › PyG › Ventas»)
+over that title; it was removed because it led nowhere and the sidebar already shows where you are.
+The entity selector still
 resolves off the PARENT, so a subitem keeps its module's control without declaring it. **A module
 with no real page does not get an entry**: an item that leads to a permanent «próximamente»
 teaches the user not to press it, and eventually not to read the one beside it either.
@@ -51,16 +53,22 @@ markup. Module-specific compositions live in `components/<module>/` (`components
 `components/occupancy/`). `ModuleTabs` holds a `MODULE_VIEWS` registry of per-module
 `rightSlot`/`toolbar`/`panel`; a module absent from it renders `ComingSoon`, so adding one is
 purely additive; `ModuleTabs` also owns the `rightSlot`'s vertical alignment, so the same
-component works outside the bar. **Excel actions are one component for the whole app**:
-`components/ui/excel-actions.tsx` renders `Cargar Excel` · `Descargar Excel` · optional `ⓘ`, and
-a module only writes a thin wrapper (`<module>-excel-actions.tsx`) that wires its provider and
-upload modal — never its own button markup. The FORM of the download control is derived from how
-many options it gets (one → plain button, two or more → menu), never declared; `busy`, the error
-panel and the reentrancy guard live in the primitive, so a module supplies just
-`run: () => Promise<void>` plus `disabled`/`disabledReason`. Live gallery at
-`/docs/components#excel-actions`. `ExcelActions` renders the UPLOAD button's `disabledReason` as a
-pill beside it rather than as a tooltip — a control switched off with no visible reason makes you
-point at it to find out what is missing, and what is missing here is the module's previous step.
+component works outside the bar. **File actions are one component for the whole app**:
+`components/ui/export-actions.tsx` renders `Cargar Excel` · `Exportar ▾` · optional `ⓘ`, and a
+module only writes a thin wrapper (`<module>-export-actions.tsx`) that wires its provider, its
+upload modal and its report preview — never its own button markup. It was born as `ExcelActions`,
+with the FORM of the download control derived from how many options it got (one → plain button,
+two or more → menu) and every printed report on a `*ReportButton` of its own beside it, each
+justifying its separateness with the primitive's own «Excel only» contract: PyG's row came to read
+«Cargar Excel · Descargar Excel ▾ · ⓘ · Informe PDF». The `unified-export-menu` change folded the
+four vocabularies into one menu — an option's `run` returns a promise (an Excel: `busy`, the error
+panel and the reentrancy guard live in the primitive) or nothing (a PDF: the wrapper mounts the
+preview with its own state) — and dropped the derived form: «Exportar» is ALWAYS a menu, because a
+control that changed shape the day a module gained its second output read as a different control.
+Live gallery at `/docs/components#export-actions`. `ExportActions` renders the UPLOAD button's
+`disabledReason` as a pill beside it rather than as a tooltip — a control switched off with no
+visible reason makes you point at it to find out what is missing, and what is missing here is the
+module's previous step.
 **Module state never lives there** — each data provider is mounted in the
 dashboard layout, because the header reads from the same state the panel does (`ActiveClient`
 shows PyG's cliente and Ocupaciones' hotel).

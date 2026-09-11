@@ -68,6 +68,9 @@ function registerGl(): Promise<void> {
   return glRegistration;
 }
 
+/** How long a container has to hold still before its chart relayouts (see the observer below). */
+const RESIZE_SETTLE_MS = 80;
+
 /** `CHART_FONT` keeps the pure layer honest with a `var()`; only a real family measures. */
 function resolvedFont(): string {
   const generated = getComputedStyle(document.documentElement)
@@ -133,10 +136,27 @@ export function Chart({ option, onSelect, height = 260, ariaLabel, className }: 
     instance.current = chart;
 
     // The sidebar collapses without a window resize event, so the container is what we watch.
-    const observer = new ResizeObserver(() => chart.resize());
+    // ONE relayout per settled size, not one per observation: `resize()` re-runs the whole pipeline
+    // even when nothing changed, and the observer fires once on `observe` (the size `init` already
+    // took) and once per frame while the container is being dragged or animated. The trailing wait
+    // is short enough to read as immediate and long enough to fold a drag into a single relayout.
+    let pending = 0;
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(pending);
+      pending = window.setTimeout(() => {
+        if (chart.isDisposed()) {
+          return;
+        }
+        if (chart.getWidth() === node.clientWidth && chart.getHeight() === node.clientHeight) {
+          return;
+        }
+        chart.resize();
+      }, RESIZE_SETTLE_MS);
+    });
     observer.observe(node);
 
     return () => {
+      window.clearTimeout(pending);
       observer.disconnect();
       chart.dispose();
       instance.current = null;

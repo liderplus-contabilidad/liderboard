@@ -52,7 +52,9 @@ export function PygToolbar() {
     togglePeriod,
     clearPeriods,
     toggleYear,
+    selectAllYears,
     clearYears,
+    visibleYears,
     removeYear,
     isConsolidated,
     loadedYears,
@@ -102,9 +104,11 @@ export function PygToolbar() {
         <div className="flex items-center gap-2.5 border-l border-border-soft pl-3">
           <YearFilter
             years={loadedYears}
-            selected={filters.years}
+            // What is ON SCREEN, not the raw marks: with none, the resolved year is what shows.
+            selected={visibleYears}
             onToggle={toggleYear}
-            onSelectAll={clearYears}
+            onSelectAll={selectAllYears}
+            onClear={clearYears}
             // The consolidado's years belong to the clients that compose it: they are deleted there.
             {...(isConsolidated ? {} : { onDelete: removeYear })}
           />

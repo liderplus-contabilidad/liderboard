@@ -4,7 +4,7 @@ import { Building2, FileSpreadsheet } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CreateClientButton } from "./pyg-client-actions";
 import { usePygData } from "./pyg-data-provider";
-import { PygExcelActions } from "./pyg-excel-actions";
+import { PygExportActions } from "./pyg-export-actions";
 
 /**
  * PyG's empty state, in its two forms — because they are two different gaps and only one is filled by
@@ -75,7 +75,7 @@ export function PygEmptyState() {
           </span>
         </span>
       </EmptyState>
-      <PygExcelActions />
+      <PygExportActions />
     </div>
   );
 }

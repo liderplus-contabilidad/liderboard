@@ -73,8 +73,8 @@ from the same state the panel does (`ActiveClient` shows PyG's cliente and Ocupa
 Layout persistence is also why the sidebar's collapse state needs no store.
 
 **Module registry is the single source of truth.** `lib/modules.ts` (`MODULES`, `DEFAULT_MODULE`,
-`findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header
-breadcrumb/title. **To add a module:** one entry + `app/(dashboard)/<slug>/page.tsx`. Nesting is ONE
+`findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header title.
+**To add a module:** one entry + `app/(dashboard)/<slug>/page.tsx`. Nesting is ONE
 level (`children`), rendered indented and visible by default — the sidebar stores what is COLLAPSED,
 so a new module with children is born visible. A module with no real page gets NO entry.
 
@@ -100,7 +100,11 @@ Learn it once and four modules read the same way:
   on that distinction being kept.
 - **Filter marks** (`lib/*/filters.ts`): none marked = ALL, kept in UNIVERSE order (not click order),
   pruned on READ (`sanitizeFilters`), never in an effect; an orphan mark counts as none. The one
-  exception is Ventas' «Año», which resolves to the most recent year instead of summing all.
+  declared exception is «Año» in Ventas, Costo de personal AND PyG, which resolves to the MOST
+  RECENT year: a screen that speaks in columns per year cannot open on every year at once. There
+  the trigger always names what is on screen (`yearMarkLabel`), «Todos los años» MARKS them all, and
+  the year is not chipped. In PyG the resolution is `resolveVisibleYears` → `visibleYears`, never
+  `sanitizeFilters`, whose same-object return is what keeps an edit from re-rendering Datos.
 - **«Exactly one marked»** is the recurring figure (`resolveActiveCenterId`, and the copies of it every module grew):
   exactly one marked = that entity, editable; none or several = the aggregate, read-only. It is why
   no module needs a «Consolidado / Por X» tab.
@@ -146,8 +150,11 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
   `PygFilters` is flat (`codes`/`centerIds`/`years`/`periods`/`preset`) and the comparison axis is
   never declared — marking several accounts and/or centers IS the comparison.
 - **Datos speaks in COLUMNS, not months** (`DatosGrid.columns` carry their own `year`; a year's Total
-  is a column like any other). Hiding empty rows and empty columns is judged against the SAME table
-  (`filter.ts`, `datos-columns.ts`): a row survives on a cell that also saves its column.
+  is a column like any other), which is why it opens on the most recent year and not on all of them.
+  Hiding empty rows and empty columns is judged against the SAME table (`filter.ts`,
+  `datos-columns.ts`): a row survives on a cell that also saves its column. Gráficos and Análisis
+  read ONE year (`chartYear`, the most recent visible); with several on screen they say so in the
+  module's notice slot (`pyg-chart-year-notice.tsx`).
 - **Charts**: `analytics/` is the pure engine; `charts/sources.ts` → `selection.ts` (`PygFilters` →
   `SeriesQuery`) → `option.ts` → `presets.ts`. Queries cap at `CHART_MAX_SERIES` (8) and the engine
   reports what it truncated. `preset-views.ts` is the catalogue behind «Predeterminados» (Ventas,
@@ -239,8 +246,9 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   year writes its figure over each point (`directLabel`); comparing, none does.
 - **The bar is Año · Mes and nothing else.** The reading is one account and it is of the COMPANY, so
   every center is summed and no «Centro de costo» is offered. `years` follows the house rule (no mark
-  = ALL), which is Ventas' declared exception inverted on purpose: there several years are SUMMED,
-  here each year is a series and the comparison IS the reading.
+  = ALL), which is the declared exception of Ventas, Costo de personal and PyG inverted on purpose:
+  there several years are summed or laid side by side, here each year is a series and the
+  comparison IS the reading.
 - **`availability.ts` is the one place that says who can CAPTURE** (MicroPlus, never the
   consolidado), and it is not a lock on the reading: comparativo and crecimiento read the raíz 4,
   which every chart of accounts declares. Where it returns `false` the three «vs» cards and
@@ -256,10 +264,13 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
 
 ### Shared UI
 
-- **`components/ui/excel-actions.tsx` is the app's ONE Excel control** — a module writes a thin
-  wrapper, never its own button markup. The download's FORM is derived from how many options it gets
-  (one → button, two or more → menu); `busy`, errors and the reentrancy guard live in the
-  primitive. Live gallery of the primitives at `/docs/components`.
+- **`components/ui/export-actions.tsx` is the app's ONE export control** — «Cargar Excel» ·
+  «Exportar ▾» · ⓘ; a module writes a thin `*-export-actions.tsx` wrapper, never its own button
+  markup and never a report button of its own. «Exportar» is ALWAYS a menu, with one option or
+  five (a derived form flipped the control's look the day a module gained its second output), and
+  draws nothing with none. An option's `run` returns a promise (an Excel: `busy`, errors and the
+  reentrancy guard live in the primitive) or nothing (a PDF: the wrapper mounts the preview with
+  its own state). Live gallery of the primitives at `/docs/components`.
 - **`side-panel.tsx` vs `modal.tsx`**: the drawer is for a detail read ALONGSIDE what opened it (no
   scrim); the modal interrupts and dims the background, for something read ALONE. `ConfirmDialog`
   predates `modal.tsx` and should be folded into it when touched.

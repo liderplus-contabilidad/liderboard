@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
  *
  * The error is painted under the control and NOT as a tooltip: a control switched off or in red with
  * no visible reason forces you to point at it with the mouse to know what is wrong — the same reason
- * `ExcelActions` renders its `disabledReason` as a pill beside it and not as a `title`.
+ * `ExportActions` renders its `disabledReason` as a pill beside it and not as a `title`.
  */
 export function FormField({
   label,

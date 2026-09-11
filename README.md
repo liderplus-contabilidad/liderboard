@@ -256,11 +256,11 @@ panel (`ActiveClient` muestra la empresa de PyG y el hotel de Ocupaciones).
   activa, más "Quitar todo") aparece solo cuando hay algo marcado y es la misma en las tres
   pestañas. Las listas de cuentas y centros salen del Excel cargado; el estado vacío solo
   aparece cuando no hay datos.
-- **Acciones de Excel** (`PygExcelActions`, solo en la tab Datos): el bloque compartido
-  `ExcelActions` (ver "Acciones de Excel" más abajo) en el `rightSlot` de la fila de tabs —
-  **Cargar Excel** (abre el modal de carga, el mismo para los dos modos), menú **Descargar
-  Excel** (Excel completo/con tus datos · Un mes en crudo, ver "Descarga de Excel" más abajo) e
-  ícono de **información** con los formatos aceptados, leídos del registry. No llevan selector
+- **Exportar** (`PygExportActions`): el bloque compartido `ExportActions` (ver "Exportar" más
+  abajo) en el `rightSlot` de la fila de tabs — **Cargar Excel** (abre el modal de carga, el mismo
+  para los dos modos; solo en la tab Datos), menú **Exportar** (Excel completo/con tus datos · Un
+  mes en crudo · Informe PDF, ver "Descarga de Excel" más abajo; igual en las tres pestañas) e
+  ícono de **información** con los formatos aceptados, leídos del registry (solo en Datos). No llevan selector
   de centro propio: qué centro lee Datos y si es editable sale del filtro **Centro de costo** de
   la fila de filtros (ver abajo).
 
@@ -443,35 +443,42 @@ plana, si la carga falla). `flatOnly()` es la puerta de todo lo que **no** es un
 imprimibles y los Excel construyen las mismas tarjetas y lanzan un error si alguna llega en tres
 dimensiones, en vez de imprimir un rectángulo vacío donde estaba la lectura.
 
-## Acciones de Excel (todos los módulos)
+## Exportar (todos los módulos)
 
-Cargar y descargar Excel se ve **igual en toda la app**: un solo primitivo,
-`components/ui/excel-actions.tsx`, rinde la fila **Cargar Excel** (brand) · **Descargar Excel**
-(secundario) · **ⓘ** (opcional). Los módulos no escriben markup de botón; aportan solo su
-dominio. La galería viva está en `/docs/components#excel-actions`.
+Cargar y exportar se ve **igual en toda la app**: un solo primitivo,
+`components/ui/export-actions.tsx`, rinde la fila **Cargar Excel** (brand) · **Exportar ▾**
+(secundario) · **ⓘ** (opcional). Los módulos no escriben markup de botón —ni un botón de informe
+aparte—; aportan solo su dominio. La galería viva está en `/docs/components#export-actions`.
 
-- **La forma del control de descarga se deriva de las opciones**, no se declara: una sola
-  opción rinde un **botón plano** que la ejecuta directo (Ocupaciones, Rol de Pagos, y PyG cuando
-  su sistema de origen es de solo lectura), dos o más rinden el **menú** («Excel completo»/«Excel
-  con tus datos» + «Un mes en crudo»). Añadir o quitar una descarga es añadir o quitar un elemento
-  del array: la forma se ajusta sola, sin un `if` en el módulo.
-- **El progreso y el error viven en el primitivo.** Un módulo aporta `run: () => Promise<void>`
-  —construye el workbook y lo entrega al navegador— y nada más: el bloque bloquea reentradas,
-  cambia el icono por un spinner y, si la promesa rechaza, muestra un panel de error bajo el
-  control que deja reintentar. Por eso el `try/catch` y el `import()` dinámico de `exceljs` no
-  están duplicados por módulo.
-- **`disabled` + `disabledReason`** es cómo un módulo dice que una descarga no está disponible
-  (el Consolidado de Ocupaciones, PyG sin dataset); la razón se lee al apuntar el control.
-- **`upload` es opcional.** Un módulo que solo DESCARGA es un caso real —Reportería de ingresos
-  deriva sus cifras de PyG y teclea el resto en un cajón—, y omitiéndolo no se dibuja ningún botón
-  de carga: un control permanentemente deshabilitado es justo lo que la regla de la casa prohíbe.
+- **«Exportar» es siempre un menú**, con una opción o con cinco; con ninguna no se dibuja. La forma
+  ya no se deriva del número de opciones: eso hacía que el control cambiara de aspecto el día que
+  un módulo ganaba su segunda salida. Añadir o quitar una es añadir o quitar un elemento del array.
+- **Excel y PDF son entradas del mismo menú.** Una opción cuyo `run` devuelve una promesa GENERA un
+  archivo (Excel, el .zip de roles); una cuyo `run` no devuelve nada ABRE una capa (el informe PDF:
+  el wrapper guarda `reportOpen` y monta la vista previa). El primitivo no distingue formatos: cada
+  entrada lleva el icono del suyo (`FileSpreadsheet` en brand para el Excel, `FileText` para el
+  PDF).
+- **El progreso y el error viven en el primitivo.** El bloque bloquea reentradas, cambia el icono
+  por un spinner y, si la promesa rechaza, muestra un panel de error bajo el control que deja
+  reintentar. Por eso el `try/catch` y el `import()` dinámico de `exceljs` o `pdf-lib` no están
+  duplicados por módulo. Un `run` síncrono resuelve en el mismo tick y no llega a pintar el spinner.
+- **`disabled` + `disabledReason`** es cómo un módulo dice que una salida no está disponible
+  (el Consolidado de Ocupaciones, PyG sin dataset); la razón se lee al apuntar la entrada.
+- **`upload` es opcional.** Un módulo que solo EXPORTA es un caso real —Reportería de ingresos y
+  Sueldos por Áreas solo entregan su informe—, y omitiéndolo no se dibuja ningún botón de carga: un
+  control permanentemente deshabilitado es justo lo que la regla de la casa prohíbe.
 - **La barra de tabs alinea el bloque una sola vez** (`ModuleTabs` envuelve el `rightSlot`), de
   modo que el mismo componente sirve fuera de ella — es lo que monta `PygEmptyState`.
 
-**Para un módulo nuevo:** escribe `components/<módulo>/<módulo>-excel-actions.tsx` que cablee
-tu proveedor y tu modal de carga sobre `<ExcelActions/>`, y decláralo en el `rightSlot` de
-`MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de que el
-caso es general y va en la API, no en tu módulo.
+Qué ofrece cada módulo: PyG «Excel completo» · «Un mes en crudo» · «Informe PDF» (o «Excel
+consolidado» · «Informe PDF»); Ventas «Excel con tus datos» · «Informe PDF»; Reportería «Informe
+PDF»; Costo personal «Excel con tus datos»; Ocupaciones «Excel con tus datos»; Rol de Pagos (detalle)
+«Rol de pagos» · «Roles individuales» (ZIP de PDF); Sueldos por Áreas «Informe PDF».
+
+**Para un módulo nuevo:** escribe `components/<módulo>/<módulo>-export-actions.tsx` que cablee
+tu proveedor, tu modal de carga y tu vista previa sobre `<ExportActions/>`, y decláralo en el
+`rightSlot` de `MODULE_VIEWS`. No toques el primitivo: si necesitas algo que no expone, es señal de
+que el caso es general y va en la API, no en tu módulo.
 
 ## Clientes de PyG
 
@@ -709,9 +716,8 @@ mano doce meses por cuenta no es un flujo real):
   que reentre sin renombrarlo (irrelevante en estado único, que no lee el nombre).
   **Solo aparece si la estrategia que originó el workspace declara que sabe escribir su formato**
   (`writesOwnFormat` en `UploadStrategy`; sin ese miembro, la estrategia es de solo lectura). Un
-  workspace cargado desde MicroPlus o Dingoo, que la app solo sabe leer, se queda con una sola
-  opción — y al quedar una, `ExcelActions` la rinde como botón plano en vez de menú, por su propia
-  regla de forma. «Excel con tus datos» sigue disponible y sigue volviendo a entrar, conservando
+  workspace cargado desde MicroPlus o Dingoo, que la app solo sabe leer, se queda sin esa entrada
+  en «Exportar». «Excel con tus datos» sigue disponible y sigue volviendo a entrar, conservando
   `microplus` o `dingoo` como sistema de origen.
 - **`lib/download.ts`** expone `downloadBlob(blob, filename)`, reutilizable por cualquier módulo.
 
@@ -835,9 +841,9 @@ estado de resultados y se recalcula en cada render.
   `paste.ts` distingue tres cosas y la tercera es la que importa —un número se escribe, una celda
   vacía **borra** a `null`, y lo que no parsea **deja intacto** el destino—, la misma regla de
   `NumericInput` aplicada a un bloque.
-- **Un Excel («Comparativo completo») y ningún «Cargar»**: aquí no se sube nada, así que
-  `ExcelActions` no recibe `upload` y el botón no existe. El libro recorre la misma
-  `ChartCardSpec.table` que dibuja la pantalla, una hoja por lectura.
+- **Ningún Excel en la barra y ningún «Cargar»**: lo único que sale del módulo es el informe, así
+  que «Exportar» ofrece solo «Informe PDF» y `ExportActions` no recibe `upload`. El Excel de la
+  CAPTURA vive dentro del cajón «Registrar datos», con este mismo primitivo.
 - **Estado vacío propio**: si el cliente no tiene ningún estado cargado, la pantalla nombra el paso
   que falta, dice de qué módulo es y lleva ahí — no ofrece una carga que no escribiría nada.
 
@@ -1170,8 +1176,9 @@ obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaci
 
 ## Informes imprimibles (PyG, Sueldos por Áreas, Ventas por servicio y Reportería de ingresos)
 
-Cuatro pantallas ofrecen un botón **«Informe PDF»** en su cabecera (nunca en la barra de filtros:
-pedir un informe no es seleccionar nada) que abre una vista previa a ancho de página y deja que el
+Cuatro pantallas ofrecen **«Informe PDF»** como una entrada de su menú «Exportar» (en la cabecera,
+nunca entre las marcas de la barra de filtros: pedir un informe no es seleccionar nada) que abre una
+vista previa a ancho de página y deja que el
 navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación de PDF en código.
 
 - **Mecanismo compartido** (`components/ui/report-layer.tsx`): `ReportLayer` monta el portal sobre

@@ -1,23 +1,31 @@
 "use client";
 
-import { useMemo } from "react";
-import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { FileSpreadsheet, FileText } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import { usePygData } from "../pyg-data-provider";
 import { deriveSalesIdentity } from "@/lib/sales/identity";
 import { useSalesData } from "./sales-data-provider";
 import { SalesUploadModal } from "./sales-upload-modal";
 
 /**
- * The `ExcelActions` wrapper for sales: a module only wires what «Cargar» opens, what it downloads
- * and what the `ⓘ` says, never its own button markup.
+ * The `ExportActions` wrapper for sales: a module only wires what «Cargar» opens, what «Exportar»
+ * offers and what the `ⓘ` says, never its own button markup.
  *
- * **The one download is a COPY of what is stored** —every month of the open client, one sheet
- * each, in the report's own shape (`lib/sales/export.ts`)— and it exists so the data can leave the
- * browser and come back through the ordinary upload unchanged. It is NOT a file for the accounting
- * system, which never receives one: what the firm hands over is the PDF report, which has its own
- * button next to it. With a single option `ExcelActions` draws a plain button on its own.
+ * **The Excel is a COPY of what is stored** —every month of the open client, one sheet each, in the
+ * report's own shape (`lib/sales/export.ts`)— and it exists so the data can leave the browser and
+ * come back through the ordinary upload unchanged. It is NOT a file for the accounting system, which
+ * never receives one: what the firm hands over is the «Informe PDF», the other entry of the same
+ * menu. The preview loads dynamically: it mounts one chart per section and cannot weigh on the load
+ * of a screen that most of the time is only looked at.
  */
-export function SalesExcelActions({
+const SalesReportPreview = dynamic(
+  () => import("./report/sales-report-preview").then((mod) => mod.SalesReportPreview),
+  { ssr: false },
+);
+
+export function SalesExportActions({
   open,
   onOpenChange,
 }: {
@@ -27,13 +35,17 @@ export function SalesExcelActions({
   const { activeClient } = usePygData();
   const { clientId, months } = useSalesData();
   const logo = activeClient?.logo;
+  const [reportOpen, setReportOpen] = useState(false);
+  const ready = clientId !== null && months.length > 0;
 
-  const downloads = useMemo<ExcelDownloadOption[]>(
+  const exports = useMemo<ExportOption[]>(
     () => [
       {
         id: "data",
         title: "Excel con tus datos",
         description: "Todos los meses cargados, una hoja por mes; se vuelve a subir tal cual",
+        icon: FileSpreadsheet,
+        iconClassName: "text-brand",
         disabled: months.length === 0,
         disabledReason:
           clientId === null
@@ -59,13 +71,25 @@ export function SalesExcelActions({
           );
         },
       },
+      {
+        id: "pdf",
+        title: "Informe PDF",
+        description: "Vista previa para imprimir: las tres lecturas con las marcas de la barra",
+        icon: FileText,
+        iconClassName: "text-muted",
+        disabled: !ready,
+        // Naming the missing step: a control switched off with no explanation forces you to point
+        // at it to find out what it is missing.
+        disabledReason: "Carga el Excel de ventas de al menos un mes.",
+        run: () => setReportOpen(true),
+      },
     ],
-    [months, clientId, logo],
+    [months, clientId, logo, ready],
   );
 
   return (
     <>
-      <ExcelActions
+      <ExportActions
         upload={{
           onClick: () => onOpenChange(true),
           disabled: clientId === null,
@@ -73,8 +97,7 @@ export function SalesExcelActions({
           // is missing, and what is missing here is the previous step of the whole module.
           disabledReason: clientId === null ? "Abre un cliente en Pérdidas y Ganancias" : undefined,
         }}
-        downloads={downloads}
-        downloadLabel="Excel"
+        exports={exports}
         info={{
           title: "¿Qué archivos acepta?",
           children: (
@@ -99,6 +122,7 @@ export function SalesExcelActions({
         }}
       />
       <SalesUploadModal open={open} onClose={() => onOpenChange(false)} />
+      {reportOpen && <SalesReportPreview onClose={() => setReportOpen(false)} />}
     </>
   );
 }

@@ -1,31 +1,34 @@
 "use client";
 
+import { FileSpreadsheet } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import { usePersonnelCostData } from "./personnel-cost-data-provider";
 import { PersonnelCostUploadModal } from "./personnel-cost-upload-modal";
 
 /**
- * The `ExcelActions` wrapper for «Análisis costo personal»: a module only wires what «Cargar» opens,
- * what it downloads and what the `ⓘ` says, never its own button markup.
+ * The `ExportActions` wrapper for «Análisis costo personal»: a module only wires what «Cargar» opens,
+ * what «Exportar» offers and what the `ⓘ` says, never its own button markup.
  *
- * **The one download is a COPY of what is written by hand** —the typed exercises and the nómina de
+ * **The one export is a COPY of what is written by hand** —the typed exercises and the nómina de
  * familia, `lib/personnel-cost/export.ts`— and it exists so the data can leave the browser and come
  * back through the upload unchanged. It carries nothing derived from the estado de resultados: those
  * tables are PyG's and are recomputed on every render, and the upload never writes over them either.
- * With a single option `ExcelActions` draws a plain button on its own.
+ * The module has no printed report yet; when it gets one it is one more entry of this same menu.
  */
-export function PersonnelCostExcelActions() {
+export function PersonnelCostExportActions() {
   const { clientId, canRead, clientName, backup } = usePersonnelCostData();
   const [open, setOpen] = useState(false);
 
-  const downloads = useMemo<ExcelDownloadOption[]>(
+  const exports = useMemo<ExportOption[]>(
     () => [
       {
         id: "data",
         title: "Excel con tus datos",
         description:
           "Los ejercicios escritos a mano y la nómina de familia; se vuelve a subir tal cual",
+        icon: FileSpreadsheet,
+        iconClassName: "text-brand",
         disabled: backup === null,
         disabledReason:
           clientId === null
@@ -59,7 +62,7 @@ export function PersonnelCostExcelActions() {
 
   return (
     <>
-      <ExcelActions
+      <ExportActions
         upload={{
           onClick: () => setOpen(true),
           disabled: !uploadable,
@@ -71,8 +74,7 @@ export function PersonnelCostExcelActions() {
               ? "Abre un cliente en Pérdidas y Ganancias"
               : "Este cliente no es de MicroPlus",
         }}
-        downloads={downloads}
-        downloadLabel="Excel"
+        exports={exports}
         info={{
           title: "¿Qué archivos acepta?",
           children: (

@@ -11,7 +11,7 @@ import {
   PersonnelCostForeignSystem,
   PersonnelCostNoData,
 } from "./personnel-cost-empty-state";
-import { PersonnelCostExcelActions } from "./personnel-cost-excel-actions";
+import { PersonnelCostExportActions } from "./personnel-cost-export-actions";
 import { PersonnelCostToolbar } from "./personnel-cost-toolbar";
 
 /**
@@ -120,7 +120,7 @@ function PersonnelCostContent() {
         <div className="flex flex-1 flex-col gap-4 overflow-auto bg-canvas px-7 py-5">
           {gap}
           <div className="flex justify-end">
-            <PersonnelCostExcelActions />
+            <PersonnelCostExportActions />
           </div>
           <Capture />
         </div>
@@ -144,7 +144,7 @@ function PersonnelCostContent() {
           de la barra se esconde— y en Gráficos es al revés: el chip marca cuáles se comparan. */}
       {tab === "datos" && <YearTabs />}
 
-      <PersonnelCostToolbar tab={tab} actions={<PersonnelCostExcelActions />} />
+      <PersonnelCostToolbar tab={tab} actions={<PersonnelCostExportActions />} />
 
       <div
         id="personnel-cost-panel"

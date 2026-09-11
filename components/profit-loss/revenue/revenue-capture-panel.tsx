@@ -4,7 +4,7 @@ import { AlertTriangle, X } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ExcelActions } from "@/components/ui/excel-actions";
+import { ExportActions } from "@/components/ui/export-actions";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { SidePanel } from "@/components/ui/side-panel";
 import { cn } from "@/lib/cn";
@@ -278,14 +278,14 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-col gap-4">
         {/* The drawer's own Excel: the capture out as a file and back in as the same rows. It is the
-            app's ONE Excel control and not a pair of buttons of its own — and it lives HERE and not in
+            app's ONE export control and not a pair of buttons of its own — and it lives HERE and not in
             the bar, because what it moves is what this drawer owns. FIRST, above the years: it acts on
             every year at once, and a control that sits under the strip of years reads as belonging to
             the one that is marked. */}
         <div className="flex items-center justify-between gap-3">
-          <ExcelActions
+          <ExportActions
             upload={{ label: "Cargar Excel", onClick: () => fileInputRef.current?.click() }}
-            downloads={[
+            exports={[
               {
                 id: "capture",
                 title: "Datos registrados",
@@ -295,7 +295,6 @@ export function RevenueCapturePanel({ onClose }: { onClose: () => void }) {
                 run: downloadCapture,
               },
             ]}
-            downloadLabel="Descargar Excel"
             info={{
               title: "¿Qué archivo acepta?",
               children: (
