@@ -686,13 +686,9 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
             xAxis: categoryAxis(categories),
             yAxis: valueAxis(money),
             legend: legendFor(true),
-            // The column's ventas: the exercise's over the span when comparing, that month's with
-            // one year — the same divisor the «% vs ventas» tile reads.
-            tooltip: axisTooltip(moneyExact, "surface", (_series, index) =>
-              comparing
-                ? (years[index]?.revenue ?? null)
-                : (years[0]?.revenueMonthly[years[0].months[index] ?? -1] ?? null),
-            ),
+            // Amounts only: the percentage over ventas is the note under the card and the tiles, and
+            // written a third time beside every figure it crowded the box.
+            tooltip: axisTooltip(moneyExact),
             series: [...series, totalLine("sections-total", totals, fit)],
           },
     table,
@@ -1197,14 +1193,12 @@ function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
           ),
           xAxis: valueAxis(money),
           legend: legendFor(false),
+          // The amount alone: «% del costo» stays in the table twin, which is where a percentage
+          // measured against another denominator than the rest of the screen says so in its header.
           tooltip: itemTooltip(
             (param) =>
               `<div style="font-weight:600;margin-bottom:4px">${param.name}</div>` +
-              `<div><b>${moneyExact(Number(param.value))}</b> · ${
-                shareOf(Number(param.value), grandTotal) === null
-                  ? "—"
-                  : percent(shareOf(Number(param.value), grandTotal) as number)
-              } del costo</div>`,
+              `<div><b>${moneyExact(Number(param.value))}</b></div>`,
           ),
           series: [
             {
@@ -1540,7 +1534,9 @@ function buildSharesCard(input: PersonnelCardsInput): {
                 },
               };
             }),
-            barMaxWidth: 22,
+            // Thicker than the ranking's: this axis holds two to nine bars, never twenty-one, and a
+            // 22 px stripe in a 300 px card read as a rule rather than a figure.
+            barMaxWidth: 44,
             label: {
               show: true,
               position: "right",
