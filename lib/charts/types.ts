@@ -253,6 +253,12 @@ export interface ChartTooltip {
 export interface ChartOption {
   animationDuration?: number;
   textStyle?: ChartTextStyle;
+  /**
+   * The GROUND the plot is painted on. Omitted, it is the card's white surface; `CHART_STAGE.sky`
+   * when a flat reading stands on the stage — the one dark ground the app has, and the only value
+   * this should ever carry. `Chart` reads it to frame the canvas the way it frames a 3D one.
+   */
+  backgroundColor?: string;
   grid?: ChartGrid;
   /**
    * One, or TWO when the second is a BAND OF LABELS and not a second scale: grouped columns

@@ -111,8 +111,11 @@ export const CHART_LINES = {
  * night sky every bar has an edge, which is the whole reason the shape is drawn in three dimensions
  * — and it is what the card's own name has been saying all along: a skyline is read against a sky.
  *
- * Its ONLY consumers are the two skyline cards. Nothing 2D takes these values: the app is a light
- * dashboard, and this is a framed stage inside a white card, never a dark mode.
+ * Its consumers are the two skyline cards and ONE flat reading: the lines of Reportería's
+ * «Comparativo de ventas por año», where several years as two-pixel strokes over a white plot were
+ * told apart by hue alone — the same reading the skyline draws, kept on the same ground. Nothing
+ * else 2D takes these values: the app is a light dashboard, and this is a framed stage inside a
+ * white card, never a dark mode.
  *
  * The marks that stand on it are `CHART_STAGE_PALETTE` and never the light scale: measured against
  * `sky`, `CHART_PALETTE` comes out (slots 1-8) 3.14 · 5.02 · 8.12 · 7.87 · 5.90 · 3.17 · 2.36 · 4.16,

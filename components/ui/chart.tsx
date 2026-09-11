@@ -185,8 +185,10 @@ export function Chart({ option, onSelect, height = 260, ariaLabel, className }: 
   // A 3D option is drawn on the STAGE (`CHART_STAGE`), and the frame is the card's half of it: the
   // canvas is a dark rectangle inside a white card, so it needs the corner radius of a panel and the
   // stage's own colour UNDER it — the WebGL layer paints nothing until `gl` lands, and a white box
-  // that turns black is what a card without this does on every mount.
-  const stage = dimension === "3d";
+  // that turns black is what a card without this does on every mount. A FLAT option that declares
+  // the stage as its `backgroundColor` (the comparison's lines) gets the same frame: the ground is
+  // the option's, the rounded panel is the card's.
+  const stage = dimension === "3d" || (!is3DOption(option) && option.backgroundColor !== undefined);
 
   return (
     <div className={cn("w-full", className)}>

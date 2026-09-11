@@ -4,7 +4,13 @@
  * It computes no figure of its own: `derive.ts` reads the years and this file decides only how they
  * are drawn and written.
  */
-import { CHART_MARK, CHART_MAX_SERIES, colorForPeriod } from "@/lib/charts/palette";
+import {
+  CHART_MARK,
+  CHART_MAX_SERIES,
+  CHART_STAGE,
+  colorForPeriod,
+  stageColor,
+} from "@/lib/charts/palette";
 import { is3DOption } from "@/lib/charts/types";
 import type {
   Chart3DOption,
@@ -29,6 +35,7 @@ import {
   moneyOrDash,
   ROUND_TOP,
   yearColor,
+  type Ground,
 } from "./chrome";
 import { skylineOption, SKYLINE_HEIGHT } from "./skyline";
 
@@ -84,6 +91,24 @@ export function buildComparisonCard(
   const comparing = drawn.length > 1;
 
   /**
+   * **The lines stand on the STAGE; the bars stay on the surface.**
+   *
+   * With several years the reading is a bundle of two-pixel strokes over one plot, and on the white
+   * card what tells one year from the next is its hue alone — a pale grid, a pale axis and four thin
+   * lines were read as one tangle. On `CHART_STAGE`'s navy every line has an edge and every year is
+   * found at a glance, which is the same reason the skyline stands on a sky: it is the SAME reading
+   * in its two shapes, so «Ver como» does not flip the ground under the reader. With one year the
+   * bars are twelve solids in the decorative scale, measured against white, and they keep the card.
+   *
+   * The years wear `stageColor`'s translation, never the light scale: measured against the navy, two
+   * of the eight identity slots fall under 3:1. It is the skyline's same slot-for-slot rule, so the
+   * line of 2024 and its row in the 3D box are ONE colour — and the growth card, which draws on the
+   * white, keeps the slot in the light scale. That is the trade `CHART_STAGE_PALETTE` declares.
+   */
+  const ground: Ground = comparing ? "stage" : "surface";
+  const lineColor = (year: number) => stageColor(yearColor(year, drawnYears));
+
+  /**
    * **This card writes NO figure over its marks**, and it is the one card of the module where that is
    * the reading and not a shortage of room.
    *
@@ -100,8 +125,8 @@ export function buildComparisonCard(
         name: String(entry.year),
         type: "line" as const,
         data: axis.map((month) => entry.monthly[month]),
-        itemStyle: { color: yearColor(entry.year, drawnYears) },
-        lineStyle: { color: yearColor(entry.year, drawnYears), width: CHART_MARK.lineWidth },
+        itemStyle: { color: lineColor(entry.year) },
+        lineStyle: { color: lineColor(entry.year), width: CHART_MARK.lineWidth },
         symbol: "circle",
         symbolSize: CHART_MARK.symbolSize,
         // Straight, never `smooth`: a curve invents values between two months nobody measured. And a
@@ -135,8 +160,14 @@ export function buildComparisonCard(
     : skyline
       ? skylineOption(drawn, drawnYears, axis, labels)
       : {
-          ...baseOption(categoryAxis(labels), currencyAxis(), legendFor(comparing)),
-          tooltip: axisTooltip(money),
+          ...baseOption(
+            categoryAxis(labels, undefined, ground),
+            currencyAxis(ground),
+            legendFor(comparing, ground === "stage" ? CHART_STAGE.inkMuted : undefined),
+            undefined,
+            ground,
+          ),
+          tooltip: axisTooltip(money, undefined, ground),
           series,
         };
 

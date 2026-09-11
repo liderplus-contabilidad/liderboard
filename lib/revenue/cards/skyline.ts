@@ -14,7 +14,7 @@ import {
 import type { Chart3DOption, Chart3DParam, Chart3DSeries, ChartAxis3D } from "@/lib/charts/types";
 import { formatCurrency } from "@/lib/format";
 import type { RevenueYearReading } from "../derive";
-import { legendFor, money, TOOLTIP_CHROME, yearColor } from "./chrome";
+import { legendFor, money, tooltipChrome, yearColor } from "./chrome";
 
 /** A skyline is read from above and needs the room a flat plot does not. */
 export const SKYLINE_HEIGHT = 360;
@@ -42,22 +42,16 @@ export function skylineOption(
   axis: readonly number[],
   labels: readonly string[],
 ): Chart3DOption {
-  // **The year with the TALLEST BAR goes at the BACK**, which is the only thing that makes a matrix
-  // of bars in perspective legible: a bar hides the ones behind it.
-  //
-  // What decides that is the PEAK and never the total. Occlusion is a fact about heights, and the two
-  // do not agree: 2026 is seven months, so its total is the lowest of the four while its abril
-  // ($337,092.91) is the tallest bar on the board — sorted by total it landed in FRONT and buried the
-  // three years behind it. The order of the COLOUR and of the legend is untouched: it stays
-  // chronological, so a year's hue is the same here, in the growth card and in the table.
-  const peakOf = (entry: RevenueYearReading) => {
-    const heights = entry.monthly.filter((value): value is number => value !== null);
-    return heights.length > 0 ? Math.max(...heights) : 0;
-  };
-  const byHeight = [...drawn].sort((a, b) => peakOf(b) - peakOf(a));
-  const depthOf = (year: number) => byHeight.findIndex((entry) => entry.year === year);
-  // The rows read front-to-back, so the axis labels are the reverse of the depth order.
-  const rows = byHeight.map((entry) => String(entry.year)).reverse();
+  // **The years go in ORDER: the oldest at the BACK, the most recent in front.** They were sorted by
+  // their tallest bar —the taller at the back, so no bar hid the ones behind it— and the depth axis
+  // read «2021 · 2026 · 2024 · 2022»: a reader looks for a year by its POSITION, and an axis that
+  // shuffles them costs more than the occlusion it spared. `drawn` arrives chronological from
+  // `derive.ts`, so depth is its index read from the far wall, and the axis —labelled front to
+  // back— is the same list reversed. Colour and legend keep the same order, so a year's hue is the
+  // same here, in the growth card and in the table.
+  const depthOf = (year: number) =>
+    drawn.length - 1 - drawn.findIndex((entry) => entry.year === year);
+  const rows = drawn.map((entry) => String(entry.year)).reverse();
 
   // The box fills the CARD. Sized off the month count it stopped at 210 and left the reading in the
   // middle third of a wide card, with the camera far enough back to shrink it again; the floor of the
@@ -120,11 +114,7 @@ export function skylineOption(
         ? []
         : [
             {
-              value: [index, drawn.length - 1 - depthOf(entry.year), value] as [
-                number,
-                number,
-                number,
-              ],
+              value: [index, depthOf(entry.year), value] as [number, number, number],
             },
           ];
     }),
@@ -189,11 +179,8 @@ export function skylineOption(
     tooltip: {
       // The module's tooltip, in the stage's tones: it is drawn INSIDE the dark panel, and the white
       // box every other card uses would be a hole punched in the night.
-      ...TOOLTIP_CHROME,
+      ...tooltipChrome("stage"),
       trigger: "item",
-      backgroundColor: CHART_STAGE.panel,
-      borderColor: CHART_STAGE.panelBorder,
-      textStyle: { color: CHART_STAGE.ink, fontSize: 12 },
       formatter: (param: Chart3DParam) => {
         // The month comes from the datum's own X INDEX and not from `param.name`: in a 3D chart that
         // field carries the series, and the reader hovering a bar is asking which month it is.

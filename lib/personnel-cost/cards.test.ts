@@ -270,9 +270,10 @@ describe("El skyline", () => {
     expect(depthOf(groups.option as Chart3DOption, "No afiliados")).toBe(0);
   });
 
-  it("lo que decide el fondo es el PICO y nunca el total: tapar es cosa de alturas", () => {
-    // 2025 factura más en el tramo (dos meses: $243,934) pero su mes más alto es $139,731; 2026 trae
-    // un solo mes de $144,277. Ordenado por total, 2026 se iba DELANTE y enterraba al otro.
+  it("los EJERCICIOS van en orden, no por altura: el más antiguo al fondo", () => {
+    // 2026 trae un solo mes de $144,277, más alto que cualquiera de 2025 ($139,731): por pico iría
+    // al fondo y el eje leería «2026 · 2025». Un año se busca por su posición, así que el orden es
+    // el cronológico y la altura no lo mueve.
     const { groups } = cards(
       [goldenYear({ year: 2025, coverage: [0, 1] }), goldenYear({ coverage: [5] })],
       [],
@@ -280,8 +281,9 @@ describe("El skyline", () => {
       "skyline",
     );
     const option = groups.option as Chart3DOption;
-    expect(depthOf(option, "2026")).toBe(1);
-    expect(depthOf(option, "2025")).toBe(0);
+    expect(depthOf(option, "2025")).toBe(1);
+    expect(depthOf(option, "2026")).toBe(0);
+    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
   });
 
   it("el color se traduce al escenario POR RANURA: la identidad se queda, el tono no", () => {
@@ -454,8 +456,20 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
   it("la ratio se pone de pie en PORCENTAJE, con una fila por ejercicio", () => {
     const { option } = solid("ratio", [goldenYear({ year: 2025 }), goldenYear()]);
     expect(option.series.map((entry) => entry.name).sort()).toEqual(["2025", "2026"]);
+    // Y en ORDEN: los ejercicios no se ordenan por altura como las secciones.
+    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
     expect(option.zAxis3D.axisLabel?.formatter?.(43.36)).toBe("43.4 %");
     expect(option.xAxis3D.data).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun"]);
+  });
+
+  it("la ratio deja los ejercicios en orden aunque el más reciente pique más alto", () => {
+    const { option } = solid("ratio", [
+      goldenYear({ year: 2025, coverage: [0, 1] }),
+      goldenYear({ coverage: [5] }),
+    ]);
+    expect(depthOf(option, "2025")).toBe(1);
+    expect(depthOf(option, "2026")).toBe(0);
+    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
   });
 
   it("el ranking es UNA fila y el color lo lleva cada columna, traducido al escenario", () => {

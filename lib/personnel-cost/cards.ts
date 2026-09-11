@@ -379,13 +379,18 @@ function writingTotals(
  * **The rows go smallest FIRST.** `solidBarsOption` draws `rows[0]` nearest the reader and a bar hides
  * whatever is behind it, so the tallest at the front covers the rest whole. It is the skyline's same
  * rule read from the other end, because that camera looks at the box from the other side.
+ *
+ * **Unless the rows are EXERCISES** (`order: "given"`): a year is looked for by its position, so
+ * they keep the chronological order they arrive in and the height does not move them — the same
+ * exception the skyline makes.
  */
 function solidBody(
   columns: readonly string[],
   rows: readonly SolidBarRow[],
   units: { value: (value: number) => string; axis: (value: number) => string },
-  colors?: readonly string[],
+  options: { order?: "peak" | "given"; colors?: readonly string[] } = {},
 ): Chart3DOption | null {
+  const { order = "peak", colors } = options;
   if (columns.length === 0 || rows.length === 0) {
     return null;
   }
@@ -393,7 +398,7 @@ function solidBody(
     columns,
     // Sorted by PEAK and never by total: occlusion is a fact about heights, and an entity that adds up
     // to more can still have every column shorter than the one it would hide.
-    rows: [...rows].sort((a, b) => peakOf(a.values) - peakOf(b.values)),
+    rows: order === "peak" ? [...rows].sort((a, b) => peakOf(a.values) - peakOf(b.values)) : rows,
     ...(colors ? { colors } : {}),
     formatValue: units.value,
     formatAxis: units.axis,
@@ -615,6 +620,8 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
       values: months.map((month) => ratioAt(year, month)),
     })),
     { value: percent, axis: percent },
+    // One row per EXERCISE, so they keep their order: the oldest at the back, never the shortest.
+    { order: "given" },
   );
   const asSolid = standing(input.solidViews?.ratio, solid);
 
@@ -886,15 +893,21 @@ function skylineOption(
   labels: readonly string[],
   depthLabel: string,
 ): Chart3DOption {
-  // **The tallest goes at the BACK**, which is the only thing that makes a matrix of bars in
-  // perspective legible: a bar hides whatever is behind it, so with the tallest in front it covers the
-  // rest whole.
+  // **The tallest goes at the BACK** — for groups and sections, which is the only thing that makes
+  // a matrix of bars in perspective legible: a bar hides whatever is behind it, so with the tallest
+  // in front it covers the rest whole. What decides that is the PEAK and never the total: occlusion
+  // is a fact about heights, and an exercise loaded to June totals more than one loaded to January
+  // and can still have every month shorter than it.
   //
-  // What decides that is the PEAK and never the total — occlusion is a fact about heights, and the two
-  // do not agree: an exercise loaded to June totals more than one loaded to January and can still have
-  // every month shorter than it. The COLOUR and the legend keep their own order, so a group's identity
-  // does not move with the camera.
-  const ordered = [...rows].sort((a, b) => peakOf(b.values) - peakOf(a.values));
+  // **The EXERCISES are the exception: they go in ORDER**, the oldest at the back and the most recent
+  // in front. Sorted by height the depth axis read «2026 · 2024 · 2025», and a reader looks for a
+  // year by its position — the occlusion that sort spared costs more than it saves. `rows` arrive
+  // chronological from `derive.ts`. The COLOUR and the legend keep their own order either way, so an
+  // entity's identity does not move with the camera.
+  const ordered =
+    depthLabel === "Ejercicio"
+      ? [...rows]
+      : [...rows].sort((a, b) => peakOf(b.values) - peakOf(a.values));
   const depthOf = (index: number) => ordered.length - 1 - index;
   const names = ordered.map((row) => row.name);
 
@@ -1208,9 +1221,13 @@ function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
       },
     ],
     { value: moneyExact, axis: money },
-    bars.map((entry, index) =>
-      entry.id === "resto" ? stageColor(CHART_NEUTRAL) : stageSliceColor(colorForSliceSlot(index)),
-    ),
+    {
+      colors: bars.map((entry, index) =>
+        entry.id === "resto"
+          ? stageColor(CHART_NEUTRAL)
+          : stageSliceColor(colorForSliceSlot(index)),
+      ),
+    },
   );
   const asSolid = standing(input.solidViews?.concepts, solid);
 
