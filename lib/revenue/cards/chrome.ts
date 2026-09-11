@@ -11,11 +11,14 @@
  */
 import {
   CHART_FONT,
+  CHART_GROUND,
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
   CHART_SURFACE,
   colorForEntity,
+  figureInk,
+  type ChartGround,
 } from "@/lib/charts/palette";
 import type {
   ChartAxis,
@@ -54,6 +57,26 @@ export const TOOLTIP_CHROME = {
   confine: true,
 } as const;
 
+/** The module's ground — `CHART_GROUND`'s two, read by every axis, legend and tooltip below. */
+export type Ground = ChartGround;
+
+/** The tooltip's chrome on either ground — `TOOLTIP_CHROME` for the surface, and on the stage the
+ *  panel of the stage, so the box is drawn INSIDE the night and not over it. */
+export function tooltipChrome(
+  ground: Ground = "surface",
+): Pick<
+  ChartTooltip,
+  "backgroundColor" | "borderColor" | "borderWidth" | "padding" | "textStyle" | "confine"
+> {
+  const tones = CHART_GROUND[ground];
+  return {
+    ...TOOLTIP_CHROME,
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
+    textStyle: { color: tones.ink, fontSize: 12 },
+  };
+}
+
 export const ROUND_TOP = [CHART_MARK.radius, CHART_MARK.radius, 0, 0] as [
   number,
   number,
@@ -86,10 +109,14 @@ export function baseOption(
    * already accounts for. Adding it here as well took the room twice and left the plot a strip.
    */
   labels?: { rows: number; fit: LabelFit },
+  ground: Ground = "surface",
 ): Omit<ChartOption, "series"> {
   return {
     animationDuration: 260,
     textStyle: { fontFamily: CHART_FONT },
+    // The ground is written ONLY where it is the stage: on the surface the option declares nothing
+    // and the card's white shows through, which is what every other card of the app does.
+    ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
     grid: {
       left: 8,
       right: 16,
@@ -147,9 +174,12 @@ export function directLabel(
      * with its bar's left edge, which is the nearest it can sit without reaching the fill beside it.
      */
     startAt?: number;
+    /** The ground the figure is written on: on the stage it takes the stage's ink. */
+    ground?: Ground;
   } = {},
 ): Pick<ChartSeries, "label" | "labelLayout"> {
   const { shares } = options;
+  const tones = CHART_GROUND[options.ground ?? "surface"];
   const write = options.unit ?? ((value: number) => formatCurrency(value, { cents: fit.cents }));
   return {
     label: {
@@ -159,14 +189,14 @@ export function directLabel(
       ...(options.startAt === undefined
         ? {}
         : { align: "left" as const, offset: [options.startAt, 0] as [number, number] }),
-      color: CHART_INK.strong,
+      ...figureInk(options.ground ?? "surface", CHART_INK.strong),
       fontSize: fit.fontSize,
       ...(shares
         ? {
             // Fainter than the amount: the percentage is an annotation over the bar, not the bar's
             // own figure — PyG's `SHARE_RICH_KEY`, and the same ink.
             rich: {
-              share: { color: CHART_INK.muted, fontSize: fit.fontSize - 0.5, lineHeight: 13 },
+              share: { color: tones.inkMuted, fontSize: fit.fontSize - 0.5, lineHeight: 13 },
             },
           }
         : {}),
@@ -207,15 +237,20 @@ export { fitBarWidth, GROUPED_BAR_GAP };
  * axis' labels are drawn just below the plot's floor, and a falling bar's figure hangs into exactly
  * that band. It travels with `baseOption`'s `below`, which reserves the room this margin then uses.
  */
-export function categoryAxis(labels: readonly string[], margin?: number): ChartAxis {
+export function categoryAxis(
+  labels: readonly string[],
+  margin?: number,
+  ground: Ground = "surface",
+): ChartAxis {
+  const tones = CHART_GROUND[ground];
   return {
     type: "category",
     data: [...labels],
-    axisLine: { show: true, lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
+    axisLine: { show: true, lineStyle: { color: tones.axis, width: 1, type: "solid" } },
     axisTick: { show: false },
     splitLine: { show: false },
     axisLabel: {
-      color: CHART_INK.muted,
+      color: tones.inkMuted,
       fontSize: 11,
       interval: 0,
       hideOverlap: true,
@@ -224,14 +259,15 @@ export function categoryAxis(labels: readonly string[], margin?: number): ChartA
   };
 }
 
-export function currencyAxis(): ChartAxis {
+export function currencyAxis(ground: Ground = "surface"): ChartAxis {
+  const tones = CHART_GROUND[ground];
   return {
     type: "value",
     axisLine: { show: false },
     axisTick: { show: false },
-    splitLine: { show: true, lineStyle: { color: CHART_LINES.grid, width: 1, type: "solid" } },
+    splitLine: { show: true, lineStyle: { color: tones.grid, width: 1, type: "solid" } },
     axisLabel: {
-      color: CHART_INK.faint,
+      color: tones.inkFaint,
       fontSize: 11,
       formatter: (value) => axisMoney(Number(value)),
     },
@@ -254,7 +290,7 @@ export function percentAxis(): ChartAxis {
 
 export function legendFor(
   show: boolean,
-  /** The skyline draws its legend ON the stage, where the card's ink would not be read. */
+  /** A card on the stage draws its legend ON it, where the card's ink would not be read. */
   tone: string = CHART_INK.muted,
 ): ChartLegend {
   return {
@@ -279,11 +315,16 @@ export function legendFor(
  * screen to reconcile them. The subtitle and the note already say it; the tooltip is where the
  * question is actually asked.
  */
-export function axisTooltip(unit: (value: number) => string, span?: string): ChartTooltip {
+export function axisTooltip(
+  unit: (value: number) => string,
+  span?: string,
+  ground: Ground = "surface",
+): ChartTooltip {
+  const tones = CHART_GROUND[ground];
   return {
-    ...TOOLTIP_CHROME,
+    ...tooltipChrome(ground),
     trigger: "axis",
-    axisPointer: { type: "shadow", lineStyle: { color: CHART_LINES.axis, width: 1 } },
+    axisPointer: { type: "shadow", lineStyle: { color: tones.axis, width: 1 } },
     formatter: (params) => {
       const rows = Array.isArray(params) ? params : [params];
       const name = rows[0]?.name ?? "";
@@ -296,9 +337,27 @@ export function axisTooltip(unit: (value: number) => string, span?: string): Cha
         )
         .join("");
       return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${
-        body || `<div style="color:${CHART_INK.muted}">Sin cargar</div>`
+        body || `<div style="color:${tones.inkMuted}">Sin cargar</div>`
       }`;
     },
+  };
+}
+
+/**
+ * The tooltip of the MARK the pointer is on, with the body the card decides.
+ *
+ * `axisTooltip` lists the column under a month; this one fires on one series and hands the card the
+ * param, because what the box should say about one line is the card's reading and not the
+ * chrome's — the comparativo answers with the year's whole run of months.
+ */
+export function itemTooltip(
+  body: (param: ChartParam) => string,
+  ground: Ground = "surface",
+): ChartTooltip {
+  return {
+    ...tooltipChrome(ground),
+    trigger: "item",
+    formatter: (params) => body(Array.isArray(params) ? params[0] : params),
   };
 }
 

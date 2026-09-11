@@ -174,6 +174,13 @@ export interface ChartSeries {
   /** `hideOverlap` is how a label that does not fit is dropped instead of clipped. */
   labelLayout?: { hideOverlap?: boolean };
   emphasis?: { focus?: "series"; itemStyle?: ChartItemStyle };
+  /**
+   * Line only. ECharts fires hover on a line's SYMBOLS and not on its stroke, so a card that wants
+   * «pass over the line» to mean anything has to say so — without it the reader has to land on a
+   * six-pixel dot for the year to answer. `chart.tsx` reads it too: the stroke has no `dataIndex`,
+   * so the tooltip has to be ASKED for the nearest mark, and that is done there.
+   */
+  triggerEvent?: "line";
   symbol?: string;
   symbolSize?: number;
   smooth?: boolean;
@@ -253,6 +260,12 @@ export interface ChartTooltip {
 export interface ChartOption {
   animationDuration?: number;
   textStyle?: ChartTextStyle;
+  /**
+   * The GROUND the plot is painted on. Omitted, it is the card's white surface; `CHART_STAGE.sky`
+   * when a flat reading stands on the stage — the one dark ground the app has, and the only value
+   * this should ever carry. `Chart` reads it to frame the canvas the way it frames a 3D one.
+   */
+  backgroundColor?: string;
   grid?: ChartGrid;
   /**
    * One, or TWO when the second is a BAND OF LABELS and not a second scale: grouped columns

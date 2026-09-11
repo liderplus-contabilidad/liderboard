@@ -20,6 +20,7 @@
  */
 import {
   CHART_FONT,
+  CHART_GROUND,
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
@@ -31,8 +32,11 @@ import {
   CHART_SURFACE,
   colorForEntity,
   colorForSliceSlot,
+  CHART_TRAJECTORY_GROUND,
+  figureInk,
   stageColor,
   stageSliceColor,
+  type ChartGround,
 } from "@/lib/charts/palette";
 import type {
   Chart3DOption,
@@ -51,6 +55,7 @@ import type {
 } from "@/lib/charts/types";
 import {
   fitDirectLabel,
+  fitPercentLabel,
   labelDistance,
   labelHeadroom,
   type LabelFit,
@@ -61,6 +66,7 @@ import {
   type SolidBarRow,
   type SolidView,
 } from "@/lib/charts/solid-bars";
+import { seriesRunTooltip, tooltipMarker } from "@/lib/charts/tooltip";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
@@ -160,26 +166,36 @@ export interface PersonnelCards {
 // Chrome
 // ---------------------------------------------------------------------------
 
-function valueAxis(unit: (value: number) => string): ChartAxis {
+/**
+ * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: the
+ * ratio comparing several exercises stands on the stage (`CHART_GROUND`), and there the light
+ * chrome's greys are invisible.
+ */
+function valueAxis(unit: (value: number) => string, ground: ChartGround = "surface"): ChartAxis {
+  const tones = CHART_GROUND[ground];
   return {
     type: "value",
     axisLine: { show: false },
     axisTick: { show: false },
-    splitLine: { show: true, lineStyle: { color: CHART_LINES.grid, width: 1, type: "solid" } },
-    axisLabel: { color: CHART_INK.faint, fontSize: 11, formatter: (value) => unit(Number(value)) },
+    splitLine: { show: true, lineStyle: { color: tones.grid, width: 1, type: "solid" } },
+    axisLabel: { color: tones.inkFaint, fontSize: 11, formatter: (value) => unit(Number(value)) },
   };
 }
 
-function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }): ChartAxis {
+function categoryAxis(
+  labels: readonly string[],
+  options?: { inverse?: boolean; ground?: ChartGround },
+): ChartAxis {
+  const tones = CHART_GROUND[options?.ground ?? "surface"];
   return {
     type: "category",
     data: [...labels],
     inverse: options?.inverse ?? false,
-    axisLine: { show: true, lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
+    axisLine: { show: true, lineStyle: { color: tones.axis, width: 1, type: "solid" } },
     axisTick: { show: false },
     splitLine: { show: false },
     axisLabel: {
-      color: CHART_INK.muted,
+      color: tones.inkMuted,
       fontSize: 11,
       // `interval: 0` forces drawing them ALL: without it ECharts thins the axis and skips every
       // other one, and a bar with no name is identified by nothing.
@@ -190,7 +206,7 @@ function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }
   };
 }
 
-function legendFor(show: boolean): ChartLegend {
+function legendFor(show: boolean, ground: ChartGround = "surface"): ChartLegend {
   return {
     show,
     type: "scroll",
@@ -199,7 +215,7 @@ function legendFor(show: boolean): ChartLegend {
     itemWidth: 10,
     itemHeight: 10,
     itemGap: 14,
-    textStyle: { color: CHART_INK.muted, fontSize: 11.5 },
+    textStyle: { color: CHART_GROUND[ground].inkMuted, fontSize: 11.5 },
   };
 }
 
@@ -217,11 +233,19 @@ const TOOLTIP_CHROME = {
   confine: true,
 };
 
-function axisTooltip(unit: (value: number) => string): ChartTooltip {
+function axisTooltip(
+  unit: (value: number) => string,
+  ground: ChartGround = "surface",
+): ChartTooltip {
+  const tones = CHART_GROUND[ground];
   return {
     trigger: "axis",
     ...TOOLTIP_CHROME,
-    axisPointer: { type: "shadow", lineStyle: { color: CHART_LINES.axis, width: 1 } },
+    // On the stage the box is drawn in the stage's panel: a white one would be a hole in the night.
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
+    textStyle: { color: tones.ink, fontSize: 12 },
+    axisPointer: { type: "shadow", lineStyle: { color: tones.axis, width: 1 } },
     formatter: (params) => {
       const rows = Array.isArray(params) ? params : [params];
       const head = rows[0]?.name ?? "";
@@ -234,16 +258,23 @@ function axisTooltip(unit: (value: number) => string): ChartTooltip {
         )
         .join("");
       return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${
-        body || `<div style="color:${CHART_INK.muted}">Sin cargar</div>`
+        body || `<div style="color:${tones.inkMuted}">Sin cargar</div>`
       }`;
     },
   };
 }
 
-function itemTooltip(formatter: (param: ChartParam) => string): ChartTooltip {
+function itemTooltip(
+  formatter: (param: ChartParam) => string,
+  ground: ChartGround = "surface",
+): ChartTooltip {
+  const tones = CHART_GROUND[ground];
   return {
     trigger: "item",
     ...TOOLTIP_CHROME,
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
+    textStyle: { color: tones.ink, fontSize: 12 },
     formatter: (params) => formatter(Array.isArray(params) ? params[0] : params),
   };
 }
@@ -292,13 +323,15 @@ function directLabel(
   read: (param: ChartParam) => number | null,
   write: (value: number) => string,
   row = 0,
+  /** The ground the figure is written on: on the stage it takes the stage's ink. */
+  ground: ChartGround = "surface",
 ): Pick<ChartSeries, "label" | "labelLayout"> {
   return {
     label: {
       show: true,
       position: "top",
       distance: labelDistance(row, fit),
-      color: CHART_INK.muted,
+      ...figureInk(ground, CHART_INK.muted),
       fontSize: fit.fontSize,
       formatter: (param: ChartParam) => {
         const value = read(param);
@@ -379,13 +412,18 @@ function writingTotals(
  * **The rows go smallest FIRST.** `solidBarsOption` draws `rows[0]` nearest the reader and a bar hides
  * whatever is behind it, so the tallest at the front covers the rest whole. It is the skyline's same
  * rule read from the other end, because that camera looks at the box from the other side.
+ *
+ * **Unless the rows are EXERCISES** (`order: "given"`): a year is looked for by its position, so
+ * they keep the chronological order they arrive in and the height does not move them — the same
+ * exception the skyline makes.
  */
 function solidBody(
   columns: readonly string[],
   rows: readonly SolidBarRow[],
   units: { value: (value: number) => string; axis: (value: number) => string },
-  colors?: readonly string[],
+  options: { order?: "peak" | "given"; colors?: readonly string[] } = {},
 ): Chart3DOption | null {
+  const { order = "peak", colors } = options;
   if (columns.length === 0 || rows.length === 0) {
     return null;
   }
@@ -393,7 +431,7 @@ function solidBody(
     columns,
     // Sorted by PEAK and never by total: occlusion is a fact about heights, and an entity that adds up
     // to more can still have every column shorter than the one it would hide.
-    rows: [...rows].sort((a, b) => peakOf(a.values) - peakOf(b.values)),
+    rows: order === "peak" ? [...rows].sort((a, b) => peakOf(a.values) - peakOf(b.values)) : rows,
     ...(colors ? { colors } : {}),
     formatValue: units.value,
     formatAxis: units.axis,
@@ -574,9 +612,23 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
     return shareOf(cost, revenue);
   };
 
-  // This card writes NO figure over its points: what a ratio is read for is the trajectory, and a
-  // percentage over every mark of every exercise turns the line into texture. The amount stays where
-  // it is never missing — in the tooltip on hover and in the table twin.
+  // **The card stands on the STAGE** (`CHART_TRAJECTORY_GROUND`), one exercise or several: a thin
+  // line over a white plot has nothing but its hue to be found by, and it is the ground the solid
+  // body of this same reading already has. There the year wears `stageColor`'s slot —the solid's
+  // same rule— and the table twin, on the white, keeps the light one.
+  const ground = CHART_TRAJECTORY_GROUND;
+  const lineColor = (year: number) =>
+    ground === "stage" ? stageColor(yearColor(year, order)) : yearColor(year, order);
+
+  // With SEVERAL exercises this card writes NO figure over its points: what a ratio is read for is
+  // the trajectory, and a percentage over every mark of every exercise turns the line into texture.
+  // The amount stays where it is never missing — in the tooltip on hover and in the table twin.
+  // ALONE, an exercise has nothing to be read against but its own months, and the percentage over
+  // each point is what turns «abril subió» into «abril fue 43.4 %» — Reportería's comparativo's
+  // same rule, one row of figures in the ground's ink.
+  const comparing = years.length > 1;
+  // A percent's own fit: six characters where an amount has eleven, so it reads two points larger.
+  const labelFit = fitPercentLabel(months.length);
   const series: ChartSeries[] = years.map((year) => ({
     id: `ratio-${year.year}`,
     type: "line",
@@ -585,10 +637,42 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
     smooth: false,
     symbol: "circle",
     symbolSize: CHART_MARK.symbolSize,
-    lineStyle: { color: yearColor(year.year, order), width: CHART_MARK.lineWidth },
-    itemStyle: { color: yearColor(year.year, order) },
+    lineStyle: { color: lineColor(year.year), width: CHART_MARK.lineWidth },
+    itemStyle: { color: lineColor(year.year) },
+    ...(comparing
+      ? {}
+      : directLabel(
+          labelFit,
+          (param) =>
+            param.value === null || param.value === undefined ? null : Number(param.value),
+          percent,
+          0,
+          ground,
+        )),
     emphasis: { focus: "series" },
+    // Comparing, a line is read ONE at a time: the exercise under the pointer comes forward, the
+    // others blur, and the stroke itself answers (`triggerEvent`) — not only its dots.
+    ...(comparing ? { triggerEvent: "line" as const } : {}),
   }));
+
+  // The line's box, comparing: the exercise as the head and its months as the body, in the same
+  // two columns Reportería's comparativo opens (`seriesRunTooltip`). A column of six exercises
+  // under one month is not what a line is followed for; the run of the one under the pointer is.
+  // Alone, the column tooltip stays: one figure per month, already written over the point.
+  const lineTooltip = itemTooltip((param) => {
+    const year = years.find((candidate) => `ratio-${candidate.year}` === param.seriesId);
+    if (!year) return "";
+    const rows = months.flatMap((month) => {
+      const value = ratioAt(year, month);
+      return value === null ? [] : [{ label: MONTHS_SHORT_ES[month], figure: percent(value) }];
+    });
+    return seriesRunTooltip(
+      `${tooltipMarker(lineColor(year.year))}${year.year}`,
+      rows,
+      param.name,
+      CHART_GROUND[ground].inkMuted,
+    );
+  }, ground);
 
   const table: ChartTable = {
     columns: [...months.map((month) => MONTHS_SHORT_ES[month]), "Tramo"],
@@ -615,6 +699,8 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
       values: months.map((month) => ratioAt(year, month)),
     })),
     { value: percent, axis: percent },
+    // One row per EXERCISE, so they keep their order: the oldest at the back, never the shortest.
+    { order: "given" },
   );
   const asSolid = standing(input.solidViews?.ratio, solid);
 
@@ -629,19 +715,25 @@ function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption |
         : {
             animationDuration: 300,
             textStyle: { fontFamily: CHART_FONT },
+            ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
             grid: {
               left: 8,
               right: 12,
-              // With no figures written there is nothing to reserve for, and the plot keeps the room.
-              top: 12,
+              // Comparing, no figure is written and the plot keeps the room; a lone exercise writes
+              // one row and the grid opens what it needs — `outerBoundsContain` only reserves for
+              // the axis' labels.
+              top: comparing ? 12 : labelHeadroom(1, labelFit, 12),
               bottom: 34,
               outerBoundsMode: "same",
               outerBoundsContain: "axisLabel",
             },
-            xAxis: categoryAxis(months.map((month) => MONTHS_SHORT_ES[month])),
-            yAxis: valueAxis(percent),
-            legend: legendFor(years.length > 1),
-            tooltip: axisTooltip(percent),
+            xAxis: categoryAxis(
+              months.map((month) => MONTHS_SHORT_ES[month]),
+              { ground },
+            ),
+            yAxis: valueAxis(percent, ground),
+            legend: legendFor(years.length > 1, ground),
+            tooltip: comparing ? lineTooltip : axisTooltip(percent, ground),
             series,
           },
     table,
@@ -886,15 +978,21 @@ function skylineOption(
   labels: readonly string[],
   depthLabel: string,
 ): Chart3DOption {
-  // **The tallest goes at the BACK**, which is the only thing that makes a matrix of bars in
-  // perspective legible: a bar hides whatever is behind it, so with the tallest in front it covers the
-  // rest whole.
+  // **The tallest goes at the BACK** — for groups and sections, which is the only thing that makes
+  // a matrix of bars in perspective legible: a bar hides whatever is behind it, so with the tallest
+  // in front it covers the rest whole. What decides that is the PEAK and never the total: occlusion
+  // is a fact about heights, and an exercise loaded to June totals more than one loaded to January
+  // and can still have every month shorter than it.
   //
-  // What decides that is the PEAK and never the total — occlusion is a fact about heights, and the two
-  // do not agree: an exercise loaded to June totals more than one loaded to January and can still have
-  // every month shorter than it. The COLOUR and the legend keep their own order, so a group's identity
-  // does not move with the camera.
-  const ordered = [...rows].sort((a, b) => peakOf(b.values) - peakOf(a.values));
+  // **The EXERCISES are the exception: they go in ORDER**, the oldest at the back and the most recent
+  // in front. Sorted by height the depth axis read «2026 · 2024 · 2025», and a reader looks for a
+  // year by its position — the occlusion that sort spared costs more than it saves. `rows` arrive
+  // chronological from `derive.ts`. The COLOUR and the legend keep their own order either way, so an
+  // entity's identity does not move with the camera.
+  const ordered =
+    depthLabel === "Ejercicio"
+      ? [...rows]
+      : [...rows].sort((a, b) => peakOf(b.values) - peakOf(a.values));
   const depthOf = (index: number) => ordered.length - 1 - index;
   const names = ordered.map((row) => row.name);
 
@@ -1208,9 +1306,13 @@ function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
       },
     ],
     { value: moneyExact, axis: money },
-    bars.map((entry, index) =>
-      entry.id === "resto" ? stageColor(CHART_NEUTRAL) : stageSliceColor(colorForSliceSlot(index)),
-    ),
+    {
+      colors: bars.map((entry, index) =>
+        entry.id === "resto"
+          ? stageColor(CHART_NEUTRAL)
+          : stageSliceColor(colorForSliceSlot(index)),
+      ),
+    },
   );
   const asSolid = standing(input.solidViews?.concepts, solid);
 

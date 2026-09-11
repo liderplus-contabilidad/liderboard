@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CHART_MAX_SERIES,
   CHART_PALETTE,
+  CHART_STAGE,
   CHART_STAGE_PALETTE,
   stageColor,
 } from "@/lib/charts/palette";
@@ -49,12 +50,13 @@ function input(years: RevenueYearInput[], overrides: Partial<RevenueCardsInput> 
   } satisfies RevenueCardsInput;
 }
 
-describe("buildComparisonCard · las dos formas", () => {
-  it("con UN año marcado dibuja barras por mes", () => {
+describe("buildComparisonCard · una línea por año", () => {
+  it("con UN año marcado dibuja UNA línea, no barras", () => {
     const card = buildComparisonCard(input([yearInput(2026, REVENUE_2026)]));
 
     expect(card.option?.series).toHaveLength(1);
-    expect(card.option?.series[0].type).toBe("bar");
+    expect(card.option?.series[0].type).toBe("line");
+    expect(card.option?.series[0].symbol).toBe("circle");
   });
 
   it("con VARIOS años marcados dibuja una línea por año", () => {
@@ -70,14 +72,17 @@ describe("buildComparisonCard · las dos formas", () => {
     ]);
   });
 
-  it("ninguna forma la elige un control: solo cuántos años están marcados", () => {
+  it("la forma no cambia con las marcas: un año y dos años son la misma línea", () => {
     const one = buildComparisonCard(input([yearInput(2024, REVENUE_2024)]));
     const two = buildComparisonCard(
       input([yearInput(2022, REVENUE_2022), yearInput(2024, REVENUE_2024)]),
     );
 
-    expect(one.option?.series[0].type).toBe("bar");
+    expect(one.option?.series[0].type).toBe("line");
     expect(two.option?.series[0].type).toBe("line");
+    // Con un año no hay leyenda: el subtítulo ya lo nombra.
+    expect(one.option?.legend?.show).toBe(false);
+    expect(two.option?.legend?.show).toBe(true);
   });
 
   it("con nueve años el gráfico corta en ocho y la tabla trae los nueve", () => {
@@ -131,6 +136,59 @@ describe("buildComparisonCard · las dos formas", () => {
     const card = flatComparisonCard(input(loadedYears()));
 
     expect(Array.isArray(card.option?.yAxis)).toBe(false);
+  });
+
+  describe("con varios años se lee UNA línea a la vez", () => {
+    it("el tooltip es de la línea y lista los MESES de ese año, no los años del mes", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+      const tooltip = card.option?.tooltip;
+
+      expect(tooltip?.trigger).toBe("item");
+      const html = tooltip?.formatter?.({
+        name: "Jul",
+        seriesId: "year-2026",
+        seriesName: "2026",
+        value: REVENUE_2026[6],
+        dataIndex: 6,
+      });
+      expect(html).toContain("2026");
+      // Los siete meses cargados de 2026, en orden, y ninguno de los otros años.
+      expect(html).toContain("Ene");
+      expect(html).toContain("$247,053.11");
+      expect(html).toContain("Jul");
+      expect(html).toContain("$241,844.03");
+      expect(html).not.toContain("2024");
+      // Agosto no está cargado: raya, no cero.
+      expect(html).not.toContain("$0.00");
+    });
+
+    it("el recuadro reparte los meses en DOS columnas, no en una lista de doce", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+      const html = card.option?.tooltip?.formatter?.({
+        name: "Ene",
+        seriesId: "year-2024",
+        seriesName: "2024",
+        value: REVENUE_2024[0],
+        dataIndex: 0,
+      });
+
+      expect(html).toMatch(/grid-template-columns:\s*auto auto auto auto/);
+    });
+
+    it("al pasar por el trazo la línea se resalta y las demás se atenúan", () => {
+      const card = flatComparisonCard(input(loadedYears()));
+
+      for (const serie of card.option?.series ?? []) {
+        expect(serie.emphasis?.focus).toBe("series");
+        expect(serie.triggerEvent).toBe("line");
+      }
+    });
+
+    it("con UN año las barras conservan el tooltip de columna", () => {
+      const card = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+
+      expect(card.option?.tooltip?.trigger).toBe("axis");
+    });
   });
 });
 
@@ -208,14 +266,23 @@ describe("cada gráfica del módulo escribe su cifra sobre la marca, tumbada", (
     expect(wrote(card.option?.series[0] ?? {})).toBe("$100,000.00");
   });
 
-  it("el comparativo NO escribe ninguna: doce cifras tapan la trayectoria que se va a leer", () => {
-    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+  it("el comparativo de VARIOS años no escribe ninguna: doce cifras por año tapan la trayectoria", () => {
     const several = flatComparisonCard(input(loadedYears()));
 
-    expect(one.option?.series.every((serie) => !serie.label?.show)).toBe(true);
     expect(several.option?.series.every((serie) => !serie.label?.show)).toBe(true);
     // Y sin cifras arriba la rejilla no gasta margen en alojarlas.
-    expect(one.option?.grid?.top).toBe(16);
+    expect(several.option?.grid?.top).toBe(16);
+  });
+
+  it("con UN año escribe la cifra sobre cada punto, en la tinta del escenario", () => {
+    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+    const [serie] = one.option?.series ?? [];
+
+    expect(wrote(serie)).toBe("$100,000.00");
+    expect(serie.label?.position).toBe("top");
+    expect(serie.label?.color).toBe(CHART_STAGE.ink);
+    // Y la rejilla abre arriba la fila que esas cifras necesitan.
+    expect(one.option?.grid?.top).toBeGreaterThan(16);
   });
 
   it("la rejilla abre arriba lo que la fila más alta necesita", () => {
@@ -548,11 +615,9 @@ describe("el comparativo en tres dimensiones", () => {
     expect(label?.formatter?.({ name: "2022", value: [0, 0, 39_684.6195] })).toBe("$39,684.62");
   });
 
-  it("al fondo va el año de la barra MÁS ALTA, no el del total más alto", () => {
-    // El caso que separa las dos reglas: 2026 son siete meses, así que su TOTAL es el menor de los
-    // cuatro ($1,683,720.41) mientras su abril ($337,092.91) es la barra más alta del tablero.
-    // Ordenando por total caía DELANTE y tapaba a los tres de atrás; la oclusión es un hecho sobre
-    // alturas, no sobre sumas.
+  it("los años van en ORDEN: el más antiguo al fondo y el más reciente delante", () => {
+    // Fue «el año de la barra más alta al fondo», y así el eje leía «2021 · 2026 · 2024 · 2022»:
+    // un lector busca un año por su posición, y la oclusión no vale lo que cuesta esa lectura.
     const card = buildComparisonCard(input(loadedYears()), "skyline");
     const option = card.option;
     if (option === null || !is3DOption(option)) {
@@ -562,14 +627,15 @@ describe("el comparativo en tres dimensiones", () => {
     // El índice de profundidad MÁXIMO es el fondo de la caja.
     const depthOf = (year: string) =>
       option.series.find((serie) => serie.name === year)?.data[0]?.value[1];
-    // Picos: 2026 $337,092.91 · 2024 $247,997.17 · 2022 $213,795.00 · 2023 $184,263.02.
-    expect(depthOf("2026")).toBe(3);
-    expect(depthOf("2024")).toBe(2);
-    expect(depthOf("2022")).toBe(1);
-    expect(depthOf("2023")).toBe(0);
+    expect(depthOf("2022")).toBe(3);
+    expect(depthOf("2023")).toBe(2);
+    expect(depthOf("2024")).toBe(1);
+    expect(depthOf("2026")).toBe(0);
+    // El eje se rotula de delante hacia atrás, así que leído de atrás hacia delante es cronológico.
+    expect(option.yAxis3D.data).toEqual(["2026", "2024", "2023", "2022"]);
   });
 
-  it("2026 con siete meses va detrás de 2024 con doce", () => {
+  it("2026 va delante de 2024 aunque su abril sea la barra más alta del tablero", () => {
     const card = buildComparisonCard(
       input([yearInput(2024, REVENUE_2024), yearInput(2026, REVENUE_2026)]),
       "skyline",
@@ -581,8 +647,8 @@ describe("el comparativo en tres dimensiones", () => {
 
     const depthOf = (year: string) =>
       option.series.find((serie) => serie.name === year)?.data[0]?.value[1];
-    expect(depthOf("2026")).toBe(1);
-    expect(depthOf("2024")).toBe(0);
+    expect(depthOf("2024")).toBe(1);
+    expect(depthOf("2026")).toBe(0);
   });
 
   it("la caja llena la tarjeta en vez de quedarse en un tercio", () => {
@@ -600,6 +666,7 @@ describe("el comparativo en tres dimensiones", () => {
   it("el año guarda su RANURA en la escala del escenario", () => {
     const flat = flatComparisonCard(input(loadedYears()));
     const solid = buildComparisonCard(input(loadedYears()), "skyline");
+    const annual = flatAnnual(input(loadedYears()), "total");
     const option = solid.option;
     if (option === null || !is3DOption(option)) {
       throw new Error("se esperaba la forma 3D");
@@ -607,12 +674,37 @@ describe("el comparativo en tres dimensiones", () => {
 
     const flatColor = flat.option?.series.find((serie) => serie.name === "2026")?.itemStyle?.color;
     const solidColor = option.series.find((serie) => serie.name === "2026")?.itemStyle?.color;
-    // El escenario tiene escala propia, y lo que se conserva es la POSICIÓN: `stageColor` traduce
-    // por ranura, así que el año es el mismo color en todas las tarjetas 3D.
-    expect(solidColor).toBe(stageColor(flatColor ?? ""));
-    expect(CHART_PALETTE.indexOf(flatColor as (typeof CHART_PALETTE)[number])).toBe(
+    // «Ventas por año» dibuja en blanco: es donde el año lleva su ranura en la escala clara.
+    const column = annual.option?.xAxis;
+    const at = Array.isArray(column) ? -1 : (column?.data?.indexOf("2026") ?? -1);
+    const datum = annual.option?.series[0].data[at];
+    const lightColor =
+      typeof datum === "object" && datum !== null ? datum.itemStyle?.color : undefined;
+    // Las dos formas del comparativo están sobre el MISMO escenario, así que el año es UN color en
+    // la línea y en la fila del skyline. Lo que se conserva frente a la tarjeta blanca es la
+    // POSICIÓN: `stageColor` traduce por ranura desde el color que ese año lleva en blanco.
+    expect(flatColor).toBe(solidColor);
+    expect(solidColor).toBe(stageColor(lightColor ?? ""));
+    expect(CHART_PALETTE.indexOf(lightColor as (typeof CHART_PALETTE)[number])).toBe(
       CHART_STAGE_PALETTE.indexOf(solidColor as (typeof CHART_STAGE_PALETTE)[number]),
     );
+  });
+
+  it("el comparativo está sobre el escenario con varios años y también con uno", () => {
+    const several = flatComparisonCard(input(loadedYears()));
+    const one = flatComparisonCard(input([yearInput(2026, REVENUE_2026)]));
+    const growth = buildGrowthCard(input(loadedYears()), "dolares");
+
+    // Varios años son trazos finos sobre un plano: el fondo navy es lo que les da borde.
+    expect(several.option?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(several.option?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
+    expect(several.option?.tooltip?.backgroundColor).toBe(CHART_STAGE.panel);
+    // Un año es una línea sola, y el suelo no va y viene con las marcas: la misma escala del
+    // escenario, por ranura.
+    expect(one.option?.backgroundColor).toBe(CHART_STAGE.sky);
+    expect(CHART_STAGE_PALETTE).toContain(one.option?.series[0].lineStyle?.color);
+    // Y ninguna otra tarjeta del módulo hereda el escenario por omisión.
+    expect(growth.option?.backgroundColor).toBeUndefined();
   });
 
   it("las tres «vs» toman cuerpo sólido con los MISMOS dos importes, el numerador delante", () => {

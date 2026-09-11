@@ -20,8 +20,8 @@
  */
 import {
   CHART_FONT,
+  CHART_GROUND,
   CHART_INK,
-  CHART_LINES,
   CHART_MARK,
   CHART_MAX_SERIES,
   CHART_NEUTRAL,
@@ -31,9 +31,11 @@ import {
   CHART_STAGE_SKY,
   stageColor,
   stageSliceColor,
-  CHART_SURFACE,
   colorForEntity,
   colorForSliceSlot,
+  CHART_TRAJECTORY_GROUND,
+  figureInk,
+  type ChartGround,
 } from "@/lib/charts/palette";
 /**
  * These two open PLANO and the 3D is opted into, which is the opposite of the evolution's default and
@@ -137,8 +139,9 @@ function payerColor(index: number): string {
   return colorForSliceSlot(index);
 }
 
-/** The fill of a month that NEVER arrived — see `absenceMarks`. */
-const ABSENT_FILL = CHART_LINES.grid;
+/** The fill of a month that NEVER arrived — see `absenceMarks`. The ground's own grid tone: a mark
+ *  that says «nothing here» has to be the most recessive thing on the plot, on either ground. */
+const absentFill = (ground: ChartGround) => CHART_GROUND[ground].grid;
 
 const SERVICES_HEIGHT = 300;
 const PAYERS_HEIGHT = 420;
@@ -303,14 +306,20 @@ function emptyMonths(monthlyByYear: readonly YearMonths[]): number[] {
 // Cromado compartido
 // ---------------------------------------------------------------------------
 
-function valueAxis(): ChartAxis {
+/**
+ * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: the
+ * evolution comparing several years stands on the stage (`CHART_GROUND`), and there the light
+ * chrome's greys are invisible.
+ */
+function valueAxis(ground: ChartGround = "surface"): ChartAxis {
+  const tones = CHART_GROUND[ground];
   return {
     type: "value",
     axisLine: { show: false },
     axisTick: { show: false },
-    splitLine: { show: true, lineStyle: { color: CHART_LINES.grid, width: 1, type: "solid" } },
+    splitLine: { show: true, lineStyle: { color: tones.grid, width: 1, type: "solid" } },
     axisLabel: {
-      color: CHART_INK.faint,
+      color: tones.inkFaint,
       fontSize: 11,
       // Without cents: an axis is the scale against which a bar's length is estimated, and six labels
       // of «$107,231.22» eat the drawing's width. The exact figure goes on the bar, in the tooltip
@@ -320,16 +329,20 @@ function valueAxis(): ChartAxis {
   };
 }
 
-function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }): ChartAxis {
+function categoryAxis(
+  labels: readonly string[],
+  options?: { inverse?: boolean; ground?: ChartGround },
+): ChartAxis {
+  const tones = CHART_GROUND[options?.ground ?? "surface"];
   return {
     type: "category",
     data: [...labels],
     inverse: options?.inverse ?? false,
-    axisLine: { show: true, lineStyle: { color: CHART_LINES.axis, width: 1, type: "solid" } },
+    axisLine: { show: true, lineStyle: { color: tones.axis, width: 1, type: "solid" } },
     axisTick: { show: false },
     splitLine: { show: false },
     axisLabel: {
-      color: CHART_INK.muted,
+      color: tones.inkMuted,
       fontSize: 11,
       // `interval: 0` forces drawing them ALL: without it ECharts thins the axis and skips every
       // other one, and a bar with no name is identified by nothing.
@@ -341,8 +354,8 @@ function categoryAxis(labels: readonly string[], options?: { inverse?: boolean }
 }
 
 /** The YEARS' legend. With just one it is superfluous: the card's subtitle already names it. */
-function yearLegend(years: number): ChartLegend {
-  return legendFor(years > 1);
+function yearLegend(years: number, ground: ChartGround = "surface"): ChartLegend {
+  return legendFor(years > 1, undefined, CHART_GROUND[ground].inkMuted);
 }
 
 /** The house legend. `data` names WHICH series it lists — see `ChartLegend.data`. */
@@ -366,30 +379,39 @@ function legendFor(
 }
 
 /** The house tooltip: inside the CARD (`confine`), which is an `overflow-hidden`. */
-function itemTooltip(formatter: (param: ChartParam) => string): ChartTooltip {
+function itemTooltip(
+  formatter: (param: ChartParam) => string,
+  ground: ChartGround = "surface",
+): ChartTooltip {
+  const tones = CHART_GROUND[ground];
   return {
     trigger: "item",
-    backgroundColor: CHART_SURFACE,
-    borderColor: CHART_LINES.axis,
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
     borderWidth: 1,
     padding: [8, 10],
-    textStyle: { color: CHART_INK.strong, fontSize: 12 },
+    textStyle: { color: tones.ink, fontSize: 12 },
     confine: true,
     formatter: (params) => formatter(Array.isArray(params) ? params[0] : params),
   };
 }
 
-/** A comparison's tooltip: the whole column, with one line per year. */
-function axisTooltip(unit: (value: number) => string): ChartTooltip {
+/** A comparison's tooltip: the whole column, with one line per year. On the stage it is drawn in
+ *  the stage's panel — a white box would be a hole punched in the night. */
+function axisTooltip(
+  unit: (value: number) => string,
+  ground: ChartGround = "surface",
+): ChartTooltip {
+  const tones = CHART_GROUND[ground];
   return {
     trigger: "axis",
-    backgroundColor: CHART_SURFACE,
-    borderColor: CHART_LINES.axis,
+    backgroundColor: tones.panel,
+    borderColor: tones.panelBorder,
     borderWidth: 1,
     padding: [8, 10],
-    textStyle: { color: CHART_INK.strong, fontSize: 12 },
+    textStyle: { color: tones.ink, fontSize: 12 },
     confine: true,
-    axisPointer: { type: "shadow", lineStyle: { color: CHART_LINES.axis, width: 1 } },
+    axisPointer: { type: "shadow", lineStyle: { color: tones.axis, width: 1 } },
     formatter: (params) => {
       const rows = Array.isArray(params) ? params : [params];
       const head = rows[0]?.name ?? "";
@@ -401,7 +423,7 @@ function axisTooltip(unit: (value: number) => string): ChartTooltip {
             `<div>${row.marker ?? ""} ${row.seriesName ?? ""}: <b>${unit(Number(row.value))}</b></div>`,
         )
         .join("");
-      return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${body || `<div style="color:${CHART_INK.muted}">Sin cargar</div>`}`;
+      return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${body || `<div style="color:${tones.inkMuted}">Sin cargar</div>`}`;
     },
   };
 }
@@ -966,13 +988,17 @@ type EvolutionShape = "stacked" | "skyline" | "services";
  * `hideOverlap` still drops what collides INSIDE a row, which is two adjacent months on an axis
  * narrower than the fit assumed; between rows there is nothing left to collide.
  */
-function totalLabel(fit: LabelFit, row = 0): Pick<ChartSeries, "label" | "labelLayout"> {
+function totalLabel(
+  fit: LabelFit,
+  row = 0,
+  ground: ChartGround = "surface",
+): Pick<ChartSeries, "label" | "labelLayout"> {
   return {
     label: {
       show: true,
       position: "top",
       distance: labelDistance(row, fit),
-      color: CHART_INK.muted,
+      ...figureInk(ground, CHART_INK.muted),
       fontSize: fit.fontSize,
       formatter: (param: ChartParam) =>
         param.value === null ? "" : formatCurrency(Number(param.value), { cents: fit.cents }),
@@ -1031,6 +1057,13 @@ function buildEvolutionCard(
   // It falls back to bars ALONE with a single column, where a line is a loose point.
   const withLine = labels.length > 1;
 
+  // **The card stands on the STAGE** (`CHART_TRAJECTORY_GROUND`) in every flat shape — one year or
+  // several, the stack, the spread of one month: a thin stroke over a white plot has nothing but its
+  // hue to be found by, and a ground that came and went with the marks read as a different card. What
+  // stands on it is translated by slot, the skyline's same rule, so a service is one colour in the
+  // stack and in the 3D box; the table twin, on white, keeps the light one.
+  const ground: ChartGround = CHART_TRAJECTORY_GROUND;
+
   // The colour of a service comes from the SAME list the breakdown card orders by, so the two cards on
   // the screen cannot paint one service two ways.
   const order = movingServices(reading).map((service) => service.code);
@@ -1059,8 +1092,9 @@ function buildEvolutionCard(
       ? legendFor(
           true,
           segments.map((segment) => segment.name),
+          CHART_GROUND[ground].inkMuted,
         )
-      : yearLegend(years.length);
+      : yearLegend(years.length, ground);
 
   // The figure over each bar. What it says is always the COLUMN's total —the month's billing, or the
   // service's when the axis is the services— and never the band it happens to sit on: a stack's bands
@@ -1075,11 +1109,11 @@ function buildEvolutionCard(
   const labelRows = spread || stacked ? 1 : monthlyByYear.length;
 
   const series: ChartSeries[] = spread
-    ? serviceBars(segments, labelFit)
+    ? serviceBars(segments, labelFit, ground)
     : stacked
-      ? stackSeries(segments, axis, withLine, labelFit)
+      ? stackSeries(segments, axis, withLine, labelFit, ground)
       : monthlyByYear.flatMap((entry, index) =>
-          yearSeries(entry, years, comparing, withLine, labelFit, index),
+          yearSeries(entry, years, comparing, withLine, labelFit, index, ground),
         );
 
   const option: ChartOption | Chart3DOption | null =
@@ -1090,6 +1124,7 @@ function buildEvolutionCard(
         : {
             animationDuration: 320,
             textStyle: { fontFamily: CHART_FONT },
+            ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
             grid: {
               left: 8,
               right: 16,
@@ -1105,10 +1140,12 @@ function buildEvolutionCard(
             // always bars: the line runs through the centre of each band, which is where the group of
             // bars is centred.
             xAxis: {
-              ...categoryAxis(spread ? segments.map((segment) => segment.name) : labels),
+              ...categoryAxis(spread ? segments.map((segment) => segment.name) : labels, {
+                ground,
+              }),
               boundaryGap: true,
             },
-            yAxis: valueAxis(),
+            yAxis: valueAxis(ground),
             tooltip: spread
               ? itemTooltip((param) => {
                   const segment = segments[param.dataIndex];
@@ -1118,13 +1155,13 @@ function buildEvolutionCard(
                     `<div>${formatCurrency(Number(param.value), { cents: true })}</div>`,
                     share === null
                       ? ""
-                      : `<div style="color:${CHART_INK.muted}">${formatPercent(share)} del mes</div>`,
+                      : `<div style="color:${CHART_GROUND[ground].inkMuted}">${formatPercent(share)} del mes</div>`,
                   ].join("");
-                })
-              : axisTooltip((value) => formatCurrency(value, { cents: true })),
+                }, ground)
+              : axisTooltip((value) => formatCurrency(value, { cents: true }), ground),
             // The absence mark is one bar per MONTH, so it has nothing to sit under on an axis of
             // services — and with a single column that never arrived there is no option to draw at all.
-            series: spread ? series : [...series, ...absenceMarks(monthlyByYear)],
+            series: spread ? series : [...series, ...absenceMarks(monthlyByYear, ground)],
           };
 
   const table: ChartTable = stacked
@@ -1462,14 +1499,16 @@ function stackSeries(
   axis: readonly MonthPoint[],
   withLine: boolean,
   fit: LabelFit,
+  ground: ChartGround,
 ): ChartSeries[] {
+  const tones = CHART_GROUND[ground];
   const bands = segments.map<ChartSeries>((segment) => ({
     id: segment.id,
     name: segment.name,
     type: "bar",
     stack: STACK_ID,
     data: segment.points.map((point) => point.amount),
-    itemStyle: { color: segment.color },
+    itemStyle: { color: groundColor(segment.color, ground) },
     barMaxWidth: CHART_MARK.barMaxWidth,
   }));
   if (!withLine) {
@@ -1477,7 +1516,7 @@ function stackSeries(
     // out into `serviceBars` instead— so the band IS the total, and it is what carries the figure.
     // Nothing changes for the reader: the amount is still written once, over the column.
     const last = bands.at(-1);
-    return last ? [...bands.slice(0, -1), { ...last, ...totalLabel(fit) }] : bands;
+    return last ? [...bands.slice(0, -1), { ...last, ...totalLabel(fit, 0, ground) }] : bands;
   }
   return [
     ...bands,
@@ -1486,8 +1525,9 @@ function stackSeries(
       name: "Total",
       type: "line",
       data: axis.map((point) => point.amount),
-      itemStyle: { color: CHART_INK.strong },
-      lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth },
+      // In the ground's INK and not in a palette slot: it is not one more service of the stack.
+      itemStyle: { color: tones.ink },
+      lineStyle: { color: tones.ink, width: CHART_MARK.lineWidth },
       symbol: "circle",
       symbolSize: CHART_MARK.symbolSize,
       // Straight and not `smooth`: a curve invents values between two months nobody measured. And a
@@ -1496,11 +1536,17 @@ function stackSeries(
       smooth: false,
       // It is measured as ONE series and not as the ninth: it is the only one carrying a figure, so
       // what decides its shape is its own row over the columns and not the stack below.
-      ...totalLabel(fit),
+      ...totalLabel(fit, 0, ground),
       // Above the bars, which is where it has to be read.
       z: 3,
     },
   ];
+}
+
+/** A segment's colour on its ground: on the stage, `stageColor`'s slot — the skyline's same
+ *  translation, so a service is one colour in the stack and in the 3D box. */
+function groundColor(color: string, ground: ChartGround): string {
+  return ground === "stage" ? stageColor(color) : color;
 }
 
 /**
@@ -1509,18 +1555,22 @@ function stackSeries(
  * Colors match `colorForEntity`, ensuring consistency across cards. Bars have rounded tops since
  * each is standalone. No line or absence mark is included as they are irrelevant here.
  */
-function serviceBars(segments: readonly StackSegment[], fit: LabelFit): ChartSeries[] {
+function serviceBars(
+  segments: readonly StackSegment[],
+  fit: LabelFit,
+  ground: ChartGround,
+): ChartSeries[] {
   return [
     {
       id: "servicios",
       type: "bar",
       data: segments.map((segment) => ({
         value: segment.points[0]?.amount ?? null,
-        itemStyle: { color: segment.color, borderRadius: ROUND_TOP },
+        itemStyle: { color: groundColor(segment.color, ground), borderRadius: ROUND_TOP },
       })),
       barMaxWidth: CHART_MARK.barMaxWidth,
       // Here the column IS the service, so its own amount is what the total label writes.
-      ...totalLabel(fit),
+      ...totalLabel(fit, 0, ground),
     },
   ];
 }
@@ -1537,8 +1587,12 @@ function yearSeries(
   withLine: boolean,
   fit: LabelFit,
   row: number,
+  ground: ChartGround,
 ): ChartSeries[] {
-  const color = yearColor(entry.year, years);
+  // On the stage the year wears `stageColor`'s slot, the skyline's same rule: the light scale was
+  // measured against white and two of its steps fall under 3:1 on the navy. The table twin, on the
+  // white, keeps the light slot — the declared cost of `CHART_STAGE_PALETTE`.
+  const color = groundColor(yearColor(entry.year, years), ground);
   const data = entry.points.map((point) => point.amount);
   const bar: ChartSeries = {
     id: `year-${entry.year}`,
@@ -1550,7 +1604,7 @@ function yearSeries(
     // Comparing several years, each one writes on its OWN row: that is what keeps 24 or 36 amounts
     // from disputing one strip, and what tells the reader whose figure is whose — they come down the
     // column in the legend's order.
-    ...totalLabel(fit, comparing ? row : 0),
+    ...totalLabel(fit, comparing ? row : 0, ground),
   };
   if (!withLine) {
     return [bar];
@@ -1585,7 +1639,7 @@ function yearSeries(
  * have a point in that column; a row of grey caps would add false marks to a chart that already
  * carries three real ones.
  */
-function absenceMarks(monthlyByYear: readonly YearMonths[]): ChartSeries[] {
+function absenceMarks(monthlyByYear: readonly YearMonths[], ground: ChartGround): ChartSeries[] {
   if (monthlyByYear.length !== 1) {
     return [];
   }
@@ -1606,7 +1660,7 @@ function absenceMarks(monthlyByYear: readonly YearMonths[]): ChartSeries[] {
       stack: "mes",
       data: points.map((point) => (point.amount === null ? stub : null)),
       itemStyle: {
-        color: ABSENT_FILL,
+        color: absentFill(ground),
         borderRadius: [2, 2, 0, 0] as [number, number, number, number],
       },
       barMaxWidth: CHART_MARK.barMaxWidth,

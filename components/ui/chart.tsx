@@ -180,13 +180,88 @@ export function Chart({ option, onSelect, height = 260, ariaLabel, className }: 
     };
   }, [onSelect, drawable, dimension]);
 
+  /**
+   * **A line's STROKE asks for the tooltip of its nearest mark.**
+   *
+   * ECharts shows an `item` tooltip only over an element that carries a `dataIndex` — a bar, a
+   * slice, a line's SYMBOL — and a line's stroke carries none: with `triggerEvent: "line"` it fires
+   * hover (so `emphasis.focus` lifts the line) but the box never opens unless the pointer lands on a
+   * six-pixel dot. So the stroke's `mousemove` is answered HERE, once for every card: the pointer's
+   * x is turned back into the category under it and the tooltip of that mark is asked for by
+   * action. The box then follows the line month by month, the way the axis tooltip follows the
+   * column. Over a symbol ECharts already answers on its own; over nothing, it hides on its own.
+   *
+   * The ask is deferred one frame, and that is not a nicety: on the same `mousemove` the tooltip's
+   * own listener runs AFTER ours, finds no `dataIndex` under the pointer and schedules a hide. Asked
+   * inside the event, the box would open and close a hundred milliseconds later; asked a frame
+   * later it reopens after that hide was scheduled, and `show` cancels it.
+   */
+  useEffect(() => {
+    const chart = instance.current;
+    if (!chart || is3DOption(option)) {
+      return;
+    }
+    const strokes = new Set(
+      option.series.flatMap((serie, index) =>
+        serie.type === "line" && serie.triggerEvent === "line" ? [index] : [],
+      ),
+    );
+    if (strokes.size === 0) {
+      return;
+    }
+    let pending = 0;
+    const follow = (params: {
+      seriesIndex?: number;
+      dataIndex?: number;
+      event?: { offsetX: number; offsetY: number };
+    }) => {
+      const seriesIndex = params.seriesIndex;
+      const at = params.event;
+      // A symbol carries its own `dataIndex` and ECharts already opened its box.
+      if (
+        seriesIndex === undefined ||
+        params.dataIndex !== undefined ||
+        !strokes.has(seriesIndex) ||
+        !at
+      ) {
+        return;
+      }
+      const [category] = chart.convertFromPixel({ seriesIndex }, [at.offsetX, at.offsetY]);
+      const dataIndex = Math.round(category);
+      if (!Number.isFinite(dataIndex)) {
+        return;
+      }
+      cancelAnimationFrame(pending);
+      pending = requestAnimationFrame(() => {
+        if (!chart.isDisposed()) {
+          chart.dispatchAction({
+            type: "showTip",
+            seriesIndex,
+            dataIndex,
+            // At the pointer, not under the mark: the box follows the hand, as it does over a dot.
+            position: [at.offsetX + 12, at.offsetY + 12],
+          });
+        }
+      });
+    };
+    chart.on("mousemove", follow);
+    return () => {
+      cancelAnimationFrame(pending);
+      if (!chart.isDisposed()) {
+        chart.off("mousemove", follow);
+      }
+    };
+  }, [option, drawable, dimension]);
+
   // Hidden from assistive tech on purpose: read aloud, an axis of twelve numbers and eight legend
   // entries is noise. The numbers live in the card's table twin.
   // A 3D option is drawn on the STAGE (`CHART_STAGE`), and the frame is the card's half of it: the
   // canvas is a dark rectangle inside a white card, so it needs the corner radius of a panel and the
   // stage's own colour UNDER it — the WebGL layer paints nothing until `gl` lands, and a white box
-  // that turns black is what a card without this does on every mount.
-  const stage = dimension === "3d";
+  // that turns black is what a card without this does on every mount. A FLAT option that declares
+  // the stage as its `backgroundColor` (the comparison's lines) gets the same frame: the ground is
+  // the option's, the rounded panel is the card's.
+  const stage = dimension === "3d" || (!is3DOption(option) && option.backgroundColor !== undefined);
 
   return (
     <div className={cn("w-full", className)}>
