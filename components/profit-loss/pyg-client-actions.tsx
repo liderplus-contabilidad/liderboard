@@ -128,20 +128,11 @@ export function PygClientActions() {
     }
   }, [deleting, deleteClient]);
 
-  // In multi-center mode the subline names the active view (Consolidado / center / Sin-centro);
-  // a single statement falls back to its own cost-center line, if any.
+  // The open center is NOT named here: the block is one line and the «Centro de costo» chip in the
+  // filter bar already says it. What the block keeps of the center is its logo, which the chip has
+  // no room for.
   const activeView = mode === "multi" ? views.find((v) => v.id === activeCenterId) : undefined;
-  const centerCount = views.filter((v) => v.role === "center").length;
-  const activeName = activeView
-    ? activeView.role === "consolidado"
-      ? `Consolidado (${centerCount} ${centerCount === 1 ? "centro" : "centros"})`
-      : activeView.name
-    : dataset?.costCenterName;
-  const period = dataset
-    ? activeName
-      ? `${dataset.periodLabel} · ${activeName}`
-      : dataset.periodLabel
-    : undefined;
+  const period = dataset?.periodLabel;
 
   // The consolidado is not a row of `clients`, so the block does not find it by id: its name and its
   // subtitle come out of what it is summing.
@@ -164,7 +155,6 @@ export function PygClientActions() {
     <>
       <ActiveClient
         {...(open ? { client: open } : {})}
-        emptySubline="Ningún estado de resultados cargado"
         clients={options}
         activeClientId={activeClientId}
         onSelect={(id) => void selectClient(id)}

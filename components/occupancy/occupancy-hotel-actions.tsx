@@ -14,7 +14,6 @@ import { formatList, pluralize } from "@/lib/format";
 import type { HotelContents, HotelSummary } from "@/lib/occupancy/db";
 import { describeHotelContents } from "@/lib/occupancy/db";
 import { centerLogoOf } from "@/lib/logos";
-import { DEFAULT_CENTER_ID } from "@/lib/occupancy/types";
 import { useOccupancyData } from "./occupancy-data-provider";
 
 /** This module's words: the subject is the HOTEL, not the client. */
@@ -89,9 +88,7 @@ export function OccupancyHotelActions() {
     activeHotelId,
     activeHotel,
     activeCenterId,
-    activeCenterName,
     activeYear,
-    centers,
     isConsolidated,
     deleteHotel,
     selectHotel,
@@ -127,14 +124,9 @@ export function OccupancyHotelActions() {
     }
   }, [deleting, deleteHotel]);
 
-  // `principal` is left out: it is labelled with the hotel's own name, so naming it here would say
-  // the same thing twice.
-  const centerLabel = isConsolidated
-    ? `Consolidado (${pluralize(centers.length, "sucursal", "sucursales")})`
-    : activeCenterId === DEFAULT_CENTER_ID
-      ? undefined
-      : activeCenterName;
-  const period = [activeYear, centerLabel].filter(Boolean).join(" · ") || undefined;
+  // The open sucursal is NOT named here: the block is one line and the sucursal control of Datos
+  // and the «Sucursal» chip of Gráficos already say it. What the block keeps of it is its logo.
+  const period = activeYear ? String(activeYear) : undefined;
 
   // The consolidado sums several sucursales, so none of them is «its own».
   const activeCenterLogo = isConsolidated
@@ -155,8 +147,6 @@ export function OccupancyHotelActions() {
               },
             }
           : {})}
-        caption="Ocupación diaria"
-        emptySubline="Ninguna ocupación cargada"
         clients={options}
         activeClientId={activeHotelId}
         labels={HOTEL_LABELS}

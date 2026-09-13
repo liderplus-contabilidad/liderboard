@@ -69,8 +69,10 @@ CI (`.github/workflows/ci.yml`) runs four independent jobs on PRs and pushes to 
 
 Next.js **App Router**. `app/(dashboard)/layout.tsx` renders the persistent shell (sidebar + header +
 `<main>`) and mounts each module's DATA PROVIDER — a provider lives there because the HEADER reads
-from the same state the panel does (`ActiveClient` shows PyG's cliente and Ocupaciones' hotel).
-Layout persistence is also why the sidebar's collapse state needs no store.
+from the same state the panel does (`ActiveClient` shows PyG's cliente and Ocupaciones' hotel). The
+open TAB lives there too (`module-tab-state.tsx`): the header paints title · tabs · export · selector
+in ONE row, the page paints toolbar · notice · panel, and `module-views.tsx` is the one registry both
+read. Layout persistence is also why the sidebar's collapse state needs no store.
 
 **Module registry is the single source of truth.** `lib/modules.ts` (`MODULES`, `DEFAULT_MODULE`,
 `findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header title.

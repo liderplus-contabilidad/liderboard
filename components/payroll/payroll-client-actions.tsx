@@ -139,8 +139,6 @@ export function PayrollClientActions() {
               },
             }
           : {})}
-        caption="Nómina mensual"
-        emptySubline="Ningún período registrado"
         clients={options}
         activeClientId={activeClientId}
         labels={PAYROLL_LABELS}

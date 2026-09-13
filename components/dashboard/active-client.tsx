@@ -129,12 +129,8 @@ export const DEFAULT_ENTITY_LABELS: EntityLabels = {
 
 export interface ActiveClientProps {
   client?: ActiveClientInfo;
-  /** What the module is showing, first item of the subline. */
-  caption?: string;
   /** Shown in place of the name when there is nothing loaded. */
   emptyLabel?: string;
-  /** Shown under `emptyLabel` when there is nothing loaded. */
-  emptySubline?: string;
   /**
    * The selector's list. WITHOUT it the block renders exactly as it always has — a read-only
    * summary — which is what lets Ocupaciones keep this component untouched until it grows its
@@ -155,14 +151,17 @@ export interface ActiveClientProps {
  * always been (Ocupaciones' hotel); with them it becomes the module's client SELECTOR — the
  * control lives where the user already looks to see which client is open.
  *
+ * It reads in ONE line —logo · name · period— because it shares the row with the title, the tabs
+ * and the export control, and a two-line block was what made that row the tallest thing on the
+ * screen. What the block no longer says is said elsewhere: the module's name is the title next to
+ * it, and the open center is the «Centro de costo» chip (PyG) or the sucursal control (Ocupaciones).
+ *
  * The dropdown has no scrim on purpose: the dashboard behind it stays readable, so the reader can
  * check a figure of the open client while deciding which one to switch to.
  */
 export function ActiveClient({
   client,
-  caption = "Estado de resultados",
   emptyLabel,
-  emptySubline,
   clients,
   activeClientId,
   onSelect,
@@ -173,7 +172,6 @@ export function ActiveClient({
 }: ActiveClientProps) {
   const hasClient = Boolean(client?.name);
   const name = client?.name ?? emptyLabel ?? `Sin ${labels.subject} seleccionado`;
-  const period = client?.period ?? "N/A";
   const interactive = clients !== undefined;
 
   const [open, setOpen] = useState(false);
@@ -248,32 +246,35 @@ export function ActiveClient({
 
   const block = (
     <div className="flex min-w-0 items-center gap-2.5">
-      {/* To the LEFT of the name, not above it: the block is right-aligned against the header's
-          edge, so the logo is the first thing crossed coming in from the content. With the center's
-          behind it, the pair reads in the same order in which it prints. */}
-      <EntityLogoMark logo={client?.logo} size={28} />
-      <EntityLogoMark logo={client?.centerLogo} size={24} />
-      <div className="flex min-w-0 flex-col items-end gap-[3px]">
+      {/* To the LEFT of the name: the block is right-aligned against the header's edge, so the
+          logo is the first thing crossed coming in from the content. With the center's behind it,
+          the pair reads in the same order in which it prints. Without a logo a glyph holds the
+          place, so the control is recognised by its shape before its name is read. */}
+      {client?.logo ? (
+        <EntityLogoMark logo={client.logo} size={24} />
+      ) : (
         <span
-          className={cn(
-            "max-w-[360px] truncate text-[15px] font-bold tracking-[-0.2px]",
-            hasClient ? "text-brand" : "text-faint",
-          )}
+          aria-hidden="true"
+          className="flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-surface-muted text-muted"
         >
-          {name}
+          <Building2 size={14} strokeWidth={1.9} />
         </span>
-        <div className="flex items-center gap-[7px] text-[11.5px] font-medium text-faint">
-          {hasClient || !emptySubline ? (
-            <>
-              <span>{caption}</span>
-              <span className="text-faintest">·</span>
-              <span>{period}</span>
-            </>
-          ) : (
-            <span>{emptySubline}</span>
-          )}
-        </div>
-      </div>
+      )}
+      <EntityLogoMark logo={client?.centerLogo} size={22} />
+      {/* The name is the figure and the period its cents: when the row runs short —a 1366 px
+          laptop with the sidebar open and three export controls— it is the period that truncates,
+          never the name. The cap on the name is for the one that is long on its own. */}
+      <span
+        className={cn(
+          "max-w-[220px] shrink-0 truncate text-[14px] font-bold tracking-[-0.2px]",
+          hasClient ? "text-brand" : "text-faint",
+        )}
+      >
+        {name}
+      </span>
+      {client?.period && (
+        <span className="min-w-0 truncate text-[12px] font-medium text-faint">{client.period}</span>
+      )}
     </div>
   );
 
@@ -300,7 +301,7 @@ export function ActiveClient({
         aria-controls={open ? listId : undefined}
         onClick={() => (open ? close() : setOpen(true))}
         className={cn(
-          "relative z-40 flex items-center gap-3 rounded-[13px] border px-4 py-2 transition-colors",
+          "relative z-40 flex h-[38px] items-center gap-2.5 rounded-[9px] border px-3 transition-colors",
           // Dotted while empty: a hollow waiting to be filled reads differently from a control
           // that has been switched off.
           hasClient

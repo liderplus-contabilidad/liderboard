@@ -71,7 +71,8 @@ export function PersonnelCostYearTabs() {
         onChange={(id) => setCaptureYear(Number(id))}
         ariaLabel="Ejercicios del cliente"
         idPrefix="personnel-year"
-        className="border-b-0 px-7"
+        rule={false}
+        className="px-7"
         rightSlot={
           adding ? (
             <form onSubmit={submit} className="flex items-center gap-2">
