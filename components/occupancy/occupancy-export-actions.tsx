@@ -1,28 +1,32 @@
 "use client";
 
+import { FileSpreadsheet } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import { centerLogoOf } from "@/lib/logos";
 import { useOccupancyData } from "./occupancy-data-provider";
 import { OccupancyUploadModal } from "./occupancy-upload-modal";
 
 /**
- * Ocupaciones' Excel actions. A single download —the open sucursal-year—, so `ExcelActions` renders
- * a plain button; the day a second option exists, it turns into a menu on its own.
+ * Ocupaciones' `ExportActions` wrapper. «Exportar» offers a single entry —the open sucursal-year as
+ * an Excel— and stays a menu all the same, so the control reads like every other module's; the
+ * module has no printed report yet, and the day it gets one it is one more entry here.
  */
-export function OccupancyExcelActions() {
+export function OccupancyExportActions() {
   const { dataset, isConsolidated, activeHotel, activeHotelId } = useOccupancyData();
   const [uploadOpen, setUploadOpen] = useState(false);
 
   // The consolidado is synthetic: it is not downloaded because it is nobody's file.
   const year = isConsolidated ? undefined : dataset;
 
-  const downloads = useMemo<ExcelDownloadOption[]>(
+  const exports = useMemo<ExportOption[]>(
     () => [
       {
         id: "data",
         title: "Excel con tus datos",
         description: "La sucursal y el año abiertos, con lo que hayas editado",
+        icon: FileSpreadsheet,
+        iconClassName: "text-brand",
         disabled: !year,
         disabledReason: isConsolidated
           ? "El consolidado es un cálculo de la app; descarga el Excel de una sucursal."
@@ -53,7 +57,7 @@ export function OccupancyExcelActions() {
 
   return (
     <>
-      <ExcelActions
+      <ExportActions
         // With no hotel there is nowhere to load: the reason renders beside the button, because what
         // is missing is not the file but the previous step.
         upload={{
@@ -61,7 +65,7 @@ export function OccupancyExcelActions() {
           disabled: activeHotelId === null,
           disabledReason: "Agrega un hotel primero: cada uno guarda sus propias sucursales.",
         }}
-        downloads={downloads}
+        exports={exports}
         info={{
           title: "Archivos aceptados",
           children: (

@@ -3,6 +3,7 @@ import {
   activeMarkCount,
   describeGroupScope,
   emptyFilters,
+  groupAxis,
   includesGroup,
   periodLabel,
   sanitizeFilters,
@@ -13,6 +14,7 @@ import {
   withGroupToggled,
   withMonthsCleared,
   withMonthToggled,
+  withSectionToggled,
   withYearToggled,
   yearMarkLabel,
   monthMarkLabel,
@@ -166,5 +168,54 @@ describe("Los chips cuentan meses y grupos, nunca años", () => {
     expect(
       activeMarkCount(withMonthToggled(withGroupToggled(filters, "afiliados"), 1, UNIVERSE.months)),
     ).toBe(2);
+  });
+});
+
+describe("La sección es el otro eje del mismo recorte", () => {
+  it("marcar una sección marca sus grupos, y el motor sigue leyendo grupos", () => {
+    const filters = withSectionToggled(emptyFilters(), "planta");
+    expect(filters.sections).toEqual(["planta"]);
+    expect(filters.groups).toEqual(["afiliados", "no-afiliados"]);
+    expect(includesGroup(filters, "honorarios-medicos")).toBe(false);
+  });
+
+  it("desmarcarla devuelve el recorte a «todos»", () => {
+    const filters = withSectionToggled(withSectionToggled(emptyFilters(), "planta"), "planta");
+    expect(filters.sections).toEqual([]);
+    expect(filters.groups).toEqual([]);
+  });
+
+  it("las dos secciones son todos los grupos, y el rótulo lo refleja", () => {
+    let filters = withSectionToggled(emptyFilters(), "externos");
+    expect(describeGroupScope(filters)).toBe("Externos");
+    filters = withSectionToggled(filters, "planta");
+    expect(describeGroupScope(filters)).toBeNull();
+  });
+
+  it("un eje bloquea al otro: con grupos marcados no hay sección, y al revés", () => {
+    const byGroup = withGroupToggled(emptyFilters(), "afiliados");
+    expect(groupAxis(byGroup)).toBe("group");
+    const bySection = withSectionToggled(emptyFilters(), "planta");
+    expect(groupAxis(bySection)).toBe("section");
+    expect(groupAxis(emptyFilters())).toBeNull();
+  });
+
+  it("los chips cuentan una sección como una marca, no como sus dos grupos", () => {
+    expect(activeMarkCount(withSectionToggled(emptyFilters(), "planta"))).toBe(1);
+  });
+
+  it("limpiar grupos limpia también las secciones", () => {
+    const filters = withGroupsCleared(withSectionToggled(emptyFilters(), "planta"));
+    expect(filters.sections).toEqual([]);
+    expect(filters.groups).toEqual([]);
+  });
+
+  it("sanitizar conserva la sección y rederiva sus grupos", () => {
+    const filters = sanitizeFilters(
+      { years: [], months: [], groups: ["afiliados"], sections: ["externos"] },
+      UNIVERSE,
+    );
+    expect(filters.sections).toEqual(["externos"]);
+    expect(filters.groups).toEqual(["honorarios-medicos"]);
   });
 });

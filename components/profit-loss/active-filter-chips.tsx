@@ -7,9 +7,14 @@ import { usePygData } from "./pyg-data-provider";
 
 /**
  * The active-filter strip under the FILTROS row: one removable chip per marked client, account,
- * center, year and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
+ * center and period, plus "Quitar todo". Rendered in all three tabs (it lives in the shared toolbar),
  * and only when something is actually marked — an ever-present empty strip would sit over the
  * table for no reason.
+ *
+ * YEARS are not chipped, as in Ventas' bar: there is always a year on screen, so a chip for it
+ * would be the one mark that cannot be removed —unmarking the only year resolves right back to
+ * it— and its trigger already names what is on screen (`Año · 2026`). «Quitar todo» still resets
+ * them, to the most recent year.
  */
 export function ActiveFilterChips() {
   const {
@@ -20,7 +25,6 @@ export function ActiveFilterChips() {
     toggleCode,
     toggleCenter,
     toggleClient,
-    toggleYear,
     togglePeriod,
     clearPreset,
     clearFilters,
@@ -31,7 +35,6 @@ export function ActiveFilterChips() {
     filters.clientIds.length +
     filters.codes.length +
     filters.centerIds.length +
-    filters.years.length +
     filters.periods.length +
     (filters.preset === null ? 0 : 1);
   if (total === 0) {
@@ -69,9 +72,6 @@ export function ActiveFilterChips() {
           />
         );
       })}
-      {filters.years.map((year) => (
-        <FilterChip key={`year-${year}`} label={String(year)} onRemove={() => toggleYear(year)} />
-      ))}
       {filters.periods.map((period) => (
         <FilterChip
           key={`period-${period.index}`}

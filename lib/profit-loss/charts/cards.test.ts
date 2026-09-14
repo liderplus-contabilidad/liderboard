@@ -122,7 +122,7 @@ const SIN_HOTEL = ctx(
 
 /**
  * A shape of the annex, by the id `annexShapes` declares — never by position. The list carries every
- * shape, so an index is a promise about where the pie landed, and adding «Sólido 3D» broke every one
+ * shape, so an index is a promise about where the pie landed, and adding «3D» broke every one
  * of those promises at once.
  */
 function anexo(
@@ -1184,7 +1184,7 @@ describe("la vista predeterminada de costos y gastos", () => {
     expect(cards.map((card) => card.id)).not.toContain("distribucion");
   });
 
-  it("«Sólido 3D» es la MISMA lectura de las barras, no una segunda", () => {
+  it("«3D» es la MISMA lectura de las barras, no una segunda", () => {
     const resultado = conAnexo();
     const solido = anexo(resultado, "solido");
     const barras = flat(anexo(resultado, "barras"));

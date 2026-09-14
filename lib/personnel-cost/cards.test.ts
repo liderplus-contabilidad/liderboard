@@ -6,16 +6,14 @@ import {
   type ChartParam,
 } from "@/lib/charts/types";
 import {
-  CHART_NEUTRAL,
   CHART_STAGE,
   CHART_STAGE_LIGHT,
   CHART_STAGE_MATERIAL,
   CHART_STAGE_SKY,
   colorForSliceSlot,
   stageColor,
-  stageSliceColor,
 } from "@/lib/charts/palette";
-import { buildPersonnelCards, CONCEPT_SLICES, type PersonnelCardsInput } from "./cards";
+import { buildPersonnelCards, type PersonnelCardsInput } from "./cards";
 
 /** Narrows a card that CAN come out in three dimensions, asserting it did not. */
 function flat(option: ChartOption | Chart3DOption | null): ChartOption {
@@ -33,7 +31,13 @@ function depthOf(option: Chart3DOption, name: string): number {
 }
 
 import { readPersonnelCost } from "./derive";
-import { GOLDEN_ACCOUNTS, GOLDEN_COVERAGE, goldenYear, legacyYear } from "./fixtures";
+import {
+  GOLDEN_ACCOUNTS,
+  GOLDEN_CONCEPT_TOTALS,
+  GOLDEN_COVERAGE,
+  goldenYear,
+  legacyYear,
+} from "./fixtures";
 
 const SPAN = GOLDEN_COVERAGE;
 
@@ -79,9 +83,21 @@ describe("Un año pone los MESES en el eje; varios, los ejercicios", () => {
 describe("Planta vs Externos", () => {
   const { sections } = cards();
 
-  it("apila las dos secciones sobre el total del mes", () => {
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Externos"]);
-    expect(sections.option?.series.every((entry) => entry.stack === "costo")).toBe(true);
+  it("apila las dos secciones y les pone encima la línea del total, como la evolución", () => {
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
+    const bars = sections.option?.series.filter((entry) => entry.type === "bar") ?? [];
+    expect(bars.every((entry) => entry.stack === "costo")).toBe(true);
+    const total = sections.option?.series.find((entry) => entry.name === "Total");
+    expect(total?.type).toBe("line");
+    // La línea ES el techo de la pila: enero suma 55,989.00 + 48,214.12.
+    expect(total?.data[0]).toBeCloseTo(104203.12, 2);
+    // Y es la única que escribe la cifra: las bandas no llevan rótulo.
+    expect(total?.label).toBeDefined();
+    expect(bars.every((entry) => entry.label === undefined)).toBe(true);
   });
 
   it("la tabla gemela cierra en el total real de cada mes", () => {
@@ -92,69 +108,93 @@ describe("Planta vs Externos", () => {
   it("la nota dice los dos porcentajes sobre ventas, que es la conclusión del reporte", () => {
     expect(sections.note).toBe("Sobre ventas: planta 27.5 %, externos 22.6 %.");
   });
+
+  it("una marca de «Grupo» acota cada sección a sus grupos marcados y calla la que no tiene ninguno", () => {
+    const { sections, groups } = cards([goldenYear()], ["afiliados"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Total"]);
+    // Planta acotada a Afiliados es la serie de Afiliados de la evolución, cifra por cifra.
+    const afiliados = flat(groups.option).series.find((entry) => entry.name === "Afiliados");
+    expect(sections.option?.series[0].data).toEqual(afiliados?.data);
+    expect(sections.table.columns).toEqual(["Planta", "Total"]);
+    expect(sections.note).toMatch(/^Sobre ventas: planta [\d.]+ %\.$/);
+  });
+
+  it("marcar Honorarios médicos deja solo Externos", () => {
+    const { sections } = cards([goldenYear()], ["honorarios-medicos"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Externos", "Total"]);
+  });
+
+  it("un ejercicio tipeado no tiene grupos, así que la marca no le quita ninguna sección", () => {
+    const marked = buildPersonnelCards({
+      reading: readPersonnelCost([legacyYear()], [0, 1]),
+      groups: ["afiliados"],
+      period: "Ene–Feb 2019",
+    });
+    expect(marked.sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
+  });
 });
 
-describe("Costo vs ventas", () => {
-  it("divide cada mes por las ventas de ESE mes, no por las del tramo", () => {
-    const { ratio } = cards();
-    const row = ratio.table.rows[0];
-    // Enero: 104,203.12 / 240,314.07 = 43.4 %; el tramo entero es 50.1 %.
-    expect(row.values[0]).toBe("43.4 %");
-    expect(row.values.at(-1)).toBe("50.1 %");
+describe("El tooltip: «Planta vs Externos» solo montos, la evolución con su porcentaje sobre ventas", () => {
+  const row = (seriesId: string, seriesName: string, value: number | null, dataIndex = 0) => ({
+    name: "Ene",
+    seriesId,
+    seriesName,
+    value,
+    dataIndex,
   });
 
-  it("un año es una serie: dos años son dos", () => {
-    expect(cards().ratio.option?.series).toHaveLength(1);
-    expect(cards([goldenYear({ year: 2025 }), goldenYear()]).ratio.option?.series).toHaveLength(2);
+  it("«Planta vs Externos» escribe cada monto y ningún porcentaje: ese va en la nota y en las fichas", () => {
+    const { sections } = cards();
+    const html = sections.option?.tooltip?.formatter?.([
+      row("section-planta", "Planta", 55989),
+      row("section-externos", "Externos", 48214.12),
+      row("sections-total", "Total", 104203.12),
+    ]);
+    expect(html).toContain("$55,989.00");
+    expect(html).toContain("$48,214.12");
+    expect(html).toContain("$104,203.12");
+    expect(html).not.toContain("de ventas");
+
+    const compared = cards([goldenYear({ year: 2025 }), goldenYear()]);
+    const several = compared.sections.option?.tooltip?.formatter?.([
+      row("sections-total", "Total", 723857.09, 1),
+    ]);
+    expect(several).toContain("$723,857.09");
+    expect(several).not.toContain("%");
   });
 
-  it("la ratio está sobre el ESCENARIO con varios ejercicios y también con uno", () => {
-    const one = cards().ratio.option;
-    const several = cards([goldenYear({ year: 2025 }), goldenYear()]).ratio;
-    expect(one?.backgroundColor).toBe(CHART_STAGE.sky);
-    expect(several.option?.backgroundColor).toBe(CHART_STAGE.sky);
-    expect(several.option?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
-    // La línea de 2026 sobre el escenario es la traducción por ranura de su color en blanco: el
-    // que lleva su fila en la tabla gemela, y el mismo que lleva en el cuerpo sólido.
-    const light = several.table.rows[1].color ?? "";
-    expect(several.option?.series[1].lineStyle?.color).toBe(stageColor(light));
+  it("la evolución por grupo hace lo mismo, y por ejercicio divide cada línea por SUS ventas", () => {
+    const one = cards();
+    const html = flat(one.groups.option).tooltip?.formatter?.([
+      row("evolution-total", "Total", 104203.12),
+    ]);
+    expect(html).toContain("43.4 % de ventas");
+
+    const several = cards([goldenYear({ year: 2025 }), goldenYear()]);
+    const compared = flat(several.groups.option).tooltip?.formatter?.([
+      row("evolution-2026", "2026", 104203.12),
+    ]);
+    expect(compared).toContain("43.4 % de ventas");
   });
 
-  it("un mes sin cargar no dibuja punto: no es un cero", () => {
-    const { ratio } = cards([goldenYear({ coverage: [0, 1, 2] })], [], [0, 1, 2, 3, 4, 5]);
-    const values = ratio.option?.series[0].data;
-    expect(values).toEqual([expect.any(Number), expect.any(Number), expect.any(Number)]);
-  });
-
-  describe("se lee UNA línea a la vez", () => {
-    it("el tooltip es de la línea y lista los MESES de ese ejercicio en dos columnas", () => {
-      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
-      const tooltip = ratio.option?.tooltip;
-
-      expect(tooltip?.trigger).toBe("item");
-      const html = tooltip?.formatter?.({
-        name: "Ene",
-        seriesId: "ratio-2026",
-        seriesName: "2026",
-        value: 43.4,
-        dataIndex: 0,
-      });
-      expect(html).toContain("2026");
-      expect(html).toContain("Ene");
-      expect(html).toContain("43.4 %");
-      expect(html).toContain("Jun");
-      expect(html).not.toContain("2025");
-      expect(html).toMatch(/grid-template-columns:\s*auto auto auto auto/);
+  it("sin ventas conocidas no escribe porcentaje: nunca «0 %»", () => {
+    const typed = buildPersonnelCards({
+      reading: readPersonnelCost(
+        [legacyYear({ revenue: Array.from({ length: 12 }, () => 0) })],
+        [0, 1],
+      ),
+      groups: [],
+      period: "Ene–Feb 2019",
     });
-
-    it("al pasar por el trazo la línea responde, no solo sus puntos", () => {
-      const { ratio } = cards([goldenYear({ year: 2025 }), goldenYear()]);
-
-      for (const serie of ratio.option?.series ?? []) {
-        expect(serie.emphasis?.focus).toBe("series");
-        expect(serie.triggerEvent).toBe("line");
-      }
-    });
+    const html = typed.sections.option?.tooltip?.formatter?.([
+      row("sections-total", "Total", 3750),
+    ]);
+    expect(html).toContain("$3,750.00");
+    expect(html).not.toContain("de ventas");
   });
 });
 
@@ -163,9 +203,8 @@ describe("Cada gemela tiene tantas columnas como valores lleva cada fila", () =>
   // más deja la última vacía y corre todas las cifras una posición a la izquierda. Pasó, y se veía.
   it.each([
     ["sections", cards().sections],
-    ["ratio", cards().ratio],
     ["groups", cards().groups],
-    ["concepts", cards().concepts],
+    ["shares", cards().shares],
   ])("%s", (_name, card) => {
     for (const row of card.table.rows) {
       expect(row.values, row.label).toHaveLength(card.table.columns.length);
@@ -173,46 +212,10 @@ describe("Cada gemela tiene tantas columnas como valores lleva cada fila", () =>
   });
 });
 
-describe("Composición por concepto", () => {
-  const { concepts } = cards();
-
-  it("ordena por monto y encabeza con los honorarios médicos externos", () => {
-    expect(concepts.table.rows[0].label).toBe("Honorarios Médicos-Externos");
-    expect(concepts.table.rows[0].values[0]).toBe("$280,966.57");
-  });
-
-  it("dobla la cola en UNA barra en vez de truncar, y lo dice", () => {
-    const bars = concepts.option?.series[0].data ?? [];
-    expect(bars).toHaveLength(CONCEPT_SLICES + 1);
-    expect(concepts.note).toContain("conceptos más suman");
-  });
-
-  it("la tabla lista TODOS los conceptos y cierra contra el total", () => {
-    const last = concepts.table.rows.at(-1);
-    expect(last?.label).toBe("Total costo de personal");
-    expect(last?.values[0]).toBe("$721,764.14");
-    // Diecinueve conceptos con movimiento (dos están en cero los seis meses) más el total.
-    expect(concepts.table.rows).toHaveLength(20);
-  });
-
-  it("el porcentaje es sobre el COSTO y no sobre las ventas, y la columna lo declara", () => {
-    expect(concepts.table.columns).toEqual(["Monto", "% del costo"]);
-    // 280,966.57 / 721,764.14 = 38.9 %
-    expect(concepts.table.rows[0].values[1]).toBe("38.9 %");
-  });
-});
-
 describe("El grupo acota TODA la pantalla", () => {
   it("la pila deja de tener las bandas que no se marcaron", () => {
     const { groups } = cards([goldenYear()], ["afiliados"]);
     expect(flat(groups.option).series.map((entry) => entry.name)).toEqual(["Afiliados", "Total"]);
-  });
-
-  it("el ranking sólo cuenta los conceptos de los grupos marcados", () => {
-    const { concepts } = cards([goldenYear()], ["afiliados"]);
-    const labels = concepts.table.rows.map((row) => row.label);
-    expect(labels).toContain("Administración (Familia Durán)");
-    expect(labels).not.toContain("Honorarios Médicos-Externos");
   });
 });
 
@@ -250,8 +253,7 @@ describe("Sin nada que dibujar", () => {
   it("la card no inventa un gráfico vacío: devuelve `null` y dice por qué", () => {
     const built = cards([goldenYear()], [], [10, 11]);
     expect(built.sections.option).toBeNull();
-    expect(built.ratio.option).toBeNull();
-    expect(built.concepts.option).toBeNull();
+    expect(built.shares.option).toBeNull();
   });
 });
 
@@ -394,24 +396,24 @@ describe("La cifra sobre la columna", () => {
   const writing = (option: ChartOption | null) =>
     (option?.series ?? []).filter((entry) => entry.label?.show);
 
-  it("la pila escribe el TOTAL del mes y no el de la banda que la lleva", () => {
+  it("la pila escribe el TOTAL del mes, y lo escribe la línea del total y no una banda", () => {
     const { sections } = cards();
     const written = writing(sections.option);
-    expect(written.map((entry) => entry.name)).toEqual(["Externos"]);
+    expect(written.map((entry) => entry.name)).toEqual(["Total"]);
     const label = written[0].label;
     expect(label?.position).toBe("top");
-    // Enero: 55,989.00 de planta + 48,214.12 de externos. La banda que la lleva vale lo segundo.
-    expect(label?.formatter?.(param(0, 48214.12))).toBe("$104,203.12");
+    // Enero: 55,989.00 de planta + 48,214.12 de externos.
+    expect(label?.formatter?.(param(0, 104203.12))).toBe("$104,203.12");
     expect(label?.formatter?.(param(5, 0))).toBe("$144,277.59");
   });
 
-  it("la lleva la última sección CON datos: sin externos, la escribe planta", () => {
+  it("sin externos la línea sigue siendo la que escribe, y vale lo que planta", () => {
     const soloPlanta = new Map(
       [...GOLDEN_ACCOUNTS].filter(([code]) => !code.startsWith("5.3.03.")),
     );
     const { sections } = cards([goldenYear({ accounts: soloPlanta })]);
     const written = writing(sections.option);
-    expect(written.map((entry) => entry.name)).toEqual(["Planta"]);
+    expect(written.map((entry) => entry.name)).toEqual(["Total"]);
     expect(written[0].label?.formatter?.(param(0, 55989))).toBe("$55,989.00");
   });
 
@@ -419,36 +421,6 @@ describe("La cifra sobre la columna", () => {
     const parcial = cards([goldenYear({ coverage: [0, 1] })], [], [0, 1, 2]);
     const label = writing(parcial.sections.option)[0]?.label;
     expect(label?.formatter?.(param(9, null))).toBe("");
-  });
-
-  it("la ratio de VARIOS ejercicios no escribe cifra sobre ningún punto: la lleva el tooltip y la gemela", () => {
-    for (const built of [
-      cards([goldenYear({ year: 2025 }), goldenYear()]),
-      cards([2022, 2023, 2024, 2025, 2026].map((year) => goldenYear({ year }))),
-    ]) {
-      expect(writing(built.ratio.option)).toHaveLength(0);
-      // Y sin cifras no hay fila que reservar: el techo es el del dibujo solo.
-      expect(built.ratio.option?.grid?.top).toBe(12);
-      // El tooltip es el de la LÍNEA (los meses del ejercicio), no el de la columna.
-      expect(built.ratio.option?.tooltip?.trigger).toBe("item");
-    }
-  });
-
-  it("con UN ejercicio la ratio escribe el porcentaje sobre cada punto, en la tinta del escenario", () => {
-    const { ratio } = cards();
-    const [written] = writing(ratio.option);
-    expect(written?.name).toBe("2026");
-    expect(written.label?.position).toBe("top");
-    // Tinta FUERTE y en seminegrita: la apagada medía 8.77 sobre el navy y se leía como marca de
-    // agua. Y con la talla de un porcentaje, dos puntos por encima de la de un importe.
-    expect(written.label?.color).toBe(CHART_STAGE.ink);
-    expect(written.label?.fontWeight).toBe(600);
-    expect(written.label?.fontSize).toBe(12.5);
-    // Lo que dice es el porcentaje del punto —enero: 43.4 %— y nada donde no hay mes cargado.
-    expect(written.label?.formatter?.(param(0, 43.36))).toBe("43.4 %");
-    expect(written.label?.formatter?.(param(9, null))).toBe("");
-    // Y la rejilla abre arriba la fila que esas cifras necesitan.
-    expect(ratio.option?.grid?.top).toBeGreaterThan(12);
   });
 
   it("en la evolución la lleva la LÍNEA del total, que ya es la cifra de la columna", () => {
@@ -475,8 +447,8 @@ describe("La cifra sobre la columna", () => {
   });
 });
 
-describe("Las cuatro lecturas pueden ponerse de pie", () => {
-  const solid = (which: "sections" | "ratio" | "concepts", years = [goldenYear()]) => {
+describe("Las lecturas planas pueden ponerse de pie", () => {
+  const solid = (which: "sections", years = [goldenYear()]) => {
     const built = buildPersonnelCards({
       reading: readPersonnelCost(years, SPAN),
       groups: [],
@@ -492,8 +464,7 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
   it("por omisión ninguna lo está: el plano es lo que abre", () => {
     const built = cards();
     expect(is3DOption(built.sections.option as ChartOption)).toBe(false);
-    expect(is3DOption(built.ratio.option as ChartOption)).toBe(false);
-    expect(is3DOption(built.concepts.option as ChartOption)).toBe(false);
+    expect(is3DOption(built.shares.option as ChartOption)).toBe(false);
   });
 
   it("el sólido gasta el alto que la perspectiva pide, y la gemela no se mueve", () => {
@@ -513,44 +484,15 @@ describe("Las cuatro lecturas pueden ponerse de pie", () => {
     expect(option.yAxis3D.data).toEqual(["Externos", "Planta"]);
   });
 
-  it("la ratio se pone de pie en PORCENTAJE, con una fila por ejercicio", () => {
-    const { option } = solid("ratio", [goldenYear({ year: 2025 }), goldenYear()]);
-    expect(option.series.map((entry) => entry.name).sort()).toEqual(["2025", "2026"]);
-    // Y en ORDEN: los ejercicios no se ordenan por altura como las secciones.
-    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
-    expect(option.zAxis3D.axisLabel?.formatter?.(43.36)).toBe("43.4 %");
-    expect(option.xAxis3D.data).toEqual(["Ene", "Feb", "Mar", "Abr", "May", "Jun"]);
-  });
-
-  it("la ratio deja los ejercicios en orden aunque el más reciente pique más alto", () => {
-    const { option } = solid("ratio", [
-      goldenYear({ year: 2025, coverage: [0, 1] }),
-      goldenYear({ coverage: [5] }),
-    ]);
-    expect(depthOf(option, "2025")).toBe(1);
-    expect(depthOf(option, "2026")).toBe(0);
-    expect(option.yAxis3D.data).toEqual(["2026", "2025"]);
-  });
-
-  it("el ranking es UNA fila y el color lo lleva cada columna, traducido al escenario", () => {
-    const { option } = solid("concepts");
-    expect(option.series).toHaveLength(1);
-    const colors = option.series[0].data.map((datum) => datum.itemStyle?.color);
-    expect(colors[0]).toBe(stageSliceColor(colorForSliceSlot(0)));
-    // La cola doblada es NEUTRA aquí también: no es la novena entidad.
-    expect(colors.at(-1)).toBe(stageColor(CHART_NEUTRAL));
-  });
-
   it("sin nada que dibujar tampoco hay sólido que ofrecer", () => {
     const built = buildPersonnelCards({
       reading: readPersonnelCost([goldenYear()], [10, 11]),
       groups: [],
       period: "Nov–Dic 2026",
-      solidViews: { sections: "solido", ratio: "solido", concepts: "solido" },
+      solidViews: { sections: "solido", shares: "solido" },
     });
     expect(built.sections.option).toBeNull();
-    expect(built.ratio.option).toBeNull();
-    expect(built.concepts.option).toBeNull();
+    expect(built.shares.option).toBeNull();
   });
 });
 
@@ -574,35 +516,162 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
 
   it("«Planta vs Externos» se dibuja igual: las dos secciones existen en las dos formas", () => {
     const { sections } = typed();
-    expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Externos"]);
+    expect(sections.option?.series.map((entry) => entry.name)).toEqual([
+      "Planta",
+      "Externos",
+      "Total",
+    ]);
     expect(sections.table.rows[0].values).toEqual(["$1,750.00", "$2,000.00", "$3,750.00"]);
   });
+});
 
-  it("el ranking lista las cuatro líneas tecleadas", () => {
-    const { concepts } = typed();
-    // Ordenado por monto, como el de siempre: personal $2,100 · externos $2,000 · familia $500 · $250.
-    expect(concepts.table.rows.map((row) => row.label)).toEqual([
-      "Afiliado personal",
-      "Externos",
-      "Afiliado familia",
-      "Factura familia",
-      "Total costo de personal",
+describe("«% vs ventas por nivel» se navega de fuera hacia dentro", () => {
+  const revenue = 240314.07 * 6;
+  const planta =
+    GOLDEN_CONCEPT_TOTALS.familia +
+    GOLDEN_CONCEPT_TOTALS.administracion +
+    GOLDEN_CONCEPT_TOTALS["mano-obra-directa"] +
+    GOLDEN_CONCEPT_TOTALS["mano-obra-indirecta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-medicos-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-imagenologia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-enfermeria-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-laboratorio-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-fisioterapia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-farmacia-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-otros-planta"] +
+    GOLDEN_CONCEPT_TOTALS["honorarios-asesoria-contable"] +
+    GOLDEN_CONCEPT_TOTALS["servicios-prestados-planta"];
+
+  function shares(
+    sharesPath?: PersonnelCardsInput["sharesPath"],
+    groups: PersonnelCardsInput["groups"] = [],
+  ) {
+    return buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups,
+      period: "Ene–Jun 2026",
+      sharesPath,
+    });
+  }
+
+  it("arranca en el total: las dos secciones, cada una sobre las ventas del MISMO tramo", () => {
+    const { shares: card, sharesEntries, sharesCrumbs } = shares();
+    expect(sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total"]);
+    expect(sharesEntries.map((entry) => entry.id)).toEqual(["planta", "externos"]);
+    expect(flat(card.option).yAxis).toMatchObject({ data: ["Planta", "Externos"], inverse: true });
+    const [series] = flat(card.option).series;
+    expect((series.data[0] as { value: number }).value).toBeCloseTo((planta / revenue) * 100, 6);
+    // La fila en negrita es el nivel de arriba: el total del costo sobre las ventas.
+    const total = card.table.rows.at(-1);
+    expect(total).toMatchObject({ id: "parent", label: "Total costo de personal", emphasis: true });
+  });
+
+  it("Planta abre sus dos grupos; Externos, hecho de UN grupo, salta directo a sus conceptos", () => {
+    const { sharesEntries } = shares();
+    expect(sharesEntries[0].next).toEqual({ section: "planta", group: null });
+    expect(sharesEntries[1].next).toEqual({ section: "externos", group: "honorarios-medicos" });
+
+    const groups = shares({ section: "planta", group: null });
+    expect(groups.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total", "Planta"]);
+    expect(groups.sharesEntries.map((entry) => entry.id)).toEqual(["afiliados", "no-afiliados"]);
+    expect(groups.shares.table.rows.at(-1)).toMatchObject({ label: "Planta", emphasis: true });
+
+    const concepts = shares({ section: "planta", group: "afiliados" });
+    expect(concepts.sharesCrumbs.map((crumb) => crumb.label)).toEqual([
+      "Total",
+      "Planta",
+      "Afiliados",
+    ]);
+    expect(concepts.sharesEntries.every((entry) => entry.next === null)).toBe(true);
+    expect(concepts.shares.subtitle).toBe("Ene–Jun 2026 · Afiliados");
+    const familia = concepts.shares.table.rows.find((row) => row.id === "familia");
+    expect(familia?.values[0]).toBe("$104,483.50");
+  });
+
+  it("una marca de «Personal» acota el nivel y devuelve al lector si su nivel se quedó sin barras", () => {
+    // Con solo Afiliados marcado, Planta ES Afiliados: se salta el nivel de grupos.
+    const narrowed = shares(undefined, ["afiliados"]);
+    expect(narrowed.sharesEntries.map((entry) => entry.id)).toEqual(["planta"]);
+    expect(narrowed.sharesEntries[0].next).toEqual({ section: "planta", group: "afiliados" });
+    // Parado en No afiliados cuando la marca lo deja fuera: vuelve al nivel de arriba válido.
+    const fallen = shares({ section: "planta", group: "no-afiliados" }, ["afiliados"]);
+    expect(fallen.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total", "Planta"]);
+    // Y parado en Externos cuando ningún grupo suyo está marcado: vuelve al total.
+    const root = shares({ section: "externos", group: "honorarios-medicos" }, ["afiliados"]);
+    expect(root.sharesCrumbs.map((crumb) => crumb.label)).toEqual(["Total"]);
+  });
+
+  it("con varios años, una barra por ejercicio y ninguna suma de porcentajes", () => {
+    const { shares: card } = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear({ year: 2025 }), goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun · 2025 y 2026",
+    });
+    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2025", "2026"]);
+    expect(flat(card.option).legend).toMatchObject({ show: true });
+    expect(card.table.columns).toEqual([
+      "Monto 2025",
+      "% vs ventas 2025",
+      "Monto 2026",
+      "% vs ventas 2026",
     ]);
   });
 
-  it("la ratio divide por las ventas tecleadas, mes contra el MISMO mes", () => {
-    const { ratio } = typed();
-    // Enero: 3,750 de 10,000; febrero: 1,100 de 12,000.
-    expect(ratio.table.rows[0].values[0]).toBe("37.5 %");
-    expect(ratio.table.rows[0].values[1]).toBe("9.2 %");
+  it("un ejercicio tipeado no tiene ventas: no se dibuja y la nota lo dice", () => {
+    const { shares: card } = buildPersonnelCards({
+      reading: readPersonnelCost([legacyYear(), goldenYear()], [0, 1]),
+      groups: [],
+      period: "Ene–Feb",
+    });
+    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2026"]);
+    expect(card.note).toContain("tipeado");
+  });
+});
+
+describe("«% vs ventas por nivel» pinta el último nivel cuenta por cuenta", () => {
+  it("las secciones y los grupos llevan su color de entidad; las cuentas, uno por posición", () => {
+    const built = (sharesPath?: PersonnelCardsInput["sharesPath"]) =>
+      buildPersonnelCards({
+        reading: readPersonnelCost([goldenYear()], SPAN),
+        groups: [],
+        period: "Ene–Jun 2026",
+        sharesPath,
+      });
+    const colorsOf = (option: ChartOption | Chart3DOption | null) =>
+      (flat(option).series[0].data as { itemStyle?: { color?: string } }[]).map(
+        (datum) => datum.itemStyle?.color,
+      );
+    // Dos secciones, dos colores distintos — y los mismos que «Planta vs Externos» usa.
+    expect(new Set(colorsOf(built().shares.option)).size).toBe(2);
+    // Cuatro cuentas de Afiliados: cuatro colores distintos, por su posición en la secuencia.
+    const accounts = colorsOf(built({ section: "planta", group: "afiliados" }).shares.option);
+    expect(accounts).toEqual([0, 1, 2, 3].map(colorForSliceSlot));
+  });
+});
+
+describe("«% vs ventas por nivel» también se pone de pie", () => {
+  it("con «solido» sale en tres dimensiones, un color por columna, y sigue sabiendo bajar", () => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun 2026",
+      solidViews: { shares: "solido" },
+    });
+    expect(is3DOption(built.shares.option as ChartOption | Chart3DOption)).toBe(true);
+    expect(built.shares.note).toContain("Arrastra");
+    // Las barras del escenario van en el mismo orden que las entradas: el clic sigue nombrándolas.
+    expect((built.shares.option as Chart3DOption).xAxis3D).toMatchObject({
+      data: ["Planta", "Externos"],
+    });
+    expect(built.sharesEntries.map((entry) => entry.id)).toEqual(["planta", "externos"]);
   });
 
-  it("una marca de «Grupo» no puede esconder unas líneas que no tienen grupo", () => {
-    const marked = buildPersonnelCards({
-      reading: readPersonnelCost([legacyYear()], [0, 1]),
-      groups: ["afiliados"],
-      period: "Ene–Feb 2019",
+  it("plano por omisión, como las otras", () => {
+    const built = buildPersonnelCards({
+      reading: readPersonnelCost([goldenYear()], SPAN),
+      groups: [],
+      period: "Ene–Jun 2026",
     });
-    expect(marked.concepts.table.rows).toHaveLength(5);
+    expect(is3DOption(built.shares.option as ChartOption | Chart3DOption)).toBe(false);
   });
 });

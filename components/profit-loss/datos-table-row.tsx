@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { memo } from "react";
 import { cn } from "@/lib/cn";
+import { DATOS_ROW_PX } from "@/lib/profit-loss/datos-columns";
 import type { EditorAnchor } from "./cell-editor";
 import { sectionTone } from "@/lib/profit-loss/datos-sections";
 import type { DatosColumn, DatosRow } from "@/lib/profit-loss/datos-types";
@@ -36,7 +37,12 @@ export interface DatosTableRowProps {
 /**
  * One account row. Memoized so editing or expanding a *different* row — or opening the
  * editor — never re-renders this one (its props are value-stable between such changes).
- * `content-visibility` lets the browser skip layout/paint for rows scrolled out of view.
+ *
+ * Its height is DECLARED (`DATOS_ROW_PX`), not left to the content: the table mounts only a
+ * window of rows and turns the scroll offset into a row index by dividing by that height, so every
+ * row —result, edited, commented— has to measure exactly that. The name already went on one line
+ * with an ellipsis; the amounts never wrap. (`content-visibility: auto` used to sit here and did
+ * nothing: size containment does not apply to table rows.)
  */
 function DatosTableRowImpl({
   row,
@@ -69,7 +75,7 @@ function DatosTableRowImpl({
   return (
     <tr
       className={cn("group", tone?.row ?? "hover:bg-surface-muted")}
-      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 39px" }}
+      style={{ height: DATOS_ROW_PX }}
     >
       <td
         className={cn(
@@ -171,7 +177,7 @@ function DetailCell({
       className={cn(
         // Its own opaque background: a pinned cell scrolls OVER the amounts, so it cannot let
         // them show through, and it has to follow the row's hover state by hand.
-        "sticky right-0 z-[1] w-[62px] border-b border-l border-border-soft p-0 text-center transition-colors",
+        "sticky right-0 z-[1] border-b border-l border-border-soft p-0 text-center transition-colors",
         tone || "bg-surface group-hover:bg-surface-muted",
         open && "bg-brand-soft group-hover:bg-brand-soft",
       )}
@@ -234,7 +240,7 @@ function DataCell({
     return (
       <td
         className={cn(
-          "relative border-b border-border-soft px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums",
+          "relative whitespace-nowrap border-b border-border-soft px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums",
           tone,
           marks,
         )}
@@ -252,7 +258,7 @@ function DataCell({
         type="button"
         onClick={(event) => onEdit(anchorOf(event.currentTarget))}
         className={cn(
-          "h-full w-full px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums hover:bg-brand-soft",
+          "h-full w-full whitespace-nowrap px-4 py-2.5 text-right text-[13px] font-semibold tabular-nums hover:bg-brand-soft",
           tone,
           marks,
         )}

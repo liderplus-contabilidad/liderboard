@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { DatosColumn } from "./datos-types";
 import {
+  DATOS_AMOUNT_COLUMN_PX,
+  DATOS_DETAIL_COLUMN_PX,
+  DATOS_NAME_COLUMN_PX,
+  DATOS_ROW_PX,
+  datosTableMinWidth,
   columnHeaderLabel,
   loadedColumnPositions,
   sliceColumns,
@@ -140,5 +145,25 @@ describe("quedarse con unas columnas", () => {
 
   it("devuelve el mismo grid cuando no hay nada que quitar", () => {
     expect(sliceColumns(grid, [0, 1, 2, 3, 4, 5])).toBe(grid);
+  });
+});
+
+describe("la geometría de la tabla es declarada, no medida", () => {
+  it("una fila mide lo mismo con cualquier contenido, y el layout la conoce de antemano", () => {
+    // The row window is computed from this figure; a row that measured differently would put
+    // the window a few rows off by the bottom of a long statement.
+    expect(DATOS_ROW_PX).toBe(41);
+  });
+
+  it("una columna de importe cabe el importe más ancho del formato con su padding", () => {
+    // «-$12,345,678.90» measures 103 px in the cell's 13 px semibold sans; the cell pads 16 + 16.
+    expect(DATOS_AMOUNT_COLUMN_PX).toBeGreaterThanOrEqual(103 + 32);
+  });
+
+  it("el ancho mínimo de la tabla es la suma de sus columnas declaradas", () => {
+    expect(datosTableMinWidth(0)).toBe(DATOS_NAME_COLUMN_PX + DATOS_DETAIL_COLUMN_PX);
+    expect(datosTableMinWidth(13)).toBe(
+      DATOS_NAME_COLUMN_PX + 13 * DATOS_AMOUNT_COLUMN_PX + DATOS_DETAIL_COLUMN_PX,
+    );
   });
 });

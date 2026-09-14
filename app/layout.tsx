@@ -23,7 +23,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+    // `suppressHydrationWarning` covers ONLY this element: browser extensions (Scribe, Grammarly…)
+    // stamp attributes on <html> before React hydrates, and the mismatch they cause is theirs, not
+    // ours. Nothing below the root is silenced.
+    <html
+      lang="es"
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-canvas font-sans text-ink antialiased">{children}</body>
     </html>
   );

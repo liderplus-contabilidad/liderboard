@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from "lucide-react";
+import { BarChart3, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpecCard } from "@/components/ui/chart-card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -39,7 +39,7 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
 /**
  * The two GRAPHICS of the same breakdown: the length of a bar, or the angle of a slice.
  *
- * They were four options in one strip —«Barras · Sólido 3D · Pastel · Rosca 3D»— and that strip
+ * They were four options in one strip —«Barras · 3D · Pastel · Rosca 3D»— and that strip
  * mixed two questions: WHICH graphic and in WHICH BODY. They are not four readings but two, each
  * available flat or standing on the stage, so they are two controls and the four cards are their
  * product. It is the same split «Ventas por año» carries between «Cifra» and «Ver como», and what it
@@ -47,8 +47,10 @@ import { ExpenseSharePanel, type AccountStep } from "./expense-share-panel";
  * strip of four.
  */
 const ANNEX_CHARTS = [
-  { value: "barras" as const, label: "Barras" },
-  { value: "pastel" as const, label: "Pastel" },
+  // The glyph IS the option: a bar and a slice say it faster than the word, and the label stays as
+  // the accessible name and the hover title.
+  { value: "barras" as const, label: "Barras", icon: <BarChart3 size={15} /> },
+  { value: "pastel" as const, label: "Pastel", icon: <PieChart size={15} /> },
 ];
 
 type AnnexChart = (typeof ANNEX_CHARTS)[number]["value"];

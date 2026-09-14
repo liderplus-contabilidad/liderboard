@@ -45,6 +45,12 @@ interface TabBarProps<Id extends string> {
   /** Aligned with the labels' height, not the underline's — that way the same slot works outside the
    *  bar without dragging the offset along. */
   rightSlot?: ReactNode;
+  /**
+   * Whether the strip closes with its own hairline. `false` where the container already draws the
+   * rule the underline sits on —the module header, whose bottom border is the strip's—; a second
+   * one there would read as a double line.
+   */
+  rule?: boolean;
   className?: string;
 }
 
@@ -55,12 +61,14 @@ export function TabBar<Id extends string>({
   ariaLabel,
   idPrefix,
   rightSlot,
+  rule = true,
   className,
 }: TabBarProps<Id>) {
   return (
     <div
       className={cn(
-        "flex items-end justify-between gap-6 border-b border-border bg-surface",
+        "flex items-end justify-between gap-6 bg-surface",
+        rule && "border-b border-border",
         className,
       )}
     >
@@ -93,7 +101,7 @@ export function TabBar<Id extends string>({
         })}
       </div>
 
-      <div className="pb-[11px]">{rightSlot}</div>
+      {rightSlot != null && <div className="pb-[11px]">{rightSlot}</div>}
     </div>
   );
 }

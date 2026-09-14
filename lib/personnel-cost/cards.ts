@@ -1,6 +1,6 @@
 /**
- * The screen's FOUR readings, described as DATA (`option` + `table`) and not as markup: the partition
- * planta/externos, the ratio against ventas, the evolution by group and the ranking of concepts.
+ * The screen's THREE readings, described as DATA (`option` + `table`) and not as markup: the partition
+ * planta/externos, the evolution by group and the share of ventas by level.
  *
  * That they are data is what lets the Datos tab, the Gráficos tab and any future printable report read
  * the same construction instead of each rebuilding its figures — two computations of one question
@@ -24,7 +24,6 @@ import {
   CHART_INK,
   CHART_LINES,
   CHART_MARK,
-  CHART_NEUTRAL,
   CHART_STAGE,
   CHART_STAGE_LIGHT,
   CHART_STAGE_MATERIAL,
@@ -32,7 +31,6 @@ import {
   CHART_SURFACE,
   colorForEntity,
   colorForSliceSlot,
-  CHART_TRAJECTORY_GROUND,
   figureInk,
   stageColor,
   stageSliceColor,
@@ -55,7 +53,6 @@ import type {
 } from "@/lib/charts/types";
 import {
   fitDirectLabel,
-  fitPercentLabel,
   labelDistance,
   labelHeadroom,
   type LabelFit,
@@ -66,10 +63,10 @@ import {
   type SolidBarRow,
   type SolidView,
 } from "@/lib/charts/solid-bars";
-import { seriesRunTooltip, tooltipMarker } from "@/lib/charts/tooltip";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import {
+  conceptsOfGroup,
   groupsOfSection,
   PERSONNEL_GROUPS,
   PERSONNEL_SECTIONS,
@@ -77,7 +74,7 @@ import {
   type PersonnelSectionId,
 } from "./accounts";
 import { shareOf, type PersonnelCostReading, type PersonnelYearReading } from "./derive";
-import { GUIDE_CONCEPTS, GUIDE_GROUPS, GUIDE_REVENUE_RATIO, GUIDE_SECTIONS } from "./guides";
+import { GUIDE_GROUPS, GUIDE_SECTIONS, GUIDE_SHARES } from "./guides";
 
 /**
  * **The module's ONE colour universe**, and it deliberately does not list the sections: `planta`, plus
@@ -99,9 +96,6 @@ function colorForPersonnel(id: string): string {
   return colorForEntity(resolved, COLOR_UNIVERSE);
 }
 
-/** How many concepts the ranking DRAWS before folding the tail into one bar. */
-export const CONCEPT_SLICES = 8;
-
 /**
  * The two shapes «Evolución» can take, and they answer two different questions.
  *
@@ -118,11 +112,9 @@ export type EvolutionView = "apilada" | "skyline";
 export const DEFAULT_EVOLUTION_VIEW: EvolutionView = "apilada";
 
 const SECTIONS_HEIGHT = 300;
-const RATIO_HEIGHT = 280;
 const GROUPS_HEIGHT = 300;
 /** The same card in three dimensions: perspective spends height a flat plot does not. */
 const GROUPS_HEIGHT_3D = 400;
-const CONCEPTS_HEIGHT = 340;
 
 /** Exactly what the cards were built from — the provider exposes it so nothing recomposes it. */
 export interface PersonnelCardsInput {
@@ -134,26 +126,62 @@ export interface PersonnelCardsInput {
   /** «Evolución»'s shape. `apilada` when not given. */
   evolutionView?: EvolutionView;
   /**
-   * Which of the other three cards are standing on the stage. Flat when not given.
+   * Which of the other two cards are standing on the stage. Flat when not given.
    *
-   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly three, they are
+   * They are named ONE BY ONE and not kept in a dictionary of ids: there are exactly two, they are
    * fixed, and a typo in a key would silently draw a flat card forever. «Evolución» is not among them
    * because its second shape is a skyline and not a frieze — a different reading, with a control of
    * its own (`evolutionView`).
    */
   solidViews?: {
     sections?: SolidView;
-    ratio?: SolidView;
-    concepts?: SolidView;
+    shares?: SolidView;
   };
+  /**
+   * Where the reader stands in «% vs ventas por nivel». The total when not given. It is held by the
+   * provider for the same reason `evolutionView` is, and it is SANITIZED on read (`resolveSharesPath`)
+   * and never in an effect: a level the bar's marks just emptied falls back to the nearest one that
+   * still has bars, so an unrelated click cannot leave the card standing on nothing.
+   */
+  sharesPath?: SharesPath;
+}
+
+/**
+ * The level «% vs ventas por nivel» is open at: nothing (the two sections), a section (its groups) or
+ * a group (its concepts) — the three levels of percentage the workbook writes in columns Q, R and S,
+ * walked from the outside in. A `group` always carries its `section`, so the crumbs never have to
+ * look it up.
+ */
+export interface SharesPath {
+  section: PersonnelSectionId | null;
+  group: PersonnelGroupId | null;
+}
+
+export const SHARES_ROOT: SharesPath = { section: null, group: null };
+
+/** One bar of «% vs ventas por nivel», and where clicking it leads — `null` on a leaf. */
+export interface SharesEntry {
+  id: string;
+  label: string;
+  next: SharesPath | null;
+}
+
+/** One step of the card's breadcrumb, root first. The last one is the level on screen. */
+export interface SharesCrumb {
+  label: string;
+  path: SharesPath;
 }
 
 export interface PersonnelCards {
-  /** All four can come out in three dimensions — hence the widened option type on every one. */
+  /** All three can come out in three dimensions — hence the widened option type on every one. */
   sections: ChartCardSpec<ChartOption | Chart3DOption>;
-  ratio: ChartCardSpec<ChartOption | Chart3DOption>;
   groups: ChartCardSpec<ChartOption | Chart3DOption>;
-  concepts: ChartCardSpec<ChartOption | Chart3DOption>;
+  /** Can stand on the stage like the others; a bar is clicked the same way in both dimensions. */
+  shares: ChartCardSpec<ChartOption | Chart3DOption>;
+  /** The bars of `shares` in axis order — what a click's `dataIndex` names. */
+  sharesEntries: SharesEntry[];
+  /** The breadcrumb of `shares`, root first, always at least the root. */
+  sharesCrumbs: SharesCrumb[];
   /**
    * Whether the skyline has anything to put on its depth axis. With ONE entity to compare it has
    * none, and the control is NOT DRAWN — a control that means nothing for the open data does not
@@ -167,9 +195,9 @@ export interface PersonnelCards {
 // ---------------------------------------------------------------------------
 
 /**
- * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: the
- * ratio comparing several exercises stands on the stage (`CHART_GROUND`), and there the light
- * chrome's greys are invisible.
+ * Every helper of this chrome takes the GROUND it is drawn on, `surface` unless said otherwise: a card
+ * standing on the stage (`CHART_GROUND`) cannot use the light chrome's greys, which are invisible
+ * there.
  */
 function valueAxis(unit: (value: number) => string, ground: ChartGround = "surface"): ChartAxis {
   const tones = CHART_GROUND[ground];
@@ -233,11 +261,30 @@ const TOOLTIP_CHROME = {
   confine: true,
 };
 
+/**
+ * The VENTAS a tooltip row is measured against — the divisor of «% sobre ventas» for the series and
+ * the column under the cursor. `null` where no ventas are known, and the row then writes no
+ * percentage at all: `shareOf`'s rule, never «0 %».
+ */
+type TooltipRevenue = (seriesId: string, dataIndex: number) => number | null;
+
 function axisTooltip(
   unit: (value: number) => string,
   ground: ChartGround = "surface",
+  revenueOf?: TooltipRevenue,
 ): ChartTooltip {
   const tones = CHART_GROUND[ground];
+  // Beside the figure and not in a column of its own: the box is read one row at a time, and the
+  // percentage is what the reader asked the figure for.
+  const shareText = (row: ChartParam): string => {
+    if (!revenueOf) {
+      return "";
+    }
+    const share = shareOf(Number(row.value), revenueOf(row.seriesId ?? "", row.dataIndex) ?? 0);
+    return share === null
+      ? ""
+      : ` <span style="color:${tones.inkMuted}">· ${percent(share)} de ventas</span>`;
+  };
   return {
     trigger: "axis",
     ...TOOLTIP_CHROME,
@@ -254,7 +301,7 @@ function axisTooltip(
         .filter((row) => row.value !== null && row.value !== undefined)
         .map(
           (row) =>
-            `<div>${row.marker ?? ""} ${row.seriesName ?? ""}: <b>${unit(Number(row.value))}</b></div>`,
+            `<div>${row.marker ?? ""} ${row.seriesName ?? ""}: <b>${unit(Number(row.value))}</b>${shareText(row)}</div>`,
         )
         .join("");
       return `<div style="font-weight:600;margin-bottom:4px">${head}</div>${
@@ -315,8 +362,8 @@ function cell(value: number | null, unit: (value: number) => string): string | n
  *
  * `read` is what the label SAYS, and it is deliberately not `param.value`: over a stack the value under
  * the label is the band's and what belongs there is the column's total. `row` is which strip of figures
- * the series writes on — one figure per column per series is what buys the width, and it is what lets
- * the ratio's exercises carry their percentage without disputing one strip.
+ * the series writes on — one figure per column per series is what buys the width, so two series can
+ * carry their figure without disputing one strip.
  */
 function directLabel(
   fit: LabelFit,
@@ -374,30 +421,36 @@ function columnTotals(series: readonly ChartSeries[], columns: number): (number 
 }
 
 /**
- * Which band WRITES the total: the last one that has a figure anywhere on the axis.
+ * The total's LINE over a stack — PyG's `stackedTotalOption` same mark, in ink and not in a palette
+ * slot, because it is not one more entity of the comparison. ONE definition for the two stacked
+ * cards («Planta vs Externos» and the evolution), so they cannot draw the same idea two ways.
  *
- * A stack's label sits at the top edge of the band carrying it, so the topmost band is where the
- * column's total belongs. But a client with no outside fees reads `externos` as `null` the whole
- * exercise, and hanging the figure there would have left the card with no figures at all — so the
- * choice falls back down the stack instead of onto silence. Returns `-1` when nothing is drawn.
+ * Here it IS the stack's ceiling, since every band is a positive cost. It earns its place anyway,
+ * and for the reason the reader gave: a ceiling is not a TRAJECTORY. The eye follows a coloured
+ * band, not the top edge of separate bars, so «subió o bajó» costs a comparison of heights across
+ * gaps. The line answers it without one.
+ *
+ * It is also the one mark that WRITES the column's figure: it already is the total, so hanging the
+ * label on it instead of on a band means no band ever needs choosing as the carrier.
  */
-function labelCarrier(series: readonly ChartSeries[]): number {
-  return series.reduce(
-    (found, entry, index) => (entry.data.some((value) => value !== null) ? index : found),
-    -1,
-  );
-}
-
-/** The same series with the total's figure hung off the band that has to write it. */
-function writingTotals(
-  series: readonly ChartSeries[],
-  totals: readonly (number | null)[],
-  fit: LabelFit,
-): ChartSeries[] {
-  const carrier = labelCarrier(series);
-  return series.map((entry, index) =>
-    index === carrier ? { ...entry, ...columnTotalLabel(fit, totals) } : entry,
-  );
+function totalLine(id: string, totals: readonly (number | null)[], fit: LabelFit): ChartSeries {
+  return {
+    id,
+    type: "line",
+    name: "Total",
+    data: [...totals],
+    lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth, type: "solid" },
+    itemStyle: { color: CHART_INK.strong },
+    symbol: "circle",
+    symbolSize: CHART_MARK.symbolSize,
+    smooth: false,
+    // Measured as ONE series and not as one more band: what decides the figure's shape is its own
+    // row over the columns, not the stack below it.
+    ...columnTotalLabel(fit, totals),
+    // Over the bars, never under: a line hidden behind the stack it measures is a line that is not
+    // there.
+    z: 3,
+  };
 }
 
 /**
@@ -465,25 +518,64 @@ function sentence(note: string | undefined, asSolid: boolean): string | undefine
 // 1 · Planta vs Externos
 // ---------------------------------------------------------------------------
 
+/**
+ * A section's figures under the bar's «Grupo» marks: the section whole with no mark, and otherwise
+ * the SUM of its marked groups — Planta narrowed to Afiliados is the Afiliados series, figure by
+ * figure. A typed exercise has no groups, so a mark means nothing for it and the section stays whole,
+ * the same rule the evolution and the concepts already hold. `null` when the section has no marked
+ * group at all: it is then not drawn, because a stack of zeros would claim the section cost nothing.
+ */
+function narrowedSection(
+  year: PersonnelYearReading,
+  sectionId: PersonnelSectionId,
+  marked: ReadonlySet<PersonnelGroupId>,
+): { total: number; monthly: (number | null)[] } | null {
+  const whole = year.sections.find((entry) => entry.section.id === sectionId);
+  if (!whole) {
+    return null;
+  }
+  if (marked.size === 0 || year.groups.length === 0) {
+    return { total: whole.total, monthly: whole.monthly };
+  }
+  const groups = year.groups.filter(
+    (entry) => entry.group.section === sectionId && marked.has(entry.group.id),
+  );
+  if (groups.length === 0) {
+    return null;
+  }
+  return {
+    total: groups.reduce((sum, entry) => sum + entry.total, 0),
+    monthly: whole.monthly.map((_, month) =>
+      groups.every((entry) => entry.monthly[month] === null)
+        ? null
+        : groups.reduce((sum, entry) => sum + (entry.monthly[month] ?? 0), 0),
+    ),
+  };
+}
+
 function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
   const { reading, period } = input;
   const years = reading.years.filter((year) => year.covered);
   const comparing = years.length > 1;
+  const marked = new Set(input.groups);
   // ONE year puts the months on the axis; several put the exercises. What the reader compares is what
   // they marked, and no control chooses between the two.
   const categories = comparing
     ? years.map((year) => String(year.year))
     : (years[0]?.months ?? []).map((month) => MONTHS_SHORT_ES[month]);
 
-  const series: ChartSeries[] = PERSONNEL_SECTIONS.map((section, index, all) => {
+  // The sections the marks leave standing: a section none of whose groups is marked is not drawn,
+  // and its column leaves the table twin with it.
+  const drawn = PERSONNEL_SECTIONS.filter((section) =>
+    years.some((year) => narrowedSection(year, section.id, marked) !== null),
+  );
+
+  const series: ChartSeries[] = drawn.map((section, index, all) => {
     const data = comparing
-      ? years.map(
-          (year) => year.sections.find((entry) => entry.section.id === section.id)?.total ?? null,
-        )
+      ? years.map((year) => narrowedSection(year, section.id, marked)?.total ?? null)
       : (years[0]?.months ?? []).map(
           (month) =>
-            years[0]?.sections.find((entry) => entry.section.id === section.id)?.monthly[month] ??
-            null,
+            (years[0] && narrowedSection(years[0], section.id, marked)?.monthly[month]) ?? null,
         );
     return {
       id: `section-${section.id}`,
@@ -511,12 +603,12 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
   const table: ChartTable = {
     // `columns` nombra sólo las columnas de VALORES: la de la etiqueta la encabeza `ChartCard`
     // («Serie»), y anteponerla aquí corría toda la fila una posición.
-    columns: [...PERSONNEL_SECTIONS.map((s) => s.label), "Total"],
+    columns: [...drawn.map((s) => s.label), "Total"],
     rows: categories.map((label, index) => ({
       id: `sections-${label}`,
       label,
       values: [
-        ...PERSONNEL_SECTIONS.map((section) => {
+        ...drawn.map((section) => {
           const found = series.find((entry) => entry.id === `section-${section.id}`);
           return cell((found?.data[index] as number | null) ?? null, moneyExact);
         }),
@@ -525,15 +617,31 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
     })),
   };
 
-  const planta = reading.sections.find((entry) => entry.section.id === "planta");
-  const externos = reading.sections.find((entry) => entry.section.id === "externos");
+  // The note's shares follow the narrowing: what is drawn is what is measured against ventas. With
+  // no mark they are the reading's own —the same figures the tiles say—, and `shareOf` is the one
+  // definition of a share either way.
+  const shareOfSection = (sectionId: PersonnelSectionId): number | null | undefined => {
+    if (!drawn.some((section) => section.id === sectionId)) {
+      return undefined;
+    }
+    if (marked.size === 0) {
+      return reading.sections.find((entry) => entry.section.id === sectionId)?.share;
+    }
+    const total = years.reduce(
+      (sum, year) => sum + (narrowedSection(year, sectionId, marked)?.total ?? 0),
+      0,
+    );
+    return shareOf(total, reading.revenue);
+  };
+  const planta = shareOfSection("planta");
+  const externos = shareOfSection("externos");
 
   // On the stage the two sections stop being a pile and become two ROWS: what the stack says by
   // accumulating, the depth axis says by standing them one behind the other, and each is then read
   // from the floor instead of from wherever the one below it ended.
   const solid = solidBody(
     categories,
-    PERSONNEL_SECTIONS.map((section) => ({
+    drawn.map((section) => ({
       id: section.id,
       name: section.label,
       color: stageColor(colorForPersonnel(section.id)),
@@ -571,16 +679,20 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
             xAxis: categoryAxis(categories),
             yAxis: valueAxis(money),
             legend: legendFor(true),
+            // Amounts only: the percentage over ventas is the note under the card and the tiles, and
+            // written a third time beside every figure it crowded the box.
             tooltip: axisTooltip(moneyExact),
-            series: writingTotals(series, totals, fit),
+            series: [...series, totalLine("sections-total", totals, fit)],
           },
     table,
     note: sentence(
-      planta && externos
-        ? `Sobre ventas: planta ${planta.share === null ? "—" : percent(planta.share)}, externos ${
-            externos.share === null ? "—" : percent(externos.share)
-          }.`
-        : undefined,
+      (() => {
+        const parts = [
+          planta === undefined ? null : `planta ${planta === null ? "—" : percent(planta)}`,
+          externos === undefined ? null : `externos ${externos === null ? "—" : percent(externos)}`,
+        ].filter((part): part is string => part !== null);
+        return parts.length > 0 ? `Sobre ventas: ${parts.join(", ")}.` : undefined;
+      })(),
       asSolid,
     ),
     guide: GUIDE_SECTIONS,
@@ -589,167 +701,7 @@ function buildSectionsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOptio
 }
 
 // ---------------------------------------------------------------------------
-// 2 · Costo de personal vs ventas
-// ---------------------------------------------------------------------------
-
-function buildRatioCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
-  const { reading, period } = input;
-  const years = reading.years.filter((year) => year.covered);
-  const months = [...new Set(years.flatMap((year) => year.months))].sort((a, b) => a - b);
-  const order = years.map((year) => year.year);
-
-  /**
-   * A month's ratio inside one exercise. It divides the month's cost by the SAME month's ventas —
-   * never by the tramo's — so a point is a real monthly reading and not the year's average redrawn
-   * twelve times.
-   */
-  const ratioAt = (year: PersonnelYearReading, month: number): number | null => {
-    const cost = year.monthly[month];
-    const revenue = year.revenueMonthly[month];
-    if (cost === null || revenue === null) {
-      return null;
-    }
-    return shareOf(cost, revenue);
-  };
-
-  // **The card stands on the STAGE** (`CHART_TRAJECTORY_GROUND`), one exercise or several: a thin
-  // line over a white plot has nothing but its hue to be found by, and it is the ground the solid
-  // body of this same reading already has. There the year wears `stageColor`'s slot —the solid's
-  // same rule— and the table twin, on the white, keeps the light one.
-  const ground = CHART_TRAJECTORY_GROUND;
-  const lineColor = (year: number) =>
-    ground === "stage" ? stageColor(yearColor(year, order)) : yearColor(year, order);
-
-  // With SEVERAL exercises this card writes NO figure over its points: what a ratio is read for is
-  // the trajectory, and a percentage over every mark of every exercise turns the line into texture.
-  // The amount stays where it is never missing — in the tooltip on hover and in the table twin.
-  // ALONE, an exercise has nothing to be read against but its own months, and the percentage over
-  // each point is what turns «abril subió» into «abril fue 43.4 %» — Reportería's comparativo's
-  // same rule, one row of figures in the ground's ink.
-  const comparing = years.length > 1;
-  // A percent's own fit: six characters where an amount has eleven, so it reads two points larger.
-  const labelFit = fitPercentLabel(months.length);
-  const series: ChartSeries[] = years.map((year) => ({
-    id: `ratio-${year.year}`,
-    type: "line",
-    name: String(year.year),
-    data: months.map((month) => ratioAt(year, month)),
-    smooth: false,
-    symbol: "circle",
-    symbolSize: CHART_MARK.symbolSize,
-    lineStyle: { color: lineColor(year.year), width: CHART_MARK.lineWidth },
-    itemStyle: { color: lineColor(year.year) },
-    ...(comparing
-      ? {}
-      : directLabel(
-          labelFit,
-          (param) =>
-            param.value === null || param.value === undefined ? null : Number(param.value),
-          percent,
-          0,
-          ground,
-        )),
-    emphasis: { focus: "series" },
-    // Comparing, a line is read ONE at a time: the exercise under the pointer comes forward, the
-    // others blur, and the stroke itself answers (`triggerEvent`) — not only its dots.
-    ...(comparing ? { triggerEvent: "line" as const } : {}),
-  }));
-
-  // The line's box, comparing: the exercise as the head and its months as the body, in the same
-  // two columns Reportería's comparativo opens (`seriesRunTooltip`). A column of six exercises
-  // under one month is not what a line is followed for; the run of the one under the pointer is.
-  // Alone, the column tooltip stays: one figure per month, already written over the point.
-  const lineTooltip = itemTooltip((param) => {
-    const year = years.find((candidate) => `ratio-${candidate.year}` === param.seriesId);
-    if (!year) return "";
-    const rows = months.flatMap((month) => {
-      const value = ratioAt(year, month);
-      return value === null ? [] : [{ label: MONTHS_SHORT_ES[month], figure: percent(value) }];
-    });
-    return seriesRunTooltip(
-      `${tooltipMarker(lineColor(year.year))}${year.year}`,
-      rows,
-      param.name,
-      CHART_GROUND[ground].inkMuted,
-    );
-  }, ground);
-
-  const table: ChartTable = {
-    columns: [...months.map((month) => MONTHS_SHORT_ES[month]), "Tramo"],
-    rows: years.map((year) => ({
-      id: `ratio-${year.year}`,
-      label: String(year.year),
-      color: yearColor(year.year, order),
-      values: [
-        ...months.map((month) => cell(ratioAt(year, month), percent)),
-        cell(year.share, percent),
-      ],
-    })),
-  };
-
-  // Standing up, the trajectory gives way to a comparison of HEIGHTS from a common floor: one solid
-  // per month and one row per exercise, on the same percentage scale. It is a second shape and not a
-  // replacement — what a line draws and a bar cannot is exactly where the ratio is going.
-  const solid = solidBody(
-    months.map((month) => MONTHS_SHORT_ES[month]),
-    years.map((year) => ({
-      id: `ratio-${year.year}`,
-      name: String(year.year),
-      color: stageColor(yearColor(year.year, order)),
-      values: months.map((month) => ratioAt(year, month)),
-    })),
-    { value: percent, axis: percent },
-    // One row per EXERCISE, so they keep their order: the oldest at the back, never the shortest.
-    { order: "given" },
-  );
-  const asSolid = standing(input.solidViews?.ratio, solid);
-
-  return {
-    id: "personnel-ratio",
-    title: "Costo de personal vs ventas",
-    subtitle: period,
-    option: asSolid
-      ? solid
-      : months.length === 0
-        ? null
-        : {
-            animationDuration: 300,
-            textStyle: { fontFamily: CHART_FONT },
-            ...(CHART_GROUND[ground].sky ? { backgroundColor: CHART_GROUND[ground].sky } : {}),
-            grid: {
-              left: 8,
-              right: 12,
-              // Comparing, no figure is written and the plot keeps the room; a lone exercise writes
-              // one row and the grid opens what it needs — `outerBoundsContain` only reserves for
-              // the axis' labels.
-              top: comparing ? 12 : labelHeadroom(1, labelFit, 12),
-              bottom: 34,
-              outerBoundsMode: "same",
-              outerBoundsContain: "axisLabel",
-            },
-            xAxis: categoryAxis(
-              months.map((month) => MONTHS_SHORT_ES[month]),
-              { ground },
-            ),
-            yAxis: valueAxis(percent, ground),
-            legend: legendFor(years.length > 1, ground),
-            tooltip: comparing ? lineTooltip : axisTooltip(percent, ground),
-            series,
-          },
-    table,
-    note: sentence(
-      reading.share === null
-        ? undefined
-        : `En el tramo completo: ${percent(reading.share)} de ${moneyExact(reading.revenue)} facturados.`,
-      asSolid,
-    ),
-    guide: GUIDE_REVENUE_RATIO,
-    height: asSolid ? SOLID_BARS_HEIGHT : RATIO_HEIGHT,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 3 · Evolución mensual por grupo
+// 2 · Evolución mensual por grupo
 // ---------------------------------------------------------------------------
 
 /** One row of the evolution: an entity, its colour and what it cost month by month. */
@@ -868,33 +820,7 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     emphasis: { focus: "series" },
   }));
 
-  /**
-   * The total's LINE over the stack — PyG's `stackedTotalOption` same mark, in ink and not in a
-   * palette slot, because it is not a fourth entity of the comparison.
-   *
-   * Unlike over there it IS the stack's ceiling, since every group is a positive cost. It earns its
-   * place anyway, and for the reason the reader gave: a ceiling is not a TRAJECTORY. The eye follows a
-   * coloured band, not the top edge of six separate bars, so «subió o bajó» costs a comparison of
-   * heights across gaps. The line answers it without one.
-   */
-  const totalSeries: ChartSeries = {
-    id: "evolution-total",
-    type: "line",
-    name: "Total",
-    data: totals,
-    lineStyle: { color: CHART_INK.strong, width: CHART_MARK.lineWidth, type: "solid" },
-    itemStyle: { color: CHART_INK.strong },
-    symbol: "circle",
-    symbolSize: CHART_MARK.symbolSize,
-    smooth: false,
-    // It is the one mark of the card that already IS the column's total, so it is the one that writes
-    // it. Measured as ONE series and not as the fourth: what decides the figure's shape is its own
-    // row over the columns, not the stack below it.
-    ...columnTotalLabel(labelFit, totals),
-    // Over the bars, never under: a line hidden behind the stack it measures is a line that is not
-    // there.
-    z: 3,
-  };
+  const totalSeries = totalLine("evolution-total", totals, labelFit);
 
   const table: ChartTable = {
     columns: [...rows.map((row) => row.name), "Total"],
@@ -924,7 +850,27 @@ function buildGroupsCard(input: PersonnelCardsInput): {
     xAxis: categoryAxis(labels),
     yAxis: valueAxis(money),
     legend: legendFor(true),
-    tooltip: axisTooltip(moneyExact),
+    // Comparing exercises each row is a year, so each divides by ITS ventas of that month; with one
+    // year every band and the total divide by the same month's.
+    tooltip: axisTooltip(moneyExact, "surface", (seriesId, index) => {
+      const month = months[index];
+      const covered = input.reading.years.filter((year) => year.covered);
+      if (month === undefined) {
+        return null;
+      }
+      // The total of several exercises in one month is measured against their ventas summed — the
+      // one divisor under which the parts' percentages add up to the whole's.
+      if (comparing && seriesId === "evolution-total") {
+        const known = covered
+          .map((entry) => entry.revenueMonthly[month])
+          .filter((value): value is number => value !== null);
+        return known.length > 0 ? known.reduce((sum, value) => sum + value, 0) : null;
+      }
+      const year = comparing
+        ? covered.find((entry) => `evolution-${entry.year}` === seriesId)
+        : covered[0];
+      return year?.revenueMonthly[month] ?? null;
+    }),
     series: [...barSeries, totalSeries],
   };
 
@@ -1172,174 +1118,354 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// 4 · Composición por concepto
+// 3 · % vs ventas por nivel
 // ---------------------------------------------------------------------------
 
-interface ConceptTotal {
-  id: string;
-  label: string;
-  total: number;
+const SHARES_HEIGHT = 300;
+
+/** The groups the bar leaves in scope, in universe order — no mark is all of them. */
+function groupsInScope(marked: readonly PersonnelGroupId[]): PersonnelGroupId[] {
+  const set = new Set(marked);
+  return PERSONNEL_GROUPS.filter((group) => set.size === 0 || set.has(group.id)).map(
+    (group) => group.id,
+  );
 }
 
-/** Every concept in scope, summed across the marked years, largest first and zeros dropped. */
-function conceptTotals(input: PersonnelCardsInput): ConceptTotal[] {
+/**
+ * The deepest level of `path` the marks still allow. A section with no group in scope, or a group
+ * that is not marked, cannot be stood on: the path falls back one level at a time, and the root is
+ * always valid.
+ */
+export function resolveSharesPath(
+  path: SharesPath | undefined,
+  marked: readonly PersonnelGroupId[],
+): SharesPath {
+  if (!path || path.section === null) {
+    return SHARES_ROOT;
+  }
+  const scope = groupsInScope(marked);
+  const sectionGroups = groupsOfSection(path.section).filter((group) => scope.includes(group.id));
+  if (sectionGroups.length === 0) {
+    return SHARES_ROOT;
+  }
+  if (path.group !== null && sectionGroups.some((group) => group.id === path.group)) {
+    return path;
+  }
+  return { section: path.section, group: null };
+}
+
+/**
+ * Where clicking a section leads: to its groups, unless ONE is in scope — then that group IS the
+ * section (Externos is Honorarios médicos, and Planta narrowed to Afiliados is Afiliados), and a level
+ * with a single bar that only repeats the one just clicked is a step with nothing to show.
+ */
+function sectionNext(section: PersonnelSectionId, scope: readonly PersonnelGroupId[]): SharesPath {
+  const groups = groupsOfSection(section).filter((group) => scope.includes(group.id));
+  return groups.length === 1 ? { section, group: groups[0].id } : { section, group: null };
+}
+
+/** A bar's figure in ONE year: the amount and its share of that year's ventas over the span. */
+interface SharesFigure {
+  total: number;
+  share: number | null;
+}
+
+/**
+ * The bars of the level `path` names, and the figure each one has in each PyG year.
+ *
+ * The share is always the entity's total over the span DIVIDED BY THE VENTAS OF THE SAME SPAN — a
+ * section is the sum of its marked groups over the year's raíz 4, which is `narrowedSection` measured
+ * by `shareOf`, so «Planta» here and «Planta» in the tile are the same number. A typed exercise has no
+ * ventas and therefore no share: it is not a bar, and the note says so.
+ */
+function sharesLevel(
+  input: PersonnelCardsInput,
+  path: SharesPath,
+): {
+  entries: SharesEntry[];
+  figures: Map<string, Map<number, SharesFigure>>;
+  parent: { label: string; figures: Map<number, SharesFigure> };
+} {
   const marked = new Set(input.groups);
-  const totals = new Map<string, ConceptTotal>();
-  const add = (id: string, label: string, total: number) => {
-    const current = totals.get(id);
-    totals.set(id, { id, label, total: (current?.total ?? 0) + total });
+  const scope = groupsInScope(input.groups);
+  const years = input.reading.years.filter((year) => year.covered && year.groups.length > 0);
+  const figures = new Map<string, Map<number, SharesFigure>>();
+  const put = (id: string, year: number, figure: SharesFigure | null) => {
+    if (figure === null) {
+      return;
+    }
+    const byYear = figures.get(id) ?? new Map<number, SharesFigure>();
+    byYear.set(year, figure);
+    figures.set(id, byYear);
   };
-  for (const year of input.reading.years) {
-    for (const group of year.groups) {
-      if (marked.size > 0 && !marked.has(group.group.id)) {
-        continue;
+  const parent = new Map<number, SharesFigure>();
+
+  if (path.section === null) {
+    const entries = PERSONNEL_SECTIONS.filter((section) =>
+      groupsOfSection(section.id).some((group) => scope.includes(group.id)),
+    ).map<SharesEntry>((section) => ({
+      id: section.id,
+      label: section.label,
+      next: sectionNext(section.id, scope),
+    }));
+    for (const year of years) {
+      let total = 0;
+      for (const entry of entries) {
+        const narrowed = narrowedSection(year, entry.id as PersonnelSectionId, marked);
+        if (narrowed) {
+          total += narrowed.total;
+          put(entry.id, year.year, {
+            total: narrowed.total,
+            share: shareOf(narrowed.total, year.revenue),
+          });
+        }
       }
-      for (const row of group.rows) {
-        add(row.concept.id, row.concept.label, row.total);
+      parent.set(year.year, { total, share: shareOf(total, year.revenue) });
+    }
+    return { entries, figures, parent: { label: "Total costo de personal", figures: parent } };
+  }
+
+  const section = PERSONNEL_SECTIONS.find((entry) => entry.id === path.section);
+  if (path.group === null) {
+    const groups = groupsOfSection(path.section).filter((group) => scope.includes(group.id));
+    const entries = groups.map<SharesEntry>((group) => ({
+      id: group.id,
+      label: group.label,
+      next: { section: group.section, group: group.id },
+    }));
+    for (const year of years) {
+      const narrowed = narrowedSection(year, path.section, marked);
+      if (narrowed) {
+        parent.set(year.year, {
+          total: narrowed.total,
+          share: shareOf(narrowed.total, year.revenue),
+        });
+      }
+      for (const group of year.groups) {
+        if (group.group.section === path.section && scope.includes(group.group.id)) {
+          put(group.group.id, year.year, { total: group.total, share: group.share });
+        }
       }
     }
-    // The typed lines are NOT narrowed by «Grupo»: a legacy exercise has no groups, so a mark that
-    // means nothing for it must not make it disappear — the grid's same rule.
-    for (const row of year.legacyRows) {
-      add(`legacy:${row.row.id}`, row.row.label, row.total);
+    return { entries, figures, parent: { label: section?.label ?? "", figures: parent } };
+  }
+
+  const group = PERSONNEL_GROUPS.find((entry) => entry.id === path.group);
+  const entries = conceptsOfGroup(path.group).map<SharesEntry>((concept) => ({
+    id: concept.id,
+    label: concept.label,
+    next: null,
+  }));
+  for (const year of years) {
+    const read = year.groups.find((entry) => entry.group.id === path.group);
+    if (!read) {
+      continue;
+    }
+    parent.set(year.year, { total: read.total, share: read.share });
+    for (const row of read.rows) {
+      put(row.concept.id, year.year, { total: row.total, share: row.share });
     }
   }
-  return [...totals.values()]
-    .filter((entry) => entry.total !== 0)
-    .sort((a, b) => b.total - a.total);
+  return { entries, figures, parent: { label: group?.label ?? "", figures: parent } };
 }
 
-function buildConceptsCard(input: PersonnelCardsInput): ChartCardSpec<ChartOption | Chart3DOption> {
-  const { period } = input;
-  const all = conceptTotals(input);
-  const grandTotal = all.reduce((sum, entry) => sum + entry.total, 0);
-  const drawn = all.slice(0, CONCEPT_SLICES);
-  const tail = all.slice(CONCEPT_SLICES);
-  const tailTotal = tail.reduce((sum, entry) => sum + entry.total, 0);
+function sharesCrumbs(path: SharesPath): SharesCrumb[] {
+  const crumbs: SharesCrumb[] = [{ label: "Total", path: SHARES_ROOT }];
+  if (path.section !== null) {
+    const section = PERSONNEL_SECTIONS.find((entry) => entry.id === path.section);
+    crumbs.push({
+      label: section?.label ?? path.section,
+      path: { section: path.section, group: null },
+    });
+  }
+  if (path.group !== null) {
+    const group = PERSONNEL_GROUPS.find((entry) => entry.id === path.group);
+    crumbs.push({ label: group?.label ?? path.group, path });
+  }
+  return crumbs;
+}
 
-  // The tail is FOLDED and never truncated: a chart whose bars do not add up to the total it is a
-  // breakdown of is exactly what makes a figure untrustworthy. The table twin lists every concept.
-  const bars = [
-    ...drawn,
-    ...(tail.length > 0
-      ? [{ id: "resto", label: `Otros ${tail.length} conceptos`, total: tailTotal }]
-      : []),
-  ];
+/**
+ * «% vs ventas por nivel»: every bar is the entity's total over the span as a percentage of the SAME
+ * span's ventas — the workbook's three percentage columns, read one level at a time. It is the one card
+ * whose bars are measured against ventas and not against the cost, and the one whose reading is
+ * navigated: a click on a bar opens what is inside it, and the crumbs walk back out.
+ *
+ * With ONE year the bars are the entities, each in its own colour; with SEVERAL every entity carries
+ * one bar per exercise, because two years' shares are compared side by side and never summed — a
+ * percentage of two different denominators has no sum.
+ */
+function buildSharesCard(input: PersonnelCardsInput): {
+  card: ChartCardSpec<ChartOption | Chart3DOption>;
+  entries: SharesEntry[];
+  crumbs: SharesCrumb[];
+} {
+  const path = resolveSharesPath(input.sharesPath, input.groups);
+  const { entries, figures, parent } = sharesLevel(input, path);
+  const years = input.reading.years
+    .filter((year) => year.covered && year.groups.length > 0)
+    .map((year) => year.year);
+  const typed = input.reading.years.filter((year) => year.covered && year.legacyRows.length > 0);
+  const crumbs = sharesCrumbs(path);
+  const level = crumbs[crumbs.length - 1].label;
+
+  const figureOf = (id: string, year: number): SharesFigure | null =>
+    figures.get(id)?.get(year) ?? null;
+  // Sections and groups wear their own entity colour. At the last level every bar is a different
+  // account, and painting all of them in the group's colour left nine bars nobody could tell apart:
+  // there each one takes its slot of the slice sequence, by position.
+  const colorOf = (entry: SharesEntry, index: number): string =>
+    path.group === null ? colorForPersonnel(entry.id) : colorForSliceSlot(index);
+  const drawn = entries.filter((entry) =>
+    years.some(
+      (year) => figureOf(entry.id, year)?.share !== null && figureOf(entry.id, year) !== null,
+    ),
+  );
+  const single = years.length === 1;
 
   const option: ChartOption | null =
-    bars.length === 0
+    drawn.length === 0
       ? null
       : {
           animationDuration: 300,
           textStyle: { fontFamily: CHART_FONT },
-          grid: { left: 8, right: 90, top: 6, bottom: 6, outerBoundsMode: "same" },
-          // Inverted so the largest sits on TOP, which is where a ranking is read from.
+          grid: { left: 8, right: 70, top: 6, bottom: single ? 6 : 28, outerBoundsMode: "same" },
           yAxis: categoryAxis(
-            bars.map((entry) => entry.label),
+            drawn.map((entry) => entry.label),
             { inverse: true },
           ),
-          xAxis: valueAxis(money),
-          legend: legendFor(false),
-          tooltip: itemTooltip(
-            (param) =>
-              `<div style="font-weight:600;margin-bottom:4px">${param.name}</div>` +
-              `<div><b>${moneyExact(Number(param.value))}</b> · ${
-                shareOf(Number(param.value), grandTotal) === null
-                  ? "—"
-                  : percent(shareOf(Number(param.value), grandTotal) as number)
-              } del costo</div>`,
-          ),
-          series: [
-            {
-              id: "concepts",
-              type: "bar",
-              data: bars.map((entry, index) => ({
-                value: entry.total,
+          xAxis: valueAxis(percent),
+          legend: legendFor(!single),
+          tooltip: itemTooltip((param) => {
+            const entry = drawn[param.dataIndex];
+            const year = single ? years[0] : Number(param.seriesName);
+            const figure = entry ? figureOf(entry.id, year) : null;
+            const body =
+              figure === null || figure.share === null
+                ? "Sin ventas en el tramo"
+                : `<b>${percent(figure.share)}</b> de ventas · ${moneyExact(figure.total)}`;
+            const hint = entry?.next
+              ? `<div style="color:${CHART_INK.muted}">Clic para abrir</div>`
+              : "";
+            return (
+              `<div style="font-weight:600;margin-bottom:4px">${param.name}${single ? "" : ` · ${year}`}</div>` +
+              `<div>${body}</div>${hint}`
+            );
+          }),
+          series: years.map((year) => ({
+            id: `shares-${year}`,
+            type: "bar",
+            name: String(year),
+            data: drawn.map((entry, index) => {
+              const figure = figureOf(entry.id, year);
+              return {
+                value: figure?.share ?? null,
                 itemStyle: {
-                  // The head of the ranking takes the saturated slice sequence; the folded tail is
-                  // NEUTRAL, because it is not one entity and must not read as the ninth.
-                  color: entry.id === "resto" ? CHART_NEUTRAL : colorForSliceSlot(index),
+                  color: single ? colorOf(entry, index) : yearColor(year, years),
                   borderRadius: ROUND_RIGHT,
                 },
-              })),
-              barMaxWidth: 22,
-              label: {
-                show: true,
-                position: "right",
-                distance: 8,
-                color: CHART_INK.muted,
-                fontSize: 11,
-                fontWeight: 600,
-                formatter: (param) => money(Number(param.value)),
-              },
-              labelLayout: { hideOverlap: true },
+              };
+            }),
+            // Thicker than the ranking's: this axis holds two to nine bars, never twenty-one, and a
+            // 22 px stripe in a 300 px card read as a rule rather than a figure.
+            barMaxWidth: 44,
+            label: {
+              show: true,
+              position: "right",
+              distance: 8,
+              color: CHART_INK.muted,
+              fontSize: 11,
+              fontWeight: 600,
+              formatter: (param) =>
+                param.value === null || param.value === undefined
+                  ? ""
+                  : percent(Number(param.value)),
             },
-          ],
+            labelLayout: { hideOverlap: true },
+          })),
         };
 
-  const rows: ChartTableRow[] = all.map((entry, index) => ({
+  const columns = single
+    ? ["Monto", "% vs ventas"]
+    : years.flatMap((year) => [`Monto ${year}`, `% vs ventas ${year}`]);
+  const valuesOf = (byYear: (year: number) => SharesFigure | null): (string | null)[] =>
+    years.flatMap((year) => {
+      const figure = byYear(year);
+      return [figure ? moneyExact(figure.total) : null, cell(figure?.share ?? null, percent)];
+    });
+  const rows: ChartTableRow[] = entries.map((entry, index) => ({
     id: entry.id,
     label: entry.label,
-    color: index < CONCEPT_SLICES ? colorForSliceSlot(index) : undefined,
-    values: [moneyExact(entry.total), cell(shareOf(entry.total, grandTotal), percent)],
+    color: colorOf(entry, index),
+    values: valuesOf((year) => figureOf(entry.id, year)),
   }));
   if (rows.length > 0) {
     rows.push({
-      id: "total",
-      label: "Total costo de personal",
+      id: "parent",
+      label: parent.label,
       emphasis: true,
-      values: [moneyExact(grandTotal), percent(100)],
+      values: valuesOf((year) => parent.figures.get(year) ?? null),
     });
   }
 
-  // The ranking standing up is `solid-bars`' own case: ONE row, and the colour belongs to the COLUMN
-  // because there it is the concept's identity and not the row's. Translated by slot, so a concept is
-  // the same hue here and in every other 3D card.
+  // On the stage: with ONE year a single row whose colour belongs to the COLUMN — the entity's, or the
+  // account's slot at the last level, exactly as flat. With several, one row per exercise in the order
+  // they arrive, because a year is looked for by its position and the height must not move it.
   const solid = solidBody(
-    bars.map((entry) => entry.label),
-    [
-      {
-        id: "concepts",
-        name: "Conceptos",
-        color: stageSliceColor(colorForSliceSlot(0)),
-        values: bars.map((entry) => entry.total),
-      },
-    ],
-    { value: moneyExact, axis: money },
+    drawn.map((entry) => entry.label),
+    years.map((year) => ({
+      id: `shares-${year}`,
+      name: String(year),
+      color: single ? stageSliceColor(colorForSliceSlot(0)) : stageColor(yearColor(year, years)),
+      values: drawn.map((entry) => figureOf(entry.id, year)?.share ?? null),
+    })),
+    { value: percent, axis: percent },
     {
-      colors: bars.map((entry, index) =>
-        entry.id === "resto"
-          ? stageColor(CHART_NEUTRAL)
+      order: single ? "peak" : "given",
+      colors: drawn.map((entry, index) =>
+        path.group === null
+          ? stageColor(colorOf(entry, index))
           : stageSliceColor(colorForSliceSlot(index)),
       ),
     },
   );
-  const asSolid = standing(input.solidViews?.concepts, solid);
+  const asSolid = standing(input.solidViews?.shares, solid);
+
+  const notes: string[] = [];
+  if (typed.length > 0) {
+    notes.push(
+      `${typed.map((year) => year.year).join(", ")} ${typed.length === 1 ? "es un ejercicio tipeado sin ventas y no se dibuja" : "son ejercicios tipeados sin ventas y no se dibujan"}.`,
+    );
+  }
+  if (path.section !== null && drawn.length > 0 && drawn.every((entry) => entry.next === null)) {
+    notes.push("Es el último nivel: cada barra es una cuenta del comparativo.");
+  }
 
   return {
-    id: "personnel-concepts",
-    title: "Composición por concepto",
-    subtitle: period,
-    option: asSolid ? solid : option,
-    table: { columns: ["Monto", "% del costo"], rows },
-    note: sentence(
-      tail.length > 0
-        ? `${tail.length} conceptos más suman ${moneyExact(tailTotal)} y se dibujan en una sola barra; la tabla los lista todos.`
-        : undefined,
-      asSolid,
-    ),
-    guide: GUIDE_CONCEPTS,
-    height: asSolid ? SOLID_BARS_HEIGHT : CONCEPTS_HEIGHT,
+    card: {
+      id: "personnel-shares",
+      title: "% vs ventas por nivel",
+      subtitle: `${input.period} · ${level}`,
+      option: asSolid ? solid : option,
+      table: { columns, rows },
+      note: sentence(notes.length > 0 ? notes.join(" ") : undefined, asSolid),
+      guide: GUIDE_SHARES,
+      height: asSolid ? SOLID_BARS_HEIGHT : SHARES_HEIGHT,
+    },
+    entries: drawn,
+    crumbs,
   };
 }
 
 export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards {
   const groups = buildGroupsCard(input);
+  const shares = buildSharesCard(input);
   return {
     sections: buildSectionsCard(input),
-    ratio: buildRatioCard(input),
     groups: groups.card,
-    concepts: buildConceptsCard(input),
+    shares: shares.card,
+    sharesEntries: shares.entries,
+    sharesCrumbs: shares.crumbs,
     skylineAvailable: groups.skylineAvailable,
   };
 }

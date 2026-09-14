@@ -118,8 +118,8 @@ export function hasAnyAmount(amounts: RevenueExternalAmounts): boolean {
  * `cards/`: the five builders all need it and so does the report, and having them import it from
  * `cards/index.ts` —which imports them— would be a cycle.
  *
- * The provider exposes it so the report and the Excel ask for the same cards with the same arguments
- * rather than recomposing them.
+ * The provider exposes it so the report asks for the same cards with the same arguments rather than
+ * recomposing them.
  */
 export interface RevenueCardsInput {
   /** The marked years with their series, ascending. */

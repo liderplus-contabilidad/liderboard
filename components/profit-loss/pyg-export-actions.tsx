@@ -1,8 +1,9 @@
 "use client";
 
-import { FilePlus2, FileSpreadsheet } from "lucide-react";
+import { FilePlus2, FileSpreadsheet, FileText } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { ExcelActions, type ExcelDownloadOption } from "@/components/ui/excel-actions";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import { pluralize } from "@/lib/format";
 import type { CenterLogos, EntityLogo } from "@/lib/logos";
 import { consolidatedCenterId } from "@/lib/profit-loss/consolidate";
@@ -11,21 +12,27 @@ import { CostCenterUploadModal } from "./cost-center-upload-modal";
 import { usePygData } from "./pyg-data-provider";
 
 /**
- * Excel actions for Profit and Loss. Integrates the provider and upload modal with `ExcelActions`,
- * which handles rendering, progress, and errors. Used in tabs (`ModuleTabs`) and empty states
- * (`PygEmptyState`) to upload or download files.
+ * PyG's wrapper over `ExportActions`: the provider and the upload modal wired to the one control,
+ * which handles rendering, progress and errors. Mounted in the tab bar (`ModuleTabs`) and in the
+ * empty state (`PygEmptyState`).
  *
- * The download menu includes options like «Excel completo» (entire workspace, re-uploadable) and
- * «Un mes en crudo» (latest loaded month in accounting system format). The latter is only
- * available if the workspace supports writing its format. Accepted formats are loaded
- * dynamically. In the CONSOLIDADO the file is instead the sum plus one sheet per piece it summed
- * — every (cliente · centro) that entered and the whole statement of each single-mode client.
+ * «Exportar» offers the Excels —«Excel completo» (entire workspace, re-uploadable) and «Un mes en
+ * crudo» (latest loaded month in the accounting system's format, only where the workspace's system
+ * can be written); in the CONSOLIDADO the one file is the sum plus one sheet per piece it summed—
+ * and the «Informe PDF», which is not a download: it opens the preview, and the print dialog is a
+ * step the preview announces rather than a surprise. The report covers the THREE tabs, so the menu
+ * is the same on all three; «Cargar Excel» and the `ⓘ` mount only where loading happens (`upload`).
  */
+const PygReportPreview = dynamic(
+  () => import("./report/pyg-report-preview").then((mod) => mod.PygReportPreview),
+  { ssr: false },
+);
+
 function withoutZeros(hide: boolean, description: string): string {
   return hide ? `${description}, sin las cuentas en cero` : description;
 }
 
-export function PygExcelActions() {
+export function PygExportActions({ upload = true }: { upload?: boolean }) {
   const {
     clients,
     activeClientId,
@@ -44,6 +51,7 @@ export function PygExcelActions() {
     hideZeroRows,
   } = usePygData();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const [acceptedFormats, setAcceptedFormats] = useState<{ id: string; label: string }[]>([]);
   const [writableSystems, setWritableSystems] = useState<string[] | null>(null);
 
@@ -96,7 +104,7 @@ export function PygExcelActions() {
   const severalYearsReason =
     "Hay varios años a la vista; elige uno para descargar un mes en crudo.";
 
-  const downloads = useMemo<ExcelDownloadOption[]>(() => {
+  const excelExports = useMemo<ExportOption[]>(() => {
     if (isConsolidated) {
       return [
         {
@@ -136,7 +144,7 @@ export function PygExcelActions() {
 
     if (mode === "multi") {
       const noMonthsReason = "Carga un mes primero.";
-      const options: ExcelDownloadOption[] = [
+      const options: ExportOption[] = [
         {
           id: "completo",
           title: "Excel completo",
@@ -217,7 +225,7 @@ export function PygExcelActions() {
     }
 
     const noMonthsReason = "Carga un mes primero.";
-    const options: ExcelDownloadOption[] = [
+    const options: ExportOption[] = [
       {
         id: "data",
         title: "Excel con tus datos",
@@ -307,29 +315,53 @@ export function PygExcelActions() {
     hideZeroRows,
   ]);
 
+  const exports = useMemo<ExportOption[]>(
+    () => [
+      ...excelExports,
+      {
+        id: "pdf",
+        title: "Informe PDF",
+        description:
+          "Vista previa para imprimir: un estado de resultados por vista y por año, con las gráficas",
+        icon: FileText,
+        iconClassName: "text-muted",
+        disabled: !dataset,
+        // Same sentence the Excels use: the missing step is the same one.
+        disabledReason: "Carga un Excel primero.",
+        run: () => setReportOpen(true),
+      },
+    ],
+    [excelExports, dataset],
+  );
+
   return (
     <>
-      <ExcelActions
-        upload={{
-          onClick: () => setUploadOpen(true),
-          disabled: activeClientId === null || isConsolidated,
-          disabledReason: isConsolidated
-            ? "El consolidado es la suma de todos los clientes. Abre uno para cargar datos."
-            : "Crea un cliente antes de cargar datos.",
-        }}
-        downloads={downloads}
-        info={{
-          title: "Archivos aceptados",
-          children:
-            acceptedFormats.length > 0 ? (
-              <>Se aceptan: {acceptedFormats.map((f) => f.label).join(", ")}.</>
-            ) : (
-              "Cargando los formatos aceptados…"
-            ),
-        }}
+      <ExportActions
+        {...(upload
+          ? {
+              upload: {
+                onClick: () => setUploadOpen(true),
+                disabled: activeClientId === null || isConsolidated,
+                disabledReason: isConsolidated
+                  ? "El consolidado es la suma de todos los clientes. Abre uno para cargar datos."
+                  : "Crea un cliente antes de cargar datos.",
+              },
+              info: {
+                title: "Archivos aceptados",
+                children:
+                  acceptedFormats.length > 0 ? (
+                    <>Se aceptan: {acceptedFormats.map((f) => f.label).join(", ")}.</>
+                  ) : (
+                    "Cargando los formatos aceptados…"
+                  ),
+              },
+            }
+          : {})}
+        exports={exports}
       />
 
       <CostCenterUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      {reportOpen && <PygReportPreview onClose={() => setReportOpen(false)} />}
     </>
   );
 }

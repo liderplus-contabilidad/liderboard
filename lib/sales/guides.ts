@@ -45,5 +45,5 @@ export const GUIDE_SALES_EVOLUTION: ChartGuide = {
     AS_TABLE,
   ],
   reading:
-    "Con un año el mes se parte por servicio, y eso se puede ver de dos formas: en «Skyline 3D» cada servicio es una fila que arranca en cero, para seguir hacia dónde va; en «Apilado» la columna se lee entera contra la línea de su total. Comparando años vuelve a una barra por año. Un mes que nunca cargaste no dibuja nada y lleva una raya en la tabla — no es un mes en cero.",
+    "Con un año el mes se parte por servicio, y eso se puede ver de dos formas: en «3D» cada servicio es una fila que arranca en cero, para seguir hacia dónde va; en «2D» la columna se lee entera contra la línea de su total. Comparando años vuelve a una barra por año. Un mes que nunca cargaste no dibuja nada y lleva una raya en la tabla — no es un mes en cero.",
 };

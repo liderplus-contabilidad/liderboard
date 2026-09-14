@@ -123,3 +123,38 @@ function sliceRows(rows: readonly DatosRow[], positions: readonly number[]): Dat
     ...(row.children ? { children: sliceRows(row.children, positions) } : {}),
   }));
 }
+
+/**
+ * The table's geometry, DECLARED rather than measured, because two things depend on knowing it
+ * before the browser lays anything out:
+ *
+ * - **The row window.** Datos mounts only the rows that fit the viewport (plus a margin) and pads
+ *   the rest with two spacer rows; the virtualizer turns a scroll offset into a row index by
+ *   dividing by this height. A row that measured differently from what was declared would put the
+ *   window a few rows off by the bottom of a long statement — so the row declares `DATOS_ROW_PX`
+ *   as its height, and the amount cells never wrap. 41 px is what a row measured before it was
+ *   declared (10 + 10 of padding, a 19.5 px line and the 1 px rule), rounded up so no content has
+ *   to shrink.
+ * - **Stable columns.** With rows entering and leaving, an automatic table layout would recompute
+ *   every column width on every scroll from whichever rows happen to be mounted, and the columns
+ *   would dance as a wider figure came into view. `table-layout: fixed` reads the widths ONCE, from
+ *   the `<colgroup>` the table declares with these constants.
+ *
+ * `DATOS_AMOUNT_COLUMN_PX` fits the widest figure the format realistically produces:
+ * «-$12,345,678.90» measures 103 px in the cell's 13 px semibold sans (canvas measurement,
+ * 2026-09-11), plus the cell's 16 + 16 px of padding. A nine-digit amount would overflow its cell
+ * rather than wrap it — the row's height is the invariant that matters.
+ */
+export const DATOS_ROW_PX = 41;
+export const DATOS_NAME_COLUMN_PX = 380;
+export const DATOS_AMOUNT_COLUMN_PX = 136;
+export const DATOS_DETAIL_COLUMN_PX = 62;
+
+/**
+ * The narrowest the table may be: its declared columns side by side. Below the container's width
+ * the columns stretch proportionally, as they did under the automatic layout; above it the
+ * container scrolls horizontally, as it already did with a single year on screen.
+ */
+export function datosTableMinWidth(amountColumns: number): number {
+  return DATOS_NAME_COLUMN_PX + amountColumns * DATOS_AMOUNT_COLUMN_PX + DATOS_DETAIL_COLUMN_PX;
+}

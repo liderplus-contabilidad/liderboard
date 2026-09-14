@@ -10,15 +10,17 @@ import type { SolidView } from "@/lib/charts/solid-bars";
 import { externalForClient } from "@/lib/revenue/db";
 import { resolveMonthlyRevenue } from "@/lib/revenue/derive";
 import type { RevenueExternalMonth } from "@/lib/revenue/types";
-import type { PersonnelGroupId } from "@/lib/personnel-cost/accounts";
+import type { PersonnelGroupId, PersonnelSectionId } from "@/lib/personnel-cost/accounts";
 import { PERSONNEL_ACCOUNT_CODES } from "@/lib/personnel-cost/accounts";
 import { canReadPersonnelCost } from "@/lib/personnel-cost/availability";
 import {
   buildPersonnelCards,
   DEFAULT_EVOLUTION_VIEW,
   type EvolutionView,
+  SHARES_ROOT,
   type PersonnelCards,
   type PersonnelCardsInput,
+  type SharesPath,
 } from "@/lib/personnel-cost/cards";
 import {
   deleteLegacyYear,
@@ -37,6 +39,8 @@ import {
   type PersonnelLegacySeries,
 } from "@/lib/personnel-cost/legacy";
 import { readPersonnelCost, type PersonnelCostReading } from "@/lib/personnel-cost/derive";
+import type { PersonnelCostBackup } from "@/lib/personnel-cost/export";
+import type { ParsedPersonnelCostBackup } from "@/lib/personnel-cost/upload";
 import {
   activeMarkCount,
   describeGroupScope,
@@ -48,6 +52,7 @@ import {
   withAllYears,
   withGroupsCleared,
   withGroupToggled,
+  withSectionToggled,
   withMonthsCleared,
   withMonthToggled,
   withYearToggled,
@@ -77,9 +82,21 @@ import { usePygData } from "../pyg-data-provider";
  * what lets the whole engine be tested without mounting anything, and it is why `derive.test.ts` can
  * reproduce the firm's own workbook from plain objects.
  */
+/** What an upload wrote and what it left alone, for the modal to say so. */
+export interface PersonnelCostImportOutcome {
+  /** Typed exercises written, ascending. */
+  legacyYears: number[];
+  /** Family years written, ascending. */
+  familyYears: number[];
+  /** Exercises the file carried for years the estado de resultados answers — NOT written. */
+  rejectedYears: number[];
+}
+
 interface PersonnelCostDataValue {
   /** The PyG client this belongs to; `null` with none open or in the consolidado. */
   clientId: string | null;
+  /** The user's label for the client — what the Excel's letterhead and filename carry. */
+  clientName: string | null;
   isConsolidated: boolean;
   /** Which upload strategy the open workspace came from — what the empty state NAMES. */
   sourceSystemId: string | null;
@@ -113,7 +130,37 @@ interface PersonnelCostDataValue {
     card: keyof NonNullable<PersonnelCardsInput["solidViews"]>,
     view: SolidView,
   ) => void;
+  /**
+   * The level «% vs ventas por nivel» is open at — held here like `evolutionView`, and for the same
+   * reason. What is stored is what the reader CLICKED; the card resolves it against the marks on read.
+   */
+  sharesPath: SharesPath;
+  setSharesPath: (path: SharesPath) => void;
+  /**
+   * Gráficos' grid: the comparativo of the MARKED years. Datos does not read it — see `datosGrid`.
+   */
   grid: PersonnelGrid;
+  /**
+   * **Datos reads the OPEN year, not the marks.** The strip of exercises over Datos opens one, and the
+   * table under it is that year's and only its own — the bar's «Año» is hidden on that tab, so a chip
+   * and a strip never say two different years over one table.
+   *
+   * The months are the bar's marks read through the OPEN year's universe: a year PyG answers offers
+   * the months it loaded, a typed year offers all twelve, because the month nobody has reached yet is
+   * exactly the cell about to be filled. One `rawFilters`, two universes: a mark that means nothing
+   * for the open year counts as none here and as itself in Gráficos, which is the house rule for an
+   * orphan mark. `datosGroupsAvailable` is false on a typed year — it has no groups to narrow.
+   */
+  datosUniverse: PersonnelCostUniverse;
+  datosFilters: PersonnelCostFilters;
+  /** The months Datos draws — the marks, or every month of `datosUniverse`. */
+  datosMonths: number[];
+  datosReading: PersonnelCostReading;
+  datosGrid: PersonnelGrid;
+  /** How Datos' reading is named — the open year over the resolved span. */
+  datosPeriodName: string;
+  datosGroupsAvailable: boolean;
+  toggleDatosMonth: (monthIndex: number) => void;
   /** Whether a row that moved nothing anywhere is held back — a control of the GRID's own header. */
   hideEmptyRows: boolean;
   setHideEmptyRows: (hide: boolean) => void;
@@ -129,6 +176,8 @@ interface PersonnelCostDataValue {
   toggleMonth: (monthIndex: number) => void;
   clearMonths: () => void;
   toggleGroup: (id: PersonnelGroupId) => void;
+  /** The other axis of the same narrowing — see `filters.ts`. */
+  toggleSection: (id: PersonnelSectionId) => void;
   clearGroups: () => void;
   /** Writes one month of the nómina de familia. `null` clears it. */
   saveFamily: (year: number, monthIndex: number, amount: number | null) => Promise<void>;
@@ -145,7 +194,12 @@ interface PersonnelCostDataValue {
    * and the comparison across the two is the whole reason this exists.
    */
   legacyYears: number[];
-  /** Which one the drawer is writing. Its own selection, independent of the bar's marks. */
+  /** The years the estado de resultados answers — what an upload never writes an exercise for. */
+  pygYears: ReadonlySet<number>;
+  /**
+   * The OPEN exercise: the year Datos shows and, when typed, the one the drawer writes. Its own
+   * selection, independent of the bar's marks, which Gráficos reads to compare.
+   */
   captureYear: number;
   setCaptureYear: (year: number) => void;
   /** The four series of `captureYear`, twelve slots each. */
@@ -162,6 +216,18 @@ interface PersonnelCostDataValue {
   captureFromPyg: boolean;
   addCaptureYear: (year: number) => void;
   removeCaptureYear: (year: number) => Promise<void>;
+  /**
+   * **What leaves and comes back through the Excel**: the typed exercises and the nómina de familia,
+   * exactly as stored. `null` where there is nothing to write — the download is then not offered.
+   */
+  backup: PersonnelCostBackup | null;
+  /**
+   * Writes a parsed «Excel con tus datos». A typed exercise REPLACES its year whole and a family row
+   * its year, the paste's own rule; an exercise of a year PyG answers is NOT written and comes back
+   * in `rejectedYears`, because the estado de resultados is the stronger claim and this module never
+   * writes over it.
+   */
+  importBackup: (parsed: ParsedPersonnelCostBackup) => Promise<PersonnelCostImportOutcome>;
   /** How many months of a typed year carry something — what the drawer's list shows. */
   typedMonthsIn: (year: number) => number;
   /** Writes ONE month of the open typed year. */
@@ -179,8 +245,15 @@ const NO_LEGACY: PersonnelLegacyMonth[] = [];
 const NO_EXTERNAL: RevenueExternalMonth[] = [];
 
 export function PersonnelCostDataProvider({ children }: { children: ReactNode }) {
-  const { activeClientId, isConsolidated, datasets, edits, loadedMonthsByYear, sourceSystemId } =
-    usePygData();
+  const {
+    activeClientId,
+    activeClient,
+    isConsolidated,
+    datasets,
+    edits,
+    loadedMonthsByYear,
+    sourceSystemId,
+  } = usePygData();
   const [rawFilters, setRawFilters] = useState<PersonnelCostFilters>(emptyFilters);
   const [hideEmptyRows, setHideEmptyRows] = useState(false);
   const [evolutionView, setEvolutionView] = useState<EvolutionView>(DEFAULT_EVOLUTION_VIEW);
@@ -190,6 +263,7 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
       setSolidViews((current) => ({ ...current, [card]: view })),
     [],
   );
+  const [sharesPath, setSharesPath] = useState<SharesPath>(SHARES_ROOT);
 
   const canRead = canReadPersonnelCost({ sourceSystemId, isConsolidated });
   // The capture writes into a REAL client and never into the consolidado, so the partition it uses is
@@ -390,8 +464,15 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   }, [inputs, filters.years, months]);
 
   const cardsInput = useMemo<PersonnelCardsInput>(
-    () => ({ reading, groups: filters.groups, period: periodName, evolutionView, solidViews }),
-    [reading, filters.groups, periodName, evolutionView, solidViews],
+    () => ({
+      reading,
+      groups: filters.groups,
+      period: periodName,
+      evolutionView,
+      solidViews,
+      sharesPath,
+    }),
+    [reading, filters.groups, periodName, evolutionView, solidViews, sharesPath],
   );
   const cards = useMemo(() => buildPersonnelCards(cardsInput), [cardsInput]);
   const grid = useMemo(
@@ -415,6 +496,10 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
   const toggleGroup = useCallback(
     (id: PersonnelGroupId) => setRawFilters((current) => withGroupToggled(current, id)),
+    [],
+  );
+  const toggleSection = useCallback(
+    (id: PersonnelSectionId) => setRawFilters((current) => withSectionToggled(current, id)),
     [],
   );
   const clearGroups = useCallback(() => setRawFilters(withGroupsCleared), []);
@@ -449,19 +534,65 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   );
   const [captureYearRaw, setCaptureYear] = useState<number | null>(null);
   /**
-   * Which year the drawer writes: the one picked, and otherwise the LAST typed one — or the year
-   * before the earliest exercise there is, which is where somebody filling in history starts.
+   * Which year is open: the one picked, and otherwise the MOST RECENT exercise there is — Datos opens
+   * on it, and that is the year a reader comes for. With no exercise at all, the year before this one:
+   * where somebody filling in history starts.
    */
   const captureYear = useMemo(() => {
     if (captureYearRaw !== null) {
       return captureYearRaw;
     }
+    if (inputs.length > 0) {
+      return inputs[inputs.length - 1].year;
+    }
     if (legacyYears.length > 0) {
       return legacyYears[legacyYears.length - 1];
     }
-    const earliest = inputs[0]?.year;
-    return earliest ? earliest - 1 : new Date().getFullYear() - 1;
+    return new Date().getFullYear() - 1;
   }, [captureYearRaw, legacyYears, inputs]);
+
+  // ── Datos ────────────────────────────────────────────────────────────────
+  const captureFromPyg = pygYears.has(captureYear);
+  // The open year's universe of months: what PyG loaded for it, or the whole year when it is typed.
+  const datosUniverse = useMemo<PersonnelCostUniverse>(() => {
+    if (!captureFromPyg) {
+      return { years, months: Array.from({ length: MONTHS_IN_YEAR }, (_, index) => index) };
+    }
+    const coverage = inputs.find((input) => input.year === captureYear)?.coverage ?? [];
+    return { years, months: [...coverage] };
+  }, [captureFromPyg, inputs, captureYear, years]);
+  // The same marks, pruned against THIS universe: `sanitizeFilters` and `selectedMonths` are the one
+  // translation of a mark into a span, so Datos and Gráficos cannot read a marked month two ways.
+  const datosFilters = useMemo(
+    () => sanitizeFilters(rawFilters, datosUniverse),
+    [rawFilters, datosUniverse],
+  );
+  const datosMonths = useMemo(
+    () => selectedMonths(datosFilters, datosUniverse),
+    [datosFilters, datosUniverse],
+  );
+  const datosReading = useMemo(
+    () =>
+      readPersonnelCost(
+        inputs.filter((input) => input.year === captureYear),
+        datosMonths,
+      ),
+    [inputs, captureYear, datosMonths],
+  );
+  const datosPeriodName = useMemo(
+    () =>
+      scopedPeriodLabel(describeGroupScope(datosFilters), periodLabel(datosMonths, [captureYear])),
+    [datosFilters, datosMonths, captureYear],
+  );
+  const datosGrid = useMemo(
+    () => buildPersonnelGrid(datosReading, { groups: datosFilters.groups, hideEmptyRows }),
+    [datosReading, datosFilters.groups, hideEmptyRows],
+  );
+  const toggleDatosMonth = useCallback(
+    (monthIndex: number) =>
+      setRawFilters((current) => withMonthToggled(current, monthIndex, datosUniverse.months)),
+    [datosUniverse.months],
+  );
 
   const captureSeries = useMemo(
     () => legacyByYear.get(captureYear) ?? emptyLegacySeries(),
@@ -498,6 +629,72 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     },
     [clientId, captureYear],
   );
+  // ── The Excel ────────────────────────────────────────────────────────────
+  const clientName = clientId ? (activeClient?.name ?? null) : null;
+  const backup = useMemo<PersonnelCostBackup | null>(() => {
+    if (legacyByYear.size === 0 && familyByYear.size === 0) {
+      return null;
+    }
+    return {
+      clientName: clientName ?? "Cliente",
+      legacy: [...legacyByYear].map(([year, series]) => ({
+        year,
+        series,
+        // The divisor as the screen resolves it, so the file's percentages can be checked by hand.
+        revenue: resolveMonthlyRevenue(
+          [...(inputs.find((input) => input.year === year && !input.legacy)?.revenue ?? [])],
+          manualRevenueByYear.get(year) ?? [],
+        ),
+      })),
+      family: [...familyByYear].map(([year, amounts]) => ({ year, amounts })),
+    };
+  }, [legacyByYear, familyByYear, clientName, inputs, manualRevenueByYear]);
+
+  const importBackup = useCallback(
+    async (parsed: ParsedPersonnelCostBackup): Promise<PersonnelCostImportOutcome> => {
+      const outcome: PersonnelCostImportOutcome = {
+        legacyYears: [],
+        familyYears: [],
+        rejectedYears: [],
+      };
+      if (!clientId || !canRead) {
+        return outcome;
+      }
+      for (const exercise of parsed.legacy) {
+        if (pygYears.has(exercise.year)) {
+          outcome.rejectedYears.push(exercise.year);
+          continue;
+        }
+        // All twelve months, `null` where the file is blank: `saveLegacyMonths` deletes those rows,
+        // which is what makes the file REPLACE the year instead of patching it.
+        await saveLegacyMonths(
+          clientId,
+          exercise.year,
+          Array.from({ length: MONTHS_IN_YEAR }, (_, monthIndex) => ({
+            monthIndex,
+            amounts: Object.fromEntries(
+              PERSONNEL_LEGACY_COST_ROWS.map((row) => [
+                row.id,
+                exercise.series[row.id][monthIndex],
+              ]),
+            ) as PersonnelLegacyAmounts,
+          })),
+        );
+        outcome.legacyYears.push(exercise.year);
+      }
+      for (const entry of parsed.family) {
+        await saveFamilyMonths(
+          clientId,
+          entry.year,
+          entry.amounts.map((amount, monthIndex) => ({ monthIndex, amount })),
+        );
+        outcome.familyYears.push(entry.year);
+      }
+      return outcome;
+    },
+    [clientId, canRead, pygYears],
+  );
+
   const removeCaptureYear = useCallback(
     async (year: number) => {
       if (!clientId) {
@@ -511,6 +708,7 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
 
   const value: PersonnelCostDataValue = {
     clientId,
+    clientName,
     isConsolidated,
     sourceSystemId,
     canRead,
@@ -525,7 +723,17 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     setEvolutionView,
     solidViews,
     setSolidView,
+    sharesPath,
+    setSharesPath,
     grid,
+    datosUniverse,
+    datosFilters,
+    datosMonths,
+    datosReading,
+    datosGrid,
+    datosPeriodName,
+    datosGroupsAvailable: datosReading.years.some((year) => year.groups.length > 0),
+    toggleDatosMonth,
     hideEmptyRows,
     setHideEmptyRows,
     markCount: activeMarkCount(filters),
@@ -535,17 +743,21 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     toggleMonth,
     clearMonths,
     toggleGroup,
+    toggleSection,
     clearGroups,
     saveFamily,
     saveFamilyBlock,
     legacyYears,
+    pygYears,
     captureYear,
     setCaptureYear: (year: number) => setCaptureYear(year),
     captureSeries,
     captureRevenue,
-    captureFromPyg: pygYears.has(captureYear),
+    captureFromPyg,
     addCaptureYear: (year: number) => setCaptureYear(year),
     removeCaptureYear,
+    backup,
+    importBackup,
     typedMonthsIn,
     saveLegacy,
     saveLegacyBlock,

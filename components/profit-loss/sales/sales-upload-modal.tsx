@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import { cn } from "@/lib/cn";
-import { MONTHS_FULL_ES } from "@/lib/date";
+import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { formatNumber } from "@/lib/format";
 import {
   describeSalesIdentityClash,
@@ -18,21 +18,39 @@ import { useSalesData } from "./sales-data-provider";
 
 interface StagedFile {
   fileName: string;
-  month?: ParsedSalesMonth;
+  /** One for the accounting system's report; one per sheet for the app's own download. */
+  months?: ParsedSalesMonth[];
   badge: string;
   error?: string;
 }
 
+/** What a file brought, in one line: the period —one month, or the first and the last— and the
+ *  count of lines. */
+function stagedBadge(months: readonly ParsedSalesMonth[]): string {
+  const lines = formatNumber(months.reduce((total, month) => total + month.lines.length, 0));
+  if (months.length === 1) {
+    const [month] = months;
+    return `${MONTHS_FULL_ES[month.monthIndex]} ${month.year} · ${lines} líneas`;
+  }
+  const sorted = [...months].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  return (
+    `${MONTHS_SHORT_ES[first.monthIndex]} ${first.year} – ${MONTHS_SHORT_ES[last.monthIndex]} ` +
+    `${last.year} · ${months.length} meses · ${lines} líneas`
+  );
+}
+
 /**
  * The sales upload modal, with the shape of PyG's: each file is PARSED on being dropped, listed with
- * the month it declared —or with its own error— and can be removed one by one **before anything is
- * written**. An invalid file does not drag the rest down, which is the entire reason the upload is in
- * two phases.
+ * the months it declared —one, or one per sheet for the app's own download— or with its own error,
+ * and can be removed one by one **before anything is written**. An invalid file does not drag the
+ * rest down, which is the entire reason the upload is in two phases.
  *
  * What is checked at the BATCH level, and not per file, are two things that only make sense looking
- * at the whole: that a month is not repeated —two files of the same period would overwrite each other
- * and the user would not know which one was left— and that the company they declare does not
- * contradict the one the client already has.
+ * at the whole of the MONTHS, whichever file each came in: that a period is not repeated —two of
+ * the same month would overwrite each other and the user would not know which one was left— and
+ * that the company they declare does not contradict the one the client already has.
  */
 export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { clientName, months, importMonths } = useSalesData();
@@ -71,11 +89,7 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
         try {
           const result = parseSalesWorkbook(await file.arrayBuffer());
           return result.ok
-            ? {
-                fileName: file.name,
-                month: result.month,
-                badge: `${MONTHS_FULL_ES[result.month.monthIndex]} ${result.month.year} · ${formatNumber(result.month.lines.length)} líneas`,
-              }
+            ? { fileName: file.name, months: result.months, badge: stagedBadge(result.months) }
             : { fileName: file.name, badge: "No válido", error: result.message };
         } catch {
           return {
@@ -89,20 +103,16 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     setFiles((previous) => [...previous, ...staged]);
   }, []);
 
-  const valid = useMemo(
-    () =>
-      files.map((file) => file.month).filter((month): month is ParsedSalesMonth => Boolean(month)),
-    [files],
-  );
+  const valid = useMemo(() => files.flatMap((file) => file.months ?? []), [files]);
 
-  /** Two files of the same period would overwrite each other in silence, and the user would not know
-   *  which one was left. */
+  /** Two months of the same period —from two files, or one file and a sheet of another— would
+   *  overwrite each other in silence, and the user would not know which one was left. */
   const duplicate = useMemo(() => {
     const seen = new Set<string>();
     for (const month of valid) {
       const key = `${month.year}-${month.monthIndex}`;
       if (seen.has(key)) {
-        return `Hay dos archivos del mismo periodo (${MONTHS_FULL_ES[month.monthIndex]} ${month.year}). Quita uno: la carga escribiría dos veces el mismo mes.`;
+        return `El mismo periodo (${MONTHS_FULL_ES[month.monthIndex]} ${month.year}) llega dos veces. Quita uno de los archivos: la carga escribiría dos veces el mismo mes.`;
       }
       seen.add(key);
     }
@@ -214,8 +224,9 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                   {/* The file's name plays NO part: the month is declared by the report itself, so
                       renaming it cannot change where it lands. */}
                   <span className="text-[11.5px] text-faint">
-                    El reporte «Venta de Servicios por FACTURA», un archivo por mes (.xls / .xlsx).
-                    El periodo se lee del propio reporte, no del nombre del archivo.
+                    El reporte «Venta de Servicios por FACTURA», un archivo por mes (.xls / .xlsx),
+                    o el «Excel con tus datos» descargado de aquí, con una hoja por mes. El periodo
+                    se lee del propio reporte, no del nombre del archivo.
                   </span>
                 </button>
                 <input
@@ -307,9 +318,7 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                 >
                   {busy && <Loader2 size={14} className="animate-spin" />}
                   Cargar{" "}
-                  {valid.length > 0
-                    ? `${valid.length} archivo${valid.length === 1 ? "" : "s"}`
-                    : ""}
+                  {valid.length > 0 ? `${valid.length} mes${valid.length === 1 ? "" : "es"}` : ""}
                 </button>
               </>
             )}

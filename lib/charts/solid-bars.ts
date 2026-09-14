@@ -54,11 +54,11 @@ export const SCREEN_SOLID_VIEW: SolidView = "plano";
  *
  * It lives beside the type and not in each view because it is the SAME control four screens over:
  * three copies of a two-entry array is three chances for one of them to say «3D» while the others
- * say «Sólido 3D», and a reader who learns the switch on one card has to learn it again on the next.
+ * say «3D», and a reader who learns the switch on one card has to learn it again on the next.
  */
 export const SOLID_VIEW_OPTIONS: { value: SolidView; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "solido", label: "Sólido 3D" },
+  { value: "plano", label: "2D" },
+  { value: "solido", label: "3D" },
 ];
 
 /** Past this many characters a label runs into the box; the tooltip carries the name whole. */

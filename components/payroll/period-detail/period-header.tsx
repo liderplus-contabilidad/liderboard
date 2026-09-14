@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  ArrowLeft,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Dropdown, DropdownPanel, useDropdown } from "@/components/ui/dropdown";
@@ -16,12 +8,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import type { PayrollPeriodFinancials } from "@/lib/payroll/period-detail";
-import { PAYSLIP_ZIP_LABEL } from "@/lib/payroll/payslip/download";
 import { periodLongLabel, sortPeriodsDesc } from "@/lib/payroll/periods";
 import type { PayrollPeriod } from "@/lib/payroll/types";
-
-/** The download needs a nómina: with no employees there is no payslip to issue. */
-const EMPTY_ROSTER_REASON = "El período todavía no tiene empleados";
 
 /** An arrow's box and the selector's share height and radius: the three pieces form a single período
  *  control, and one of a different size would split it in two. */
@@ -36,12 +24,6 @@ interface PeriodHeaderProps {
   employeeCount: number;
   financials: PayrollPeriodFinancials | undefined;
   onDelete: () => void;
-  /** Downloads the payslips of the whole nómina: one PDF per employee, in a .zip. */
-  onDownloadPayslips: () => void;
-  /** While `pdf-lib` loads and one PDF per employee is assembled. With nóminas of thirty employees
-   *  that is a few tenths of a second: without the notice, the button looks unresponsive and gets
-   *  pressed again. */
-  downloading: boolean;
 }
 
 /**
@@ -52,6 +34,9 @@ interface PeriodHeaderProps {
  * does while reviewing a nómina, and jumping to a distant month is what one does on coming back to it
  * weeks later. With only the dropdown, advancing one month costs two clicks; with only the arrows,
  * going from January to December costs eleven.
+ *
+ * Its one action is «Eliminar período». The período's files —the rol in Excel and the payslips in
+ * PDF— leave through «Exportar» in the tab bar, next to «Cargar», like every other module's.
  */
 export function PeriodHeader({
   period,
@@ -61,10 +46,7 @@ export function PeriodHeader({
   employeeCount,
   financials,
   onDelete,
-  onDownloadPayslips,
-  downloading,
 }: PeriodHeaderProps) {
-  const empty = employeeCount === 0;
   return (
     <div className="mb-5">
       <Link
@@ -89,29 +71,15 @@ export function PeriodHeader({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2.5">
-          <Button variant="danger" size="toolbar" icon={<Trash2 size={15} />} onClick={onDelete}>
-            Eliminar período
-          </Button>
-          {/* The reason goes in a tooltip, not in a pill: the pill is `ExcelActions`' convention for
-              the UPLOAD button, where what is missing is the previous step of the whole module and it
-              has to be seen without pointing. Here what is missing is this período's nómina, and
-              shouting it next to the title would steal the período's place.
-              It goes here and not inside `PayrollExcelActions` because that primitive renders «Cargar
-              Excel · Descargar Excel · ⓘ» and its shape is derived from how many EXCEL downloads it
-              receives: a PDF inside would force it to stop speaking of Excel in all three modules. */}
-          <span title={empty ? EMPTY_ROSTER_REASON : undefined}>
-            <Button
-              variant="secondary"
-              size="toolbar"
-              disabled={empty || downloading}
-              icon={<FileText size={15} />}
-              onClick={onDownloadPayslips}
-            >
-              {downloading ? "Generando…" : PAYSLIP_ZIP_LABEL}
-            </Button>
-          </span>
-        </div>
+        <Button
+          variant="danger"
+          size="toolbar"
+          icon={<Trash2 size={15} />}
+          className="shrink-0"
+          onClick={onDelete}
+        >
+          Eliminar período
+        </Button>
       </div>
     </div>
   );

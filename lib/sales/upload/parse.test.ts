@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseSalesGrid } from "./parse";
+import { parseSalesGrid, parseSalesWorkbook } from "./parse";
 import {
   foreignGrid,
   salesGrid,
   salesGridShifted,
   salesGridWithRange,
   salesGridWithTextAmounts,
+  salesWorkbook,
 } from "./parse.fixtures";
 import type { Cell } from "@/lib/excel/workbook";
 
@@ -170,5 +171,47 @@ describe("el cuadre contra el total del archivo", () => {
 describe("la empresa", () => {
   it("se lee la razón social y no el título ni la paginación", () => {
     expect(ok(salesGrid()).companyName).toBe("CLINICA DE PRUEBA S.A.");
+  });
+});
+
+describe("un libro de varias hojas", () => {
+  it("una sola hoja es un solo mes, como el reporte del sistema contable", () => {
+    const result = parseSalesWorkbook(salesWorkbook([{ name: "Hoja1", grid: salesGrid() }]));
+    expect(result.ok && result.months).toEqual([ok(salesGrid())]);
+  });
+
+  it("cada hoja es un mes, en el orden de las hojas", () => {
+    const may = salesGridWithRange("01/05/2026", "31/05/2026");
+    const result = parseSalesWorkbook(
+      salesWorkbook([
+        { name: "Mayo 2026", grid: may },
+        { name: "Abril 2026", grid: salesGrid() },
+      ]),
+    );
+    expect(result.ok && result.months.map((month) => month.monthIndex)).toEqual([4, 3]);
+  });
+
+  it("una hoja inválida rechaza el archivo NOMBRANDO la hoja", () => {
+    const result = parseSalesWorkbook(
+      salesWorkbook([
+        { name: "Abril 2026", grid: salesGrid() },
+        { name: "Resumen", grid: foreignGrid() },
+      ]),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toContain("«Resumen»");
+    expect(result.ok === false && result.message).toContain("VENTA TOTAL");
+  });
+
+  it("dos hojas del mismo periodo rechazan el archivo nombrándolo", () => {
+    const result = parseSalesWorkbook(
+      salesWorkbook([
+        { name: "Abril", grid: salesGrid() },
+        { name: "Abril (2)", grid: salesGrid() },
+      ]),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toContain("abril 2026");
+    expect(result.ok === false && result.message).toContain("«Abril (2)»");
   });
 });

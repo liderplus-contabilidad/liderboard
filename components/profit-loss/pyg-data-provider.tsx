@@ -80,6 +80,7 @@ import {
   withPresetSelected,
   withPeriodsCleared,
   withPeriodToggled,
+  withAllYears,
   withYearsCleared,
   withYearToggled,
   type FilterView,
@@ -319,6 +320,11 @@ interface PygDataValue {
   toggleCenter: (centerId: string) => void;
   /** Marks or unmarks a client of the consolidado. None marked = all of them. */
   toggleClient: (clientId: string) => void;
+  /**
+   * Adds or removes a year OVER what is on screen (`visibleYears`), not over the raw marks: with
+   * no mark the bar's checkboxes already show the resolved year, so marking a second one must ADD
+   * to it. Unmarking the only visible year resolves right back — there is never «no year».
+   */
   toggleYear: (year: number) => void;
   togglePeriod: (period: PeriodSlot) => void;
   /** Picks (or removes, if it was already there) a preset view; picking it clears the account marks. */
@@ -332,7 +338,13 @@ interface PygDataValue {
   clearPreset: () => void;
   /** Each dropdown's own "Quitar selección" footer button. */
   clearCodes: () => void;
+  /** «Quitar todo»'s half for years: back to the most recent one, not to all of them. */
   clearYears: () => void;
+  /**
+   * «Todos los años» — MARKS every loaded year. It populates the list instead of emptying it
+   * because an empty list resolves to the most recent year (`resolveVisibleYears`).
+   */
+  selectAllYears: () => void;
   /** "Todos (Consolidado)" — clears only the center marks. */
   clearCenters: () => void;
   /** «Todos los clientes» — goes back to summing them all. */
@@ -667,9 +679,9 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   const toggleYear = useCallback(
     (year: number) => {
-      setRawFilters(withYearToggled(filters, year, loadedYears));
+      setRawFilters(withYearToggled({ ...filters, years: visibleYears }, year, loadedYears));
     },
-    [filters, loadedYears],
+    [filters, visibleYears, loadedYears],
   );
 
   const togglePeriod = useCallback(
@@ -741,6 +753,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   const clearCenters = useCallback(() => setRawFilters(withCentersCleared(filters)), [filters]);
   const clearClients = useCallback(() => setRawFilters(withClientsCleared(filters)), [filters]);
   const clearYears = useCallback(() => setRawFilters(withYearsCleared(filters)), [filters]);
+  const selectAllYears = useCallback(
+    () => setRawFilters(withAllYears(filters, loadedYears)),
+    [filters, loadedYears],
+  );
   const clearPeriods = useCallback(() => setRawFilters(withPeriodsCleared(filters)), [filters]);
   const clearFilters = useCallback(() => setRawFilters(clearAllFilters()), []);
 
@@ -1072,6 +1088,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       clearCenters,
       clearClients,
       clearYears,
+      selectAllYears,
       clearPeriods,
       clearFilters,
       canEdit,
@@ -1134,6 +1151,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       clearCenters,
       clearClients,
       clearYears,
+      selectAllYears,
       clearPeriods,
       clearFilters,
       canEdit,

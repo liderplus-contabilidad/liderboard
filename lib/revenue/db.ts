@@ -117,6 +117,46 @@ export async function saveExternalMonths(
 }
 
 /**
+ * Several WHOLE years in a SINGLE transaction — what the Excel of «Datos registrados» writes back.
+ *
+ * Each year the file names is REPLACED: its stored rows go and what the file says lands, month by
+ * month under the same emptiness rule (`hasAnyAmount` → put, otherwise nothing). Years the file does
+ * not name are not touched, which is why the delete is bounded by `[clientId+year]` and never by the
+ * client alone.
+ *
+ * One transaction for all the years and not one per year: a file of five years written as five
+ * commits would, on a failure halfway, leave the base in a state that is neither what it was nor what
+ * the file says — and between two of them `useLiveQuery` would paint a year empty for a frame.
+ */
+export async function replaceExternalYears(
+  clientId: string,
+  years: readonly { year: number; months: readonly RevenueExternalAmounts[] }[],
+): Promise<void> {
+  const toPut: RevenueExternalMonth[] = [];
+  for (const { year, months } of years) {
+    months.forEach((amounts, monthIndex) => {
+      if (hasAnyAmount(amounts)) {
+        toPut.push({
+          id: revenueMonthId(clientId, year, monthIndex),
+          clientId,
+          year,
+          monthIndex,
+          ...amounts,
+        });
+      }
+    });
+  }
+  await db.transaction("rw", db.external, async () => {
+    for (const { year } of years) {
+      await db.external.where("[clientId+year]").equals([clientId, year]).delete();
+    }
+    if (toPut.length > 0) {
+      await db.external.bulkPut(toPut);
+    }
+  });
+}
+
+/**
  * Every stored month of ONE year of ONE client — what «quitar año» erases.
  *
  * Bounded by the compound index and never by the year alone: `[clientId+year]` is exactly why that

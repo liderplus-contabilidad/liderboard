@@ -13,10 +13,14 @@ import {
   type PersonnelLegacySeries,
 } from "@/lib/personnel-cost/legacy";
 import { shareOf } from "@/lib/personnel-cost/derive";
-import { MONTHS_IN_YEAR } from "@/lib/personnel-cost/types";
 
 interface PersonnelCostCaptureGridProps {
   series: PersonnelLegacySeries;
+  /**
+   * The months DRAWN, ascending: all twelve, or the ones the bar's «Mes» marks. Totals and shares are
+   * of these months only, so the figure at the end of a row is the figure of the columns beside it.
+   */
+  months: readonly number[];
   /**
    * The year's VENTAS as the app resolves them — raíz 4 where the estado de resultados has the month,
    * «Reportería de ingresos» where it does not. Read and never written here: this table shows the
@@ -31,13 +35,11 @@ interface PersonnelCostCaptureGridProps {
   ) => void;
 }
 
-const MONTHS = Array.from({ length: MONTHS_IN_YEAR }, (_, index) => index);
-
 /** The rows a paste can land on, in the order they are DRAWN. */
 const ROW_IDS: readonly PersonnelLegacyRowId[] = PERSONNEL_LEGACY_COST_ROWS.map((row) => row.id);
 
 /**
- * The old sheet, as it was: **four fixed rows and twelve fixed columns**.
+ * The old sheet, as it was: **four fixed rows and a column per month** — twelve, or the ones «Mes» marks.
  *
  * It is TRANSPOSED against `RevenueCaptureGrid` —there the months are the rows— and that is not a
  * style choice: this table exists to be filled by copying out of the workbook it replaces, and that
@@ -45,8 +47,10 @@ const ROW_IDS: readonly PersonnelLegacyRowId[] = PERSONNEL_LEGACY_COST_ROWS.map(
  * has to find twelve cells lying the way they lie in their own file, or every paste needs transposing
  * by hand first.
  *
- * Fixed rows and columns because the YEAR is the thing being written: a month nobody has reached yet
- * is exactly the cell the user is about to fill, and hiding it would hide the form.
+ * Fixed rows, and every month of the year unless the bar's «Mes» marks some: the YEAR is the thing
+ * being written, and a month nobody has reached yet is exactly the cell the user is about to fill.
+ * The mark narrows what is drawn, the way it narrows the comparativo, and it narrows the paste with
+ * it — a block never writes into a column that is not on screen.
  *
  * **It saves on leaving the cell**, with no «Guardar» button — Datos' cell editor, Ocupaciones' daily
  * grid and Ingresos' capture, all the same gesture. A save button would be a second truth about
@@ -63,6 +67,7 @@ const ROW_IDS: readonly PersonnelLegacyRowId[] = PERSONNEL_LEGACY_COST_ROWS.map(
  */
 export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
   series,
+  months,
   revenue: revenueSeries,
   onCommit,
   onPasteMonths,
@@ -94,6 +99,9 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
 
       const anchorMonth = Number(cell.dataset.month);
       const anchorRow = Number(cell.dataset.row);
+      // The block walks the DRAWN columns from the anchor, not the calendar: with «Mes» marking three
+      // months, a row of three figures lands on those three and nothing is written behind the filter.
+      const anchorColumn = months.indexOf(anchorMonth);
 
       // The block is resolved into whole MONTHS because `db.ts` stores a month and not a cell: the
       // lines a paste does not reach have to travel unchanged or they would be blanked.
@@ -120,8 +128,8 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
           return;
         }
         line.forEach((value, columnOffset) => {
-          const month = anchorMonth + columnOffset;
-          if (month >= MONTHS_IN_YEAR || value === undefined) {
+          const month = months[anchorColumn + columnOffset];
+          if (month === undefined || value === undefined) {
             // `undefined` is «no pude leer esto» and leaves the target alone — `parsePastedGrid`'s
             // own rule, which is what stops a stray word blanking the month it lands on.
             return;
@@ -136,18 +144,20 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
           .map(([monthIndex, amounts]) => ({ monthIndex, amounts })),
       );
     },
-    [series, onPasteMonths],
+    [series, months, onPasteMonths],
   );
 
   const total = (row: PersonnelLegacyRowId) => {
-    const values = series[row].filter((value): value is number => value !== null);
+    const values = months
+      .map((month) => series[row][month])
+      .filter((value): value is number => value !== null);
     return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
   };
 
-  // The year's denominator, and `shareOf` is the module's ONE definition of a share: `null` where no
+  // The span's denominator, and `shareOf` is the module's ONE definition of a share: `null` where no
   // ventas are known anywhere, which reads «–» and never «0 %» — a zero would claim the cost was
   // nothing.
-  const revenue = revenueSeries.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  const revenue = months.reduce<number>((sum, month) => sum + (revenueSeries[month] ?? 0), 0);
   const share = (row: PersonnelLegacyRowId) => {
     const amount = total(row);
     return amount === null ? null : shareOf(amount, revenue);
@@ -162,7 +172,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
             <th className="sticky left-0 z-10 bg-surface-header px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
               Concepto
             </th>
-            {MONTHS.map((month) => (
+            {months.map((month) => (
               <th
                 key={month}
                 className="px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.5px] text-faint"
@@ -187,7 +197,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
               >
                 {row.label}
               </th>
-              {MONTHS.map((month) => (
+              {months.map((month) => (
                 <td key={month} className="p-0" data-month={month} data-row={rowIndex}>
                   <NumericInput
                     value={series[row.id][month]}
@@ -219,7 +229,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
             >
               Ventas
             </th>
-            {MONTHS.map((month) => (
+            {months.map((month) => (
               <td
                 key={month}
                 className="whitespace-nowrap px-2 py-1.5 text-right font-mono tabular-nums text-muted"

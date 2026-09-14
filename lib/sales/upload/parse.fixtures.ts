@@ -26,6 +26,7 @@
  * 57.5 % of the month and the remaining 946 add up to 97,540.32. They are the figures the firm
  * recognises from its own report, and the only external evidence that this reading means what it says.
  */
+import * as XLSX from "xlsx";
 import type { Cell } from "@/lib/excel/workbook";
 
 /** The real file's columns, so the fixture inherits its misalignment. */
@@ -113,4 +114,16 @@ export function foreignGrid(): Cell[][] {
     row({ 2: "CODIGO", 10: "NOMBRE DE LA CUENTA", 25: "SALDO" }),
     row({ 1: "4.", 7: "INGRESOS", 24: 1900 }),
   ];
+}
+
+/**
+ * A grid as a WORKBOOK, one sheet per entry, in the order given — the app's own download is exactly
+ * that, and the accounting system's report is the one-sheet case.
+ */
+export function salesWorkbook(sheets: readonly { name: string; grid: Cell[][] }[]): ArrayBuffer {
+  const workbook = XLSX.utils.book_new();
+  for (const { name, grid } of sheets) {
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(grid), name);
+  }
+  return XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 }

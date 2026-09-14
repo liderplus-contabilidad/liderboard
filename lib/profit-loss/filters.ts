@@ -23,7 +23,11 @@ export interface PygFilters {
    * year.
    */
   clientIds: string[];
-  /** Marked years. Marking none is not "no years": it is every year the workspace holds. */
+  /**
+   * Marked years, ascending. Empty resolves to the MOST RECENT loaded year on read
+   * (`resolveVisibleYears`), never to «all» — the declared exception Ventas and Costo de personal
+   * make, and for the same reason: Datos speaks in columns that carry their year.
+   */
   years: number[];
   /** Marked periods, year-less: a mark narrows the axis of EVERY visible year. */
   periods: PeriodSlot[];
@@ -177,8 +181,17 @@ export function withClientsCleared(filters: PygFilters): PygFilters {
   return { ...filters, clientIds: [] };
 }
 
+/** Empties the marks, which now means «back to the most recent year», not «all of them». */
 export function withYearsCleared(filters: PygFilters): PygFilters {
   return { ...filters, years: [] };
+}
+
+/**
+ * Marks ALL the loaded years. It is not «emptying the list»: an empty list resolves to the most
+ * recent year, so the bar's «Todos los años» has to populate it for real — as Ventas' does.
+ */
+export function withAllYears(filters: PygFilters, universe: readonly number[]): PygFilters {
+  return { ...filters, years: [...universe] };
 }
 
 export function withPeriodsCleared(filters: PygFilters): PygFilters {
@@ -220,16 +233,30 @@ export function canEditActiveCenter(filters: PygFilters, views: readonly FilterV
 }
 
 /**
- * The years Datos renders, ascending: the marked ones, or every loaded year when none is marked.
+ * The years on screen, ascending — the ONE definition Datos, the report, the Excel and the bar
+ * read: the marked ones that still exist, or the MOST RECENT loaded year when none does.
  *
  * Unlike centers, years are NOT summed when several are in play — a Consolidado of 2025 and 2026
- * would be a number nobody asked for. They are laid side by side instead, which is why "none
- * marked" means "all of them" rather than "an aggregate of them".
+ * would be a number nobody asked for. They are laid side by side instead, one block of columns per
+ * year. That is exactly why «none marked» does not mean «all of them» here, the way it does for
+ * every other mark: Datos speaks in columns that carry their year, and three exercises side by
+ * side is thirty-nine columns —and three times the DOM— that nobody opens on. It is the declared
+ * exception «Ventas por servicio» and «Análisis costo personal» already make; marking more is how
+ * the comparison is asked for.
+ *
+ * The resolution lives HERE and not in `sanitizeFilters` on purpose: the marks stay marks (`[]`
+ * is a valid, cheap state), and the bar reads the resolved list the provider publishes as
+ * `visibleYears`. Resolving inside the sanitizer would hand back a new object on every edit and
+ * re-render the whole statement (see its docstring).
  */
 export function resolveVisibleYears(filters: PygFilters, loadedYears: readonly number[]): number[] {
   const loaded = new Set(loadedYears);
   const marked = filters.years.filter((year) => loaded.has(year));
-  return (marked.length > 0 ? marked : [...loadedYears]).sort((a, b) => a - b);
+  if (marked.length > 0) {
+    return [...marked].sort((a, b) => a - b);
+  }
+  const latest = Math.max(...loadedYears);
+  return Number.isFinite(latest) ? [latest] : [];
 }
 
 /**
@@ -279,6 +306,10 @@ export interface FilterSanitizeContext {
  * Datos table cheap: this runs against a context rebuilt on every edit, and a fresh `periods`
  * array — even an identically empty one — invalidates the visible columns and re-renders every
  * row of the statement. Comparing lengths is enough: filtering only ever removes, in order.
+ *
+ * That identity is also why the YEAR is not resolved here, unlike Ventas' sanitizer: turning `[]`
+ * into `[2026]` would be a new object on every edit. `resolveVisibleYears` owns the resolution and
+ * the provider publishes it as `visibleYears`; here a year is only ever pruned.
  */
 export function sanitizeFilters(filters: PygFilters, context: FilterSanitizeContext): PygFilters {
   const centerIds = new Set(context.views.map((view) => view.id));

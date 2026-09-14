@@ -11,11 +11,19 @@ import {
   MousePointerClick,
   PanelRight,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
-import { columnHeaderLabel } from "@/lib/profit-loss/datos-columns";
+import {
+  columnHeaderLabel,
+  DATOS_AMOUNT_COLUMN_PX,
+  DATOS_DETAIL_COLUMN_PX,
+  DATOS_NAME_COLUMN_PX,
+  DATOS_ROW_PX,
+  datosTableMinWidth,
+} from "@/lib/profit-loss/datos-columns";
 import type { EditorAnchor } from "./cell-editor";
 import { DatosTableRow } from "./datos-table-row";
 import type { DatosGrid, DatosSort, DatosSortKey } from "@/lib/profit-loss/datos-types";
@@ -61,7 +69,30 @@ function sameKey(a: DatosSortKey, b: DatosSortKey): boolean {
   return a === b;
 }
 
-/** One editable Estado de Resultados grid — for the whole company or a cost center. */
+/**
+ * Rows mounted beyond the viewport on each side. Enough for a normal wheel tick not to show blank
+ * rows on the office laptops, short enough that a 365-account statement mounts ~50 rows, not 365.
+ */
+const ROW_OVERSCAN = 8;
+
+/**
+ * One editable Estado de Resultados grid — for the whole company or a cost center.
+ *
+ * **Only the rows that fit the viewport are in the DOM.** A real MicroPlus plan is 364 accounts,
+ * and with three years on screen the full table was 31 000 nodes — after which every interaction
+ * on the page, a dropdown included, paid for that DOM (measured: 2–3 s per year toggle on the
+ * firm's laptops). `content-visibility: auto` on the rows was meant to skip the offscreen ones and
+ * did nothing: size containment does not apply to table rows. So the table keeps a WINDOW of rows
+ * (`useVirtualizer`, `DATOS_ROW_PX` per row, `ROW_OVERSCAN` on each side) and pads the rest with
+ * two spacer rows, which is what keeps it a real `<table>`: the sticky `<thead>`, the sticky
+ * «Ficha» column and the native scroll are untouched, unlike a `transform`ed row that slides out
+ * from under its sticky cells.
+ *
+ * The geometry is declared rather than measured (`datos-columns.ts`): the row's height, because
+ * the window is computed from it, and the columns' widths (`table-layout: fixed`), because an
+ * automatic layout would recompute them from whichever rows happen to be mounted and the columns
+ * would dance on scroll.
+ */
 export function DatosTable({
   grid,
   rows,
@@ -83,6 +114,20 @@ export function DatosTable({
 }: DatosTableProps) {
   const accountCount = rows.filter((flat) => !flat.row.isResult).length;
   const trimmed = visibleColumns.length < grid.columns.length;
+
+  const scroller = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: () => DATOS_ROW_PX,
+    overscan: ROW_OVERSCAN,
+  });
+  const window = virtualizer.getVirtualItems();
+  const first = window[0];
+  const last = window[window.length - 1];
+  // What the spacers stand in for: every row before the window, every row after it.
+  const topPad = first ? first.start : 0;
+  const bottomPad = last ? virtualizer.getTotalSize() - last.end : 0;
 
   return (
     <div className="mb-4 overflow-hidden rounded-[13px] border border-border bg-surface">
@@ -137,8 +182,19 @@ export function DatosTable({
         </EmptyState>
       ) : (
         <>
-          <div className="max-h-[62vh] min-h-[180px] overflow-auto">
-            <table className="w-full min-w-[960px] border-separate border-spacing-0">
+          <div ref={scroller} className="max-h-[62vh] min-h-[180px] overflow-auto">
+            <table
+              className="w-full table-fixed border-separate border-spacing-0"
+              style={{ minWidth: datosTableMinWidth(visibleColumns.length) }}
+            >
+              {/* The widths are read from here, once, and never from the rows (see above). */}
+              <colgroup>
+                <col style={{ width: DATOS_NAME_COLUMN_PX }} />
+                {visibleColumns.map((col) => (
+                  <col key={col} style={{ width: DATOS_AMOUNT_COLUMN_PX }} />
+                ))}
+                <col style={{ width: DATOS_DETAIL_COLUMN_PX }} />
+              </colgroup>
               <thead>
                 <tr>
                   <SortableTh
@@ -146,7 +202,6 @@ export function DatosTable({
                     active={sort ? sameKey(sort.key, "name") : false}
                     dir={sort?.dir}
                     onClick={() => onSort("name")}
-                    className="min-w-[300px]"
                   >
                     Cuenta
                   </SortableTh>
@@ -167,29 +222,34 @@ export function DatosTable({
                     );
                   })}
                   {/* Pinned above AND to the right, so it stacks over the other sticky headers. */}
-                  <th className="sticky right-0 top-0 z-[3] w-[62px] border-b border-l border-border bg-surface-header px-2 py-2.5">
+                  <th className="sticky right-0 top-0 z-[3] border-b border-l border-border bg-surface-header px-2 py-2.5">
                     <span className="sr-only">Ficha</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((flat) => (
-                  <DatosTableRow
-                    key={flat.row.code || flat.row.resultKind}
-                    row={flat.row}
-                    hasChildren={flat.hasChildren}
-                    isCollapsed={flat.isCollapsed}
-                    columns={grid.columns}
-                    visibleColumns={visibleColumns}
-                    editable={editable}
-                    loadedColumns={loadedColumns}
-                    flashCol={flash?.code === flat.row.code ? flash.col : null}
-                    detailOpen={openDetailCode === flat.row.code}
-                    onToggle={onToggle}
-                    onEditCell={onEditCell}
-                    onOpenDetail={onOpenDetail}
-                  />
-                ))}
+                {topPad > 0 && <SpacerRow height={topPad} />}
+                {window.map((item) => {
+                  const flat = rows[item.index];
+                  return (
+                    <DatosTableRow
+                      key={flat.row.code || flat.row.resultKind}
+                      row={flat.row}
+                      hasChildren={flat.hasChildren}
+                      isCollapsed={flat.isCollapsed}
+                      columns={grid.columns}
+                      visibleColumns={visibleColumns}
+                      editable={editable}
+                      loadedColumns={loadedColumns}
+                      flashCol={flash?.code === flat.row.code ? flash.col : null}
+                      detailOpen={openDetailCode === flat.row.code}
+                      onToggle={onToggle}
+                      onEditCell={onEditCell}
+                      onOpenDetail={onOpenDetail}
+                    />
+                  );
+                })}
+                {bottomPad > 0 && <SpacerRow height={bottomPad} />}
               </tbody>
             </table>
           </div>
@@ -241,6 +301,15 @@ export function DatosTable({
         </>
       )}
     </div>
+  );
+}
+
+/** Stands in for the rows outside the window, so the scroll height is the whole statement's. */
+function SpacerRow({ height }: { height: number }) {
+  return (
+    <tr aria-hidden style={{ height }}>
+      <td aria-hidden />
+    </tr>
   );
 }
 

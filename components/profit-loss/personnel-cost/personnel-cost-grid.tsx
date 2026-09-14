@@ -220,6 +220,7 @@ const GridRow = memo(function GridRow({
   onCapture: PersonnelCostGridProps["onCapture"];
 }) {
   const groupLabel = PERSONNEL_GROUPS.find((group) => group.id === row.group)?.label;
+  const bandLess = row.kind === "section" || row.kind === "grand";
 
   return (
     <tr className={cn("border-b border-border-soft", ROW_TONE[row.kind])}>
@@ -236,12 +237,14 @@ const GridRow = memo(function GridRow({
           {groupLabel}
         </th>
       )}
-      {/* A computed row has no band above it, so its label takes BOTH slots: merging them is what
-          keeps «Externos · subtotal honorarios médicos» on one line, and it leaves no empty cell for a
-          screen reader to walk through. */}
+      {/* A section or grand row has no band above it, so its label takes BOTH slots: merging them
+          leaves no empty cell for a screen reader to walk through. The group SUBTOTAL is still under
+          its band (the `rowspan` reaches down to it), so it takes one slot like the concepts — merged,
+          it spilled over the first month and shifted every figure of the row one column to the right,
+          which read as «falta el subtotal de enero». */}
       <td
-        colSpan={row.kind === "concept" ? 1 : 2}
-        style={{ left: row.kind === "concept" ? GROUP_WIDTH : 0 }}
+        colSpan={bandLess ? 2 : 1}
+        style={{ left: bandLess ? 0 : GROUP_WIDTH }}
         className={cn(
           "sticky z-10 border-b border-r border-border-soft border-r-border px-3.5 py-2 text-left text-[12.5px]",
           STICKY_TONE[row.kind],

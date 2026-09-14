@@ -16,8 +16,7 @@ import { PygEmptyState } from "../pyg-empty-state";
 import { RevenueCapturePanel } from "./revenue-capture-panel";
 import { RevenueDataProvider, useRevenueData } from "./revenue-data-provider";
 import { RevenueEmptyState } from "./revenue-empty-state";
-import { RevenueExcelActions } from "./revenue-excel-actions";
-import { RevenueReportButton } from "./report/revenue-report-button";
+import { RevenueExportActions } from "./revenue-export-actions";
 import { RevenueToolbar } from "./revenue-toolbar";
 
 /** «Ver en» — the growth's unit, as the header names it. */
@@ -28,8 +27,8 @@ const GROWTH_UNITS: { value: GrowthUnit; label: string }[] = [
 
 /** «Ver como» en el comparativo — plano, o el año con su propio eje de fondo. */
 const COMPARISON_SHAPES: { value: ComparisonShape; label: string }[] = [
-  { value: "plano", label: "Plano" },
-  { value: "skyline", label: "Skyline 3D" },
+  { value: "plano", label: "2D" },
+  { value: "skyline", label: "3D" },
 ];
 
 /**
@@ -127,8 +126,7 @@ function RevenueContent() {
                   Registrar datos
                 </Button>
               )}
-              <RevenueExcelActions />
-              <RevenueReportButton />
+              <RevenueExportActions />
             </>
           }
         />

@@ -1,6 +1,14 @@
 "use client";
 
-import { ChevronDown, FileSpreadsheet, Loader2, Upload, X, type LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  FileSpreadsheet,
+  Loader2,
+  Upload,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DisabledReasonPill } from "@/components/ui/disabled-reason-pill";
@@ -8,61 +16,63 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/cn";
 
 /**
- * The Excel actions of ANY module — upload, download and the accepted-files info tip. It is
- * deliberately domain-agnostic: it imports no providers, no modals and no export layers, so a new
- * module only writes the wrapper that passes it what «Cargar» opens, what «Descargar» generates and
- * what the `ⓘ` says.
+ * The file actions of ANY module — upload, the «Exportar» menu and the accepted-files info tip. It
+ * is deliberately domain-agnostic: it imports no providers, no modals and no export layers, so a new
+ * module only writes the wrapper that passes it what «Cargar» opens, what «Exportar» offers and what
+ * the `ⓘ` says.
  *
- * The SHAPE of the download control is derived from how many options it receives (one → a plain
- * button, two or more → a menu); no module declares it. The generation's progress and error live
- * here, because they are the same everywhere: the module only supplies a promise.
+ * The menu does not know what FORMAT an option is. An Excel is GENERATED —its `run` returns a
+ * promise, and the progress and the error of generating live here because they are the same
+ * everywhere— and a PDF report is OPENED —its `run` returns nothing, and the wrapper mounts the
+ * preview with its own state. Both are entries of the same menu, which is what lets every module's
+ * header read «Cargar Excel · Exportar ▾ · ⓘ» and nothing else.
+ *
+ * It is ALWAYS a menu named «Exportar», even with a single option: the shape used to be derived from
+ * the count (one → a plain button), and that made the control change its look the day a module
+ * gained its second output. With no options at all it draws nothing — a control that means nothing
+ * for the open data does not render disabled.
  */
 
-export interface ExcelDownloadOption {
+export interface ExportOption {
   id: string;
-  /** The menu item's title. With a single option it is not shown: the button says `downloadLabel`. */
   title: string;
   description: string;
   /** The menu item's icon — the component, not the node: the size is set by whoever renders it. */
   icon?: LucideIcon;
   iconClassName?: string;
   disabled?: boolean;
-  /** Why it cannot be done; offered as help text on pointing at the control. */
+  /** Why it cannot be done; offered as help text on pointing at the entry. */
   disabledReason?: string;
-  /** Builds the file and hands it to the browser. Rejecting is how it reports failure. */
-  run: () => Promise<void>;
+  /**
+   * Builds the file and hands it to the browser (a promise: rejecting is how it reports failure),
+   * or opens a layer (nothing to wait for: the menu closes at once).
+   */
+  run: () => void | Promise<void>;
 }
 
-interface ExcelActionsProps {
+interface ExportActionsProps {
   /**
-   * OPTIONAL, because a module that only DOWNLOADS is a real case: «Reportería de ingresos» derives
+   * OPTIONAL, because a module that only EXPORTS is a real case: «Reportería de ingresos» derives
    * its figures from PyG and types the rest into a drawer, so it has nothing to upload. Left out, no
-   * upload button is drawn at all — a permanently disabled control is precisely what the house rule
-   * forbids: what means nothing for the open data does not render.
+   * upload button is drawn at all.
    */
   upload?: {
     label?: string;
     onClick: () => void;
     disabled?: boolean;
     /**
-     * Why uploading is not possible. Unlike the downloads, this does NOT go in a tooltip: it renders
+     * Why uploading is not possible. Unlike the exports, this does NOT go in a tooltip: it renders
      * as a pill beside the button. A disabled control with no visible reason forces you to point at
      * it to find out what is missing, and what is missing here is the previous step of the whole
      * module.
      */
     disabledReason?: string;
   };
-  downloads: ExcelDownloadOption[];
-  downloadLabel?: string;
+  exports: ExportOption[];
   info?: { title?: string; children: ReactNode };
 }
 
-export function ExcelActions({
-  upload,
-  downloads,
-  downloadLabel = "Descargar Excel",
-  info,
-}: ExcelActionsProps) {
+export function ExportActions({ upload, exports, info }: ExportActionsProps) {
   return (
     <div className="flex items-center gap-2.5">
       {upload && (
@@ -81,7 +91,7 @@ export function ExcelActions({
         </>
       )}
 
-      {downloads.length > 0 && <DownloadControl options={downloads} label={downloadLabel} />}
+      {exports.length > 0 && <ExportMenu options={exports} />}
 
       {info && (
         <InfoTip label="¿Qué archivos acepta?" title={info.title}>
@@ -94,37 +104,35 @@ export function ExcelActions({
 
 const MENU_WIDTH = 308;
 
-function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; label: string }) {
+function ExportMenu({ options }: { options: ExportOption[] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   const run = useCallback(
-    async (option: ExcelDownloadOption) => {
+    async (option: ExportOption) => {
       if (busy || option.disabled) {
         return;
       }
       setBusy(option.id);
       setFailed(false);
       try {
+        // A `void` run resolves in the same microtask: React batches the two `setBusy` and no
+        // spinner frame is painted for an option that only opens a layer.
         await option.run();
       } catch {
         setFailed(true);
       } finally {
         setBusy(null);
-        // The menu closes whatever happens: the failure is reported below, where it looks the same
-        // whether it came from the menu or from the plain button.
+        // The menu closes whatever happens: the failure is reported below, under the trigger.
         setOpen(false);
       }
     },
     [busy],
   );
 
-  const single = options.length === 1 ? options[0] : undefined;
-
   return (
-    // The title goes on the container: a disabled button does not fire the browser's tooltip.
-    <div className="relative" title={single?.disabled ? single.disabledReason : undefined}>
+    <div className="relative">
       {open && (
         <button
           type="button"
@@ -134,32 +142,22 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
         />
       )}
 
-      {single ? (
-        <Button
-          size="toolbar"
-          variant="secondary"
-          disabled={single.disabled || busy !== null}
-          icon={<ControlIcon busy={busy !== null} />}
-          onClick={() => void run(single)}
-        >
-          {busy === single.id ? "Generando…" : label}
-        </Button>
-      ) : (
-        <Button
-          size="toolbar"
-          variant="secondary"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className="relative z-30"
-          icon={<ControlIcon busy={busy !== null} />}
-          trailingIcon={
-            <ChevronDown size={14} className={cn("transition-transform", open && "rotate-180")} />
-          }
-          onClick={() => setOpen((value) => !value)}
-        >
-          {label}
-        </Button>
-      )}
+      <Button
+        size="toolbar"
+        variant="secondary"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="relative z-30"
+        icon={
+          busy !== null ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />
+        }
+        trailingIcon={
+          <ChevronDown size={14} className={cn("transition-transform", open && "rotate-180")} />
+        }
+        onClick={() => setOpen((value) => !value)}
+      >
+        Exportar
+      </Button>
 
       {open && (
         <div
@@ -196,7 +194,7 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
           className="absolute right-0 top-[calc(100%+8px)] z-30 flex items-start gap-2 rounded-xl border border-border bg-surface px-[11px] py-2.5 shadow-[0_14px_36px_rgba(15,23,42,0.16)]"
         >
           <span className="flex-1 text-[11.5px] leading-snug text-negative">
-            No se pudo generar el Excel. Intenta de nuevo.
+            No se pudo generar el archivo. Intenta de nuevo.
           </span>
           <button
             type="button"
@@ -212,13 +210,8 @@ function DownloadControl({ options, label }: { options: ExcelDownloadOption[]; l
   );
 }
 
-/** The control's icon, whether it is a plain button or a menu trigger. */
-function ControlIcon({ busy }: { busy: boolean }) {
-  return busy ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />;
-}
-
 /** A menu item's icon, or the spinner while that option runs. */
-function OptionIcon({ option, busy }: { option: ExcelDownloadOption; busy: boolean }) {
+function OptionIcon({ option, busy }: { option: ExportOption; busy: boolean }) {
   if (busy) {
     return <Loader2 size={17} className="animate-spin text-brand" />;
   }

@@ -12,8 +12,10 @@ import { PersonnelCostGrid } from "./personnel-cost-grid";
 /**
  * The Datos tab: **the open exercise's table, and only its own**.
  *
- * Which of the two shapes is drawn is decided by the year the strip above has open, and never by a
- * control: a year the estado de resultados answers has twenty-one accounts under three groups, so it
+ * The year is the strip's, never the bar's: the bar's «Año» is hidden on this tab, so the reader sees
+ * ONE selector of years over this table. The marks still compare years — in Gráficos, where a
+ * comparison has cards to show it. Which of the two shapes is drawn is decided by the year the strip
+ * above has open, and never by a control: a year the estado de resultados answers has twenty-one accounts under three groups, so it
  * gets the comparativo whole; a year somebody typed has four lines, so it gets those four. Drawing
  * both at once would put a table of twenty-one rows above a table of four that says the same thing at
  * another resolution, and the reader would spend the page working out which of the two to believe.
@@ -29,11 +31,11 @@ import { PersonnelCostGrid } from "./personnel-cost-grid";
  */
 export function PersonnelCostDatosView() {
   const {
-    grid,
-    reading,
+    datosGrid: grid,
+    datosReading: reading,
     hideEmptyRows,
     setHideEmptyRows,
-    periodName,
+    datosPeriodName: periodName,
     saveFamily,
     saveFamilyBlock,
     captureYear,

@@ -51,7 +51,7 @@ export interface DashboardModule {
   slug: string;
   /** Sidebar navigation label. */
   label: string;
-  /** Header title and breadcrumb leaf. */
+  /** Header title. */
   title: string;
   icon: LucideIcon;
   /** Tabs shown inside the module, in display order. First tab is the default. */
@@ -149,8 +149,8 @@ export function findModuleBySlug(slug: string | undefined): DashboardModule | un
  *
  * Returning `undefined` is the right answer —and the important one— for a segment that is a route
  * PARAMETER: `/payroll/<uuid>` is a período's detail, not a subitem, and without this check its
- * identifier would end up in the breadcrumb and in the page's title. An identifier says nothing to
- * the reader and gives away the internal shape of the data.
+ * identifier would end up in the page's title. An identifier says nothing to the reader and gives
+ * away the internal shape of the data.
  */
 export function findSubmoduleBySlug(
   module: DashboardModule | undefined,

@@ -16,6 +16,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.11",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "echarts": "^6.1.0",

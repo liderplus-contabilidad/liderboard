@@ -27,7 +27,7 @@ import {
 import type { PayrollEmployeeLine } from "@/lib/payroll/types";
 import { PayrollEmptyState } from "../payroll-empty-state";
 import { usePayrollData } from "../payroll-data-provider";
-import { SalariesReportButton } from "./report/salaries-report-button";
+import { SalariesExportActions } from "./salaries-export-actions";
 import { SalariesToolbar } from "./salaries-toolbar";
 
 const EMPTY_LINES: Map<string, PayrollEmployeeLine[]> = new Map();
@@ -114,7 +114,7 @@ export function SalariesView() {
             empleados uno por uno.
           </p>
         </div>
-        <SalariesReportButton
+        <SalariesExportActions
           clientName={costCenterHeading(activeClient?.name ?? "Cliente", activeClient?.costCenter)}
           {...(reportLogos.left ? { logo: reportLogos.left } : {})}
           {...(reportLogos.right ? { rightLogo: reportLogos.right } : {})}

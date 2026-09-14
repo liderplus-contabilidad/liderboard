@@ -1,28 +1,35 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { ExcelActions } from "@/components/ui/excel-actions";
+import { FileSpreadsheet, FileText } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import type { CompanyProfile } from "@/lib/company-profile";
 import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/logos";
 import { downloadRolWorkbook } from "@/lib/payroll/export/download";
 import { DEFAULT_PAYROLL_PARAMETERS } from "@/lib/payroll/engine/parameters";
+import { downloadPayslipZip } from "@/lib/payroll/payslip/download";
+import { buildPeriodPayslips } from "@/lib/payroll/payslip/period";
 import type { PayrollEmployeeLine, PayrollPeriod } from "@/lib/payroll/types";
 import { RolUploadModal } from "../rol-upload-modal";
 
 /**
- * Rol de Pagos' wrapper over `ExcelActions` — the same rule `PygExcelActions` and
- * `OccupancyExcelActions` follow: the module supplies what «Cargar» opens, what «Descargar»
- * generates and what the `ⓘ` says; the shape of the controls belongs to the primitive and no module
- * writes it.
+ * Rol de Pagos' wrapper over `ExportActions` — the same rule `PygExportActions` and
+ * `OccupancyExportActions` follow: the module supplies what «Cargar» opens, what «Exportar» offers
+ * and what the `ⓘ` says; the shape of the controls belongs to the primitive and no module writes it.
  *
- * It goes in the tab bar's `rightSlot`, and only over «Empleados»: loading and downloading the rol is
- * what happens in that view, just as PyG mounts its own only over Datos.
+ * It goes in the tab bar's `rightSlot`, and only over «Empleados»: loading and exporting the rol is
+ * what happens in that view, just as PyG mounts its upload only over Datos.
  *
- * The download is assembled HERE, at the moment of the click, from the nómina and the engine: nothing
- * the file carries is stored, which is the same rule as the payslip in PDF and the journal entry.
+ * «Exportar» offers the two files the período delivers: the rol as an Excel —the GENERAL sheet— and
+ * the payslips as PDFs, one per employee in a .zip. Both are assembled HERE, at the moment of the
+ * click, from the nómina and the engine: nothing either file carries is stored, which is the same rule
+ * as the journal entry. `buildPeriodPayslips` is the SAME builder the history row uses, which
+ * downloads this same .zip without opening the período. While `pdf-lib` loads and one PDF per
+ * employee is assembled the primitive shows its progress: with nóminas of thirty employees that is a
+ * few tenths of a second, and without the notice the entry looked unresponsive and got pressed again.
  */
-export function PayrollExcelActions({
+export function PayrollExportActions({
   period,
   periods,
   lines,
@@ -66,24 +73,59 @@ export function PayrollExcelActions({
     ],
   );
 
+  const downloadPayslips = useCallback(
+    () =>
+      downloadPayslipZip(
+        buildPeriodPayslips({
+          period,
+          lines,
+          parameters: DEFAULT_PAYROLL_PARAMETERS,
+          clientName,
+          ...(clientLogo ? { clientLogo } : {}),
+          ...(clientCompany ? { clientCompany } : {}),
+          ...(clientCostCenter ? { clientCostCenter } : {}),
+        }),
+        period,
+      ),
+    [clientName, clientLogo, clientCompany, clientCostCenter, lines, period],
+  );
+
   const empty = lines.length === 0;
+  // The same reason for both files: with no employees there is nothing to write on either.
+  const emptyReason = "El período todavía no tiene empleados.";
+
+  const exports = useMemo<ExportOption[]>(
+    () => [
+      {
+        id: "rol",
+        title: "Rol de pagos",
+        description:
+          "La hoja GENERAL del período, con las columnas del libro y todas las cifras del motor.",
+        icon: FileSpreadsheet,
+        iconClassName: "text-brand",
+        disabled: empty,
+        disabledReason: emptyReason,
+        run: download,
+      },
+      {
+        id: "payslips",
+        title: "Roles individuales",
+        description: "Un PDF por empleado, en el orden de la tabla, dentro de un .zip.",
+        icon: FileText,
+        iconClassName: "text-muted",
+        disabled: empty,
+        disabledReason: emptyReason,
+        run: downloadPayslips,
+      },
+    ],
+    [empty, download, downloadPayslips],
+  );
 
   return (
     <>
-      <ExcelActions
+      <ExportActions
         upload={{ label: "Cargar rol de pagos", onClick: () => setUploading(true) }}
-        downloads={[
-          {
-            id: "rol",
-            title: "Rol de pagos",
-            description:
-              "La hoja GENERAL del período, con las columnas del libro y todas las cifras del motor.",
-            disabled: empty,
-            ...(empty ? { disabledReason: "El período todavía no tiene empleados." } : {}),
-            run: download,
-          },
-        ]}
-        downloadLabel="Descargar rol"
+        exports={exports}
         info={{
           title: "¿Qué archivo acepta, y qué archivo entrega?",
           children: (
