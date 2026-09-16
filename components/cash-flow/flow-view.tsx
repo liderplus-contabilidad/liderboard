@@ -91,13 +91,7 @@ export function FlowView() {
             value={money(totals.bankTotal)}
             hint={`Saldo ${money(totals.balance)} + ingresos ${money(totals.incomes)} + sobregiro ${money(totals.overdraft)}`}
           />
-          {hasChecks && (
-            <StatTile
-              label="Cheques no cobrados"
-              value={money(totals.outstanding)}
-              hint="Del módulo Cheques, a la fecha"
-            />
-          )}
+          {hasChecks && <StatTile label="Cheques no cobrados" value={money(totals.outstanding)} />}
           <StatTile
             label="Marcado para pago"
             value={money(totals.urgent + totals.pending)}
@@ -106,7 +100,6 @@ export function FlowView() {
           <StatTile
             label={totals.remaining < 0 ? "Saldo faltante" : "Saldo sobrante"}
             value={money(Math.abs(totals.remaining))}
-            hint="Total bancos − cheques − urgente − pendiente"
             sign={totals.remaining < 0 ? "negativo" : "positivo"}
           />
         </div>
@@ -119,7 +112,7 @@ export function FlowView() {
           <SectionHeading
             icon={<Landmark size={15} />}
             title={`Flujo de bancos · ${dateLabel}`}
-            hint={`Las celdas con campo son la captura. Disponible, no cobrados, marcados y saldo final se calculan solos.${flow ? "" : " Todavía no hay captura para esta fecha."}`}
+            hint={flow ? undefined : "Sin captura para esta fecha"}
           >
             {previous && (
               <Button
@@ -134,9 +127,7 @@ export function FlowView() {
           </SectionHeading>
 
           {derived.accounts.length === 0 ? (
-            <EmptyState icon={<Waves size={22} />}>
-              Ninguna cuenta del centro marcado. Quita el filtro de centro o declara una cuenta.
-            </EmptyState>
+            <EmptyState icon={<Waves size={22} />}>Ninguna cuenta del centro marcado.</EmptyState>
           ) : (
             <DataGrid minWidth={hasChecks ? 1100 : 980}>
               <thead>
@@ -223,7 +214,7 @@ export function FlowView() {
                   derived.unassignedIncomes > 0) && (
                   <GridRow muted>
                     <Cell className="text-[11.5px] text-faint" colSpan={2}>
-                      Sin cuenta asignada (suma en la empresa)
+                      Sin cuenta asignada
                     </Cell>
                     <Cell numeric tone="muted">
                       {money(derived.unassignedIncomes)}
@@ -270,14 +261,6 @@ export function FlowView() {
               </tbody>
             </DataGrid>
           )}
-
-          <p className="text-[11.5px] leading-relaxed text-faint">
-            Total bancos = saldo + ingresos proyectados + sobregiro. Saldo final = total bancos
-            {hasChecks && " − cheques girados y no cobrados"} − urgente − pendiente.
-            {hasChecks && " Los cheques vienen del módulo Cheques a la fecha de corte;"} los pagos
-            salen de los documentos marcados en Cuentas por pagar (monto aprobado o, sin él, el
-            saldo).
-          </p>
         </FlowSection>
 
         <MarkedSection />
@@ -286,11 +269,7 @@ export function FlowView() {
             figures — after everything marked, after only the urgent, after only the pending. */}
         {derived.accounts.length > 0 && (
           <FlowSection>
-            <SectionHeading
-              icon={<Scale size={15} />}
-              title="Saldo faltante o sobrante"
-              hint="Total bancos − cheques − lo marcado, en sus tres lecturas"
-            />
+            <SectionHeading icon={<Scale size={15} />} title="Saldo faltante o sobrante" />
             <div className="grid grid-cols-3 gap-3">
               <Remaining label="Tras todo lo marcado" value={totals.remaining} />
               <Remaining label="Pagando solo lo urgente" value={totals.remainingUrgentOnly} />
@@ -303,11 +282,7 @@ export function FlowView() {
 
         {hasCenters && derived.loans.length > 0 && (
           <FlowSection>
-            <SectionHeading
-              icon={<ArrowRightLeft size={15} />}
-              title="Préstamos entre centros"
-              hint="Lo que la cuenta de un centro paga por documentos de otro: lo que antes se anotaba en CARGAS CASH."
-            />
+            <SectionHeading icon={<ArrowRightLeft size={15} />} title="Préstamos entre centros" />
             <ul className="flex flex-wrap gap-2">
               {derived.loans.map((loan) => (
                 <li
@@ -341,14 +316,14 @@ function SettledSection() {
     return null;
   }
   const window = derived.settledSince
-    ? `desde el ${formatDayMonthYear(derived.settledSince)} (flujo anterior) hasta la fecha de corte`
+    ? `desde el ${formatDayMonthYear(derived.settledSince)}`
     : "en la fecha de corte";
   return (
     <FlowSection>
       <SectionHeading
         icon={<CheckCircle2 size={15} />}
         title="Pagado en esta fecha"
-        hint={`${pluralize(derived.settled.length, "documento")} liquidados ${window} · fuera de las sumas: el saldo capturado ya los descuenta`}
+        hint={`${pluralize(derived.settled.length, "documento")} liquidados ${window}`}
       />
       <div className="overflow-hidden rounded-[13px] border border-border bg-surface">
         <table className="w-full table-fixed border-collapse">
@@ -465,11 +440,7 @@ function IncomesSection({
 
   return (
     <FlowSection>
-      <SectionHeading
-        icon={<TrendingUp size={15} />}
-        title="Ingresos proyectados"
-        hint="Ventas previstas, reservas, efectivo por depositar, cheques y tarjetas por efectivizar. Suman al total bancos."
-      >
+      <SectionHeading icon={<TrendingUp size={15} />} title="Ingresos proyectados">
         <span className="text-[13px] font-semibold tabular-nums text-brand">{money(total)}</span>
         <Button
           variant="secondary"
@@ -563,14 +534,11 @@ function MarkedSection() {
       <SectionHeading
         icon={<Flag size={15} />}
         title="Pagos marcados"
-        hint={`${pluralize(derived.lines.length, "documento")} · se marcan y desmarcan en Cuentas por pagar; aquí solo se leen`}
+        hint={pluralize(derived.lines.length, "documento")}
       />
       <div className="overflow-hidden rounded-[13px] border border-border bg-surface">
         {derived.groups.length === 0 ? (
-          <p className="px-4 py-4 text-[12.5px] text-faint">
-            Nada marcado todavía: en Cuentas por pagar, selecciona documentos y márcalos urgentes o
-            pendientes.
-          </p>
+          <p className="px-4 py-4 text-[12.5px] text-faint">Sin pagos marcados.</p>
         ) : (
           <table className="w-full table-fixed border-collapse">
             <colgroup>

@@ -27,13 +27,6 @@ import { PayableDetailPanel } from "./payable-detail-panel";
 
 const NONE = "";
 
-const SECTION_HINTS: Record<CashSection["id"], string> = {
-  initial: "Lo que abre el período en caja: préstamos entre centros, saldos iniciales.",
-  misc: "Bonos, sueldos y otros pagos por caja que no vienen de una cartera.",
-  suppliers:
-    "Los documentos abiertos marcados «Cash» en Cuentas por pagar, uno por proveedor. Se editan allá.",
-};
-
 /**
  * «Cargas cash»: the book's sheet, three matrices with the same columns (`deriveCashMatrix`). The
  * two hand-written ones edit IN LINE — a date, a detail, a monto per center, the loan and an
@@ -89,11 +82,10 @@ export function CashEntriesView() {
   );
 }
 
-function SectionHeading({ title, hint }: { title: string; hint?: string }) {
+function SectionHeading({ title }: { title: string }) {
   return (
     <div className="min-w-0 flex-1">
       <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
-      {hint && <p className="mt-0.5 text-[11.5px] text-faint">{hint}</p>}
     </div>
   );
 }
@@ -154,7 +146,7 @@ function ManualSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <SectionHeading title={section.title} hint={SECTION_HINTS[section.id]} />
+        <SectionHeading title={section.title} />
         <Button variant="secondary" size="sm" icon={<Plus size={13} />} onClick={onAdd}>
           Agregar fila
         </Button>
@@ -171,7 +163,7 @@ function ManualSection({
                 colSpan={section.columns.length + trailingSpan + 2}
                 className="text-[12px] text-faint"
               >
-                Sin filas. «Agregar fila» abre una con la fecha de hoy.
+                Sin filas.
               </Cell>
             </GridRow>
           )}
@@ -343,12 +335,10 @@ function SuppliersSection({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <SectionHeading title={section.title} hint={SECTION_HINTS.suppliers} />
+        <SectionHeading title={section.title} />
       </div>
       {section.rows.length === 0 ? (
-        <EmptyState icon={<Coins size={22} />}>
-          Ningún documento marcado «Cash». Márcalos en Cuentas por pagar y aparecen aquí.
-        </EmptyState>
+        <EmptyState icon={<Coins size={22} />}>Ningún documento marcado «Cash».</EmptyState>
       ) : (
         <DataGrid minWidth={820}>
           <MatrixHead columns={section.columns} />

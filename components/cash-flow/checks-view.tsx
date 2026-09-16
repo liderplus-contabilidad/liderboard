@@ -96,12 +96,7 @@ export function ChecksView() {
       <div className="flex h-full flex-col gap-4 px-7 py-5">
         {accounts.length === 0 && checks.length > 0 && (
           <div className="flex items-center gap-3 rounded-[13px] border border-warning/40 bg-warning/5 px-4 py-3 text-[12.5px] text-ink">
-            <span className="flex-1">
-              <strong className="font-semibold">Esta empresa no tiene cuentas bancarias.</strong>{" "}
-              Declara sus cuentas con el banco tal como lo escribe el libro (PRODUBANCO, PICHINCHA)
-              y luego asigna cada banco desde «Sin cuenta»: hasta entonces ningún cheque resta del
-              disponible.
-            </span>
+            <span className="flex-1 font-semibold">Esta empresa no tiene cuentas bancarias.</span>
             <ConfigureClientButton />
           </div>
         )}
@@ -109,7 +104,6 @@ export function ChecksView() {
           <StatTile
             label="Girados y no cobrados"
             value={money(outstandingTotal)}
-            hint="A la fecha de corte · resta del disponible"
             sign={outstandingTotal > 0 ? "negativo" : undefined}
           />
           {/* The sum of what is ON SCREEN, and only while a mark narrows it: with nothing marked the
@@ -118,7 +112,7 @@ export function ChecksView() {
             <StatTile
               label="Total filtrado"
               value={money(visibleTotal)}
-              hint={`${pluralize(sorted.length, "cheque")} · sin los anulados`}
+              hint={pluralize(sorted.length, "cheque")}
             />
           )}
         </div>
@@ -146,7 +140,7 @@ export function ChecksView() {
           <EmptyState icon={<Receipt size={22} />}>
             {checks.length === 0 ? (
               <span className="flex flex-col items-center gap-3 text-center">
-                <span>Carga el histórico del control de cheques o registra el primero.</span>
+                <span>Ningún cheque registrado.</span>
                 <Button size="sm" icon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>
                   Cargar control de cheques
                 </Button>
@@ -340,13 +334,7 @@ function UnassignedBanks({
   ];
   return (
     <div className="rounded-[13px] border border-warning/40 bg-warning/5 px-4 py-3">
-      <p className="text-[12.5px] font-semibold text-ink">
-        Cheques sin cuenta
-        <span className="ml-2 font-normal text-muted">
-          El banco que escribe el libro no coincide con ninguna cuenta de la empresa; fuera de toda
-          suma hasta asignarlos. CAJA, CRUCE o RECAUDACIÓN T.C. pueden quedarse así.
-        </span>
-      </p>
+      <p className="text-[12.5px] font-semibold text-ink">Cheques sin cuenta</p>
       <ul className="mt-2 flex flex-wrap gap-2">
         {banks.map((entry) => (
           <li

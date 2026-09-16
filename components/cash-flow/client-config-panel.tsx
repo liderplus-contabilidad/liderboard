@@ -44,23 +44,12 @@ export function ClientConfigPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SectionHeading({
-  icon,
-  title,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-}) {
+function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div>
-      <h3 className="flex items-center gap-2 text-[13px] font-bold tracking-[-0.1px] text-ink">
-        <span className="text-faint">{icon}</span>
-        {title}
-      </h3>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-faint">{hint}</p>
-    </div>
+    <h3 className="flex items-center gap-2 text-[13px] font-bold tracking-[-0.1px] text-ink">
+      <span className="text-faint">{icon}</span>
+      {title}
+    </h3>
   );
 }
 
@@ -85,11 +74,7 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
 
   return (
     <section className="flex flex-col gap-3">
-      <SectionHeading
-        icon={<MapPin size={15} />}
-        title="Centros"
-        hint="Las unidades de la empresa (HA · HC · HK). Opcionales: sin centros, ningún control de centro se dibuja."
-      />
+      <SectionHeading icon={<MapPin size={15} />} title="Centros" />
       {centers.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
           {centers.map((center) => (
@@ -188,11 +173,7 @@ function AccountsSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <SectionHeading
-        icon={<Landmark size={15} />}
-        title="Cuentas bancarias"
-        hint="El banco tal como lo escribe el control de cheques (PRODUBANCO, PICHINCHA): así se reconoce la cuenta de cada cheque. El nombre es cómo la ves tú; el sobregiro se suma al saldo como disponible."
-      />
+      <SectionHeading icon={<Landmark size={15} />} title="Cuentas bancarias" />
       {accounts.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
           {accounts.map((account) => (
@@ -279,7 +260,7 @@ function AccountsSection({
           label="Nombre"
           value={name}
           placeholder="Produbanco HA"
-          hint="Opcional: cómo se nombra la cuenta en pantalla y en el reporte."
+          hint="Opcional"
           onChange={(event) => setName(event.target.value)}
         />
         <FormField label="Sobregiro" hint={overdraft ? money(overdraft) : undefined}>

@@ -43,7 +43,9 @@ const TAB_ANALISIS: ModuleTab = { id: "analisis", label: "Análisis", icon: Micr
 
 /** Flujo de caja's four: a reading, the two registers and the flow they feed. */
 const TAB_RESUMEN: ModuleTab = { id: "resumen", label: "Resumen", icon: LayoutDashboard };
-const TAB_CXP: ModuleTab = { id: "cxp", label: "Cuentas por pagar", icon: FileText };
+// «Cartera» and not «Cuentas por pagar»: the title beside it already says that, and a header
+// that names the same thing twice runs out of room on a 1366 px laptop.
+const TAB_CXP: ModuleTab = { id: "cxp", label: "Cartera", icon: FileText };
 const TAB_CHEQUES: ModuleTab = { id: "cheques", label: "Cheques", icon: Receipt };
 const TAB_FLUJO: ModuleTab = { id: "flujo", label: "Flujo", icon: Waves };
 const TAB_CARGAS: ModuleTab = { id: "cargas", label: "Cargas cash", icon: Coins };

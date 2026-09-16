@@ -151,10 +151,6 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
               />
             </FormField>
           )}
-          <p className="mt-3 rounded-[9px] bg-surface-muted px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft">
-            Mientras el cheque no esté cobrado ni anulado, su valor resta del disponible de su
-            cuenta en Flujo a la fecha de corte.
-          </p>
         </section>
 
         <section className="grid grid-cols-2 gap-3">
@@ -163,7 +159,6 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             value={draft.voucher}
             variant="mono"
             error={error}
-            hint={check ? undefined : "Propuesto como el siguiente; puedes corregirlo."}
             disabled={check !== null}
             onChange={(event) => {
               setDraft((current) => ({ ...current, voucher: event.target.value }));

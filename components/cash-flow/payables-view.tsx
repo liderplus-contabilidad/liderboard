@@ -151,10 +151,9 @@ export function PayablesView() {
           <StatTile
             label="Vencido"
             value={money(totals.overdue)}
-            hint="Antes de la fecha de corte"
             sign={totals.overdue > 0 ? "negativo" : undefined}
           />
-          <StatTile label="Por vencer" value={money(totals.due)} hint="Desde la fecha de corte" />
+          <StatTile label="Por vencer" value={money(totals.due)} />
           <StatTile
             label="Marcado para pago"
             value={money(totals.urgent + totals.pending)}
@@ -166,7 +165,7 @@ export function PayablesView() {
           <div className="min-w-0 flex-1">
             <h2 className="text-[13.5px] font-bold text-ink">Cartera por pagar</h2>
             <p className="mt-0.5 truncate text-[11.5px] text-faint">
-              {cutLabel || "Ninguna cartera cargada todavía"} ·
+              {cutLabel || "Ninguna cartera cargada"}
             </p>
           </div>
           {groups.length > 1 && (
@@ -204,10 +203,7 @@ export function PayablesView() {
           <EmptyState icon={<FileText size={22} />}>
             {payables.length === 0 ? (
               <span className="flex flex-col items-center gap-3 text-center">
-                <span>
-                  Carga la cartera por pagar de Contífico o de Dingoo, o agrega una obligación a
-                  mano.
-                </span>
+                <span>Ninguna cartera cargada.</span>
                 <Button size="sm" icon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>
                   Cargar cartera
                 </Button>
@@ -215,7 +211,7 @@ export function PayablesView() {
             ) : hasActiveFilters(payableFilters) || payableFilters.search ? (
               "Ningún documento coincide con los filtros."
             ) : (
-              "Todo está liquidado. Marca «Ver liquidadas» para verlo."
+              "Todo está liquidado."
             )}
           </EmptyState>
         ) : (
@@ -233,12 +229,6 @@ export function PayablesView() {
             onOpen={setOpenId}
           />
         )}
-
-        <p className="flex items-center gap-2 text-[11.5px] text-faint">
-          <ApprovalDots filled />
-          Aprobación: observación · 1ª revisión · revisión final · notificación. Clic en una fila
-          para abrir el detalle.
-        </p>
       </div>
 
       {open && <PayableDetailPanel payable={open} onClose={() => setOpenId(null)} />}

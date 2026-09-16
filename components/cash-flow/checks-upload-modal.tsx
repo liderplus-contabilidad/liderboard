@@ -149,9 +149,7 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
             <p className="text-[15px] font-bold text-ink">Histórico incorporado</p>
             <p className="max-w-[420px] text-[12.5px] text-muted">
               {pluralize(done.written, "cheque")} escritos
-              {done.unassigned > 0 &&
-                ` · ${done.unassigned} sin cuenta reconocida (asígnalos desde «Sin cuenta»)`}
-              .
+              {done.unassigned > 0 && ` · ${done.unassigned} sin cuenta reconocida`}.
             </p>
             <Button size="sm" onClick={close}>
               Listo
@@ -173,9 +171,7 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
               <span className="text-[13px] font-semibold text-ink">
                 {reading ? "Leyendo el archivo…" : "Elige el libro del control de cheques"}
               </span>
-              <span className="text-[11.5px] text-faint">
-                CHEQUES INICIO.xlsx · se puede recargar: el egreso es la identidad
-              </span>
+              <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
             {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
@@ -226,12 +222,6 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
                 ))}
               </ul>
             </div>
-            <p className="rounded-[10px] border border-border bg-surface-muted px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
-              Cada fila se escribe por su N° EGRESO: recargar el libro actualiza lo que cambió y no
-              duplica nada. Las cuentas marcadas se crean sin número ni sobregiro —se completan en
-              «Configurar»— y cada cheque encuentra la suya; lo que no case queda «sin cuenta»,
-              visible y fuera de toda suma.
-            </p>
             <div className="flex items-center justify-between gap-2">
               <Button variant="secondary" size="sm" disabled={saving} onClick={reset}>
                 Elegir otro archivo

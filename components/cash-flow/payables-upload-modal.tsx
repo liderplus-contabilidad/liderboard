@@ -188,8 +188,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               {pluralize(done.written, "documento")} escritos
               {done.settled > 0 &&
                 ` · ${pluralize(done.settled, "documento")} liquidados por no venir en este corte`}
-              . La antigüedad y el estado se leen a la fecha de corte; nada se copia ni se pega a
-              mano.
+              .
             </p>
             <Button size="sm" onClick={close}>
               Ir a Cuentas por pagar
@@ -211,9 +210,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               <span className="text-[13px] font-semibold text-ink">
                 {reading ? "Leyendo el archivo…" : "Elige la exportación de Contífico o de Dingoo"}
               </span>
-              <span className="text-[11.5px] text-faint">
-                .xlsx o .xls · el formato se detecta solo
-              </span>
+              <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
             {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
@@ -334,17 +331,14 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
 
             {staged.kind === "liderplus" ? (
               <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
-                Es la cartera que exportó este módulo. Al confirmar{" "}
+                Es la cartera que exportó este módulo: al confirmar{" "}
                 <strong className="font-semibold">se reemplaza toda la cartera actual</strong> por
-                la del archivo, tal cual estaba: marcas, fechas programadas, aprobaciones,
-                observaciones, obligaciones manuales y liquidadas incluidas. La cuenta «Pagar desde»
-                se reconoce por su banco y número.
+                la del archivo, con sus marcas y observaciones.
               </p>
             ) : (
               <p className="rounded-[10px] border border-border bg-surface-muted px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
-                Al confirmar, cada documento se escribe por su identidad (proveedor · tipo · número)
-                y conserva lo que ya tenía anotado; lo que este corte ya no trae se da por liquidado
-                a la fecha de corte. Las obligaciones manuales no se tocan.
+                Los documentos que ya existen conservan sus marcas; los que este corte no trae se
+                liquidan a la fecha de corte.
               </p>
             )}
 

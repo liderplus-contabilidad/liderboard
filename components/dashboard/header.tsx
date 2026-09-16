@@ -8,7 +8,6 @@ import { OccupancyHotelActions } from "@/components/occupancy/occupancy-hotel-ac
 import { PayrollClientActions } from "@/components/payroll/payroll-client-actions";
 import { PygClientActions } from "@/components/profit-loss/pyg-client-actions";
 import { TabBar } from "@/components/ui/tab-bar";
-import { cn } from "@/lib/cn";
 import {
   DEFAULT_MODULE,
   findModuleBySlug,
@@ -26,6 +25,12 @@ import {
  *
  * On a subitem's page (`/profit-loss/sales`) and on a module without tabs (Rol de Pagos) the row is
  * the title and the selector, nothing between them.
+ *
+ * The export control and the selector are ONE right-hand group, and the row may WRAP: when what the
+ * module puts on it does not fit —Cuentas por Pagar's five tabs and three controls on a 1366 px
+ * laptop with the sidebar open— that group drops under the tabs, still right-aligned, instead of
+ * the selector leaving the screen. On every wider row nothing changes: the group sits on the same
+ * centre line as before.
  */
 export function DashboardHeader() {
   const pathname = usePathname();
@@ -47,57 +52,62 @@ export function DashboardHeader() {
   const isCashFlow = current.slug === "cash-flow";
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-surface px-7">
+    <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-surface px-7 py-2">
       <h1 className="min-w-0 shrink-0 truncate text-xl font-bold tracking-tight text-brand">
         {title}
       </h1>
 
-      {tabbed && <ModuleTabStrip mod={current} />}
+      {tabbed && <ModuleTabs mod={current} />}
 
       {/* Each module mounts its own selector over the same block: PyG lists its clients, Ocupaciones
           its hotels, Rol de Pagos its own. The three lists are different —each with its own
           database—; the only things they share are this control and the rules of a name.
-          With no strip the selector alone takes the right edge; with one, the strip's export group
-          is what pushes right and the selector follows it. */}
-      <div className={cn("min-w-0", !tabbed && "ml-auto")}>
-        {isPyg && <PygClientActions />}
-        {isOccupancy && <OccupancyHotelActions />}
-        {isPayroll && <PayrollClientActions />}
-        {isCashFlow && <CashFlowClientActions />}
+          The export control of the open tab sits in the same group, so the two travel together
+          when the row wraps. */}
+      <div className="ml-auto flex min-w-0 items-center">
+        {tabbed && <ModuleExport mod={current} />}
+        <div className="min-w-0">
+          {isPyg && <PygClientActions />}
+          {isOccupancy && <OccupancyHotelActions />}
+          {isPayroll && <PayrollClientActions />}
+          {isCashFlow && <CashFlowClientActions />}
+        </div>
       </div>
     </header>
   );
 }
 
 /**
- * The module's tabs and the open tab's export control. Split out so the hook runs only where the
- * row has tabs: a subitem's page reads the same header and has none to resolve.
+ * The module's tabs. Split out so the hook runs only where the row has tabs: a subitem's page reads
+ * the same header and has none to resolve.
  */
-function ModuleTabStrip({ mod }: { mod: DashboardModule }) {
+function ModuleTabs({ mod }: { mod: DashboardModule }) {
   const [activeTab, setTab] = useModuleTab(mod);
-  const rightSlot = MODULE_VIEWS[mod.slug]?.rightSlot?.(activeTab.id);
-
   return (
-    <>
-      <TabBar
-        items={mod.tabs}
-        value={activeTab.id}
-        onChange={setTab}
-        ariaLabel={`Vistas de ${mod.label}`}
-        idPrefix={mod.slug}
-        rule={false}
-        className="shrink-0"
-      />
-      {/* The rule between export and selector exists only with something on its left: a tab
-          without an export control (Ocupaciones' Gráficos) leaves the selector alone on the edge. */}
-      <div
-        className={cn(
-          "ml-auto flex shrink-0 items-center",
-          rightSlot != null && "border-r border-border-soft pr-4",
-        )}
-      >
-        {rightSlot}
-      </div>
-    </>
+    <TabBar
+      items={mod.tabs}
+      value={activeTab.id}
+      onChange={setTab}
+      ariaLabel={`Vistas de ${mod.label}`}
+      idPrefix={mod.slug}
+      rule={false}
+      className="shrink-0"
+    />
+  );
+}
+
+/** The open tab's export control, on the selector's left. */
+function ModuleExport({ mod }: { mod: DashboardModule }) {
+  const [activeTab] = useModuleTab(mod);
+  const rightSlot = MODULE_VIEWS[mod.slug]?.rightSlot?.(activeTab.id);
+  if (rightSlot == null) {
+    return null;
+  }
+  // The rule between export and selector exists only with something on its left: a tab without an
+  // export control (Ocupaciones' Gráficos) leaves the selector alone on the edge.
+  return (
+    <div className="mr-4 flex shrink-0 items-center border-r border-border-soft pr-4">
+      {rightSlot}
+    </div>
   );
 }

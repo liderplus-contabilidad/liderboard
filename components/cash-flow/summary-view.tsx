@@ -70,32 +70,20 @@ export function SummaryView() {
           <StatTile
             label="Total bancos"
             value={money(totals.bankTotal)}
-            hint={`Al ${formatDayMonthYear(asOf)} · saldo + ingresos + sobregiro`}
+            hint={`Al ${formatDayMonthYear(asOf)}`}
           />
-          {hasChecks && (
-            <StatTile
-              label="Cheques no cobrados"
-              value={money(totals.outstanding)}
-              hint="Girados y sin cobrar a la fecha"
-            />
-          )}
-          <StatTile
-            label="Urgente"
-            value={money(totals.urgent)}
-            hint="Marcado urgente en Cuentas por pagar"
-          />
-          <StatTile label="Pendiente" value={money(totals.pending)} hint="Marcado pendiente" />
+          {hasChecks && <StatTile label="Cheques no cobrados" value={money(totals.outstanding)} />}
+          <StatTile label="Urgente" value={money(totals.urgent)} />
+          <StatTile label="Pendiente" value={money(totals.pending)} />
           <StatTile
             label={totals.remaining < 0 ? "Saldo faltante" : "Saldo sobrante"}
             value={money(Math.abs(totals.remaining))}
-            hint="Total bancos − cheques − marcados"
             sign={totals.remaining < 0 ? "negativo" : "positivo"}
           />
         </div>
         {cards.length === 0 ? (
           <p className="rounded-[13px] border border-border bg-surface px-4 py-6 text-center text-[12.5px] text-faint">
-            Sin cartera abierta ni pagos marcados no hay nada que dibujar: carga una cartera en
-            Cuentas por pagar.
+            Sin cartera ni pagos marcados a esta fecha.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-4">

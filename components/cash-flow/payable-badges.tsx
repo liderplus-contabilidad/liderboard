@@ -33,21 +33,12 @@ export function CashBadge() {
  * The approval as four dots — observación · 1ª revisión · revisión final · notificación — the
  * `REPORTE CXP`'s four working columns read at a glance. Filled where something was written.
  */
-export function ApprovalDots({
-  payable,
-  filled = false,
-  size = 7,
-}: {
-  payable?: Payable;
-  /** The legend's four, all on. */
-  filled?: boolean;
-  size?: number;
-}) {
+export function ApprovalDots({ payable, size = 7 }: { payable: Payable; size?: number }) {
   const steps = [
-    { label: "Observación", on: filled || (payable?.observation.trim().length ?? 0) > 0 },
-    { label: "Primera revisión", on: filled || (payable?.approved ?? null) !== null },
-    { label: "Revisión final", on: filled || Boolean(payable?.finalReview) },
-    { label: "Notificación de pago", on: filled || Boolean(payable?.notified) },
+    { label: "Observación", on: payable.observation.trim().length > 0 },
+    { label: "Primera revisión", on: payable.approved !== null },
+    { label: "Revisión final", on: Boolean(payable.finalReview) },
+    { label: "Notificación de pago", on: Boolean(payable.notified) },
   ];
   return (
     <span

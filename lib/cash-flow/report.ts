@@ -76,11 +76,12 @@ export function buildFlowReport(input: {
         id: "total",
         label: "Total bancos",
         emphasis: true,
+        // The same order as the rows above — the printed total is read column by column.
         values: [
           derived.totals.balance,
-          derived.totals.incomes,
           derived.totals.overdraft,
-          derived.totals.bankTotal,
+          derived.totals.available,
+          derived.totals.incomes,
           derived.totals.outstanding,
           derived.totals.urgent,
           derived.totals.pending,
@@ -233,5 +234,5 @@ export function buildFlowReport(input: {
 }
 
 export function flowReportSubtitle(header: FlowReportHeader): string {
-  return `${pluralize(header.accountCount, "cuenta")} · ${pluralize(header.lineCount, "pago marcado")}`;
+  return `${pluralize(header.accountCount, "cuenta")} · ${pluralize(header.lineCount, "pago marcado", "pagos marcados")}`;
 }

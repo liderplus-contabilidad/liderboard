@@ -161,9 +161,7 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
               <span className="text-[13px] font-semibold text-ink">
                 {reading ? "Leyendo el archivo…" : "Elige la hoja de Cargas cash"}
               </span>
-              <span className="text-[11.5px] text-faint">
-                La hoja «CARGAS CASH» del libro o el Excel que exporta esta pestaña
-              </span>
+              <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
             {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
@@ -214,11 +212,9 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
             <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
               Al confirmar,{" "}
               <strong className="font-semibold">
-                cada bloque que trae el archivo reemplaza por completo
+                cada bloque del archivo reemplaza por completo
               </strong>{" "}
-              las filas que hoy tiene ese bloque; un bloque que el archivo no trae no se toca.
-              PROVEEDORES no se carga: se lee de los documentos marcados «Cash» en Cuentas por
-              pagar.
+              las filas actuales de ese bloque.
             </p>
             <div className="flex items-center justify-between gap-2">
               <Button variant="secondary" size="sm" disabled={saving} onClick={reset}>

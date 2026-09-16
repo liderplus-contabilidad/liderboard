@@ -124,7 +124,7 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
               />
             </FieldBox>
           </FormField>
-          <FormField label="Vencimiento" hint="Opcional; sin fecha cuenta como por vencer.">
+          <FormField label="Vencimiento" hint="Opcional">
             <DateField value={dueOn} nullable ariaLabel="Vencimiento" onChange={setDueOn} />
           </FormField>
           {centers.length > 0 && (

@@ -91,6 +91,54 @@ describe("buildFlowReport", () => {
     expect(payments.rows[4].values).toEqual(["", "", "", "", "$1,695.93", "$720.00", "$975.93"]);
   });
 
+  it("totals the accounts column by column, incomes included", () => {
+    const withIncome = deriveFlow({
+      date: "2026-08-05",
+      flow: {
+        id: "f",
+        clientId: "c",
+        date: "2026-08-05",
+        balances: { prod: 6677.34 },
+        incomes: [{ id: "i", concept: "Reservas", amount: 1200, accountId: "prod" }],
+      },
+      accounts: ACCOUNTS,
+      centers: [],
+      payables: [payable({})],
+      checks: [],
+    });
+    const single = buildFlowReport({
+      clientName: "Nomik",
+      derived: withIncome,
+      incomes: withIncome.flow?.incomes ?? [],
+      accounts: ACCOUNTS,
+      centers: [],
+      generatedAt: new Date(2026, 7, 5, 10, 0),
+    });
+    const accounts = single.sections.find((section) => section.id === "accounts")!.table;
+    expect(accounts.columns).toEqual([
+      "Saldo",
+      "Sobregiro",
+      "Disponible",
+      "Ingresos",
+      "Cheques no cobrados",
+      "Urgente",
+      "Pendiente",
+      "Saldo final",
+    ]);
+    // One account: its row IS the total, figure by figure.
+    expect(accounts.rows[0].values).toEqual([
+      "$6,677.34",
+      "$5,000.00",
+      "$11,677.34",
+      "$1,200.00",
+      "$0.00",
+      "$720.00",
+      "$0.00",
+      "$12,157.34",
+    ]);
+    expect(accounts.rows[1].values).toEqual(accounts.rows[0].values);
+  });
+
   it("writes the same sections to one sheet", () => {
     const ws = buildFlowWorkbook(report).getWorksheet("FLUJO")!;
     const labels = [] as unknown[];

@@ -35,14 +35,8 @@ export function CashFlowEmptyState({
     return (
       <div className="flex flex-col items-center gap-4 px-7 py-16">
         <EmptyState icon={<Building2 size={22} />} className="py-0">
-          <span className="flex flex-col items-center gap-1.5 text-center">
-            <span className="text-[15px] font-bold tracking-[-0.2px] text-ink">
-              Todavía no hay empresas
-            </span>
-            <span className="max-w-[440px]">
-              Cada empresa guarda sus cuentas bancarias, su cartera por pagar, sus cheques y su
-              flujo. Crea la primera y después declara sus cuentas.
-            </span>
+          <span className="text-[15px] font-bold tracking-[-0.2px] text-ink">
+            Todavía no hay empresas
           </span>
         </EmptyState>
         <CreateCashFlowClientButton />
@@ -54,14 +48,8 @@ export function CashFlowEmptyState({
     return (
       <div className="flex flex-col items-center gap-4 px-7 py-16">
         <EmptyState icon={<Landmark size={22} />} className="py-0">
-          <span className="flex flex-col items-center gap-1.5 text-center">
-            <span className="text-[15px] font-bold tracking-[-0.2px] text-ink">
-              Esta empresa no tiene cuentas bancarias
-            </span>
-            <span className="max-w-[440px]">
-              Declara sus cuentas —banco, número y sobregiro— para que el flujo tenga dónde capturar
-              el saldo y cada cheque encuentre su cuenta.
-            </span>
+          <span className="text-[15px] font-bold tracking-[-0.2px] text-ink">
+            Esta empresa no tiene cuentas bancarias
           </span>
         </EmptyState>
         <ConfigureClientButton variant="primary" />

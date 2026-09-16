@@ -71,8 +71,10 @@ Next.js **App Router**. `app/(dashboard)/layout.tsx` renders the persistent shel
 `<main>`) and mounts each module's DATA PROVIDER — a provider lives there because the HEADER reads
 from the same state the panel does (`ActiveClient` shows PyG's cliente and Ocupaciones' hotel). The
 open TAB lives there too (`module-tab-state.tsx`): the header paints title · tabs · export · selector
-in ONE row, the page paints toolbar · notice · panel, and `module-views.tsx` is the one registry both
-read. Layout persistence is also why the sidebar's collapse state needs no store.
+in ONE row (export + selector are one right-hand group that WRAPS under the tabs when the row runs
+short — a 1366 px laptop with the sidebar open — rather than leaving the screen), the page paints
+toolbar · notice · panel, and `module-views.tsx` is the one registry both read. Layout persistence
+is also why the sidebar's collapse state needs no store.
 
 **Module registry is the single source of truth.** `lib/modules.ts` (`MODULES`, `DEFAULT_MODULE`,
 `findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header title.
@@ -264,7 +266,7 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
-**Cuentas por Pagar** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo · Cargas cash) · `lib/cash-flow/` ·
+**Cuentas por Pagar** · `/cash-flow` (Resumen · Cartera · Cheques · Flujo · Cargas cash) · `lib/cash-flow/` ·
 its own Dexie base `liderboard-cash-flow` v4 (v1–v2 retire a lost prototype, v4 adds `cashEntries`) partitioned by `clientId`; its own list of EMPRESAS (like
 Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
 sobregiro · centro) in «Configurar».

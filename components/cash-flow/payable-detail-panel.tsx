@@ -123,7 +123,7 @@ export function PayableDetailPanel({
               checked={payable.cash}
               {...(settled ? {} : { onChange: (checked: boolean) => patch({ cash: checked }) })}
             />
-            <label htmlFor={cashId}>Cash — aparece en «Cargas cash»</label>
+            <label htmlFor={cashId}>Cash</label>
           </div>
         </section>
 
@@ -145,10 +145,7 @@ export function PayableDetailPanel({
               className="w-full resize-y rounded-lg border border-border bg-surface px-[9px] py-2 font-sans text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
           </FormField>
-          <FormField
-            label="Aprobación primera revisión (monto)"
-            hint="Lo que el flujo cuenta de este documento; vacío cuenta el saldo entero."
-          >
+          <FormField label="Aprobación primera revisión (monto)">
             <FieldBox>
               <NumericInput
                 value={payable.approved}

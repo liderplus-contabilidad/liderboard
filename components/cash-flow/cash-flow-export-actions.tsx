@@ -168,8 +168,9 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
   ]);
 
   const uploads = tab === "cxp" || tab === "cheques" || tab === "cargas";
-  const uploadLabel =
-    tab === "cxp" ? "Cargar cartera" : tab === "cheques" ? "Cargar cheques" : "Cargar matriz";
+  // «Cargar» alone: the open tab —Cartera, Cheques, Cargas cash— already says what; the modal's
+  // title says it again. The long label was one of the three things that overflowed the header.
+  const uploadLabel = "Cargar";
 
   return (
     <>
@@ -180,7 +181,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
                 label: uploadLabel,
                 onClick: () => setUploadOpen(true),
                 disabled: activeClientId === null,
-                disabledReason: "Agrega una empresa primero: cada una guarda su propia cartera.",
+                disabledReason: "Agrega una empresa primero.",
               },
             }
           : {})}

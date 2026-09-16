@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Landmark, Plus, Settings2, ShieldCheck, Trash2 } from "lucide-react";
+import { Building2, Landmark, Plus, Settings2, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActiveClient,
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { DiscardedRow } from "@/components/ui/discarded-row";
 import type { CashFlowClientContents, CashFlowClientSummary } from "@/lib/cash-flow/db";
 import { describeClientContents } from "@/lib/cash-flow/db";
-import { formatList, pluralize } from "@/lib/format";
+import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { ClientConfigPanel } from "./client-config-panel";
 
@@ -20,6 +20,7 @@ import { ClientConfigPanel } from "./client-config-panel";
 export const CASH_FLOW_LABELS: EntityLabels = {
   subject: "empresa",
   plural: "empresas",
+  feminine: true,
   renameKeeps: "sus cuentas, su cartera, sus cheques y sus flujos",
 };
 
@@ -56,11 +57,15 @@ export function CreateCashFlowClientButton() {
 }
 
 /** «Configurar» — centers and bank accounts of the open empresa. Also offered from the empty
- *  state of every tab, because without an account the flow has no row to capture. */
+ *  state of every tab, because without an account the flow has no row to capture. In the header
+ *  it is `compact` —the icon alone— because that row carries five tabs and three controls and the
+ *  labelled button was what pushed the empresa selector off a 1366 px screen. */
 export function ConfigureClientButton({
   variant = "secondary",
+  compact = false,
 }: {
   variant?: "secondary" | "primary";
+  compact?: boolean;
 }) {
   const { activeClientId } = useCashFlowData();
   const [open, setOpen] = useState(false);
@@ -73,6 +78,9 @@ export function ConfigureClientButton({
         variant={variant}
         size="toolbar"
         icon={<Settings2 size={14} />}
+        iconOnly={compact}
+        aria-label={compact ? "Configurar empresa" : undefined}
+        title={compact ? "Configurar empresa" : undefined}
         onClick={() => setOpen(true)}
       >
         Configurar
@@ -121,7 +129,7 @@ export function CashFlowClientActions() {
 
   return (
     <div className="flex items-center gap-2.5">
-      <ConfigureClientButton />
+      <ConfigureClientButton compact />
       <ActiveClient
         {...(activeClient
           ? {
@@ -146,7 +154,6 @@ export function CashFlowClientActions() {
       {deleting && (
         <DeleteCashFlowClientDialog
           client={deleting}
-          others={clients.filter((client) => client.id !== deleting.id).map((c) => c.name)}
           busy={busy}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setDeleting(null)}
@@ -159,13 +166,11 @@ export function CashFlowClientActions() {
 /** Deleting is irreversible, so the confirmation COUNTS what it discards. */
 function DeleteCashFlowClientDialog({
   client,
-  others,
   busy,
   onConfirm,
   onCancel,
 }: {
   client: CashFlowClientSummary;
-  others: string[];
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -224,17 +229,6 @@ function DeleteCashFlowClientDialog({
             </DiscardedRow>
           </ul>
         </div>
-
-        {others.length > 0 && (
-          <div className="mt-3 flex items-start gap-2.5 rounded-[9px] bg-surface-muted px-3.5 py-3">
-            <ShieldCheck size={16} className="mt-px shrink-0 text-muted" />
-            <p className="text-[12.5px] leading-relaxed text-ink-soft">
-              <strong className="font-semibold text-ink">Las demás empresas no se tocan.</strong>{" "}
-              {formatList(others)} {others.length === 1 ? "conserva" : "conservan"} sus cuentas, su
-              cartera y sus cheques.
-            </p>
-          </div>
-        )}
 
         <div className="mt-5 flex items-center justify-end gap-2.5">
           <Button variant="secondary" size="sm" disabled={busy} onClick={onCancel}>
