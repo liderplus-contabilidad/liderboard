@@ -11,6 +11,7 @@ import type { ParsedCartera } from "../types";
 import { matchesContifico, parseContifico } from "./contifico";
 import { matchesDingoo, parseDingoo } from "./dingoo";
 import type { Grid } from "./grid";
+import { matchesLiderplus, parseLiderplus, type StoredPayableRow } from "./liderplus";
 
 export interface CarteraStrategy {
   id: "contifico" | "dingoo";
@@ -34,12 +35,22 @@ export const CARTERA_STRATEGIES: readonly CarteraStrategy[] = [
   },
 ];
 
+export const LIDERPLUS_LABEL = "LiderPlus · Cartera para recargar";
+
 export type CarteraReadResult =
-  | { ok: true; strategy: CarteraStrategy; cartera: ParsedCartera; sheetName: string }
+  | {
+      ok: true;
+      kind: "system";
+      strategy: CarteraStrategy;
+      cartera: ParsedCartera;
+      sheetName: string;
+    }
+  /** The module's own sheet: put back as it is, marks included, never merged as a cut. */
+  | { ok: true; kind: "liderplus"; rows: StoredPayableRow[]; sheetName: string }
   | { ok: false; message: string };
 
 export const REJECTION =
-  "Este archivo no es una cartera por pagar reconocida. Se aceptan la «Cartera por Pagar (Detallado)» de Contífico —también pegada en el FORMATO IDEAL— y el «Reporte · Cuentas por pagar» de Dingoo.";
+  "Este archivo no es una cartera por pagar reconocida. Se aceptan la «Cartera por Pagar (Detallado)» de Contífico —también pegada en el FORMATO IDEAL—, el «Reporte · Cuentas por pagar» de Dingoo y la «Cartera para recargar» que exporta este módulo.";
 
 export function readCartera(data: ArrayBuffer): CarteraReadResult {
   const workbook = readWorkbook(data);
@@ -54,9 +65,13 @@ export function readCartera(data: ArrayBuffer): CarteraReadResult {
     if (!grid) {
       continue;
     }
+    // The module's own sheet first: its header is the most specific of the three.
+    if (matchesLiderplus(grid)) {
+      return { ok: true, kind: "liderplus", rows: parseLiderplus(grid), sheetName };
+    }
     for (const strategy of CARTERA_STRATEGIES) {
       if (strategy.matches(grid)) {
-        return { ok: true, strategy, cartera: strategy.parse(grid), sheetName };
+        return { ok: true, kind: "system", strategy, cartera: strategy.parse(grid), sheetName };
       }
     }
   }

@@ -19,7 +19,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
   const {
     activeClientId,
     activeClient,
-    visiblePayables,
+    payables,
     visibleChecks,
     derived,
     flow,
@@ -36,24 +36,23 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
     if (tab === "cxp") {
       return [
         {
-          id: "reporte-cxp",
-          title: "Reporte CxP",
-          description:
-            "Las columnas del REPORTE CXP, con la antigüedad a la fecha de corte y lo filtrado",
+          id: "cartera",
+          title: "Cartera",
+          description: "Toda la cartera con sus marcas y aprobaciones, tal como está",
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
-          disabled: visiblePayables.length === 0,
-          disabledReason: "No hay documentos en pantalla que exportar.",
+          disabled: payables.length === 0,
+          disabledReason: "No hay cartera que exportar.",
           run: async () => {
             const [mod, shared, { downloadBlob }] = await Promise.all([
-              import("@/lib/cash-flow/export/payables-workbook"),
+              import("@/lib/cash-flow/export/cartera-workbook"),
               import("@/lib/cash-flow/export/shared"),
               import("@/lib/download"),
             ]);
             const blob = await shared.workbookToBlob(
-              mod.buildPayablesWorkbook(visiblePayables, asOf, companyName, logo),
+              mod.buildCarteraWorkbook(payables, accounts, companyName),
             );
-            downloadBlob(blob, shared.exportFilename("REPORTE_CXP", companyName, asOf));
+            downloadBlob(blob, shared.exportFilename("CARTERA", companyName, asOf));
           },
         },
       ];
@@ -127,18 +126,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
       ];
     }
     return [];
-  }, [
-    tab,
-    visiblePayables,
-    visibleChecks,
-    derived,
-    flow,
-    asOf,
-    companyName,
-    logo,
-    accounts,
-    centers,
-  ]);
+  }, [tab, payables, visibleChecks, derived, flow, asOf, companyName, logo, accounts, centers]);
 
   const uploads = tab === "cxp" || tab === "cheques";
 

@@ -278,7 +278,7 @@ sobregiro · centro) in «Configurar».
   deletes — a flow of two weeks ago still reads it.
 - **The aging is a function** (`aging.ts`: `agingOf(dueOn, asOf)`), never a stored column: the
   buckets Contífico writes are true only on the day of the download, so they are discarded at the
-  door and the grid, the `REPORTE CXP`, Resumen and the flow all ask this one definition.
+  door and the grid, Resumen and the flow all ask this one definition.
 - **The mark of payment lives in the DOCUMENT** (`priority` urgente · pendiente · sin marcar, `payOn`,
   `payFromAccountId`), never in a flow, and what a marked document contributes is `markedAmount` =
   `approved ?? balance` (`derive.ts`). «Marcar pagado» settles by hand.
@@ -292,9 +292,11 @@ sobregiro · centro) in «Configurar».
   account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
   same `DerivedFlow`.
 - Uploads are by label with a registry (`upload/registry.ts`: `contifico` · `dingoo`, first match
-  over EVERY sheet; the check register is `checks-log.ts`, a separate load). The three Excels
-  (`export/`) and the printed flow (`report.ts` → `ReportTable`) are the module's outputs, all through
-  `cash-flow-export-actions.tsx`; Resumen has none. `money` (`derive.ts`) is the module's amount,
+  over EVERY sheet, plus the module's OWN `liderplus.ts`, which is how «Exportar · Cartera» comes back
+  as it left — marks included, REPLACING the cartera instead of merging as a cut; the check register
+  is `checks-log.ts`, a separate load). The three Excels (`export/`) and the printed flow
+  (`report.ts` → `ReportTable`) are the module's outputs, all through `cash-flow-export-actions.tsx`;
+  Resumen has none. `money` (`derive.ts`) is the module's amount,
   always with cents.
 
 ### Shared UI

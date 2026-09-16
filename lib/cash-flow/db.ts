@@ -15,7 +15,9 @@ import Dexie, { type Table } from "dexie";
 import { normalizeLabel, sortByName, type EntityLogo } from "@/lib/workspaces";
 import { mergeCut, type IncomingPayable } from "./cut";
 import { todayISO } from "./dates";
+import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
+import type { StoredPayableRow } from "./upload/liderplus";
 import type {
   BankAccount,
   CashFlowCenter,
@@ -321,6 +323,62 @@ export async function applyCut(
     });
     const written = incoming.length;
     return { written, settled: writes.length - written };
+  });
+}
+
+/**
+ * REPLACES the empresa's cartera with the rows of a «cartera para recargar» — every source, open
+ * and settled, marks included — in ONE transaction. Not a cut: a cut merges what a SYSTEM exported
+ * and settles the absent; this puts back what THIS module exported, as it was. The account each
+ * row names is resolved by label against the empresa's accounts; one it does not have reads as
+ * «sin cuenta». The cuts in force are left as they were.
+ */
+export async function replaceCartera(
+  clientId: string,
+  rows: readonly StoredPayableRow[],
+): Promise<number> {
+  return db.transaction("rw", db.payables, db.accounts, async () => {
+    const accounts = await db.accounts.where("clientId").equals(clientId).toArray();
+    const byRef = new Map(
+      accounts.map((account) => [normalizeLabel(accountRef(account)), account.id]),
+    );
+    const today = todayISO();
+    const payables: Payable[] = rows.map((row) => ({
+      id:
+        row.source === "manual"
+          ? crypto.randomUUID()
+          : payableId(clientId, row.source, row.supplier, row.docType, row.docNumber),
+      clientId,
+      source: row.source,
+      supplier: row.supplier,
+      supplierTaxId: row.supplierTaxId,
+      docType: row.docType,
+      docNumber: row.docNumber,
+      description: row.description,
+      issuedOn: row.issuedOn,
+      dueOn: row.dueOn,
+      amount: row.amount,
+      withholdings: row.withholdings,
+      payments: row.payments,
+      balance: row.balance,
+      centerName: row.centerName,
+      ...(row.kind ? { kind: row.kind } : {}),
+      priority: row.priority,
+      payOn: row.payOn,
+      payFromAccountId: row.payFromAccount
+        ? (byRef.get(normalizeLabel(row.payFromAccount)) ?? null)
+        : null,
+      observation: row.observation,
+      approved: row.approved,
+      finalReview: row.finalReview,
+      notified: row.notified,
+      status: row.status,
+      settledOn: row.settledOn,
+      cutDate: row.cutDate || today,
+    }));
+    await db.payables.where("clientId").equals(clientId).delete();
+    await db.payables.bulkPut(payables);
+    return payables.length;
   });
 }
 

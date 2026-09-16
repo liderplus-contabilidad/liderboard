@@ -16,13 +16,13 @@ function workbook(sheets: Record<string, Grid>): ArrayBuffer {
 describe("readCartera", () => {
   it("picks Contífico's reader", () => {
     const result = readCartera(workbook({ "Control de Cartera Detallado": CONTIFICO_GRID }));
-    expect(result.ok && result.strategy.id).toBe("contifico");
-    expect(result.ok && result.cartera.payables).toHaveLength(4);
+    expect(result.ok && result.kind === "system" && result.strategy.id).toBe("contifico");
+    expect(result.ok && result.kind === "system" && result.cartera.payables).toHaveLength(4);
   });
 
   it("picks Dingoo's reader", () => {
     const result = readCartera(workbook({ RptReportePagos: DINGOO_GRID }));
-    expect(result.ok && result.strategy.id).toBe("dingoo");
+    expect(result.ok && result.kind === "system" && result.strategy.id).toBe("dingoo");
   });
 
   it("finds the paste on a later sheet of the FORMATO IDEAL", () => {

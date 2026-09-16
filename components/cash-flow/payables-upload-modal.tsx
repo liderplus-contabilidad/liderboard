@@ -11,7 +11,8 @@ import { NoticeBanner } from "@/components/ui/notice-banner";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { isISODate } from "@/lib/cash-flow/dates";
-import type { CarteraStrategy } from "@/lib/cash-flow/upload/registry";
+import type { StoredPayableRow } from "@/lib/cash-flow/upload/liderplus";
+import { LIDERPLUS_LABEL, type CarteraStrategy } from "@/lib/cash-flow/upload/registry";
 import type { ParsedCartera } from "@/lib/cash-flow/types";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
@@ -19,11 +20,10 @@ import { useCashFlowData } from "./cash-flow-data-provider";
 
 const PREVIEW_ROWS = 8;
 
-interface Staged {
-  fileName: string;
-  strategy: CarteraStrategy;
-  cartera: ParsedCartera;
-}
+type Staged =
+  | { fileName: string; kind: "system"; strategy: CarteraStrategy; cartera: ParsedCartera }
+  /** The module's own «Cartera para recargar»: put back as it is, marks included. */
+  | { fileName: string; kind: "liderplus"; rows: StoredPayableRow[] };
 
 /**
  * Loading a cartera, in the mockup's three steps inside ONE modal — subir → vista previa
@@ -35,6 +35,10 @@ interface Staged {
  * cut date. Contífico declares the cut; Dingoo does not, and the dialog asks for it with the bar's
  * date as default. Confirming applies the cut (`db.applyCut`): what comes is written, what stopped
  * coming is settled, and what the user wrote on a document survives.
+ *
+ * The module's own «Cartera para recargar» takes the other door: it is not a cut but the cartera
+ * as it was exported, so confirming REPLACES what the empresa holds with it (`db.replaceCartera`),
+ * marks included, and asks no cut date.
  */
 export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { activeClientId, asOf } = useCashFlowData();
@@ -64,7 +68,16 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
           setFailure(result.message);
           return;
         }
-        setStaged({ fileName: file.name, strategy: result.strategy, cartera: result.cartera });
+        if (result.kind === "liderplus") {
+          setStaged({ fileName: file.name, kind: "liderplus", rows: result.rows });
+          return;
+        }
+        setStaged({
+          fileName: file.name,
+          kind: "system",
+          strategy: result.strategy,
+          cartera: result.cartera,
+        });
         setCutDate(result.cartera.cutDate ?? asOf);
       } finally {
         setReading(false);
@@ -85,12 +98,20 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
   );
 
   const confirm = useCallback(async () => {
-    if (!staged || !activeClientId || !isISODate(cutDate)) {
+    if (!staged || !activeClientId) {
+      return;
+    }
+    if (staged.kind === "system" && !isISODate(cutDate)) {
       return;
     }
     setSaving(true);
     try {
-      setDone(await cashDb.applyCut(activeClientId, staged.cartera, cutDate));
+      if (staged.kind === "liderplus") {
+        const written = await cashDb.replaceCartera(activeClientId, staged.rows);
+        setDone({ written, settled: 0 });
+      } else {
+        setDone(await cashDb.applyCut(activeClientId, staged.cartera, cutDate));
+      }
     } finally {
       setSaving(false);
     }
@@ -101,7 +122,16 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     onClose();
   }, [reset, onClose]);
 
-  const total = staged ? staged.cartera.payables.reduce((acc, row) => acc + row.balance, 0) : 0;
+  const previewRows = staged
+    ? staged.kind === "liderplus"
+      ? staged.rows
+      : staged.cartera.payables
+    : [];
+  const total = previewRows
+    .filter((row) => !("status" in row) || row.status === "open")
+    .reduce((acc, row) => acc + row.balance, 0);
+  const settledCount =
+    staged?.kind === "liderplus" ? staged.rows.filter((row) => row.status === "settled").length : 0;
 
   return (
     <Modal open={open} title="Cargar cartera por pagar" width={720} onClose={close}>
@@ -152,7 +182,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </span>
             </button>
             {failure && <NoticeBanner>{failure}</NoticeBanner>}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <SourceCard
                 name="Contífico"
                 fmt="Cartera por Pagar (Detallado)"
@@ -163,6 +193,11 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
                 fmt="Reporte · Cuentas por pagar"
                 desc="Reporte por proveedor con sus facturas y cuotas. No declara corte: se pide al confirmar."
               />
+              <SourceCard
+                name="LiderPlus"
+                fmt="Cartera para recargar"
+                desc="La cartera que exporta este módulo desde «Exportar»; vuelve tal cual, con sus marcas, y reemplaza la actual."
+              />
             </div>
           </>
         ) : (
@@ -172,29 +207,40 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               <div className="min-w-0 flex-1 text-[12.5px]">
                 <div className="truncate font-semibold text-ink">{staged.fileName}</div>
                 <div className="text-muted">
-                  {staged.strategy.label}
-                  {staged.cartera.companyName && ` · ${staged.cartera.companyName}`}
-                  {" · "}
-                  {pluralize(staged.cartera.payables.length, "documento")} · {money(total)}
-                  {staged.cartera.skipped > 0 &&
-                    ` · ${pluralize(staged.cartera.skipped, "fila")} de subtotal ignoradas`}
+                  {staged.kind === "liderplus" ? (
+                    <>
+                      {LIDERPLUS_LABEL} · {pluralize(staged.rows.length, "documento")}
+                      {settledCount > 0 && ` (${settledCount} liquidados)`} · {money(total)}{" "}
+                      abiertos
+                    </>
+                  ) : (
+                    <>
+                      {staged.strategy.label}
+                      {staged.cartera.companyName && ` · ${staged.cartera.companyName}`}
+                      {" · "}
+                      {pluralize(staged.cartera.payables.length, "documento")} · {money(total)}
+                      {staged.cartera.skipped > 0 &&
+                        ` · ${pluralize(staged.cartera.skipped, "fila")} de subtotal ignoradas`}
+                    </>
+                  )}
                 </div>
               </div>
-              <FormField label="Fecha de corte" className="w-[150px]">
-                <input
-                  type="date"
-                  value={cutDate}
-                  aria-label="Fecha de corte de la cartera"
-                  onChange={(event) => setCutDate(event.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface px-[9px] py-1.5 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
-                />
-              </FormField>
+              {staged.kind === "system" && (
+                <FormField label="Fecha de corte" className="w-[150px]">
+                  <input
+                    type="date"
+                    value={cutDate}
+                    aria-label="Fecha de corte de la cartera"
+                    onChange={(event) => setCutDate(event.target.value)}
+                    className="w-full rounded-lg border border-border bg-surface px-[9px] py-1.5 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+                  />
+                </FormField>
+              )}
             </div>
 
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
-                Vista previa normalizada · primeras{" "}
-                {Math.min(PREVIEW_ROWS, staged.cartera.payables.length)} filas
+                Vista previa · primeras {Math.min(PREVIEW_ROWS, previewRows.length)} filas
               </p>
               <DataGrid>
                 <thead>
@@ -209,7 +255,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
                   </tr>
                 </thead>
                 <tbody>
-                  {staged.cartera.payables.slice(0, PREVIEW_ROWS).map((row, index) => (
+                  {previewRows.slice(0, PREVIEW_ROWS).map((row, index) => (
                     <tr key={index}>
                       <Cell className="max-w-[220px] truncate">{row.supplier}</Cell>
                       <Cell className="font-mono text-[11.5px]">{`${row.docType} ${row.docNumber}`}</Cell>
@@ -234,11 +280,21 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </DataGrid>
             </div>
 
-            <p className="rounded-[10px] border border-border bg-surface-muted px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
-              Al confirmar, cada documento se escribe por su identidad (proveedor · tipo · número) y
-              conserva lo que ya tenía anotado; lo que este corte ya no trae se da por liquidado a
-              la fecha de corte. Las obligaciones manuales no se tocan.
-            </p>
+            {staged.kind === "liderplus" ? (
+              <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
+                Es la cartera que exportó este módulo. Al confirmar{" "}
+                <strong className="font-semibold">se reemplaza toda la cartera actual</strong> por
+                la del archivo, tal cual estaba: marcas, fechas programadas, aprobaciones,
+                observaciones, obligaciones manuales y liquidadas incluidas. La cuenta «Pagar desde»
+                se reconoce por su banco y número.
+              </p>
+            ) : (
+              <p className="rounded-[10px] border border-border bg-surface-muted px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
+                Al confirmar, cada documento se escribe por su identidad (proveedor · tipo · número)
+                y conserva lo que ya tenía anotado; lo que este corte ya no trae se da por liquidado
+                a la fecha de corte. Las obligaciones manuales no se tocan.
+              </p>
+            )}
 
             <div className="flex items-center justify-between gap-2">
               <Button variant="secondary" size="sm" disabled={saving} onClick={reset}>
@@ -246,11 +302,15 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </Button>
               <Button
                 size="sm"
-                disabled={saving || !isISODate(cutDate)}
+                disabled={saving || (staged.kind === "system" && !isISODate(cutDate))}
                 trailingIcon={<ArrowRight size={14} />}
                 onClick={() => void confirm()}
               >
-                {saving ? "Aplicando…" : "Confirmar e incorporar"}
+                {saving
+                  ? "Aplicando…"
+                  : staged.kind === "liderplus"
+                    ? "Reemplazar la cartera"
+                    : "Confirmar e incorporar"}
               </Button>
             </div>
           </>

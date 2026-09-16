@@ -2,7 +2,7 @@
  * The ONE definition of a document's age. Contífico writes the buckets into its file, and they are
  * true only on the day of the download — the same defect Reportería corrected of the workbook it
  * replaced (a figure frozen at the date it was copied). Here the buckets are a FUNCTION of the due
- * date and the date one looks from (the bar's cut date), and the grid, the tiles, the `REPORTE CXP`,
+ * date and the date one looks from (the bar's cut date), and the grid, the tiles, the Excel,
  * Resumen and the flow all ask this function. Nothing of it is stored.
  *
  * The rule, as the `FORMATO IDEAL` lays it out: a document is VENCIDA when its due date is before
