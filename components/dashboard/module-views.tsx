@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
+import { CashFlowExportActions } from "@/components/cash-flow/cash-flow-export-actions";
+import { CashFlowToolbar } from "@/components/cash-flow/cash-flow-toolbar";
 import { OccupancyExportActions } from "@/components/occupancy/occupancy-export-actions";
 import { OccupancyToolbar } from "@/components/occupancy/occupancy-toolbar";
 import { PygChartYearNotice } from "@/components/profit-loss/pyg-chart-year-notice";
@@ -48,6 +50,22 @@ const OccupancyGraficosView = dynamic(
   () => import("@/components/occupancy/charts/graficos-view").then((mod) => mod.GraficosView),
   { ssr: false, loading: PanelFallback },
 );
+const CashFlowSummaryView = dynamic(
+  () => import("@/components/cash-flow/summary-view").then((mod) => mod.SummaryView),
+  { ssr: false, loading: PanelFallback },
+);
+const PayablesView = dynamic(
+  () => import("@/components/cash-flow/payables-view").then((mod) => mod.PayablesView),
+  { ssr: false, loading: PanelFallback },
+);
+const ChecksView = dynamic(
+  () => import("@/components/cash-flow/checks-view").then((mod) => mod.ChecksView),
+  { ssr: false, loading: PanelFallback },
+);
+const FlowView = dynamic(
+  () => import("@/components/cash-flow/flow-view").then((mod) => mod.FlowView),
+  { ssr: false, loading: PanelFallback },
+);
 
 export interface ModuleViews {
   /** The export control of the tab, mounted in the header's row next to the tabs. */
@@ -86,6 +104,28 @@ export const MODULE_VIEWS: Record<string, ModuleViews> = {
           return <OccupancyDatosView />;
         case "graficos":
           return <OccupancyGraficosView />;
+        default:
+          return null;
+      }
+    },
+  },
+  "cash-flow": {
+    // «Cargar Excel» only where something is loaded (a cartera, the check register); «Exportar»
+    // wherever the tab has an output. Resumen has neither: it is a reading.
+    rightSlot: (tab) => (tab === "resumen" ? null : <CashFlowExportActions tab={tab} />),
+    // ONE bar for the four tabs: the cut date and the center are common, and each tab adds its own
+    // marks (see `CashFlowToolbar`).
+    toolbar: (tab) => <CashFlowToolbar tab={tab} />,
+    panel: (tab) => {
+      switch (tab) {
+        case "resumen":
+          return <CashFlowSummaryView />;
+        case "cxp":
+          return <PayablesView />;
+        case "cheques":
+          return <ChecksView />;
+        case "flujo":
+          return <FlowView />;
         default:
           return null;
       }

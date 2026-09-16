@@ -66,6 +66,8 @@ interface CellProps {
   value?: number;
   /** Row/weekend background (ignored on sticky cells, which need a solid fill). */
   background?: string;
+  /** A group row's label spanning several columns. */
+  colSpan?: number;
   className?: string;
 }
 
@@ -79,6 +81,7 @@ export function Cell({
   tone = "default",
   value,
   background,
+  colSpan,
   className,
 }: CellProps) {
   const resolved = resolveTone(tone, value);
@@ -88,6 +91,7 @@ export function Cell({
   return (
     <td
       style={style}
+      colSpan={colSpan}
       className={cn(
         "border-b border-border-soft px-3.5 py-2 text-[12.5px]",
         numeric || align === "right" ? "text-right tabular-nums" : "text-left",

@@ -1,0 +1,185 @@
+"use client";
+
+import { FileSpreadsheet, Printer } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
+import type { ModuleTabId } from "@/lib/modules";
+import { useCashFlowData } from "./cash-flow-data-provider";
+import { ChecksUploadModal } from "./checks-upload-modal";
+import { FlowReportPreview } from "./flow-report-preview";
+import { PayablesUploadModal } from "./payables-upload-modal";
+
+/**
+ * Flujo de caja's `ExportActions` wrapper, per tab: «Cargar Excel» where something is loaded (a
+ * cartera in CxP, the register in Cheques) and «Exportar ▾» with that tab's outputs — the `REPORTE
+ * CXP`, the fourteen-column control, the flow's report and Excel. Resumen mounts nothing (see
+ * `module-views.tsx`).
+ */
+export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
+  const {
+    activeClientId,
+    activeClient,
+    visiblePayables,
+    visibleChecks,
+    derived,
+    flow,
+    asOf,
+    accounts,
+    centers,
+  } = useCashFlowData();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const companyName = activeClient?.name ?? "";
+  const logo = activeClient?.logo;
+
+  const exports = useMemo<ExportOption[]>(() => {
+    if (tab === "cxp") {
+      return [
+        {
+          id: "reporte-cxp",
+          title: "Reporte CxP",
+          description:
+            "Las columnas del REPORTE CXP, con la antigüedad a la fecha de corte y lo filtrado",
+          icon: FileSpreadsheet,
+          iconClassName: "text-brand",
+          disabled: visiblePayables.length === 0,
+          disabledReason: "No hay documentos en pantalla que exportar.",
+          run: async () => {
+            const [mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/export/payables-workbook"),
+              import("@/lib/cash-flow/export/shared"),
+              import("@/lib/download"),
+            ]);
+            const blob = await shared.workbookToBlob(
+              mod.buildPayablesWorkbook(visiblePayables, asOf, companyName, logo),
+            );
+            downloadBlob(blob, shared.exportFilename("REPORTE_CXP", companyName, asOf));
+          },
+        },
+      ];
+    }
+    if (tab === "cheques") {
+      return [
+        {
+          id: "control-cheques",
+          title: "Control de cheques",
+          description: "Las catorce columnas del libro, con lo que pasa los filtros",
+          icon: FileSpreadsheet,
+          iconClassName: "text-brand",
+          disabled: visibleChecks.length === 0,
+          disabledReason: "No hay cheques en pantalla que exportar.",
+          run: async () => {
+            const [mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/export/checks-workbook"),
+              import("@/lib/cash-flow/export/shared"),
+              import("@/lib/download"),
+            ]);
+            const blob = await shared.workbookToBlob(
+              mod.buildChecksWorkbook(visibleChecks, companyName, logo),
+            );
+            downloadBlob(blob, shared.exportFilename("CHEQUES", companyName, asOf));
+          },
+        },
+      ];
+    }
+    if (tab === "flujo") {
+      const empty = accounts.length === 0;
+      return [
+        {
+          id: "flow-report",
+          title: "Reporte de flujo",
+          description:
+            "Cuentas, ingresos, pagos por proveedor y préstamos, para imprimir o guardar en PDF",
+          icon: Printer,
+          iconClassName: "text-brand",
+          disabled: empty,
+          disabledReason: "Declara una cuenta bancaria primero.",
+          run: () => setReportOpen(true),
+        },
+        {
+          id: "flow-excel",
+          title: "Excel de flujo",
+          description: "Las mismas secciones del reporte en una hoja",
+          icon: FileSpreadsheet,
+          iconClassName: "text-brand",
+          disabled: empty,
+          disabledReason: "Declara una cuenta bancaria primero.",
+          run: async () => {
+            const [{ buildFlowReport }, mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/report"),
+              import("@/lib/cash-flow/export/flow-workbook"),
+              import("@/lib/cash-flow/export/shared"),
+              import("@/lib/download"),
+            ]);
+            const report = buildFlowReport({
+              clientName: companyName,
+              ...(logo ? { logo } : {}),
+              derived,
+              incomes: flow?.incomes ?? [],
+              accounts,
+              centers,
+              generatedAt: new Date(),
+            });
+            const blob = await shared.workbookToBlob(mod.buildFlowWorkbook(report, logo));
+            downloadBlob(blob, shared.exportFilename("FLUJO", companyName, asOf));
+          },
+        },
+      ];
+    }
+    return [];
+  }, [
+    tab,
+    visiblePayables,
+    visibleChecks,
+    derived,
+    flow,
+    asOf,
+    companyName,
+    logo,
+    accounts,
+    centers,
+  ]);
+
+  const uploads = tab === "cxp" || tab === "cheques";
+
+  return (
+    <>
+      <ExportActions
+        {...(uploads
+          ? {
+              upload: {
+                label: tab === "cxp" ? "Cargar cartera" : "Cargar cheques",
+                onClick: () => setUploadOpen(true),
+                disabled: activeClientId === null,
+                disabledReason: "Agrega una empresa primero: cada una guarda su propia cartera.",
+              },
+            }
+          : {})}
+        exports={exports}
+        info={{
+          title: "Archivos aceptados",
+          children:
+            tab === "cheques" ? (
+              <>
+                El libro del control de cheques (hoja con N° EGRESO · BANCO · NOMBRE · CHEQUE ·
+                VALOR · FECHA DE EMISION). Se puede recargar: cada fila se escribe por su egreso.
+              </>
+            ) : (
+              <>
+                La «Cartera por Pagar (Detallado)» de Contífico —también pegada en el FORMATO IDEAL—
+                y el «Reporte · Cuentas por pagar» de Dingoo (.xls / .xlsx). El formato se detecta
+                solo.
+              </>
+            ),
+        }}
+      />
+      {tab === "cxp" && (
+        <PayablesUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      )}
+      {tab === "cheques" && (
+        <ChecksUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      )}
+      {reportOpen && <FlowReportPreview onClose={() => setReportOpen(false)} />}
+    </>
+  );
+}

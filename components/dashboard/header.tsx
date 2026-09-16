@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { CashFlowClientActions } from "@/components/cash-flow/cash-flow-client-actions";
 import { useModuleTab } from "@/components/dashboard/module-tab-state";
 import { MODULE_VIEWS } from "@/components/dashboard/module-views";
 import { OccupancyHotelActions } from "@/components/occupancy/occupancy-hotel-actions";
@@ -43,6 +44,7 @@ export function DashboardHeader() {
   const isPyg = current.slug === "profit-loss";
   const isOccupancy = current.slug === "occupancy";
   const isPayroll = current.slug === "payroll";
+  const isCashFlow = current.slug === "cash-flow";
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-surface px-7">
@@ -61,6 +63,7 @@ export function DashboardHeader() {
         {isPyg && <PygClientActions />}
         {isOccupancy && <OccupancyHotelActions />}
         {isPayroll && <PayrollClientActions />}
+        {isCashFlow && <CashFlowClientActions />}
       </div>
     </header>
   );

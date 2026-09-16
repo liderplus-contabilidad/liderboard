@@ -264,6 +264,39 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
+**Flujo de caja y CxP** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo) · `lib/cash-flow/` ·
+its own Dexie base `liderboard-cash-flow` v3 (v1–v2 retire a lost prototype) partitioned by `clientId`; its own list of EMPRESAS (like
+Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
+sobregiro · centro) in «Configurar».
+
+- **The FECHA DE CORTE is one control of the bar, read by the four tabs** (`asOf` in the provider,
+  today by default, chip «Al dd/mm/aaaa» otherwise). Nothing ages, sums or captures at any other date.
+- **ONE table for what is owed** (`payables`): a Contífico/Dingoo document and a manual obligation
+  (SRI, IESS, arriendo, sueldos…) are the same row with a different `source`. `identity.ts` composes
+  a document's id from what the file says, so a reload upserts and KEEPS the mark and the four
+  working columns; `cut.ts` (`mergeCut`) settles what the same `source` stopped bringing and never
+  deletes — a flow of two weeks ago still reads it.
+- **The aging is a function** (`aging.ts`: `agingOf(dueOn, asOf)`), never a stored column: the
+  buckets Contífico writes are true only on the day of the download, so they are discarded at the
+  door and the grid, the `REPORTE CXP`, Resumen and the flow all ask this one definition.
+- **The mark of payment lives in the DOCUMENT** (`priority` urgente · pendiente · sin marcar, `payOn`,
+  `payFromAccountId`), never in a flow, and what a marked document contributes is `markedAmount` =
+  `approved ?? balance` (`derive.ts`). «Marcar pagado» settles by hand.
+- **A check has a STEP and a VOIDED flag** (`made → signed → delivered → cashed`; `voided`
+  orthogonal) and stores `cashedOn`: `checks.ts` (`outstandingChecks` at a date) is the one definition
+  of «girados y no cobrados», counted whatever the step. A bank label the empresa's accounts do not
+  match is «sin cuenta»: visible, assignable in bulk, in no sum.
+- **A flow stores only its captures** (`flows`, unique per empresa and date: balances per account and
+  the projected incomes). `flow.ts` (`deriveFlow`) derives disponible, no cobrados, urgente,
+  pendiente, saldo final, faltante and the LOANS between centers (a document of HC paid from an
+  account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
+  same `DerivedFlow`.
+- Uploads are by label with a registry (`upload/registry.ts`: `contifico` · `dingoo`, first match
+  over EVERY sheet; the check register is `checks-log.ts`, a separate load). The three Excels
+  (`export/`) and the printed flow (`report.ts` → `ReportTable`) are the module's outputs, all through
+  `cash-flow-export-actions.tsx`; Resumen has none. `money` (`derive.ts`) is the module's amount,
+  always with cents.
+
 ### Shared UI
 
 - **`components/ui/export-actions.tsx` is the app's ONE export control** — «Cargar Excel» ·
