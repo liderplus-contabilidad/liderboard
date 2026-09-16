@@ -160,8 +160,8 @@ export const MODULES: DashboardModule[] = [
   // MANOR») is kept verbatim and never has to match a PyG center.
   {
     slug: "cash-flow",
-    label: "Flujo de caja y CxP",
-    title: "Flujo de caja y cuentas por pagar",
+    label: "Cuentas por Pagar",
+    title: "Cuentas por pagar",
     icon: Wallet,
     tabs: [TAB_RESUMEN, TAB_CXP, TAB_CHEQUES, TAB_FLUJO],
   },

@@ -1,5 +1,5 @@
 /**
- * Flujo de caja y CxP domain types: the EMPRESA (with its centers and bank accounts), what is OWED
+ * Cuentas por Pagar domain types: the EMPRESA (with its centers and bank accounts), what is OWED
  * (`Payable`), the CHECK register (`Check`) and what a FLOW captures (`PaymentFlow`).
  *
  * Three things are deliberately NOT here, because they are derived on every read and never stored

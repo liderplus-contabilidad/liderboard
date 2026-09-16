@@ -264,7 +264,7 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
-**Flujo de caja y CxP** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo) · `lib/cash-flow/` ·
+**Cuentas por Pagar** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo) · `lib/cash-flow/` ·
 its own Dexie base `liderboard-cash-flow` v3 (v1–v2 retire a lost prototype) partitioned by `clientId`; its own list of EMPRESAS (like
 Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
 sobregiro · centro) in «Configurar».
