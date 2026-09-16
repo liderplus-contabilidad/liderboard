@@ -17,6 +17,7 @@ import { mergeCut, type IncomingPayable } from "./cut";
 import { todayISO } from "./dates";
 import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
+import { cashColumnRole, type ParsedCashSheet } from "./upload/cash-entries";
 import type { StoredPayableRow } from "./upload/liderplus";
 import type {
   BankAccount,
@@ -768,4 +769,71 @@ export async function updateCashEntry(
 
 export async function deleteCashEntry(id: string): Promise<void> {
   await db.cashEntries.delete(id);
+}
+
+/** What loading a `CARGAS CASH` sheet wrote, per section, and what it could not place. */
+export interface CashSheetSummary {
+  written: number;
+  /** Sections the file named and were replaced. */
+  sections: CashEntry["section"][];
+  /** Column labels no center, «Monto» or loan pair answered — their figures were dropped. */
+  unknownColumns: string[];
+}
+
+/**
+ * REPLACES each section the sheet brings with its rows, in ONE transaction — the round-trip rule
+ * of the app: what is loaded substitutes, never merges. A section the file does not name is left
+ * as it is. Here the column LABELS become centers and loans (`cashColumnRole`), which is why the
+ * upload creates the proposed centers first; a label nothing answers is reported and its figures
+ * dropped, never written under a made-up key. One loan per row: the first loan column with a
+ * figure wins.
+ */
+export async function replaceCashSections(
+  clientId: string,
+  sheet: ParsedCashSheet,
+): Promise<CashSheetSummary> {
+  return db.transaction("rw", db.centers, db.cashEntries, async () => {
+    const centers = await db.centers.where("clientId").equals(clientId).toArray();
+    const unknown = new Set<string>();
+    let written = 0;
+    for (const section of sheet.sections) {
+      const roles = new Map(
+        section.columns.map((label) => [label, cashColumnRole(label, centers)] as const),
+      );
+      const entries: CashEntry[] = section.rows.map((row) => {
+        const amounts: Record<string, number> = {};
+        let loan: CashEntry["loan"] = null;
+        for (const [label, amount] of Object.entries(row.amounts)) {
+          const role = roles.get(label) ?? { kind: "unknown" };
+          if (role.kind === "center") {
+            amounts[role.centerId] = amount;
+          } else if (role.kind === "amount") {
+            amounts[""] = amount;
+          } else if (role.kind === "loan") {
+            loan ??= { fromCenterId: role.fromCenterId, toCenterId: role.toCenterId, amount };
+          } else {
+            unknown.add(label);
+          }
+        }
+        return {
+          id: crypto.randomUUID(),
+          clientId,
+          section: section.id,
+          date: row.date ?? todayISO(),
+          detail: row.detail,
+          amounts,
+          loan,
+          observation: row.observation,
+        };
+      });
+      await db.cashEntries.where("[clientId+section]").equals([clientId, section.id]).delete();
+      await db.cashEntries.bulkAdd(entries);
+      written += entries.length;
+    }
+    return {
+      written,
+      sections: sheet.sections.map((section) => section.id),
+      unknownColumns: [...unknown],
+    };
+  });
 }

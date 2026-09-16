@@ -305,7 +305,10 @@ sobregiro · centro) in «Configurar».
   of that section uses, «Sin centro» only when PROVEEDORES needs it: MOVIMIENTO INICIAL and VARIOS
   are hand-written rows (`cashEntries`, a monto per center + optional loan, edited in line, a live
   list the cut date does not touch) and PROVEEDORES is DERIVED from the open documents carrying the
-  `cash` label, one row per supplier. The four Excels (`export/`) and the printed flow
+  `cash` label, one row per supplier. The sheet LOADS too (`upload/cash-entries.ts`, blocks by
+  TITLE, columns by label resolved at the door by `cashColumnRole`, each block REPLACING its
+  section whole — the same shape the export writes, so it round-trips). The four Excels
+  (`export/`) and the printed flow
   (`report.ts` → `ReportTable`) are the module's outputs, all through `cash-flow-export-actions.tsx`;
   Resumen has none. `money` (`derive.ts`) is the module's amount,
   always with cents.

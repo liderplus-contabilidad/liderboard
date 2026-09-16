@@ -5,13 +5,14 @@ import { useMemo, useState } from "react";
 import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
 import type { ModuleTabId } from "@/lib/modules";
 import { useCashFlowData } from "./cash-flow-data-provider";
+import { CashEntriesUploadModal } from "./cash-entries-upload-modal";
 import { ChecksUploadModal } from "./checks-upload-modal";
 import { FlowReportPreview } from "./flow-report-preview";
 import { PayablesUploadModal } from "./payables-upload-modal";
 
 /**
  * Flujo de caja's `ExportActions` wrapper, per tab: «Cargar Excel» where something is loaded (a
- * cartera in CxP, the register in Cheques) and «Exportar ▾» with that tab's outputs — the `REPORTE
+ * cartera in CxP, the register in Cheques, the `CARGAS CASH` sheet in Cargas cash) and «Exportar ▾» with that tab's outputs — the `REPORTE
  * CXP`, the fourteen-column control, the flow's report and Excel, the «Cargas cash» sheet. Resumen
  * mounts nothing (see `module-views.tsx`).
  */
@@ -166,7 +167,9 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
     cashMatrix,
   ]);
 
-  const uploads = tab === "cxp" || tab === "cheques";
+  const uploads = tab === "cxp" || tab === "cheques" || tab === "cargas";
+  const uploadLabel =
+    tab === "cxp" ? "Cargar cartera" : tab === "cheques" ? "Cargar cheques" : "Cargar matriz";
 
   return (
     <>
@@ -174,7 +177,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
         {...(uploads
           ? {
               upload: {
-                label: tab === "cxp" ? "Cargar cartera" : "Cargar cheques",
+                label: uploadLabel,
                 onClick: () => setUploadOpen(true),
                 disabled: activeClientId === null,
                 disabledReason: "Agrega una empresa primero: cada una guarda su propia cartera.",
@@ -188,6 +191,9 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
       )}
       {tab === "cheques" && (
         <ChecksUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      )}
+      {tab === "cargas" && (
+        <CashEntriesUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
       )}
       {reportOpen && <FlowReportPreview onClose={() => setReportOpen(false)} />}
     </>

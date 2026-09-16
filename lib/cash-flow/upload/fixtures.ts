@@ -422,3 +422,33 @@ export const CHECKS_GRID: Grid = [
   [17100],
   [17101],
 ];
+
+/** The `CARGAS CASH` sheet of `FLUJO DE PAGOS COMISERSA SECCIONES.xlsx`, rows 1–38 as they are:
+ *  dates are Excel serials, the three blocks are stacked with their TOTAL rows, and PROVEEDORES
+ *  points at the `PROVEEDOR` sheets (here already the values the formulas resolve to). */
+export const CASH_GRID: Grid = [
+  ["CARGAS CASH PENDIENTE DE APROBACION"],
+  ["MOVIMIENTO INICIAL"],
+  ["FECHA", "DETALLE", "HA", "HC", "HK", "HA-HC", "HC-HA", "OBSERVACION "],
+  [46245, "PRESTAMO HK A HC", null, null, 1000, null, null, "PAGO SR OBIOL-SONIA-CHINO"],
+  [],
+  [],
+  [],
+  ["TOTAL", null, 0, 0, 1000, 0, 0],
+  [],
+  ["VARIOS"],
+  ["FECHA", "DETALLE", "HA", "HC", "HK", "HA-HC", "HC-HA", "OBSERVACION "],
+  [46245, "SR OBIOL BONO HC", null, 850, null, null, null, "BONO HC"],
+  [46245, "SUELDO 07-2026 SONIA SALINAS", null, 601.33, null, null, null, "VENDEDORA"],
+  [46245, "SUELDO 07-2026 DON JOSE ", null, 154.74, null, 200, null, "CHINO MESERO"],
+  [],
+  ["TOTAL", null, 0, 1606.07, 0, 200, 0],
+  [],
+  [],
+  ["PROVEEDORES"],
+  [],
+  ["FECHA", "DETALLE", "HA", "HC", "HK", "HA-HC", "HC-HA", "OBSERVACION "],
+  [46206, "COMPANIA DE ECONOMIA MIXTA AUSTROGAS", null, 206.43, 268.03],
+  [46206, "GAVIDIA ALTAMIRANO PAUL FERNANDO", null, 249.61, 145.93],
+  ["TOTAL", null, 0, 456.04, 413.96, 0, 0],
+];
