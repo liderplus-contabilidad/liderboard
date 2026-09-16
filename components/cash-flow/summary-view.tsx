@@ -16,10 +16,18 @@ import { formatDayMonthYear } from "@/lib/date";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
 
-/** The first card takes the whole row; after it, cards pair up two per row. */
+/**
+ * The first card takes the whole row; after it, cards pair up two per row. A card left alone on
+ * the last row —an odd count after the first, or a partner the data did not answer— takes the
+ * whole row too: half a row beside an empty rectangle reads as something missing.
+ */
+function spansRow(cards: { height: number }[], index: number): boolean {
+  return index === 0 || (index === cards.length - 1 && index % 2 === 1);
+}
+
 function rowHeight(cards: { height: number }[], index: number): number {
-  if (index === 0) {
-    return cards[0].height;
+  if (spansRow(cards, index)) {
+    return cards[index].height;
   }
   const first = index % 2 === 1 ? index : index - 1;
   return Math.max(cards[first].height, cards[first + 1]?.height ?? 0);
@@ -92,10 +100,10 @@ export function SummaryView() {
         ) : (
           <div className="grid grid-cols-2 gap-4">
             {cards.map((card, index) => (
-              <div key={card.id} className={index === 0 ? "col-span-2" : undefined}>
+              <div key={card.id} className={spansRow(cards, index) ? "col-span-2" : undefined}>
                 {/* Two cards on one row share the taller one's height, so the row's bottom edges
                     line up whatever each card asked for. */}
-                <SpecCard spec={{ ...card, height: rowHeight(cards, index) }} />
+                <SpecCard spec={{ ...card, height: rowHeight(cards, index) }} expandable />
               </div>
             ))}
           </div>

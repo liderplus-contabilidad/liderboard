@@ -3,7 +3,7 @@
 import { Landmark, MapPin, Plus, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FormField, TextField } from "@/components/ui/form-field";
+import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
 import { SidePanel } from "@/components/ui/side-panel";
@@ -283,12 +283,16 @@ function AccountsSection({
           onChange={(event) => setName(event.target.value)}
         />
         <FormField label="Sobregiro" hint={overdraft ? money(overdraft) : undefined}>
-          <NumericInput
-            value={overdraft}
-            format="currency"
-            ariaLabel="Sobregiro de la cuenta nueva"
-            onCommit={setOverdraft}
-          />
+          <FieldBox>
+            <NumericInput
+              value={overdraft}
+              format="currency"
+              align="left"
+              placeholder="$0.00"
+              ariaLabel="Sobregiro de la cuenta nueva"
+              onCommit={setOverdraft}
+            />
+          </FieldBox>
         </FormField>
         {centers.length > 0 && (
           <Select

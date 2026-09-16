@@ -228,6 +228,7 @@ export function GraficosView() {
    */
   const channelsCard = (
     <ChartCard
+      expandable
       title="Canales de venta"
       subtitle={`De dónde salieron esas noches · ${period}`}
       option={
@@ -327,6 +328,7 @@ export function GraficosView() {
             return (
               <ChartCard
                 key={column.id}
+                expandable
                 title={column.label}
                 subtitle={`${axisTitle} · ${period}`}
                 option={
@@ -367,6 +369,7 @@ export function GraficosView() {
       <HeatmapCard result={heatmaps} onSelectDay={onSelectDay} />
 
       <ChartCard
+        expandable
         title={`${metric.label} por día de la semana`}
         subtitle={`Dónde se cae y dónde se llena · ${period}`}
         option={weekdayOption(week, metric.unit, { colorOf, colorAt }, weekColor)}

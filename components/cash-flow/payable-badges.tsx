@@ -24,6 +24,11 @@ export function PriorityBadge({ priority }: { priority: Payable["priority"] }) {
   );
 }
 
+/** The «CASH» label of the `PROVEEDOR` sheets — beside the priority, never instead of it. */
+export function CashBadge() {
+  return <Badge variant="positive">Cash</Badge>;
+}
+
 /**
  * The approval as four dots — observación · 1ª revisión · revisión final · notificación — the
  * `REPORTE CXP`'s four working columns read at a glance. Filled where something was written.

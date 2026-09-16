@@ -3,21 +3,21 @@
 import { RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FormField } from "@/components/ui/form-field";
+import { FieldBox, FormField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
 import { SidePanel } from "@/components/ui/side-panel";
 import { agingOf } from "@/lib/cash-flow/aging";
 import * as cashDb from "@/lib/cash-flow/db";
-import { isISODate } from "@/lib/cash-flow/dates";
-import { documentLabel, KIND_LABELS, money } from "@/lib/cash-flow/derive";
+import { documentLabel, kindLabel, money } from "@/lib/cash-flow/derive";
 import type { Payable, PayPriority } from "@/lib/cash-flow/types";
 import { formatDayMonthYear } from "@/lib/date";
 
 import { AccountPicker } from "./account-picker";
 import { useCashFlowData } from "./cash-flow-data-provider";
-import { AgingBadge, PriorityBadge } from "./payable-badges";
+import { AgingBadge, CashBadge, PriorityBadge } from "./payable-badges";
 
 const NONE = "";
 
@@ -38,6 +38,7 @@ export function PayableDetailPanel({
   const [observation, setObservation] = useState(payable.observation);
   const finalReviewId = useId();
   const notifiedId = useId();
+  const cashId = useId();
   const settled = payable.status === "settled";
   const aging = agingOf(payable.dueOn, asOf);
 
@@ -48,7 +49,7 @@ export function PayableDetailPanel({
 
   return (
     <SidePanel
-      eyebrow={documentLabel(payable) || KIND_LABELS[payable.kind ?? "otros"]}
+      eyebrow={documentLabel(payable) || kindLabel(payable.kind ?? "otros")}
       title={payable.supplier}
       width={460}
       onClose={onClose}
@@ -59,7 +60,10 @@ export function PayableDetailPanel({
             <AgingBadge aging={aging} settled={settled} />
           </Fact>
           <Fact label="Prioridad">
-            <PriorityBadge priority={payable.priority} />
+            <span className="inline-flex items-center gap-1.5">
+              <PriorityBadge priority={payable.priority} />
+              {payable.cash && <CashBadge />}
+            </span>
           </Fact>
           <Fact label="Emisión">{formatDayMonthYear(payable.issuedOn) ?? "—"}</Fact>
           <Fact label="Vencimiento">{formatDayMonthYear(payable.dueOn) ?? "—"}</Fact>
@@ -97,15 +101,12 @@ export function PayableDetailPanel({
               }
             />
             <FormField label="Fecha programada">
-              <input
-                type="date"
-                value={payable.payOn ?? ""}
+              <DateField
+                value={payable.payOn}
+                nullable
                 disabled={settled}
-                aria-label="Fecha programada"
-                onChange={(event) =>
-                  patch({ payOn: isISODate(event.target.value) ? event.target.value : null })
-                }
-                className="w-full rounded-lg border border-border bg-surface px-[9px] py-2 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+                ariaLabel="Fecha programada"
+                onChange={(payOn) => patch({ payOn })}
               />
             </FormField>
             <AccountPicker
@@ -115,6 +116,14 @@ export function PayableDetailPanel({
               onChange={(accountId) => patch({ payFromAccountId: accountId })}
               creationClassName="col-span-2"
             />
+          </div>
+          <div className="flex items-center gap-2.5 text-[13px] text-ink">
+            <Checkbox
+              id={cashId}
+              checked={payable.cash}
+              {...(settled ? {} : { onChange: (checked: boolean) => patch({ cash: checked }) })}
+            />
+            <label htmlFor={cashId}>Cash — aparece en «Cargas cash»</label>
           </div>
         </section>
 
@@ -140,13 +149,18 @@ export function PayableDetailPanel({
             label="Aprobación primera revisión (monto)"
             hint="Lo que el flujo cuenta de este documento; vacío cuenta el saldo entero."
           >
-            <NumericInput
-              value={payable.approved}
-              nullable
-              format="currency"
-              ariaLabel="Monto aprobado en primera revisión"
-              onCommit={(value) => patch({ approved: value })}
-            />
+            <FieldBox>
+              <NumericInput
+                value={payable.approved}
+                nullable
+                disabled={settled}
+                format="currency"
+                align="left"
+                placeholder="$0.00"
+                ariaLabel="Monto aprobado en primera revisión"
+                onCommit={(value) => patch({ approved: value })}
+              />
+            </FieldBox>
           </FormField>
           <div className="flex items-center gap-2.5 text-[13px] text-ink">
             <Checkbox

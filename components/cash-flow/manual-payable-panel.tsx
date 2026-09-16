@@ -1,33 +1,42 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FormField, TextField } from "@/components/ui/form-field";
+import { DateField } from "@/components/ui/date-field";
+import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
 import { SidePanel } from "@/components/ui/side-panel";
 import * as cashDb from "@/lib/cash-flow/db";
-import { isISODate } from "@/lib/cash-flow/dates";
-import { KIND_LABELS, PAYABLE_KINDS } from "@/lib/cash-flow/derive";
+import { BUILTIN_KINDS, customKinds, kindLabel, normalizeKind } from "@/lib/cash-flow/derive";
 import type { PayableKind } from "@/lib/cash-flow/types";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 const NO_CENTER = "";
+/** The option that opens the name field: never a class itself, so no typed name can collide. */
+const NEW_KIND = "\u0000new";
 
 /**
  * «Agregar obligación»: what no accounting system exports — SRI, IESS, the rent, the payroll, a
  * loan instalment — typed by hand into the SAME list as the imported documents, so the flow, the
  * Excel and the report paint one cartera. Born unmarked, like a document a cut just brought.
+ *
+ * «Clase» offers the built-ins, then the classes this empresa already typed (`customKinds`, read off
+ * its payables so nothing has to be stored), then «Nueva clase…», which opens a name field. The
+ * name goes through `normalizeKind`, so typing «Arriendo» lands on the built-in and not beside it.
  */
 export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
-  const { activeClientId, centers } = useCashFlowData();
+  const { activeClientId, centers, payables } = useCashFlowData();
   const [supplier, setSupplier] = useState("");
   const [kind, setKind] = useState<PayableKind>("otros");
+  const [newKind, setNewKind] = useState("");
+  const used = useMemo(() => customKinds(payables), [payables]);
   const [amount, setAmount] = useState<number | null>(null);
-  const [dueOn, setDueOn] = useState("");
+  const [dueOn, setDueOn] = useState<string | null>(null);
   const [centerId, setCenterId] = useState(NO_CENTER);
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | undefined>();
+  const [kindError, setKindError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
   const save = useCallback(async () => {
@@ -36,6 +45,11 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
     }
     if (!supplier.trim()) {
       setError("Escribe el concepto o el beneficiario.");
+      return;
+    }
+    const resolvedKind = kind === NEW_KIND ? normalizeKind(newKind) : kind;
+    if (!resolvedKind) {
+      setKindError("Escribe el nombre de la clase nueva.");
       return;
     }
     if (!amount || amount <= 0) {
@@ -47,9 +61,9 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
       const center = centers.find((candidate) => candidate.id === centerId);
       await cashDb.addManualPayable(activeClientId, {
         supplier,
-        kind,
+        kind: resolvedKind,
         amount,
-        dueOn: isISODate(dueOn) ? dueOn : null,
+        dueOn,
         centerName: center?.name ?? null,
         description,
       });
@@ -57,7 +71,18 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
     } finally {
       setBusy(false);
     }
-  }, [activeClientId, supplier, amount, kind, dueOn, centerId, centers, description, onClose]);
+  }, [
+    activeClientId,
+    supplier,
+    amount,
+    kind,
+    newKind,
+    dueOn,
+    centerId,
+    centers,
+    description,
+    onClose,
+  ]);
 
   return (
     <SidePanel eyebrow="Cuentas por pagar" title="Agregar obligación" width={440} onClose={onClose}>
@@ -76,26 +101,31 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
           <Select
             label="Clase"
             value={kind}
-            options={PAYABLE_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
-            onChange={(event) => setKind(event.target.value as PayableKind)}
+            options={[
+              ...BUILTIN_KINDS.map((value) => ({ value, label: kindLabel(value) })),
+              ...used.map((value) => ({ value, label: kindLabel(value) })),
+              { value: NEW_KIND, label: "Nueva clase…" },
+            ]}
+            onChange={(event) => {
+              setKind(event.target.value);
+              setKindError(undefined);
+            }}
           />
           <FormField label="Monto">
-            <NumericInput
-              value={amount}
-              nullable
-              format="currency"
-              ariaLabel="Monto"
-              onCommit={setAmount}
-            />
+            <FieldBox>
+              <NumericInput
+                value={amount}
+                nullable
+                format="currency"
+                align="left"
+                placeholder="$0.00"
+                ariaLabel="Monto"
+                onCommit={setAmount}
+              />
+            </FieldBox>
           </FormField>
           <FormField label="Vencimiento" hint="Opcional; sin fecha cuenta como por vencer.">
-            <input
-              type="date"
-              value={dueOn}
-              aria-label="Vencimiento"
-              onChange={(event) => setDueOn(event.target.value)}
-              className="w-full rounded-lg border border-border bg-surface px-[9px] py-2 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
-            />
+            <DateField value={dueOn} nullable ariaLabel="Vencimiento" onChange={setDueOn} />
           </FormField>
           {centers.length > 0 && (
             <Select
@@ -109,6 +139,18 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
             />
           )}
         </div>
+        {kind === NEW_KIND && (
+          <TextField
+            label="Nombre de la clase"
+            value={newKind}
+            error={kindError}
+            placeholder="Servicios básicos"
+            onChange={(event) => {
+              setNewKind(event.target.value);
+              setKindError(undefined);
+            }}
+          />
+        )}
         <TextField
           label="Detalle"
           value={description}

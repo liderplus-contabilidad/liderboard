@@ -66,6 +66,10 @@ const FlowView = dynamic(
   () => import("@/components/cash-flow/flow-view").then((mod) => mod.FlowView),
   { ssr: false, loading: PanelFallback },
 );
+const CashEntriesView = dynamic(
+  () => import("@/components/cash-flow/cash-entries-view").then((mod) => mod.CashEntriesView),
+  { ssr: false, loading: PanelFallback },
+);
 
 export interface ModuleViews {
   /** The export control of the tab, mounted in the header's row next to the tabs. */
@@ -113,7 +117,7 @@ export const MODULE_VIEWS: Record<string, ModuleViews> = {
     // «Cargar Excel» only where something is loaded (a cartera, the check register); «Exportar»
     // wherever the tab has an output. Resumen has neither: it is a reading.
     rightSlot: (tab) => (tab === "resumen" ? null : <CashFlowExportActions tab={tab} />),
-    // ONE bar for the four tabs: the cut date and the center are common, and each tab adds its own
+    // ONE bar for the five tabs: the cut date and the center are common, and each tab adds its own
     // marks (see `CashFlowToolbar`).
     toolbar: (tab) => <CashFlowToolbar tab={tab} />,
     panel: (tab) => {
@@ -126,6 +130,8 @@ export const MODULE_VIEWS: Record<string, ModuleViews> = {
           return <ChecksView />;
         case "flujo":
           return <FlowView />;
+        case "cargas":
+          return <CashEntriesView />;
         default:
           return null;
       }

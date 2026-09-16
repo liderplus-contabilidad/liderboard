@@ -55,8 +55,15 @@ export interface BankAccount {
 
 export type PayableSource = "contifico" | "dingoo" | "manual";
 
-/** The class of an obligation no accounting system exports. Only a manual payable carries one. */
-export type PayableKind = "sri" | "iess" | "arriendo" | "sueldos" | "cuota" | "prestamo" | "otros";
+/**
+ * The class of an obligation no accounting system exports. Only a manual payable carries one. The
+ * seven the module was born with travel as ids (`BUILTIN_KINDS` in `derive.ts`); a class the user
+ * typed («Servicios básicos») travels as its own LABEL, so the list is open without a table of
+ * classes to keep — `kindLabel` is the one translation to screen and `normalizeKind` the one
+ * reading from a sheet.
+ */
+export type PayableKind = BuiltinKind | (string & {});
+export type BuiltinKind = "sri" | "iess" | "arriendo" | "sueldos" | "cuota" | "prestamo" | "otros";
 
 /** The mark that puts a document INTO the flow. `null` is «sin marcar»: open, but not decided. */
 export type PayPriority = "urgent" | "pending";
@@ -93,6 +100,10 @@ export interface Payable {
   kind?: PayableKind;
   /** The mark of payment — see `PayPriority`. */
   priority: PayPriority | null;
+  /** The «CASH» label of the `PROVEEDOR` sheets: what «Cargas cash» lists in PROVEEDORES. A LABEL
+   *  beside the priority, never a value of it — a document is urgent AND cash at once, and it
+   *  changes nothing of what the flow reads. */
+  cash: boolean;
   /** The date the payment is scheduled for, if one was set. */
   payOn: string | null;
   /** The account the payment leaves from, or `null` when not chosen (the flow sums it at company
@@ -162,6 +173,36 @@ export interface PaymentFlow {
   date: string;
   balances: Record<string, number>;
   incomes: FlowIncome[];
+}
+
+/** The two hand-written matrices of `CARGAS CASH`; the third (PROVEEDORES) is derived. */
+export type CashSectionId = "initial" | "misc";
+
+/** «HA-HC»: a loan from one center to another, written on a row of the matrix. */
+export interface CashLoan {
+  fromCenterId: string;
+  toCenterId: string;
+  amount: number;
+}
+
+/**
+ * One hand-written row of `CARGAS CASH` (MOVIMIENTO INICIAL · VARIOS): what is paid from the TILL,
+ * outside every bank account. ONE row with a monto per center — not a row per center — because the
+ * book writes «SUELDO 07-2026» once, under HC, and the row must keep reading as one. Only what is
+ * typed is stored: the column totals are derived (`cash-entries.ts`). Without centers the one key
+ * is `""` («Monto») and no loan is offered.
+ */
+export interface CashEntry {
+  id: string;
+  clientId: string;
+  section: CashSectionId;
+  /** ISO `yyyy-mm-dd`: the row's own date, not the cut's — the matrix is a live list. */
+  date: string;
+  detail: string;
+  /** Center id → amount. A key that is no longer a center is ignored on read. */
+  amounts: Record<string, number>;
+  loan: CashLoan | null;
+  observation: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Coins,
   FileText,
   Flag,
   Plus,
@@ -15,6 +16,7 @@ import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { GridRow } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatTile } from "@/components/ui/stat-tile";
@@ -27,16 +29,15 @@ import {
   payableDetail,
   type SupplierGroup,
 } from "@/lib/cash-flow/derive";
-import { isISODate } from "@/lib/cash-flow/dates";
 import { hasActiveFilters } from "@/lib/cash-flow/filters";
-import type { Payable } from "@/lib/cash-flow/types";
+import type { Payable, PayPriority } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
 import { ManualPayablePanel } from "./manual-payable-panel";
-import { AgingBadge, ApprovalDots, PriorityBadge } from "./payable-badges";
+import { AgingBadge, ApprovalDots, CashBadge, PriorityBadge } from "./payable-badges";
 import { PayableDetailPanel } from "./payable-detail-panel";
 import { PayablesUploadModal } from "./payables-upload-modal";
 
@@ -165,7 +166,7 @@ export function PayablesView() {
           <div className="min-w-0 flex-1">
             <h2 className="text-[13.5px] font-bold text-ink">Cartera por pagar</h2>
             <p className="mt-0.5 truncate text-[11.5px] text-faint">
-              {cutLabel || "Ninguna cartera cargada todavía"} · antigüedad a la fecha de corte
+              {cutLabel || "Ninguna cartera cargada todavía"} ·
             </p>
           </div>
           {groups.length > 1 && (
@@ -271,7 +272,7 @@ function BulkBar({
   }, []);
   // With ONE account there is nothing to choose: marking assigns it, so the flow sums it in its row.
   const onlyAccount = accounts.length === 1 ? accounts[0] : undefined;
-  const mark = (priority: "urgent" | "pending" | null) =>
+  const mark = (priority: PayPriority | null) =>
     run(() =>
       cashDb.updatePayables(ids, {
         priority,
@@ -300,14 +301,31 @@ function BulkBar({
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => void mark(null)}>
         Sin marcar
       </Button>
+      {/* The cash LABEL, beside the priority: put on and taken off without touching the mark. */}
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        icon={<Coins size={13} />}
+        onClick={() => void run(() => cashDb.updatePayables(ids, { cash: true }))}
+      >
+        Cash
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        onClick={() => void run(() => cashDb.updatePayables(ids, { cash: false }))}
+      >
+        Quitar cash
+      </Button>
       <span className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/30 px-2 text-[12px] font-semibold">
         Programar
-        <input
-          type="date"
+        <DateField
           value={payOn}
-          aria-label="Fecha programada"
-          onChange={(event) => isISODate(event.target.value) && setPayOn(event.target.value)}
-          className="bg-transparent py-1 font-sans text-[12px] font-semibold tabular-nums text-white outline-none [color-scheme:dark]"
+          variant="dark"
+          ariaLabel="Fecha programada"
+          onChange={(date) => date && setPayOn(date)}
         />
         <Button
           size="sm"
@@ -359,19 +377,26 @@ const GroupRow = memo(function GroupRow({
 }) {
   const Caret = collapsed ? ChevronRight : ChevronDown;
   return (
-    <GridRow muted onClick={() => onToggleGroup(group.key)} className="h-[38px]">
+    // The supplier's row is a HEADING, not a document: it wears the brand tint and the brand ink so
+    // the eye finds where one supplier ends and the next begins without reading the labels.
+    <GridRow
+      onClick={() => onToggleGroup(group.key)}
+      className="h-[40px] bg-brand-soft hover:bg-brand-soft"
+    >
       <Cell />
-      <Cell className="font-semibold text-ink">
-        <span className="inline-flex items-center gap-1.5">
-          <Caret size={14} className="text-faint" />
+      <Cell>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand">
+          <Caret size={14} className="text-brand" />
           {group.label}
           {group.taxId && (
-            <span className="font-mono text-[11px] font-normal text-faint">{group.taxId}</span>
+            <span className="font-mono text-[11px] font-normal text-muted">{group.taxId}</span>
           )}
         </span>
       </Cell>
-      <Cell colSpan={4} className="text-[11.5px] text-faint">
-        {pluralize(group.payables.length, "documento")}
+      <Cell colSpan={4}>
+        <span className="text-[11.5px] font-semibold text-muted">
+          {pluralize(group.payables.length, "documento")}
+        </span>
       </Cell>
       <Cell numeric strong value={group.balance}>
         {money(group.balance)}
@@ -510,15 +535,21 @@ function VirtualPayablesGrid({
                   />
                 );
               }
+              // The same closing row the flow's PROVEEDORES table paints: brand ground, white
+              // figure — the one row of the grid that is a sum and not a document.
               return (
-                <tr key="total" className="h-[41px]">
-                  <Cell />
-                  <Cell strong>{totalLabel}</Cell>
-                  <Cell colSpan={4} />
-                  <Cell numeric strong value={total}>
+                <tr key="total" className="h-[41px] bg-brand text-white">
+                  <Cell className="border-b-0" />
+                  <Cell
+                    colSpan={5}
+                    className="border-b-0 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
+                  >
+                    {totalLabel}
+                  </Cell>
+                  <Cell numeric className="border-b-0 text-[14px] font-bold text-white">
                     {money(total)}
                   </Cell>
-                  <Cell colSpan={2} />
+                  <Cell colSpan={2} className="border-b-0" />
                 </tr>
               );
             })}
@@ -551,10 +582,9 @@ const PayableRow = memo(function PayableRow({
   // source: which system a document came from is in the header's cut line.
   const sub = payableDetail(payable, { center: hasCenters || payable.source !== "manual" });
   return (
-    <GridRow
-      className={cn("h-[46px] transition-colors hover:bg-surface-muted", settled && "opacity-60")}
-    >
-      <Cell>
+    <GridRow onClick={() => onOpen(payable.id)} className={cn("h-[46px]", settled && "opacity-60")}>
+      {/* Selecting must not open: the checkbox cell swallows its click. */}
+      <Cell onClick={(event) => event.stopPropagation()}>
         <Checkbox
           size={16}
           checked={checked}
@@ -564,7 +594,7 @@ const PayableRow = memo(function PayableRow({
       </Cell>
       <Cell>
         {/* The row's accessible way in: a real button on its title, so the detail opens from the
-            keyboard; the checkbox beside it selects without opening. */}
+            keyboard; the whole row opens it on click, the checkbox beside it selects without opening. */}
         {/* The document and its two states on ONE line: what it is, how late it is, whether it is
             marked — read left to right without hunting two columns to the right. */}
         <span className="flex min-w-0 items-center gap-2">
@@ -577,21 +607,34 @@ const PayableRow = memo(function PayableRow({
           </button>
           <AgingBadge aging={aging} settled={settled} />
           {payable.priority && <PriorityBadge priority={payable.priority} />}
+          {payable.cash && <CashBadge />}
         </span>
-        {sub && <span className="block truncate text-[11px] text-faint">{sub}</span>}
+        {sub && <span className="block truncate text-[11.5px] text-muted">{sub}</span>}
       </Cell>
-      <Cell className="tabular-nums text-muted">{formatDayMonthYear(payable.issuedOn) ?? "—"}</Cell>
-      <Cell className="tabular-nums text-muted">{formatDayMonthYear(payable.dueOn) ?? "—"}</Cell>
-      <Cell numeric tone="muted">
-        {money(payable.amount)}
+      <Cell>
+        <span className="tabular-nums text-ink-soft">
+          {formatDayMonthYear(payable.issuedOn) ?? "—"}
+        </span>
       </Cell>
-      <Cell numeric tone="muted">
-        {money(payable.payments)}
+      <Cell>
+        <span className="tabular-nums text-ink-soft">
+          {formatDayMonthYear(payable.dueOn) ?? "—"}
+        </span>
+      </Cell>
+      <Cell numeric>
+        <span className="text-muted">{money(payable.amount)}</span>
+      </Cell>
+      <Cell numeric>
+        <span className="text-muted">{money(payable.payments)}</span>
       </Cell>
       <Cell numeric strong value={payable.balance}>
         {money(payable.balance)}
       </Cell>
-      <Cell className="tabular-nums text-muted">{formatDayMonthYear(payable.payOn) ?? "—"}</Cell>
+      <Cell>
+        <span className="tabular-nums text-ink-soft">
+          {formatDayMonthYear(payable.payOn) ?? "—"}
+        </span>
+      </Cell>
       <Cell>
         <ApprovalDots payable={payable} />
       </Cell>

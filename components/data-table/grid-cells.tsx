@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 type Align = "left" | "right";
@@ -68,6 +68,8 @@ interface CellProps {
   background?: string;
   /** A group row's label spanning several columns. */
   colSpan?: number;
+  /** For a cell that must NOT hand its click to a clickable row (a checkbox beside a row that opens). */
+  onClick?: MouseEventHandler<HTMLTableCellElement>;
   className?: string;
 }
 
@@ -82,6 +84,7 @@ export function Cell({
   value,
   background,
   colSpan,
+  onClick,
   className,
 }: CellProps) {
   const resolved = resolveTone(tone, value);
@@ -92,6 +95,7 @@ export function Cell({
     <td
       style={style}
       colSpan={colSpan}
+      onClick={onClick}
       className={cn(
         "border-b border-border-soft px-3.5 py-2 text-[12.5px]",
         numeric || align === "right" ? "text-right tabular-nums" : "text-left",

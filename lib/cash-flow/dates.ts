@@ -27,10 +27,8 @@ function toUTC(iso: string): number {
   return Date.UTC(year, month - 1, day);
 }
 
-/** Today, in the reader's LOCAL calendar — the cut date's default. */
-export function todayISO(now: Date = new Date()): string {
-  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-}
+/** The cut date's default; the definition lives with the calendar, this module only re-exports it. */
+export { todayISO } from "@/lib/calendar";
 
 /** Whole days from `from` to `to`; negative when `to` is earlier. */
 export function daysBetween(from: string, to: string): number {

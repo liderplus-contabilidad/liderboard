@@ -264,12 +264,12 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
-**Cuentas por Pagar** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo) · `lib/cash-flow/` ·
-its own Dexie base `liderboard-cash-flow` v3 (v1–v2 retire a lost prototype) partitioned by `clientId`; its own list of EMPRESAS (like
+**Cuentas por Pagar** · `/cash-flow` (Resumen · Cuentas por pagar · Cheques · Flujo · Cargas cash) · `lib/cash-flow/` ·
+its own Dexie base `liderboard-cash-flow` v4 (v1–v2 retire a lost prototype, v4 adds `cashEntries`) partitioned by `clientId`; its own list of EMPRESAS (like
 Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
 sobregiro · centro) in «Configurar».
 
-- **The FECHA DE CORTE is one control of the bar, read by the four tabs** (`asOf` in the provider,
+- **The FECHA DE CORTE is one control of the bar, read by the four dated tabs** (Cargas cash is a live list) (`asOf` in the provider,
   today by default, chip «Al dd/mm/aaaa» otherwise). Nothing ages, sums or captures at any other date.
 - **ONE table for what is owed** (`payables`): a Contífico/Dingoo document and a manual obligation
   (SRI, IESS, arriendo, sueldos…) are the same row with a different `source`. `identity.ts` composes
@@ -281,7 +281,11 @@ sobregiro · centro) in «Configurar».
   door and the grid, Resumen and the flow all ask this one definition.
 - **The mark of payment lives in the DOCUMENT** (`priority` urgente · pendiente · sin marcar, `payOn`,
   `payFromAccountId`), never in a flow, and what a marked document contributes is `markedAmount` =
-  `approved ?? balance` (`derive.ts`). «Marcar pagado» settles by hand.
+  `approved ?? balance` (`derive.ts`). «Marcar pagado» settles by hand. **`cash` is a LABEL beside
+  the priority, never a value of it** (the `PROVEEDOR` sheets write «CASH» in one column and «OK» in
+  another): a document is urgent AND cash at once, the flow reads nothing of it, and it only decides
+  what «Cargas cash» lists. It survives a reload (`cut.ts`) and travels in the cartera Excel's
+  «Cash» column, which `liderplus.ts` reads as OPTIONAL.
 - **A check has a STEP and a VOIDED flag** (`made → signed → delivered → cashed`; `voided`
   orthogonal) and stores `cashedOn`: `checks.ts` (`outstandingChecks` at a date) is the one definition
   of «girados y no cobrados», counted whatever the step. A bank label the empresa's accounts do not
@@ -294,7 +298,14 @@ sobregiro · centro) in «Configurar».
 - Uploads are by label with a registry (`upload/registry.ts`: `contifico` · `dingoo`, first match
   over EVERY sheet, plus the module's OWN `liderplus.ts`, which is how «Exportar · Cartera» comes back
   as it left — marks included, REPLACING the cartera instead of merging as a cut; the check register
-  is `checks-log.ts`, a separate load). The three Excels (`export/`) and the printed flow
+  is `checks-log.ts`, a separate load). Both uploads PROPOSE what the file already knows: the
+  register its banks (`bank-labels.ts` → `createAccountsForBanks`), the cartera its centers
+  (`center-labels.ts` → `createCentersForLabels`), pre-checked, created before the rows are written. **«Cargas cash»** (`cash-entries.ts`) is the book's sheet of
+  three matrices with ONE set of columns — a center each, a LOAN column per (de → a) pair some row
+  of that section uses, «Sin centro» only when PROVEEDORES needs it: MOVIMIENTO INICIAL and VARIOS
+  are hand-written rows (`cashEntries`, a monto per center + optional loan, edited in line, a live
+  list the cut date does not touch) and PROVEEDORES is DERIVED from the open documents carrying the
+  `cash` label, one row per supplier. The four Excels (`export/`) and the printed flow
   (`report.ts` → `ReportTable`) are the module's outputs, all through `cash-flow-export-actions.tsx`;
   Resumen has none. `money` (`derive.ts`) is the module's amount,
   always with cents.
@@ -321,7 +332,8 @@ sobregiro · centro) in «Configurar».
 - **`chart.tsx` is the sole `echarts.init` caller** (partial imports, SVG renderer). `ChartCard`
   pairs an `option` with its table twin, capped to the chart's height, and offers `headerSlot` /
   `footerSlot`, plus `expandable` — «Ampliar», which opens the chart ALONE in a `Modal fill`.
-  `expandable` is **off by default** (one screen wants it, fifteen do not) and renders nothing when
+  `expandable` is **off by default** (every module SCREEN asks for it; the reports and the cards
+  inside a `Modal`/`SidePanel`, already read alone, do not) and renders nothing when
   the card is collapsed, has no series, or is showing its table twin.
 - **The third dimension is a SEPARATE type.** `Chart3DOption` (`grid3D` required, `is3DOption`
   discriminates) never widens `ChartOption`, so «no chart declares two `yAxis`» keeps meaning what it

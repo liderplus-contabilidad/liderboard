@@ -20,6 +20,7 @@ function payable(over: Partial<Payable>): Payable {
     balance: 100,
     centerName: null,
     priority: null,
+    cash: false,
     payOn: null,
     payFromAccountId: null,
     observation: "",

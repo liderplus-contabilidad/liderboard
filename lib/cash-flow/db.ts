@@ -20,6 +20,7 @@ import { checkId, payableId } from "./identity";
 import type { StoredPayableRow } from "./upload/liderplus";
 import type {
   BankAccount,
+  CashEntry,
   CashFlowCenter,
   CashFlowClient,
   Check,
@@ -61,6 +62,13 @@ const CASH_FLOW_STORES = {
   active: "key",
 } as const;
 
+/** v4 adds the hand-written rows of «Cargas cash» (`[clientId+section]` is how a matrix is read)
+ *  and backfills the `cash` label on every stored document. */
+const CASH_FLOW_STORES_V4 = {
+  ...CASH_FLOW_STORES,
+  cashEntries: "id, clientId, [clientId+section]",
+} as const;
+
 class CashFlowDb extends Dexie {
   clients!: Table<CashFlowClient, string>;
   centers!: Table<CashFlowCenter, string>;
@@ -68,6 +76,7 @@ class CashFlowDb extends Dexie {
   payables!: Table<Payable, string>;
   checks!: Table<Check, string>;
   flows!: Table<PaymentFlow, string>;
+  cashEntries!: Table<CashEntry, string>;
   meta!: Table<CutMeta, string>;
   active!: Table<ActiveClientRow, string>;
 
@@ -83,6 +92,16 @@ class CashFlowDb extends Dexie {
       Object.fromEntries(Object.keys(CASH_FLOW_STORES).map((table) => [table, null])),
     );
     this.version(3).stores(CASH_FLOW_STORES);
+    this.version(4)
+      .stores(CASH_FLOW_STORES_V4)
+      .upgrade((tx) =>
+        tx
+          .table("payables")
+          .toCollection()
+          .modify((row: Partial<Payable>) => {
+            row.cash ??= false;
+          }),
+      );
   }
 }
 
@@ -116,14 +135,24 @@ export async function updateClient(
 }
 
 /**
- * Deletes an empresa and EVERYTHING that hangs off it — centers, accounts, cartera, checks, flows
- * and cut metadata — in ONE transaction. No other empresa is touched. Deleting the open one hands
+ * Deletes an empresa and EVERYTHING that hangs off it — centers, accounts, cartera, checks, flows,
+ * cash entries and cut metadata — in ONE transaction. No other empresa is touched. Deleting the open one hands
  * the module to the first remaining BY NAME.
  */
 export async function deleteClient(clientId: string): Promise<void> {
   await db.transaction(
     "rw",
-    [db.clients, db.centers, db.accounts, db.payables, db.checks, db.flows, db.meta, db.active],
+    [
+      db.clients,
+      db.centers,
+      db.accounts,
+      db.payables,
+      db.checks,
+      db.flows,
+      db.cashEntries,
+      db.meta,
+      db.active,
+    ],
     async () => {
       await Promise.all([
         db.centers.where("clientId").equals(clientId).delete(),
@@ -131,6 +160,7 @@ export async function deleteClient(clientId: string): Promise<void> {
         db.payables.where("clientId").equals(clientId).delete(),
         db.checks.where("clientId").equals(clientId).delete(),
         db.flows.where("clientId").equals(clientId).delete(),
+        db.cashEntries.where("clientId").equals(clientId).delete(),
         db.meta.where("clientId").equals(clientId).delete(),
       ]);
       await db.clients.delete(clientId);
@@ -221,6 +251,35 @@ export async function addCenter(clientId: string, name: string): Promise<CashFlo
 
 export async function renameCenter(centerId: string, name: string): Promise<void> {
   await db.centers.update(centerId, { name: name.trim() });
+}
+
+/**
+ * Creates a center for each label the empresa does not have yet — what the cartera's upload
+ * proposes from the file's own «Centro de costos» column — in ONE transaction. A label a center
+ * already answers to (`normalizeLabel`) creates nothing. Documents need no update: they keep their
+ * label and `resolveCenterId` matches it from now on.
+ */
+export async function createCentersForLabels(
+  clientId: string,
+  labels: readonly string[],
+): Promise<CashFlowCenter[]> {
+  return db.transaction("rw", db.centers, async () => {
+    const existing = await db.centers.where("clientId").equals(clientId).toArray();
+    const known = new Set(existing.map((center) => normalizeLabel(center.name)));
+    const created: CashFlowCenter[] = [];
+    for (const label of labels) {
+      const name = label.trim();
+      const key = normalizeLabel(name);
+      if (!key || known.has(key)) {
+        continue;
+      }
+      const center: CashFlowCenter = { id: crypto.randomUUID(), clientId, name };
+      await db.centers.add(center);
+      known.add(key);
+      created.push(center);
+    }
+    return created;
+  });
 }
 
 /** Deletes a center; its accounts fall back to «de la empresa». Documents keep their label. */
@@ -364,6 +423,7 @@ export async function replaceCartera(
       centerName: row.centerName,
       ...(row.kind ? { kind: row.kind } : {}),
       priority: row.priority,
+      cash: row.cash,
       payOn: row.payOn,
       payFromAccountId: row.payFromAccount
         ? (byRef.get(normalizeLabel(row.payFromAccount)) ?? null)
@@ -418,6 +478,7 @@ export async function addManualPayable(
     centerName: input.centerName,
     kind: input.kind,
     priority: null,
+    cash: false,
     payOn: null,
     payFromAccountId: null,
     observation: "",
@@ -432,11 +493,12 @@ export async function addManualPayable(
   return payable;
 }
 
-/** What the screen may rewrite of a document: the mark and the four working columns. */
+/** What the screen may rewrite of a document: the marks and the four working columns. */
 export type PayablePatch = Partial<
   Pick<
     Payable,
     | "priority"
+    | "cash"
     | "payOn"
     | "payFromAccountId"
     | "observation"
@@ -665,4 +727,45 @@ export async function deleteFlow(clientId: string, date: string): Promise<void> 
   if (existing) {
     await db.flows.delete(existing.id);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cargas cash — the hand-written rows; PROVEEDORES is derived from the cartera (`cash-entries.ts`)
+// ---------------------------------------------------------------------------
+
+/** Every row of the empresa, both sections, oldest date first and then by insertion. */
+export async function listCashEntries(clientId: string): Promise<CashEntry[]> {
+  const rows = await db.cashEntries.where("clientId").equals(clientId).toArray();
+  return rows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+}
+
+/** «+ Agregar fila»: an empty row dated today, so the grid has a cell to type into. */
+export async function addCashEntry(
+  clientId: string,
+  section: CashEntry["section"],
+  date = todayISO(),
+): Promise<CashEntry> {
+  const entry: CashEntry = {
+    id: crypto.randomUUID(),
+    clientId,
+    section,
+    date,
+    detail: "",
+    amounts: {},
+    loan: null,
+    observation: "",
+  };
+  await db.cashEntries.add(entry);
+  return entry;
+}
+
+export async function updateCashEntry(
+  id: string,
+  patch: Partial<Pick<CashEntry, "date" | "detail" | "amounts" | "loan" | "observation">>,
+): Promise<void> {
+  await db.cashEntries.update(id, patch);
+}
+
+export async function deleteCashEntry(id: string): Promise<void> {
+  await db.cashEntries.delete(id);
 }

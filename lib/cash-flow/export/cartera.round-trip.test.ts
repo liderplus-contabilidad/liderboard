@@ -57,6 +57,7 @@ beforeEach(async () => {
     finalReview: true,
   });
   await updatePayables([docs[1].id], { priority: "pending", notified: true });
+  await updatePayables([docs[2].id], { priority: "urgent", cash: true });
   const manual = await addManualPayable(clientId, {
     supplier: "Arriendo mes de marzo FC 00017 Laszlo",
     kind: "arriendo",

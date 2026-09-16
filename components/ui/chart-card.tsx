@@ -52,9 +52,10 @@ export interface ChartCardProps extends Omit<
    * Default false. Offers «Ampliar», which opens the chart ALONE in a window the size of the screen.
    *
    * It is off by default and not on —unlike `tableToggle` and `showGuide`, which the report turns
-   * off— because the split is the other way round: one screen wants it and fifteen do not, and the
-   * three printable reports least of all, where a button is something nobody can press. Off by
-   * default is what makes this card unable to change anything outside the caller that asks for it.
+   * off— because a card that is already read ALONE has nothing to enlarge: the printable reports,
+   * where a button is something nobody can press, and the cards mounted inside a `Modal` or a
+   * `SidePanel`, where the window would open over a window. Every module SCREEN asks for it; off by
+   * default is what keeps a new mount from changing anything outside the caller that asks for it.
    *
    * The state is held HERE and not by the caller (unlike `collapsed`): collapsing has a «Cerrar
    * todos» that demands a single truth, and enlarging has no equivalent — only one window is open at

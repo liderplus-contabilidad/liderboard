@@ -5,6 +5,7 @@ import {
   resolveCenterId,
   sanitizeFilters,
   withCenterToggled,
+  withOnlyCash,
   withPriorityToggled,
   withSideToggled,
 } from "./filters";
@@ -33,6 +34,7 @@ function payable(over: Partial<Payable>): Payable {
     balance: 144,
     centerName: "HC",
     priority: null,
+    cash: false,
     payOn: null,
     payFromAccountId: null,
     observation: "",
@@ -68,6 +70,9 @@ describe("resolveCenterId", () => {
     expect(resolveCenterId(" hc", CENTERS)).toBe("hc");
     expect(resolveCenterId("CULTURA MANOR", CENTERS)).toBeNull();
     expect(resolveCenterId(null, CENTERS)).toBeNull();
+    // A cell that lists the center once per line resolves like a plain one.
+    expect(resolveCenterId("hc,HC ,hc", CENTERS)).toBe("hc");
+    expect(resolveCenterId("CULTURA MANOR, HC", CENTERS)).toBe("hc");
   });
 });
 
@@ -110,6 +115,10 @@ describe("applyFilters", () => {
       "due-hc",
       "manual",
     ]);
+    const cash = withOnlyCash(emptyPayableFilters(), true);
+    expect(applyFilters(rows, cash, CENTERS, "2026-09-15")).toEqual([]);
+    const cashRows = [...rows, payable({ id: "cash", centerName: "HA", cash: true })];
+    expect(applyFilters(cashRows, cash, CENTERS, "2026-09-15").map((r) => r.id)).toEqual(["cash"]);
     const hc = withCenterToggled(emptyPayableFilters(), "hc", ["ha", "hc"]);
     expect(applyFilters(rows, hc, CENTERS, "2026-09-15").map((r) => r.id)).toEqual(["due-hc"]);
   });

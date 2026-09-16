@@ -31,6 +31,7 @@ export const CARTERA_COLUMNS = [
   "Centro",
   "Clase",
   "Prioridad",
+  "Cash",
   "Programado",
   "Pagar desde",
   "Observación",
@@ -42,7 +43,7 @@ export const CARTERA_COLUMNS = [
   "Corte",
 ] as const;
 
-const AMOUNT_COLUMNS = [9, 10, 11, 12, 19];
+const AMOUNT_COLUMNS = [9, 10, 11, 12, 20];
 
 /** «PRODUBANCO · 80010385» — how a row names an account; the number may be empty. */
 export function accountRef(account: Pick<BankAccount, "bank" | "number">): string {
@@ -80,6 +81,7 @@ export function carteraRow(
     orBlank(row.centerName),
     row.kind ?? "",
     row.priority ?? "",
+    yes(row.cash),
     orBlank(row.payOn),
     ref(row.payFromAccountId),
     row.observation,

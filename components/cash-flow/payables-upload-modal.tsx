@@ -1,16 +1,19 @@
 "use client";
 
-import { ArrowRight, Check, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { ArrowRight, Check, FileSpreadsheet, Loader2, MapPin, Upload } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { DataGrid } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Modal } from "@/components/ui/modal";
 import { NoticeBanner } from "@/components/ui/notice-banner";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { isISODate } from "@/lib/cash-flow/dates";
+import { detectCenters } from "@/lib/cash-flow/upload/center-labels";
 import type { StoredPayableRow } from "@/lib/cash-flow/upload/liderplus";
 import { LIDERPLUS_LABEL, type CarteraStrategy } from "@/lib/cash-flow/upload/registry";
 import type { ParsedCartera } from "@/lib/cash-flow/types";
@@ -39,11 +42,17 @@ type Staged =
  * The module's own «Cartera para recargar» takes the other door: it is not a cut but the cartera
  * as it was exported, so confirming REPLACES what the empresa holds with it (`db.replaceCartera`),
  * marks included, and asks no cut date.
+ *
+ * The file's «Centro de costos» column is what says which CENTERS the empresa has, so the preview
+ * DETECTS them (`detectCenters`) and proposes one center per label not yet declared, pre-checked —
+ * as the check register's upload does with its banks. Confirming creates the checked ones first
+ * (`createCentersForLabels`), so every document resolves its center from the first cut.
  */
 export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { activeClientId, asOf } = useCashFlowData();
+  const { activeClientId, asOf, centers } = useCashFlowData();
   const inputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<Staged | null>(null);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
   const [cutDate, setCutDate] = useState<string>(asOf);
   const [failure, setFailure] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
@@ -55,6 +64,12 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     setFailure(null);
     setDone(null);
   }, []);
+
+  const stagedRows = useMemo(
+    () => (staged ? (staged.kind === "liderplus" ? staged.rows : staged.cartera.payables) : []),
+    [staged],
+  );
+  const detected = useMemo(() => detectCenters(stagedRows, centers), [stagedRows, centers]);
 
   const readFile = useCallback(
     async (file: File) => {
@@ -68,6 +83,14 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
           setFailure(result.message);
           return;
         }
+        const rows = result.kind === "liderplus" ? result.rows : result.cartera.payables;
+        setPicked(
+          new Set(
+            detectCenters(rows, centers)
+              .filter((center) => !center.known)
+              .map((center) => center.name),
+          ),
+        );
         if (result.kind === "liderplus") {
           setStaged({ fileName: file.name, kind: "liderplus", rows: result.rows });
           return;
@@ -83,8 +106,20 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
         setReading(false);
       }
     },
-    [asOf],
+    [asOf, centers],
   );
+
+  const togglePicked = useCallback((name: string) => {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }, []);
 
   const onPick = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,6 +141,9 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     }
     setSaving(true);
     try {
+      if (picked.size > 0) {
+        await cashDb.createCentersForLabels(activeClientId, [...picked]);
+      }
       if (staged.kind === "liderplus") {
         const written = await cashDb.replaceCartera(activeClientId, staged.rows);
         setDone({ written, settled: 0 });
@@ -115,18 +153,14 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     } finally {
       setSaving(false);
     }
-  }, [staged, activeClientId, cutDate]);
+  }, [staged, activeClientId, cutDate, picked]);
 
   const close = useCallback(() => {
     reset();
     onClose();
   }, [reset, onClose]);
 
-  const previewRows = staged
-    ? staged.kind === "liderplus"
-      ? staged.rows
-      : staged.cartera.payables
-    : [];
+  const previewRows = stagedRows;
   const total = previewRows
     .filter((row) => !("status" in row) || row.status === "open")
     .reduce((acc, row) => acc + row.balance, 0);
@@ -182,23 +216,6 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </span>
             </button>
             {failure && <NoticeBanner>{failure}</NoticeBanner>}
-            <div className="grid grid-cols-3 gap-3">
-              <SourceCard
-                name="Contífico"
-                fmt="Cartera por Pagar (Detallado)"
-                desc="Tabla plana con fecha de corte; también pegada en las hojas VENCIDA y POR VENCER del FORMATO IDEAL."
-              />
-              <SourceCard
-                name="Dingoo"
-                fmt="Reporte · Cuentas por pagar"
-                desc="Reporte por proveedor con sus facturas y cuotas. No declara corte: se pide al confirmar."
-              />
-              <SourceCard
-                name="LiderPlus"
-                fmt="Cartera para recargar"
-                desc="La cartera que exporta este módulo desde «Exportar»; vuelve tal cual, con sus marcas, y reemplaza la actual."
-              />
-            </div>
           </>
         ) : (
           <>
@@ -227,12 +244,10 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </div>
               {staged.kind === "system" && (
                 <FormField label="Fecha de corte" className="w-[150px]">
-                  <input
-                    type="date"
+                  <DateField
                     value={cutDate}
-                    aria-label="Fecha de corte de la cartera"
-                    onChange={(event) => setCutDate(event.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface px-[9px] py-1.5 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+                    ariaLabel="Fecha de corte de la cartera"
+                    onChange={(date) => date && setCutDate(date)}
                   />
                 </FormField>
               )}
@@ -280,6 +295,43 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </DataGrid>
             </div>
 
+            {detected.length > 0 && (
+              <div className="rounded-[9px] border border-border">
+                <div className="flex items-center gap-2 border-b border-border bg-surface-muted px-3.5 py-2 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+                  <MapPin size={13} />
+                  Centros de costo que trae el archivo · marca los que son centros de la empresa
+                </div>
+                <ul className="divide-y divide-border-soft">
+                  {detected.map((entry) => (
+                    <li
+                      key={entry.name}
+                      className="flex items-center gap-3 px-3.5 py-2 text-[12.5px]"
+                    >
+                      {entry.known ? (
+                        <Check size={16} className="text-positive" />
+                      ) : (
+                        <Checkbox
+                          size={16}
+                          checked={picked.has(entry.name)}
+                          ariaLabel={`Crear centro ${entry.name}`}
+                          onChange={() => togglePicked(entry.name)}
+                        />
+                      )}
+                      <span className="flex-1 font-semibold text-ink">{entry.name}</span>
+                      <span className="text-faint">{pluralize(entry.count, "documento")}</span>
+                      <span className="w-[150px] text-right text-[11.5px] text-faint">
+                        {entry.known
+                          ? "ya es un centro"
+                          : picked.has(entry.name)
+                            ? "se creará el centro"
+                            : "queda sin centro"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {staged.kind === "liderplus" ? (
               <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
                 Es la cartera que exportó este módulo. Al confirmar{" "}
@@ -317,15 +369,5 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
         )}
       </div>
     </Modal>
-  );
-}
-
-function SourceCard({ name, fmt, desc }: { name: string; fmt: string; desc: string }) {
-  return (
-    <div className="rounded-[9px] border border-border px-3.5 py-3">
-      <div className="text-[12.5px] font-bold text-ink">{name}</div>
-      <div className="font-mono text-[11px] text-brand">{fmt}</div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-faint">{desc}</p>
-    </div>
   );
 }

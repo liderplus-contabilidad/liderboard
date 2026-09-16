@@ -5,13 +5,13 @@
  */
 import { formatCurrency } from "@/lib/format";
 import { agingOf, AGING_BUCKETS, type AgingBucket, type AgingSide } from "./aging";
-import type { Payable, PayableKind } from "./types";
+import type { BuiltinKind, Payable, PayableKind } from "./types";
 
 /** The module's amount, ALWAYS with cents: a cartera holds documents of $0.09, and a flow is checked
  *  to the centavo against the bank. The axes of Resumen are the one place that drops them. */
 export const money = (value: number) => formatCurrency(value, { cents: true });
 
-export const KIND_LABELS: Record<PayableKind, string> = {
+const KIND_LABELS: Record<BuiltinKind, string> = {
   sri: "SRI",
   iess: "IESS",
   arriendo: "Arriendo",
@@ -21,7 +21,7 @@ export const KIND_LABELS: Record<PayableKind, string> = {
   otros: "Otros",
 };
 
-export const PAYABLE_KINDS: readonly PayableKind[] = [
+export const BUILTIN_KINDS: readonly BuiltinKind[] = [
   "sri",
   "iess",
   "arriendo",
@@ -30,6 +30,43 @@ export const PAYABLE_KINDS: readonly PayableKind[] = [
   "prestamo",
   "otros",
 ];
+
+function isBuiltinKind(kind: string): kind is BuiltinKind {
+  return Object.hasOwn(KIND_LABELS, kind);
+}
+
+/** What a class prints: a built-in by its label, a typed one as it was typed. */
+export function kindLabel(kind: PayableKind): string {
+  return isBuiltinKind(kind) ? KIND_LABELS[kind] : kind;
+}
+
+/**
+ * What a cell or a typed name means as a class: a built-in id or label (in any case) folds to the
+ * id, anything else is a class of its own, trimmed; blank is none. It is what keeps «Arriendo»
+ * typed by hand from becoming a second class beside `arriendo`.
+ */
+export function normalizeKind(text: string): PayableKind | null {
+  const clean = text.trim();
+  if (!clean) {
+    return null;
+  }
+  const lower = clean.toLowerCase();
+  const builtin = BUILTIN_KINDS.find(
+    (kind) => kind === lower || KIND_LABELS[kind].toLowerCase() === lower,
+  );
+  return builtin ?? clean;
+}
+
+/** The classes the empresa typed beyond the built-ins, first seen first, for offering them again. */
+export function customKinds(payables: readonly Pick<Payable, "kind">[]): PayableKind[] {
+  const seen: PayableKind[] = [];
+  for (const { kind } of payables) {
+    if (kind && !isBuiltinKind(kind) && !seen.includes(kind)) {
+      seen.push(kind);
+    }
+  }
+  return seen;
+}
 
 /** What a marked document adds to the flow: the amount the first review approved, else its balance. */
 export function markedAmount(payable: Pick<Payable, "approved" | "balance">): number {
@@ -158,7 +195,7 @@ export function agingDistribution(
 /** «PALLASCO PALOMO FERNANDA NAT» for a document, «Arriendo · Arriendo mes de marzo» for a manual. */
 export function payableTitle(payable: Payable): string {
   if (payable.source === "manual" && payable.kind) {
-    return `${KIND_LABELS[payable.kind]} · ${payable.supplier}`;
+    return `${kindLabel(payable.kind)} · ${payable.supplier}`;
   }
   return payable.supplier;
 }
@@ -190,7 +227,7 @@ export function payableDetail(
   }
   return [
     text,
-    payable.kind ? KIND_LABELS[payable.kind] : null,
+    payable.kind ? kindLabel(payable.kind) : null,
     options.center === false ? null : payable.centerName,
   ]
     .filter(Boolean)

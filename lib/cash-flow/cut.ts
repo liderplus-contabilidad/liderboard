@@ -4,7 +4,7 @@
  *
  * A cut REPLACES and CONSERVES: every document the file brings is written over its previous row
  * (same `id`, see `identity.ts`), taking the file's figures and keeping what the user wrote on it —
- * the mark of payment, the schedule, the account and the four working columns. Every OPEN document
+ * the mark of payment, the cash label, the schedule, the account and the four working columns. Every OPEN document
  * of the same `source` the file does NOT bring is taken as paid and marked `settled` at the cut
  * date. It is archived and never deleted, because a flow of two weeks ago still reads it.
  *
@@ -17,6 +17,7 @@ import type { ParsedPayable, Payable, PayableSource } from "./types";
 function keptFrom(old: Payable): Partial<Payable> {
   return {
     priority: old.priority,
+    cash: old.cash,
     payOn: old.payOn,
     payFromAccountId: old.payFromAccountId,
     observation: old.observation,
@@ -61,6 +62,7 @@ export function mergeCut(
       balance: doc.balance,
       centerName: doc.centerName,
       priority: null,
+      cash: false,
       payOn: null,
       payFromAccountId: null,
       observation: "",

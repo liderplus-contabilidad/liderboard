@@ -26,6 +26,7 @@ function payable(over: Partial<Payable>): Payable {
     balance: 720,
     centerName: null,
     priority: "urgent",
+    cash: false,
     payOn: null,
     payFromAccountId: "prod",
     observation: "",

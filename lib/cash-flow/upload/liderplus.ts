@@ -10,6 +10,7 @@
 import type { Cell } from "@/lib/excel/workbook";
 import { toISODate } from "../dates";
 import { CARTERA_COLUMNS } from "../export/cartera-workbook";
+import { normalizeKind } from "../derive";
 import type { PayableKind, PayableSource, PayPriority } from "../types";
 import { cellAmount, cellText, findHeaderRow, locate, type Grid } from "./grid";
 
@@ -30,6 +31,7 @@ export interface StoredPayableRow {
   centerName: string | null;
   kind: PayableKind | null;
   priority: PayPriority | null;
+  cash: boolean;
   payOn: string | null;
   /** The account's label («PRODUBANCO · 80010385»), or `null`. */
   payFromAccount: string | null;
@@ -43,26 +45,20 @@ export interface StoredPayableRow {
 }
 
 const SOURCES = new Set<PayableSource>(["contifico", "dingoo", "manual"]);
-const KINDS = new Set<PayableKind>([
-  "sri",
-  "iess",
-  "arriendo",
-  "sueldos",
-  "cuota",
-  "prestamo",
-  "otros",
-]);
 
 const text = (cell: Cell) => cellText(cell);
 const orNull = (cell: Cell) => cellText(cell) || null;
 const flag = (cell: Cell) => /^(si|sí|x|true|1)$/i.test(cellText(cell));
 
+/** «Cash» was added after the first carteras left: a sheet without it still comes back. */
+const REQUIRED_COLUMNS = CARTERA_COLUMNS.filter((label) => label !== "Cash");
+
 export function matchesLiderplus(grid: Grid): boolean {
-  return findHeaderRow(grid, CARTERA_COLUMNS, 10) >= 0;
+  return findHeaderRow(grid, REQUIRED_COLUMNS, 10) >= 0;
 }
 
 export function parseLiderplus(grid: Grid): StoredPayableRow[] {
-  const headerRow = findHeaderRow(grid, CARTERA_COLUMNS, 10);
+  const headerRow = findHeaderRow(grid, REQUIRED_COLUMNS, 10);
   const index = locate(grid[headerRow] ?? [], CARTERA_COLUMNS);
   const rows: StoredPayableRow[] = [];
   for (let at = headerRow + 1; at < grid.length; at += 1) {
@@ -73,7 +69,6 @@ export function parseLiderplus(grid: Grid): StoredPayableRow[] {
     const col = (label: (typeof CARTERA_COLUMNS)[number]): Cell =>
       cells[index[CARTERA_COLUMNS.indexOf(label)]] ?? null;
     const source = text(col("Origen")) as PayableSource;
-    const kind = text(col("Clase")) as PayableKind;
     const priority = text(col("Prioridad"));
     rows.push({
       source: SOURCES.has(source) ? source : "manual",
@@ -89,8 +84,9 @@ export function parseLiderplus(grid: Grid): StoredPayableRow[] {
       payments: cellAmount(col("Pagos")),
       balance: cellAmount(col("Saldo")),
       centerName: orNull(col("Centro")),
-      kind: KINDS.has(kind) ? kind : null,
+      kind: normalizeKind(text(col("Clase"))),
       priority: priority === "urgent" || priority === "pending" ? priority : null,
+      cash: flag(col("Cash")),
       payOn: toISODate(col("Programado")),
       payFromAccount: orNull(col("Pagar desde")),
       observation: text(col("Observación")),

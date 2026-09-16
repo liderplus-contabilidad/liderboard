@@ -29,12 +29,21 @@ export interface PayableFilters {
   centerIds: string[];
   sides: AgingSide[];
   priorities: PriorityMark[];
+  /** «Solo cash»: only the documents carrying the cash label. */
+  onlyCash: boolean;
   /** «Ver liquidadas»: with it, settled documents are listed too (greyed). */
   showSettled: boolean;
 }
 
 export function emptyPayableFilters(): PayableFilters {
-  return { search: "", centerIds: [], sides: [], priorities: [], showSettled: false };
+  return {
+    search: "",
+    centerIds: [],
+    sides: [],
+    priorities: [],
+    onlyCash: false,
+    showSettled: false,
+  };
 }
 
 function toggled<T>(marks: readonly T[], value: T, universe: readonly T[]): T[] {
@@ -71,6 +80,10 @@ export function withShowSettled(filters: PayableFilters, showSettled: boolean): 
   return { ...filters, showSettled };
 }
 
+export function withOnlyCash(filters: PayableFilters, onlyCash: boolean): PayableFilters {
+  return { ...filters, onlyCash };
+}
+
 export function withCentersCleared(filters: PayableFilters): PayableFilters {
   return { ...filters, centerIds: [] };
 }
@@ -91,6 +104,7 @@ export function hasActiveFilters(filters: PayableFilters): boolean {
     filters.centerIds.length > 0 ||
     filters.sides.length > 0 ||
     filters.priorities.length > 0 ||
+    filters.onlyCash ||
     filters.showSettled
   );
 }
@@ -100,15 +114,39 @@ export function hasActiveFilters(filters: PayableFilters): boolean {
  * centers — `normalizeLabel` on both sides, so «HC» and «hc » are one. `null` when it matches none,
  * which is also the answer for an empresa without centers.
  */
+/**
+ * A center cell is a COMMA LIST of labels — Contífico writes the center once per line of the
+ * document («CULTURA MANOR,CULTURA MANOR») — so everything that reads one splits it and keeps the
+ * distinct labels, in the file's order. The one rule behind the parser, the upload's proposal and
+ * `resolveCenterId`.
+ */
+export function splitCenterLabels(raw: string | null): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const part of (raw ?? "").split(",")) {
+    const label = part.trim();
+    const key = normalizeLabel(label);
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      labels.push(label);
+    }
+  }
+  return labels;
+}
+
+/** The first label of the cell that names a center of the empresa, or `null`. */
 export function resolveCenterId(
   centerName: string | null,
   centers: readonly CashFlowCenter[],
 ): string | null {
-  if (!centerName) {
-    return null;
+  const byLabel = new Map(centers.map((center) => [normalizeLabel(center.name), center.id]));
+  for (const label of splitCenterLabels(centerName)) {
+    const id = byLabel.get(normalizeLabel(label));
+    if (id) {
+      return id;
+    }
   }
-  const wanted = normalizeLabel(centerName);
-  return centers.find((center) => normalizeLabel(center.name) === wanted)?.id ?? null;
+  return null;
 }
 
 export function matchesSearch(payable: Payable, search: string): boolean {
@@ -142,6 +180,9 @@ export function applyFilters(
       return false;
     }
     if (priorities.size > 0 && !priorities.has(payable.priority ?? "none")) {
+      return false;
+    }
+    if (filters.onlyCash && !payable.cash) {
       return false;
     }
     return matchesSearch(payable, filters.search);

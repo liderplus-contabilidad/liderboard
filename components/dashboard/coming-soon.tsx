@@ -9,6 +9,7 @@ const TAB_BLURB: Record<ModuleTab["id"], string> = {
   cxp: "las cuentas por pagar",
   cheques: "el control de cheques",
   flujo: "el flujo de pagos",
+  cargas: "las cargas cash",
 };
 
 export function ComingSoon({ mod, tab }: { mod: DashboardModule; tab: ModuleTab }) {

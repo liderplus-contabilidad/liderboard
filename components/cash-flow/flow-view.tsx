@@ -1,7 +1,18 @@
 "use client";
 
-import { ArrowRightLeft, Copy, Plus, Trash2, Waves } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import {
+  ArrowRightLeft,
+  CheckCircle2,
+  Copy,
+  Flag,
+  Landmark,
+  Plus,
+  Scale,
+  Trash2,
+  TrendingUp,
+  Waves,
+} from "lucide-react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { DataGrid, GridRow } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
@@ -10,7 +21,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
 import * as cashDb from "@/lib/cash-flow/db";
-import { documentLabel, KIND_LABELS, money, payableDetail } from "@/lib/cash-flow/derive";
+import { documentLabel, kindLabel, money, payableDetail } from "@/lib/cash-flow/derive";
 import { accountLabel, centerName, copyFlowFrom, type FlowLine } from "@/lib/cash-flow/flow";
 import type { BankAccount, FlowIncome } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
@@ -100,182 +111,183 @@ export function FlowView() {
           />
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[13.5px] font-bold text-ink">Flujo de bancos · {dateLabel}</h2>
-            <p className="mt-0.5 text-[11.5px] text-faint">
-              Las celdas con campo son la captura. Disponible, no cobrados, marcados y saldo final
-              se calculan solos.
-              {!flow && " Todavía no hay captura para esta fecha."}
-            </p>
-          </div>
-          {previous && (
-            <Button
-              variant="secondary"
-              size="toolbar"
-              icon={<Copy size={14} />}
-              onClick={copyPrevious}
-            >
-              Copiar del {formatDayMonthYear(previous.date)}
-            </Button>
-          )}
-        </div>
+        {/* Incomes first: they are a capture and they ADD to the bank total the table below opens
+            with, so what is typed is read before what it feeds. */}
+        <IncomesSection incomes={incomes} onChange={setIncomes} />
 
-        {derived.accounts.length === 0 ? (
-          <EmptyState icon={<Waves size={22} />}>
-            Ninguna cuenta del centro marcado. Quita el filtro de centro o declara una cuenta.
-          </EmptyState>
-        ) : (
-          <DataGrid minWidth={hasChecks ? 1100 : 980}>
-            <thead>
-              <tr>
-                <HeadCell width={220}>Cuenta</HeadCell>
-                <HeadCell align="right" width={130}>
-                  Saldo
-                </HeadCell>
-                <HeadCell align="right">Ingresos proy.</HeadCell>
-                <HeadCell align="right" width={130}>
-                  Sobregiro
-                </HeadCell>
-                <HeadCell align="right">Total bancos</HeadCell>
-                {hasChecks && <HeadCell align="right">Cheques no cobr.</HeadCell>}
-                <HeadCell align="right">Urgente</HeadCell>
-                <HeadCell align="right">Pendiente</HeadCell>
-                <HeadCell align="right" sticky="right">
-                  Saldo final
-                </HeadCell>
-              </tr>
-            </thead>
-            <tbody>
-              {derived.accounts.map((row) => (
-                <tr key={row.account.id}>
-                  <Cell>
-                    <span className="block font-semibold text-ink">
-                      {accountLabel(row.account, [])}
-                    </span>
-                    {hasCenters && (
-                      <span className="block text-[11px] text-faint">
-                        {row.account.centerId
-                          ? centerName(row.account.centerId, centers)
-                          : "De la empresa"}
+        <FlowSection>
+          <SectionHeading
+            icon={<Landmark size={15} />}
+            title={`Flujo de bancos · ${dateLabel}`}
+            hint={`Las celdas con campo son la captura. Disponible, no cobrados, marcados y saldo final se calculan solos.${flow ? "" : " Todavía no hay captura para esta fecha."}`}
+          >
+            {previous && (
+              <Button
+                variant="secondary"
+                size="toolbar"
+                icon={<Copy size={14} />}
+                onClick={copyPrevious}
+              >
+                Copiar del {formatDayMonthYear(previous.date)}
+              </Button>
+            )}
+          </SectionHeading>
+
+          {derived.accounts.length === 0 ? (
+            <EmptyState icon={<Waves size={22} />}>
+              Ninguna cuenta del centro marcado. Quita el filtro de centro o declara una cuenta.
+            </EmptyState>
+          ) : (
+            <DataGrid minWidth={hasChecks ? 1100 : 980}>
+              <thead>
+                <tr>
+                  <HeadCell width={220}>Cuenta</HeadCell>
+                  <HeadCell align="right" width={130}>
+                    Saldo
+                  </HeadCell>
+                  <HeadCell align="right">Ingresos proy.</HeadCell>
+                  <HeadCell align="right" width={130}>
+                    Sobregiro
+                  </HeadCell>
+                  <HeadCell align="right">Total bancos</HeadCell>
+                  {hasChecks && <HeadCell align="right">Cheques no cobr.</HeadCell>}
+                  <HeadCell align="right">Urgente</HeadCell>
+                  <HeadCell align="right">Pendiente</HeadCell>
+                  <HeadCell align="right" sticky="right">
+                    Saldo final
+                  </HeadCell>
+                </tr>
+              </thead>
+              <tbody>
+                {derived.accounts.map((row) => (
+                  <tr key={row.account.id}>
+                    <Cell>
+                      <span className="block font-semibold text-ink">
+                        {accountLabel(row.account, [])}
                       </span>
-                    )}
-                  </Cell>
-                  <Cell numeric className="bg-marked/40 p-1">
-                    <NumericInput
-                      value={flow?.balances[row.account.id] ?? null}
-                      nullable
-                      format="currency"
-                      placeholder="0.00"
-                      ariaLabel={`Saldo de ${accountLabel(row.account, centers)}`}
-                      onCommit={(value) => setBalance(row.account.id, value)}
-                    />
-                  </Cell>
-                  <Cell numeric tone="muted">
-                    {money(row.incomes)}
-                  </Cell>
-                  {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
+                      {hasCenters && (
+                        <span className="block text-[11px] text-faint">
+                          {row.account.centerId
+                            ? centerName(row.account.centerId, centers)
+                            : "De la empresa"}
+                        </span>
+                      )}
+                    </Cell>
+                    <Cell numeric className="bg-marked/40 p-1">
+                      <NumericInput
+                        value={flow?.balances[row.account.id] ?? null}
+                        nullable
+                        format="currency"
+                        placeholder="0.00"
+                        ariaLabel={`Saldo de ${accountLabel(row.account, centers)}`}
+                        onCommit={(value) => setBalance(row.account.id, value)}
+                      />
+                    </Cell>
+                    <Cell numeric tone="muted">
+                      {money(row.incomes)}
+                    </Cell>
+                    {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
                       but it is captured here, where the sheet writes it, and not only in Configurar. */}
-                  <Cell numeric className="bg-marked/40 p-1">
-                    <NumericInput
-                      value={row.account.overdraft}
-                      format="currency"
-                      placeholder="0.00"
-                      ariaLabel={`Sobregiro de ${accountLabel(row.account, centers)}`}
-                      onCommit={(value) =>
-                        void cashDb.updateAccount(row.account.id, { overdraft: value ?? 0 })
-                      }
-                    />
+                    <Cell numeric className="bg-marked/40 p-1">
+                      <NumericInput
+                        value={row.account.overdraft}
+                        format="currency"
+                        placeholder="0.00"
+                        ariaLabel={`Sobregiro de ${accountLabel(row.account, centers)}`}
+                        onCommit={(value) =>
+                          void cashDb.updateAccount(row.account.id, { overdraft: value ?? 0 })
+                        }
+                      />
+                    </Cell>
+                    <Cell numeric strong value={row.bankTotal}>
+                      {money(row.bankTotal)}
+                    </Cell>
+                    {hasChecks && (
+                      <Cell numeric className="text-crosslink">
+                        {money(row.outstanding)}
+                      </Cell>
+                    )}
+                    <Cell numeric className="text-warning">
+                      {money(row.urgent)}
+                    </Cell>
+                    <Cell numeric tone="muted">
+                      {money(row.pending)}
+                    </Cell>
+                    <Cell numeric strong sticky="right" value={row.remaining}>
+                      {money(row.remaining)}
+                    </Cell>
+                  </tr>
+                ))}
+                {(derived.unassignedMarked.urgent > 0 ||
+                  derived.unassignedMarked.pending > 0 ||
+                  derived.unassignedIncomes > 0) && (
+                  <GridRow muted>
+                    <Cell className="text-[11.5px] text-faint" colSpan={2}>
+                      Sin cuenta asignada (suma en la empresa)
+                    </Cell>
+                    <Cell numeric tone="muted">
+                      {money(derived.unassignedIncomes)}
+                    </Cell>
+                    <Cell colSpan={hasChecks ? 3 : 2} />
+                    <Cell numeric className="text-warning">
+                      {money(derived.unassignedMarked.urgent)}
+                    </Cell>
+                    <Cell numeric tone="muted">
+                      {money(derived.unassignedMarked.pending)}
+                    </Cell>
+                    <Cell sticky="right" />
+                  </GridRow>
+                )}
+                <tr className="bg-surface-sunken">
+                  <Cell strong>Total</Cell>
+                  <Cell numeric strong value={totals.balance}>
+                    {money(totals.balance)}
                   </Cell>
-                  <Cell numeric strong value={row.bankTotal}>
-                    {money(row.bankTotal)}
+                  <Cell numeric strong>
+                    {money(totals.incomes)}
+                  </Cell>
+                  <Cell numeric strong>
+                    {money(totals.overdraft)}
+                  </Cell>
+                  <Cell numeric strong>
+                    {money(totals.bankTotal)}
                   </Cell>
                   {hasChecks && (
-                    <Cell numeric className="text-crosslink">
-                      {money(row.outstanding)}
+                    <Cell numeric strong className="text-crosslink">
+                      {money(totals.outstanding)}
                     </Cell>
                   )}
-                  <Cell numeric className="text-warning">
-                    {money(row.urgent)}
+                  <Cell numeric strong className="text-warning">
+                    {money(totals.urgent)}
                   </Cell>
-                  <Cell numeric tone="muted">
-                    {money(row.pending)}
+                  <Cell numeric strong>
+                    {money(totals.pending)}
                   </Cell>
-                  <Cell numeric strong sticky="right" value={row.remaining}>
-                    {money(row.remaining)}
+                  <Cell numeric strong sticky="right" value={totals.remaining}>
+                    {money(totals.remaining)}
                   </Cell>
                 </tr>
-              ))}
-              {(derived.unassignedMarked.urgent > 0 ||
-                derived.unassignedMarked.pending > 0 ||
-                derived.unassignedIncomes > 0) && (
-                <GridRow muted>
-                  <Cell className="text-[11.5px] text-faint" colSpan={2}>
-                    Sin cuenta asignada (suma en la empresa)
-                  </Cell>
-                  <Cell numeric tone="muted">
-                    {money(derived.unassignedIncomes)}
-                  </Cell>
-                  <Cell colSpan={hasChecks ? 3 : 2} />
-                  <Cell numeric className="text-warning">
-                    {money(derived.unassignedMarked.urgent)}
-                  </Cell>
-                  <Cell numeric tone="muted">
-                    {money(derived.unassignedMarked.pending)}
-                  </Cell>
-                  <Cell sticky="right" />
-                </GridRow>
-              )}
-              <tr className="bg-surface-sunken">
-                <Cell strong>Total</Cell>
-                <Cell numeric strong value={totals.balance}>
-                  {money(totals.balance)}
-                </Cell>
-                <Cell numeric strong>
-                  {money(totals.incomes)}
-                </Cell>
-                <Cell numeric strong>
-                  {money(totals.overdraft)}
-                </Cell>
-                <Cell numeric strong>
-                  {money(totals.bankTotal)}
-                </Cell>
-                {hasChecks && (
-                  <Cell numeric strong className="text-crosslink">
-                    {money(totals.outstanding)}
-                  </Cell>
-                )}
-                <Cell numeric strong className="text-warning">
-                  {money(totals.urgent)}
-                </Cell>
-                <Cell numeric strong>
-                  {money(totals.pending)}
-                </Cell>
-                <Cell numeric strong sticky="right" value={totals.remaining}>
-                  {money(totals.remaining)}
-                </Cell>
-              </tr>
-            </tbody>
-          </DataGrid>
-        )}
+              </tbody>
+            </DataGrid>
+          )}
 
-        <p className="text-[11.5px] leading-relaxed text-faint">
-          Total bancos = saldo + ingresos proyectados + sobregiro. Saldo final = total bancos
-          {hasChecks && " − cheques girados y no cobrados"} − urgente − pendiente.
-          {hasChecks && " Los cheques vienen del módulo Cheques a la fecha de corte;"} los pagos
-          salen de los documentos marcados en Cuentas por pagar (monto aprobado o, sin él, el
-          saldo).
-        </p>
-
-        <IncomesSection incomes={incomes} onChange={setIncomes} />
+          <p className="text-[11.5px] leading-relaxed text-faint">
+            Total bancos = saldo + ingresos proyectados + sobregiro. Saldo final = total bancos
+            {hasChecks && " − cheques girados y no cobrados"} − urgente − pendiente.
+            {hasChecks && " Los cheques vienen del módulo Cheques a la fecha de corte;"} los pagos
+            salen de los documentos marcados en Cuentas por pagar (monto aprobado o, sin él, el
+            saldo).
+          </p>
+        </FlowSection>
 
         <MarkedSection />
 
         {/* The sheet's «SALDO FALTANTE» row, right under the TOTAL it is read against: its three
             figures — after everything marked, after only the urgent, after only the pending. */}
         {derived.accounts.length > 0 && (
-          <section className="flex flex-col gap-3">
+          <FlowSection>
             <SectionHeading
+              icon={<Scale size={15} />}
               title="Saldo faltante o sobrante"
               hint="Total bancos − cheques − lo marcado, en sus tres lecturas"
             />
@@ -284,22 +296,19 @@ export function FlowView() {
               <Remaining label="Pagando solo lo urgente" value={totals.remainingUrgentOnly} />
               <Remaining label="Pagando solo lo pendiente" value={totals.remainingPendingOnly} />
             </div>
-          </section>
+          </FlowSection>
         )}
 
         <SettledSection />
 
         {hasCenters && derived.loans.length > 0 && (
-          <section className="rounded-[13px] border border-border bg-surface px-4 py-3">
-            <h3 className="flex items-center gap-2 text-[13px] font-bold text-ink">
-              <ArrowRightLeft size={15} className="text-faint" />
-              Préstamos entre centros
-            </h3>
-            <p className="mt-0.5 text-[11.5px] text-faint">
-              Lo que la cuenta de un centro paga por documentos de otro: lo que antes se anotaba en
-              CARGAS CASH.
-            </p>
-            <ul className="mt-2 flex flex-wrap gap-2">
+          <FlowSection>
+            <SectionHeading
+              icon={<ArrowRightLeft size={15} />}
+              title="Préstamos entre centros"
+              hint="Lo que la cuenta de un centro paga por documentos de otro: lo que antes se anotaba en CARGAS CASH."
+            />
+            <ul className="flex flex-wrap gap-2">
               {derived.loans.map((loan) => (
                 <li
                   key={`${loan.fromCenterId}-${loan.toCenterId}`}
@@ -313,7 +322,7 @@ export function FlowView() {
                 </li>
               ))}
             </ul>
-          </section>
+          </FlowSection>
         )}
       </div>
     </CashFlowEmptyState>
@@ -335,8 +344,9 @@ function SettledSection() {
     ? `desde el ${formatDayMonthYear(derived.settledSince)} (flujo anterior) hasta la fecha de corte`
     : "en la fecha de corte";
   return (
-    <section className="flex flex-col gap-3">
+    <FlowSection>
       <SectionHeading
+        icon={<CheckCircle2 size={15} />}
         title="Pagado en esta fecha"
         hint={`${pluralize(derived.settled.length, "documento")} liquidados ${window} · fuera de las sumas: el saldo capturado ya los descuenta`}
       />
@@ -382,16 +392,42 @@ function SettledSection() {
           </tbody>
         </table>
       </div>
-    </section>
+    </FlowSection>
   );
 }
 
-/** A section's heading, in the page's order: bancos → ingresos → pagos → faltante. */
-function SectionHeading({ title, hint }: { title: string; hint?: string }) {
+/**
+ * One block of the page, in its order: ingresos → bancos → pagos marcados → faltante → pagado →
+ * préstamos. A hairline above and the same air between them is what tells one from the next —
+ * six headings of the same size, one after another, read as one long table.
+ */
+function FlowSection({ children }: { children: ReactNode }) {
+  return <section className="flex flex-col gap-3 border-t border-border pt-5">{children}</section>;
+}
+
+/** A section's heading: its icon on a brand tile, the title, the hint, and the controls of the
+ *  section (a total, «Agregar», «Copiar del …») on the right. */
+function SectionHeading({
+  icon,
+  title,
+  hint,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  hint?: string;
+  children?: ReactNode;
+}) {
   return (
-    <div className="min-w-0">
-      <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
-      {hint && <p className="mt-0.5 text-[11.5px] text-faint">{hint}</p>}
+    <div className="flex items-center gap-3">
+      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] bg-brand-soft text-brand">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-[14px] font-bold text-ink">{title}</h2>
+        {hint && <p className="mt-0.5 text-[11.5px] text-faint">{hint}</p>}
+      </div>
+      {children}
     </div>
   );
 }
@@ -428,14 +464,12 @@ function IncomesSection({
   const total = incomes.reduce((acc, income) => acc + income.amount, 0);
 
   return (
-    <section className="rounded-[13px] border border-border bg-surface px-4 py-3">
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <SectionHeading
-            title="Ingresos proyectados"
-            hint="Ventas previstas, reservas, efectivo por depositar, cheques y tarjetas por efectivizar."
-          />
-        </div>
+    <FlowSection>
+      <SectionHeading
+        icon={<TrendingUp size={15} />}
+        title="Ingresos proyectados"
+        hint="Ventas previstas, reservas, efectivo por depositar, cheques y tarjetas por efectivizar. Suman al total bancos."
+      >
         <span className="text-[13px] font-semibold tabular-nums text-brand">{money(total)}</span>
         <Button
           variant="secondary"
@@ -455,9 +489,9 @@ function IncomesSection({
         >
           Agregar
         </Button>
-      </div>
+      </SectionHeading>
       {incomes.length > 0 && (
-        <ul className="mt-3 divide-y divide-border-soft">
+        <ul className="divide-y divide-border-soft rounded-[13px] border border-border bg-surface px-4 py-1">
           {incomes.map((income) => (
             <li
               key={income.id}
@@ -502,7 +536,7 @@ function IncomesSection({
           ))}
         </ul>
       )}
-    </section>
+    </FlowSection>
   );
 }
 
@@ -525,8 +559,9 @@ function MarkedSection() {
   const total = derived.totals.urgent + derived.totals.pending;
 
   return (
-    <section className="flex flex-col gap-3">
+    <FlowSection>
       <SectionHeading
+        icon={<Flag size={15} />}
         title="Pagos marcados"
         hint={`${pluralize(derived.lines.length, "documento")} · se marcan y desmarcan en Cuentas por pagar; aquí solo se leen`}
       />
@@ -592,7 +627,7 @@ function MarkedSection() {
           </table>
         )}
       </div>
-    </section>
+    </FlowSection>
   );
 }
 
@@ -620,7 +655,7 @@ function GroupRows({
           {group.label}
           {group.payables[0]?.kind && (
             <span className="ml-2 text-[11px] font-normal text-faint">
-              {KIND_LABELS[group.payables[0].kind]}
+              {kindLabel(group.payables[0].kind)}
             </span>
           )}
         </Cell>

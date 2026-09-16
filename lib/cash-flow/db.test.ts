@@ -2,20 +2,24 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addAccount,
+  addCashEntry,
   addCenter,
   addManualPayable,
   applyCut,
   assignBankToAccount,
   createAccountsForBanks,
+  createCentersForLabels,
   createClient,
   db,
   deleteAccount,
+  deleteCashEntry,
   deleteClient,
   describeClientContents,
   getActiveClientId,
   getFlow,
   importChecks,
   listAccounts,
+  listCashEntries,
   listChecks,
   listClientSummaries,
   listCuts,
@@ -23,6 +27,7 @@ import {
   listPayables,
   saveFlow,
   settlePayables,
+  updateCashEntry,
   updatePayables,
 } from "./db";
 import { parseChecksLog } from "./upload/checks-log";
@@ -128,6 +133,7 @@ describe("applyCut", () => {
       status: "settled",
       settledOn: "2026-09-16",
       priority: null,
+      cash: false,
     });
   });
 });
@@ -169,6 +175,18 @@ describe("checks", () => {
   });
 });
 
+describe("createCentersForLabels", () => {
+  it("creates only the labels no center answers to, once each", async () => {
+    await addCenter(clientId, "HA");
+    const created = await createCentersForLabels(clientId, ["ha", "HC", "hc ", "", "HK"]);
+    expect(created.map((center) => center.name)).toEqual(["HC", "HK"]);
+    const names = (await db.centers.where("clientId").equals(clientId).toArray()).map(
+      (center) => center.name,
+    );
+    expect(names.sort()).toEqual(["HA", "HC", "HK"]);
+  });
+});
+
 describe("createAccountsForBanks", () => {
   it("creates the missing accounts and hands them their unassigned checks", async () => {
     await importChecks(clientId, parseChecksLog(CHECKS_GRID).checks);
@@ -204,5 +222,33 @@ describe("flows", () => {
       "2026-08-07",
       "2026-08-05",
     ]);
+  });
+});
+
+describe("cash entries", () => {
+  it("adds an empty row dated today, edits it and lists by date", async () => {
+    const later = await addCashEntry(clientId, "misc", "2026-08-12");
+    const earlier = await addCashEntry(clientId, "initial", "2026-08-11");
+    expect(later.detail).toBe("");
+    expect(later.amounts).toEqual({});
+    await updateCashEntry(later.id, {
+      detail: "SUELDO 07-2026 SONIA SALINAS",
+      amounts: { hc: 601.33 },
+    });
+    const rows = await listCashEntries(clientId);
+    expect(rows.map((row) => row.id)).toEqual([earlier.id, later.id]);
+    expect(rows[1].amounts).toEqual({ hc: 601.33 });
+    await deleteCashEntry(later.id);
+    expect(await listCashEntries(clientId)).toHaveLength(1);
+  });
+
+  it("belongs to its empresa and dies with it", async () => {
+    await addCashEntry(clientId, "misc");
+    const other = (await createClient("Otra")).id;
+    await addCashEntry(other, "misc");
+    expect(await listCashEntries(other)).toHaveLength(1);
+    await deleteClient(other);
+    expect(await listCashEntries(other)).toHaveLength(0);
+    expect(await listCashEntries(clientId)).toHaveLength(1);
   });
 });

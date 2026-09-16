@@ -13,6 +13,7 @@
  */
 import { normalizeLabel, type Cell } from "@/lib/excel/workbook";
 import { toISODate } from "../dates";
+import { splitCenterLabels } from "../filters";
 import type { ParsedCartera, ParsedPayable } from "../types";
 import { cellAmount, cellText, findHeaderRow, firstTextLine, locate, type Grid } from "./grid";
 
@@ -47,6 +48,13 @@ export function findCutDate(grid: Grid, headerRow: number): string | null {
     }
   }
   return null;
+}
+
+/** The distinct labels of the cell Contífico repeats once per line («CULTURA MANOR,CULTURA
+ *  MANOR» → «CULTURA MANOR»), comma-joined when a document really names several. */
+export function centerLabel(raw: string): string | null {
+  const labels = splitCenterLabels(raw);
+  return labels.length > 0 ? labels.join(", ") : null;
 }
 
 export function parseContifico(grid: Grid): ParsedCartera {
@@ -92,7 +100,7 @@ export function parseContifico(grid: Grid): ParsedCartera {
       withholdings: cellAmount(row[withCol]),
       payments: cellAmount(row[paidCol]),
       balance: cellAmount(row[totalCol]),
-      centerName: centerCol >= 0 ? cellText(row[centerCol]) || null : null,
+      centerName: centerCol >= 0 ? centerLabel(cellText(row[centerCol])) : null,
     });
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesContifico, parseContifico } from "./contifico";
+import { centerLabel, matchesContifico, parseContifico } from "./contifico";
 import { CONTIFICO_GRID, DINGOO_GRID, FORMATO_IDEAL_VENCIDA_GRID } from "./fixtures";
 
 describe("parseContifico", () => {
@@ -29,6 +29,15 @@ describe("parseContifico", () => {
       balance: 900,
       centerName: "CULTURA MANOR",
     });
+  });
+
+  it("splits the center cell by commas and keeps the distinct labels", () => {
+    expect(centerLabel("CULTURA MANOR,CULTURA MANOR")).toBe("CULTURA MANOR");
+    expect(centerLabel(Array(40).fill("CENTRO DE COSTO PRINCIPAL").join(","))).toBe(
+      "CENTRO DE COSTO PRINCIPAL",
+    );
+    expect(centerLabel(" HA , ha, HC ")).toBe("HA, HC");
+    expect(centerLabel(" , ")).toBeNull();
   });
 
   it("keeps the supplier's label over the razón social, and an empty center as null", () => {

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-type BadgeVariant = "mono" | "soft" | "outline" | "warning" | "positive" | "negative";
+export type BadgeVariant = "mono" | "soft" | "outline" | "warning" | "positive" | "negative";
 
 const VARIANTS: Record<BadgeVariant, string> = {
   mono: "rounded-full border border-border bg-border-faint px-2 py-0.5 font-mono text-[10.5px] text-muted",

@@ -12,8 +12,8 @@ import { PayablesUploadModal } from "./payables-upload-modal";
 /**
  * Flujo de caja's `ExportActions` wrapper, per tab: «Cargar Excel» where something is loaded (a
  * cartera in CxP, the register in Cheques) and «Exportar ▾» with that tab's outputs — the `REPORTE
- * CXP`, the fourteen-column control, the flow's report and Excel. Resumen mounts nothing (see
- * `module-views.tsx`).
+ * CXP`, the fourteen-column control, the flow's report and Excel, the «Cargas cash» sheet. Resumen
+ * mounts nothing (see `module-views.tsx`).
  */
 export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
   const {
@@ -26,6 +26,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
     asOf,
     accounts,
     centers,
+    cashMatrix,
   } = useCashFlowData();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -125,8 +126,45 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
         },
       ];
     }
+    if (tab === "cargas") {
+      const empty = cashMatrix.sections.every((section) => section.rows.length === 0);
+      return [
+        {
+          id: "cash-entries",
+          title: "Cargas cash",
+          description: "Las tres matrices del libro con sus totales, en una hoja",
+          icon: FileSpreadsheet,
+          iconClassName: "text-brand",
+          disabled: empty,
+          disabledReason: "No hay filas ni documentos cash que exportar.",
+          run: async () => {
+            const [mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/export/cash-entries-workbook"),
+              import("@/lib/cash-flow/export/shared"),
+              import("@/lib/download"),
+            ]);
+            const blob = await shared.workbookToBlob(
+              mod.buildCashEntriesWorkbook(cashMatrix, companyName, logo),
+            );
+            downloadBlob(blob, shared.exportFilename("CARGAS_CASH", companyName, asOf));
+          },
+        },
+      ];
+    }
     return [];
-  }, [tab, payables, visibleChecks, derived, flow, asOf, companyName, logo, accounts, centers]);
+  }, [
+    tab,
+    payables,
+    visibleChecks,
+    derived,
+    flow,
+    asOf,
+    companyName,
+    logo,
+    accounts,
+    centers,
+    cashMatrix,
+  ]);
 
   const uploads = tab === "cxp" || tab === "cheques";
 
@@ -144,22 +182,6 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
             }
           : {})}
         exports={exports}
-        info={{
-          title: "Archivos aceptados",
-          children:
-            tab === "cheques" ? (
-              <>
-                El libro del control de cheques (hoja con N° EGRESO · BANCO · NOMBRE · CHEQUE ·
-                VALOR · FECHA DE EMISION). Se puede recargar: cada fila se escribe por su egreso.
-              </>
-            ) : (
-              <>
-                La «Cartera por Pagar (Detallado)» de Contífico —también pegada en el FORMATO IDEAL—
-                y el «Reporte · Cuentas por pagar» de Dingoo (.xls / .xlsx). El formato se detecta
-                solo.
-              </>
-            ),
-        }}
       />
       {tab === "cxp" && (
         <PayablesUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />

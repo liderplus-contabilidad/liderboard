@@ -3,13 +3,13 @@
 import { Ban, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FormField, TextField } from "@/components/ui/form-field";
+import { DateField } from "@/components/ui/date-field";
+import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { SidePanel } from "@/components/ui/side-panel";
 import { CHECK_STEP_LABELS, CHECK_STEPS, nextVoucher, stepIndex } from "@/lib/cash-flow/checks";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
-import { isISODate } from "@/lib/cash-flow/dates";
 import type { Check, CheckStep } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 
@@ -144,14 +144,10 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
           </ol>
           {draft.step === "cashed" && !draft.voided && (
             <FormField label="Fecha de cobro" className="mt-3">
-              <input
-                type="date"
-                value={draft.cashedOn ?? ""}
-                aria-label="Fecha de cobro"
-                onChange={(event) =>
-                  isISODate(event.target.value) && commit({ cashedOn: event.target.value })
-                }
-                className="w-full rounded-lg border border-border bg-surface px-[9px] py-2 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+              <DateField
+                value={draft.cashedOn}
+                ariaLabel="Fecha de cobro"
+                onChange={(cashedOn) => cashedOn && commit({ cashedOn })}
               />
             </FormField>
           )}
@@ -197,22 +193,23 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             onBlur={() => check && commit({ number: draft.number })}
           />
           <FormField label="Valor">
-            <NumericInput
-              value={draft.amount}
-              format="currency"
-              ariaLabel="Valor del cheque"
-              onCommit={(value) => commit({ amount: value ?? 0 })}
-            />
+            <FieldBox>
+              <NumericInput
+                value={draft.amount}
+                format="currency"
+                align="left"
+                placeholder="$0.00"
+                ariaLabel="Valor del cheque"
+                onCommit={(value) => commit({ amount: value ?? 0 })}
+              />
+            </FieldBox>
           </FormField>
           <FormField label="Fecha de emisión">
-            <input
-              type="date"
-              value={draft.issuedOn ?? ""}
-              aria-label="Fecha de emisión"
-              onChange={(event) =>
-                commit({ issuedOn: isISODate(event.target.value) ? event.target.value : null })
-              }
-              className="w-full rounded-lg border border-border bg-surface px-[9px] py-2 font-sans text-[13px] tabular-nums text-ink outline-none focus:border-brand"
+            <DateField
+              value={draft.issuedOn}
+              nullable
+              ariaLabel="Fecha de emisión"
+              onChange={(issuedOn) => commit({ issuedOn })}
             />
           </FormField>
           <TextField

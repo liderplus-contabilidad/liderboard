@@ -1,6 +1,7 @@
 import {
   BarChart3,
   BedDouble,
+  Coins,
   FileText,
   LayoutDashboard,
   LineChart,
@@ -23,7 +24,8 @@ export type ModuleTabId =
   | "resumen"
   | "cxp"
   | "cheques"
-  | "flujo";
+  | "flujo"
+  | "cargas";
 
 export interface ModuleTab {
   id: ModuleTabId;
@@ -44,6 +46,7 @@ const TAB_RESUMEN: ModuleTab = { id: "resumen", label: "Resumen", icon: LayoutDa
 const TAB_CXP: ModuleTab = { id: "cxp", label: "Cuentas por pagar", icon: FileText };
 const TAB_CHEQUES: ModuleTab = { id: "cheques", label: "Cheques", icon: Receipt };
 const TAB_FLUJO: ModuleTab = { id: "flujo", label: "Flujo", icon: Waves };
+const TAB_CARGAS: ModuleTab = { id: "cargas", label: "Cargas cash", icon: Coins };
 
 /**
  * A module's SUBITEM: a page hanging off it (`/<parent>/<child>`) rendered indented under its parent
@@ -163,7 +166,7 @@ export const MODULES: DashboardModule[] = [
     label: "Cuentas por Pagar",
     title: "Cuentas por pagar",
     icon: Wallet,
-    tabs: [TAB_RESUMEN, TAB_CXP, TAB_CHEQUES, TAB_FLUJO],
+    tabs: [TAB_RESUMEN, TAB_CXP, TAB_CHEQUES, TAB_FLUJO, TAB_CARGAS],
   },
 ];
 

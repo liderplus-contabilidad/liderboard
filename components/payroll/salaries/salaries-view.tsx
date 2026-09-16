@@ -144,6 +144,7 @@ export function SalariesView() {
         </div>
       ) : (
         <ChartCard
+          expandable
           title={card.title}
           subtitle={card.subtitle}
           option={card.option}

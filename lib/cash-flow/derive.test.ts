@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   agingDistribution,
+  customKinds,
+  kindLabel,
+  normalizeKind,
   documentLabel,
   markedSplit,
   payableDetail,
@@ -28,6 +31,7 @@ function payable(over: Partial<Payable>): Payable {
     balance: 100,
     centerName: null,
     priority: null,
+    cash: false,
     payOn: null,
     payFromAccountId: null,
     observation: "",
@@ -162,5 +166,32 @@ describe("payableDetail", () => {
       ),
     ).toBe("FC 00017 Laszlo · Arriendo");
     expect(payableDetail(payable({ description: "", centerName: null }))).toBe("");
+  });
+});
+
+describe("kinds", () => {
+  it("prints a built-in by its label and a typed class as it was typed", () => {
+    expect(kindLabel("prestamo")).toBe("Préstamo");
+    expect(kindLabel("Servicios básicos")).toBe("Servicios básicos");
+  });
+
+  it("folds a built-in id or label, in any case, to the id and keeps anything else", () => {
+    expect(normalizeKind("arriendo")).toBe("arriendo");
+    expect(normalizeKind("ARRIENDO")).toBe("arriendo");
+    expect(normalizeKind(" Préstamo ")).toBe("prestamo");
+    expect(normalizeKind("  Servicios básicos ")).toBe("Servicios básicos");
+    expect(normalizeKind("   ")).toBeNull();
+  });
+
+  it("lists the typed classes once, first seen first, and never a built-in", () => {
+    expect(
+      customKinds([
+        { kind: "sri" },
+        { kind: "Servicios básicos" },
+        { kind: undefined },
+        { kind: "Seguros" },
+        { kind: "Servicios básicos" },
+      ]),
+    ).toEqual(["Servicios básicos", "Seguros"]);
   });
 });

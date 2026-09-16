@@ -10,6 +10,8 @@ import {
   Timer,
 } from "lucide-react";
 import { useId } from "react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dropdown,
@@ -35,7 +37,7 @@ import {
   type StepMark,
 } from "@/lib/cash-flow/check-filters";
 import { CHECK_STEP_LABELS } from "@/lib/cash-flow/checks";
-import { isISODate, todayISO } from "@/lib/cash-flow/dates";
+import { todayISO } from "@/lib/cash-flow/dates";
 import {
   AGING_SIDES,
   PRIORITY_LABELS,
@@ -44,6 +46,7 @@ import {
   withCentersCleared,
   withPriorityToggled,
   withSearch,
+  withOnlyCash,
   withShowSettled,
   withSideToggled,
 } from "@/lib/cash-flow/filters";
@@ -64,9 +67,11 @@ function stepMarkLabel(mark: StepMark): string {
  * nothing for an empresa without centers. After them, each tab's own marks; every mark leaves a
  * chip, and none marked is all.
  *
- * The date is a native `<input type="date">` dressed as the bar's other triggers: the reading has
- * to be able to jump to any day, and a grid of days would be a control for a question the calendar
- * already answers.
+ * The date is a `Dropdown` like every other trigger of the bar, opening the app's own `Calendar`
+ * (`components/ui/calendar.tsx`) rather than a native `<input type="date">`: the native control
+ * brought the browser's picker and its own box model, which left «Corte» a few pixels off the
+ * neighbouring triggers and reading as a foreign control. The trigger names the date on screen
+ * and is highlighted only when it is not today — the day the chip also appears.
  */
 export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
   const {
@@ -85,6 +90,7 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
   } = useCashFlowData();
   const idle = activeClientId === null;
   const settledId = useId();
+  const cashId = useId();
   const centerIds = centers.map((center) => center.id);
   const centerName = (id: string) => centers.find((center) => center.id === id)?.name ?? id;
   const accountIds = [...accounts.map((account) => account.id), UNASSIGNED];
@@ -123,6 +129,13 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
         onRemove: () => setPayableFilters((f) => withPriorityToggled(f, mark)),
       });
     }
+    if (payableFilters.onlyCash) {
+      chips.push({
+        key: "cash",
+        label: "Solo cash",
+        onRemove: () => setPayableFilters((f) => withOnlyCash(f, false)),
+      });
+    }
     if (payableFilters.showSettled) {
       chips.push({
         key: "settled",
@@ -154,6 +167,7 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
       ...withCentersCleared(f),
       sides: [],
       priorities: [],
+      onlyCash: false,
       showSettled: false,
     }));
     setCheckFilters((f) => ({ ...f, accountIds: [], steps: [] }));
@@ -164,30 +178,26 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
       <Toolbar inert={idle} className={cn(idle && "opacity-50")}>
         <ToolbarLabel icon={<SlidersHorizontal size={15} />}>Filtros</ToolbarLabel>
 
-        <label
-          className={cn(
-            "inline-flex h-[34px] items-center gap-2 rounded-[9px] border px-3 text-[12.5px] font-semibold transition-colors",
-            isToday
-              ? "border-border bg-surface text-muted hover:bg-canvas"
-              : "border-brand bg-brand-soft text-brand",
-          )}
-        >
-          <CalendarDays size={15} />
-          <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-            Corte
-          </span>
-          <input
-            type="date"
-            value={asOf}
-            aria-label="Fecha de corte"
-            onChange={(event) => {
-              if (isISODate(event.target.value)) {
-                setAsOf(event.target.value);
-              }
-            }}
-            className="bg-transparent font-sans text-[12.5px] font-semibold tabular-nums text-inherit outline-none"
-          />
-        </label>
+        <Dropdown>
+          <DropdownTrigger active={!isToday} icon={<CalendarDays size={15} />}>
+            <span className="tabular-nums">Corte · {formatDayMonthYear(asOf) ?? asOf}</span>
+          </DropdownTrigger>
+          <DropdownPanel>
+            {/* Keyed by the date so a pick — or «Hoy» — re-seeds the month on screen. */}
+            <Calendar key={asOf} value={asOf} today={todayISO()} onChange={setAsOf} />
+            <DropdownFooter>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isToday}
+                onClick={() => setAsOf(todayISO())}
+              >
+                Hoy
+              </Button>
+              <DropdownDone />
+            </DropdownFooter>
+          </DropdownPanel>
+        </Dropdown>
 
         {centers.length > 0 && (
           <Dropdown>
@@ -265,6 +275,14 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
                 </DropdownFooter>
               </DropdownPanel>
             </Dropdown>
+            <span className="inline-flex h-[34px] items-center gap-2 px-1 text-[12.5px] font-semibold text-muted">
+              <Checkbox
+                id={cashId}
+                checked={payableFilters.onlyCash}
+                onChange={(checked) => setPayableFilters((f) => withOnlyCash(f, checked))}
+              />
+              <label htmlFor={cashId}>Solo cash</label>
+            </span>
             <span className="inline-flex h-[34px] items-center gap-2 px-1 text-[12.5px] font-semibold text-muted">
               <Checkbox
                 id={settledId}

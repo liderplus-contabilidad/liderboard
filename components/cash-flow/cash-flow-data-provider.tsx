@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { deriveCashMatrix, type CashMatrix } from "@/lib/cash-flow/cash-entries";
 import * as cashDb from "@/lib/cash-flow/db";
 import {
   applyCheckFilters,
@@ -22,6 +23,7 @@ import {
 import { deriveFlow, previousFlow, type DerivedFlow } from "@/lib/cash-flow/flow";
 import type {
   BankAccount,
+  CashEntry,
   CashFlowCenter,
   Check,
   Payable,
@@ -35,6 +37,7 @@ const EMPTY_ACCOUNTS: BankAccount[] = [];
 const EMPTY_PAYABLES: Payable[] = [];
 const EMPTY_CHECKS: Check[] = [];
 const EMPTY_FLOWS: PaymentFlow[] = [];
+const EMPTY_CASH_ENTRIES: CashEntry[] = [];
 const EMPTY_CUTS: cashDb.CutMeta[] = [];
 
 interface CashFlowDataValue {
@@ -54,6 +57,8 @@ interface CashFlowDataValue {
   checks: Check[];
   flows: PaymentFlow[];
   cuts: cashDb.CutMeta[];
+  /** The hand-written rows of «Cargas cash», both sections. */
+  cashEntries: CashEntry[];
 
   /** The FECHA DE CORTE — the one date every tab reads at (design D11). Today by default. */
   asOf: string;
@@ -80,6 +85,8 @@ interface CashFlowDataValue {
   /** The latest flow strictly before `asOf` — what «Copiar del anterior» offers. */
   previous: PaymentFlow | null;
   derived: DerivedFlow;
+  /** The three matrices of «Cargas cash»: the manual rows plus PROVEEDORES off `scopedPayables`. */
+  cashMatrix: CashMatrix;
 }
 
 const CashFlowDataContext = createContext<CashFlowDataValue | null>(null);
@@ -119,6 +126,11 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
     () => (activeClientId ? cashDb.listCuts(activeClientId) : Promise.resolve(EMPTY_CUTS)),
     [activeClientId],
   );
+  const cashEntryRows = useLiveQuery(
+    () =>
+      activeClientId ? cashDb.listCashEntries(activeClientId) : Promise.resolve(EMPTY_CASH_ENTRIES),
+    [activeClientId],
+  );
 
   const [asOf, setAsOf] = useState<string>(() => todayISO());
   const [rawPayableFilters, setRawPayableFilters] = useState<PayableFilters>(emptyPayableFilters);
@@ -131,6 +143,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
   const checks = checkRows ?? EMPTY_CHECKS;
   const flows = flowRows ?? EMPTY_FLOWS;
   const cuts = cutRows ?? EMPTY_CUTS;
+  const cashEntries = cashEntryRows ?? EMPTY_CASH_ENTRIES;
   const ready = clientRows !== undefined;
 
   const activeClient = useMemo(
@@ -197,6 +210,10 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       }),
     [asOf, flow, scopedAccounts, centers, scopedPayables, checks, previous],
   );
+  const cashMatrix = useMemo(
+    () => deriveCashMatrix(cashEntries, centers, scopedPayables),
+    [cashEntries, centers, scopedPayables],
+  );
 
   const createClient = useCallback(async (name: string, logo?: EntityLogo) => {
     const client = await cashDb.createClient(name, logo);
@@ -232,6 +249,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       checks,
       flows,
       cuts,
+      cashEntries,
       asOf,
       setAsOf,
       isToday: asOf === todayISO(),
@@ -248,6 +266,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       flow,
       previous,
       derived,
+      cashMatrix,
     }),
     [
       clients,
@@ -264,6 +283,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       checks,
       flows,
       cuts,
+      cashEntries,
       asOf,
       payableFilters,
       visiblePayables,
@@ -276,6 +296,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       flow,
       previous,
       derived,
+      cashMatrix,
     ],
   );
 
