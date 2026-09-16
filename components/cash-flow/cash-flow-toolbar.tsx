@@ -173,7 +173,9 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
           )}
         >
           <CalendarDays size={15} />
-          <span className="sr-only">Fecha de corte</span>
+          <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+            Corte
+          </span>
           <input
             type="date"
             value={asOf}
