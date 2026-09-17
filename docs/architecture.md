@@ -1986,6 +1986,48 @@ vendió cero recibe `minHeight`, una losa a ras. Es la misma distinción `null` 
 el panel, dicha en el único lenguaje que un sólido tiene: ausencia de cuerpo contra cuerpo de altura
 cero.
 
+### Cuentas por Pagar — Flujo como hoja de trabajo y la matriz
+
+**La lista de «Pagos marcados» de Flujo es una SEGUNDA SUPERFICIE de los mismos campos del
+documento, no una entidad del flujo.** El libro del contador es una hoja `FJ dd-mm-aaaa` por flujo
+—sesenta y cinco en un año— donde bancos arriba y pagos abajo se leen y se ESCRIBEN juntos: estado,
+monto que sale ahora, cuenta que paga, fecha de pago. La primera versión del módulo leía eso junto en
+Flujo pero lo escribía en Cuentas por pagar (la marca, por la barra masiva) y en un cajón por
+documento (cuenta, monto aprobado, fecha): diez documentos costaban ~45 clics contra ~15 ediciones en
+la hoja, y la auditoría de usabilidad del 16-09-2026 puntuó «flexibilidad y eficiencia» 1/4. Lo que
+se consideró primero fue lo que la hoja guarda literalmente —una fila por flujo y documento— y se
+descartó porque sería una COPIA derivada de la marca: al siguiente ajuste en Cuentas por pagar las
+dos discreparían y nada podría decir cuál es la buena. La lista lee `DerivedFlow.lines` como antes y
+cada celda editable escribe UN campo del documento (`priority` · `payFromAccountId` · `approved` ·
+`payOn`) por `db.updatePayable` al perder el foco —el patrón de Cargas cash, porque para una tabla
+de diez filas un cajón por celda es más lento que el Excel—; la consulta viva del proveedor vuelve a
+derivar el flujo y la tabla de bancos se recalcula como los tiles. De Urgente y Pendiente la celda
+EDITABLE es la que la prioridad hace editable; las dos escriben `approved` por `approvedFromTyped`:
+menos que el saldo es un parcial, el saldo mismo es el TODO y se guarda como `null` —guardar el saldo
+se habría vuelto un parcial silencioso el día que una recarga lo cambiara—, más que el saldo es el
+saldo. El flujo se alimenta desde ahí mismo: «Agregar de la cartera» (un `Modal` sobre los documentos
+abiertos sin prioridad, que los marca urgentes en una escritura: agregar a un flujo es «pagar en este
+flujo», y la hoja nace URGENTE y el contador cambia las pocas PENDIENTE) y «Agregar obligación» con
+`markAs`. Después del cambio, un flujo de siete documentos desde Flujo son ~20 interacciones en una
+sola pantalla —abrir el selector, marcar, confirmar y luego un select por fila—, medido con
+playwright sobre la cartera real de Contífico.
+
+**La matriz cuentas × beneficiarios (`FLUJO MATRIZ` de COMISERSA) es DERIVADA, de solo lectura y una
+sola definición (`lib/cash-flow/matrix.ts`).** Una celda es la suma de urgente + pendiente de los
+documentos marcados de ese beneficiario cuya cuenta que paga es la de la fila: contesta «cuánto de
+quién desde dónde», que es lo que la hoja contesta, y deja el reparto urgente/pendiente en la lista
+(`markedSplit`, nunca repetido). Es de solo lectura a propósito: un documento tiene UNA cuenta que
+paga y una celda puede sumar varios documentos —la columna SRI de COMISERSA lleva el de HA y el de
+HC en dos filas—, así que una celda tecleada tendría que inventar qué documento se mueve. Si el
+contador la pide, la puerta es la regla «editable solo cuando la celda es exactamente un documento»,
+la figura del «exactamente uno» que la app repite. Las columnas van por total marcado descendente
+—los pagos grandes a la izquierda, donde empieza la vista—; la fila «Sin cuenta» existe solo con
+varias cuentas y algo marcado sin una (con UNA cuenta `deriveFlow` ya lo cuenta en ella, y la matriz
+lee esa regla de `derived.accounts` en vez de repetirla). En pantalla es «Ver como» lista · matriz
+en la cabecera de «Flujo de bancos» —un control que lee UNA tarjeta vive en su cabecera— y no se
+dibuja sin nada marcado; en el papel y en el Excel de flujo la matriz se imprime SIEMPRE que haya
+algo marcado, porque en el papel no hay controles.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind

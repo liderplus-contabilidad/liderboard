@@ -13,7 +13,7 @@ import { useCashFlowData } from "./cash-flow-data-provider";
  * the whole derived flow is printed, whatever the screen was showing.
  */
 export function FlowReportPreview({ onClose }: { onClose: () => void }) {
-  const { activeClient, derived, flow, accounts, centers } = useCashFlowData();
+  const { activeClient, derived, flow, accounts, centers, checks } = useCashFlowData();
   // Stamped once, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 
@@ -26,9 +26,10 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
         incomes: flow?.incomes ?? [],
         accounts,
         centers,
+        hasChecks: checks.length > 0,
         generatedAt,
       }),
-    [activeClient, derived, flow, accounts, centers, generatedAt],
+    [activeClient, derived, flow, accounts, centers, checks.length, generatedAt],
   );
 
   const widest = Math.max(1, ...report.sections.map((section) => section.table.columns.length));

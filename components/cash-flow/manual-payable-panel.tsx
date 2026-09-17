@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { SidePanel } from "@/components/ui/side-panel";
 import * as cashDb from "@/lib/cash-flow/db";
 import { BUILTIN_KINDS, customKinds, kindLabel, normalizeKind } from "@/lib/cash-flow/derive";
-import type { PayableKind } from "@/lib/cash-flow/types";
+import type { PayableKind, PayPriority } from "@/lib/cash-flow/types";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 const NO_CENTER = "";
@@ -25,7 +25,18 @@ const NEW_KIND = "\u0000new";
  * its payables so nothing has to be stored), then «Nueva clase…», which opens a name field. The
  * name goes through `normalizeKind`, so typing «Arriendo» lands on the built-in and not beside it.
  */
-export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
+/**
+ * `markAs`: the priority the new obligation is born with. From Flujo it is «urgent» — an obligation
+ * added from the flow IS in the flow, as a row typed in the sheet is — and from Cuentas por pagar
+ * it is absent, so the obligation joins the cartera unmarked like any other document.
+ */
+export function ManualPayablePanel({
+  onClose,
+  markAs,
+}: {
+  onClose: () => void;
+  markAs?: PayPriority;
+}) {
   const { activeClientId, centers, payables } = useCashFlowData();
   const [supplier, setSupplier] = useState("");
   const [kind, setKind] = useState<PayableKind>("otros");
@@ -59,7 +70,7 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
     setBusy(true);
     try {
       const center = centers.find((candidate) => candidate.id === centerId);
-      await cashDb.addManualPayable(activeClientId, {
+      const created = await cashDb.addManualPayable(activeClientId, {
         supplier,
         kind: resolvedKind,
         amount,
@@ -67,6 +78,9 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
         centerName: center?.name ?? null,
         description,
       });
+      if (markAs) {
+        await cashDb.updatePayable(created.id, { priority: markAs });
+      }
       onClose();
     } finally {
       setBusy(false);
@@ -81,6 +95,7 @@ export function ManualPayablePanel({ onClose }: { onClose: () => void }) {
     centerId,
     centers,
     description,
+    markAs,
     onClose,
   ]);
 

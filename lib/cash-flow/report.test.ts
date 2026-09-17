@@ -66,6 +66,7 @@ describe("buildFlowReport", () => {
       "accounts",
       "remaining",
       "payments",
+      "matrix",
     ]);
     expect(report.header.dateLabel).toBe("05/08/2026");
     const accounts = report.sections[0].table;
@@ -139,12 +140,56 @@ describe("buildFlowReport", () => {
     expect(accounts.rows[1].values).toEqual(accounts.rows[0].values);
   });
 
+  it("prints the matrix after the payments whenever something is marked, and not otherwise", () => {
+    const matrix = report.sections.find((section) => section.id === "matrix")!;
+    expect(matrix.title).toBe("Matriz de pagos");
+    expect(matrix.table.columns).toEqual([
+      "Saldo",
+      "Sobregiro",
+      "Ingresos",
+      "Total bancos",
+      "NUNA",
+      "PALLASCO PALOMO",
+      "Total marcado",
+      "Saldo final",
+    ]);
+    expect(matrix.table.rows.map((row) => row.label)).toEqual(["PRODUBANCO", "Total"]);
+    expect(matrix.table.rows[0].values).toEqual([
+      "$6,677.34",
+      "$5,000.00",
+      "$0.00",
+      "$11,677.34",
+      "$975.93",
+      "$720.00",
+      "$1,695.93",
+      "$9,981.41",
+    ]);
+
+    const nothingMarked = buildFlowReport({
+      clientName: "Nomik",
+      derived: deriveFlow({
+        date: "2026-08-05",
+        flow: null,
+        accounts: ACCOUNTS,
+        centers: [],
+        payables: [payable({ priority: null })],
+        checks: [],
+      }),
+      incomes: [],
+      accounts: ACCOUNTS,
+      centers: [],
+      generatedAt: new Date(2026, 7, 5, 10, 0),
+    });
+    expect(nothingMarked.sections.map((section) => section.id)).not.toContain("matrix");
+  });
+
   it("writes the same sections to one sheet", () => {
     const ws = buildFlowWorkbook(report).getWorksheet("FLUJO")!;
     const labels = [] as unknown[];
     ws.eachRow((row) => labels.push(row.getCell(1).value));
     expect(labels).toContain("Flujo de bancos");
     expect(labels).toContain("Pagos marcados por proveedor");
+    expect(labels).toContain("Matriz de pagos");
     expect(labels).toContain("Total");
   });
 });

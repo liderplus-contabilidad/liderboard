@@ -234,7 +234,7 @@ const ManualRow = memo(function ManualRow({
 
   return (
     <tr>
-      <Cell className="p-1">
+      <Cell control>
         <DateField
           value={entry.date}
           variant="cell"
@@ -242,7 +242,7 @@ const ManualRow = memo(function ManualRow({
           onChange={(date) => date && patch({ date })}
         />
       </Cell>
-      <Cell className="p-1">
+      <Cell control>
         <input
           defaultValue={entry.detail}
           placeholder="Detalle"
@@ -260,7 +260,7 @@ const ManualRow = memo(function ManualRow({
             {loan && loanColumnId(loan) === column.id ? money(loan.amount) : ""}
           </Cell>
         ) : (
-          <Cell key={column.id} numeric className="bg-marked/40 p-1">
+          <Cell key={column.id} numeric control className="bg-marked/40">
             <NumericInput
               value={entry.amounts[column.id] ?? null}
               nullable
@@ -273,7 +273,7 @@ const ManualRow = memo(function ManualRow({
         ),
       )}
       {hasCenters && (
-        <Cell className="p-1">
+        <Cell control>
           <div className="grid grid-cols-[1fr_1fr_110px] items-center gap-1">
             <Select
               size="sm"
@@ -300,7 +300,7 @@ const ManualRow = memo(function ManualRow({
           </div>
         </Cell>
       )}
-      <Cell className="p-1">
+      <Cell control>
         <input
           defaultValue={entry.observation}
           placeholder="Observación"
@@ -311,7 +311,7 @@ const ManualRow = memo(function ManualRow({
           className={CELL_INPUT}
         />
       </Cell>
-      <Cell className="p-1">
+      <Cell control>
         <Button
           variant="danger"
           size="sm"

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { agingLabel, type Aging } from "@/lib/cash-flow/aging";
+import { agingLabel, agingShortLabel, type Aging } from "@/lib/cash-flow/aging";
 import { PRIORITY_LABELS } from "@/lib/cash-flow/filters";
 import type { Payable } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
@@ -10,7 +10,13 @@ export function AgingBadge({ aging, settled }: { aging: Aging; settled?: boolean
     return <Badge variant="positive">Liquidada</Badge>;
   }
   return (
-    <Badge variant={aging.side === "overdue" ? "negative" : "outline"}>{agingLabel(aging)}</Badge>
+    <Badge
+      variant={aging.side === "overdue" ? "negative" : "outline"}
+      className="whitespace-nowrap"
+      title={agingLabel(aging)}
+    >
+      {agingShortLabel(aging)}
+    </Badge>
   );
 }
 

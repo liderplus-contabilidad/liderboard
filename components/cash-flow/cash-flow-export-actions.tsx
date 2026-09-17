@@ -22,6 +22,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
     activeClient,
     payables,
     visibleChecks,
+    checks,
     derived,
     flow,
     asOf,
@@ -119,6 +120,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
               incomes: flow?.incomes ?? [],
               accounts,
               centers,
+              hasChecks: checks.length > 0,
               generatedAt: new Date(),
             });
             const blob = await shared.workbookToBlob(mod.buildFlowWorkbook(report, logo));
@@ -157,6 +159,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
     tab,
     payables,
     visibleChecks,
+    checks.length,
     derived,
     flow,
     asOf,

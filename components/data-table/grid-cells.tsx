@@ -70,6 +70,12 @@ interface CellProps {
   colSpan?: number;
   /** For a cell that must NOT hand its click to a clickable row (a checkbox beside a row that opens). */
   onClick?: MouseEventHandler<HTMLTableCellElement>;
+  /**
+   * A cell that HOLDS A CONTROL (a select, a date, an amount field): the control brings its own
+   * box, so the cell's padding shrinks to a hairline and the row keeps the sheet's height instead
+   * of stacking the field's padding on the cell's.
+   */
+  control?: boolean;
   className?: string;
 }
 
@@ -85,6 +91,7 @@ export function Cell({
   background,
   colSpan,
   onClick,
+  control = false,
   className,
 }: CellProps) {
   const resolved = resolveTone(tone, value);
@@ -97,7 +104,8 @@ export function Cell({
       colSpan={colSpan}
       onClick={onClick}
       className={cn(
-        "border-b border-border-soft px-3.5 py-2 text-[12.5px]",
+        "border-b border-border-soft text-[12.5px]",
+        control ? "px-1 py-1" : "px-3.5 py-2",
         numeric || align === "right" ? "text-right tabular-nums" : "text-left",
         strong
           ? cn("font-semibold", resolved === "negative" ? "text-negative" : "text-brand")

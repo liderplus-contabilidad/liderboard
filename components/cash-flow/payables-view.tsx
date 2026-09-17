@@ -1,15 +1,16 @@
 "use client";
 
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Coins,
   FileText,
-  Flag,
   Plus,
   Upload,
+  X,
 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
@@ -19,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
 import { agingOf } from "@/lib/cash-flow/aging";
 import * as cashDb from "@/lib/cash-flow/db";
@@ -30,6 +33,7 @@ import {
   type SupplierGroup,
 } from "@/lib/cash-flow/derive";
 import { hasActiveFilters } from "@/lib/cash-flow/filters";
+import { accountLabel } from "@/lib/cash-flow/flow";
 import type { Payable, PayPriority } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
@@ -99,6 +103,10 @@ export function PayablesView() {
   const selectedVisible = useMemo(
     () => [...selected].filter((id) => visibleIds.has(id)),
     [selected, visibleIds],
+  );
+  const selectedPayables = useMemo(
+    () => visiblePayables.filter((payable) => selected.has(payable.id)),
+    [visiblePayables, selected],
   );
 
   const toggle = useCallback((id: string) => {
@@ -192,9 +200,12 @@ export function PayablesView() {
 
         {selectedVisible.length > 0 && (
           <BulkBar
-            ids={selectedVisible}
+            selection={selectedPayables}
             asOf={asOf}
-            accounts={accounts.map((account) => account.id)}
+            accounts={accounts.map((account) => ({
+              value: account.id,
+              label: accountLabel(account, centers),
+            }))}
             onDone={() => setSelected(new Set())}
           />
         )}
@@ -239,19 +250,27 @@ export function PayablesView() {
 }
 
 /** The bulk bar over a selection: the marks that are decided over many rows at once. */
+/**
+ * The bulk bar: what the sheet's three columns do for many rows at once — ESTADO, CUENTA, FECHA DE
+ * PAGO — plus the cash label and the settlement. Every control APPLIES ON CHANGE, so there is no
+ * «Aplicar» beside each one: the selection is explicit, the write is one `updatePayables`, and the
+ * next pick undoes the last. The estado is one segmented control that lights the value the whole
+ * selection shares and nothing when it is mixed. «Marcar pagado» is the one act here that leaves
+ * the cartera, so it sits last and wears no louder colour than its neighbours.
+ */
 function BulkBar({
-  ids,
+  selection,
   asOf,
   accounts,
   onDone,
 }: {
-  ids: string[];
+  selection: readonly Payable[];
   asOf: string;
-  accounts: string[];
+  accounts: { value: string; label: string }[];
   onDone: () => void;
 }) {
-  const [payOn, setPayOn] = useState(asOf);
   const [busy, setBusy] = useState(false);
+  const ids = useMemo(() => selection.map((payable) => payable.id), [selection]);
   const run = useCallback(async (action: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -260,44 +279,92 @@ function BulkBar({
       setBusy(false);
     }
   }, []);
+  // What the selection SHARES lights the control; a mixed selection lights nothing.
+  const common = <K extends keyof Payable>(key: K): Payable[K] | undefined =>
+    selection.every((payable) => payable[key] === selection[0][key])
+      ? selection[0][key]
+      : undefined;
+  const priority = common("priority");
+  const cash = common("cash");
+  const payFrom = common("payFromAccountId");
+  const payOn = common("payOn");
   // With ONE account there is nothing to choose: marking assigns it, so the flow sums it in its row.
-  const onlyAccount = accounts.length === 1 ? accounts[0] : undefined;
-  const mark = (priority: PayPriority | null) =>
+  const onlyAccount = accounts.length === 1 ? accounts[0].value : undefined;
+  const mark = (next: PayPriority | null) =>
     run(() =>
       cashDb.updatePayables(ids, {
-        priority,
-        ...(priority && onlyAccount ? { payFromAccountId: onlyAccount } : {}),
+        priority: next,
+        ...(next && onlyAccount ? { payFromAccountId: onlyAccount } : {}),
       }),
     );
 
   return (
     <div className="flex flex-wrap items-center gap-2.5 rounded-[13px] bg-brand px-4 py-2.5 text-white">
-      <span className="text-[12.5px] font-bold">
-        {pluralize(ids.length, "documento")} seleccionados
+      <span className="inline-flex items-center gap-1 text-[12.5px] font-bold">
+        {pluralize(ids.length, "documento")}
+        <Button
+          size="sm"
+          variant="ghost"
+          iconOnly
+          icon={<X size={13} />}
+          aria-label="Quitar selección"
+          title="Quitar selección"
+          className="text-white/75 hover:bg-white/10 hover:text-white"
+          onClick={onDone}
+        />
       </span>
       <span className="flex-1" />
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={busy}
-        icon={<Flag size={13} />}
-        onClick={() => void mark("urgent")}
-      >
-        Marcar urgente
-      </Button>
-      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void mark("pending")}>
-        Pendiente
-      </Button>
-      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void mark(null)}>
-        Sin marcar
-      </Button>
+      <SegmentedControl
+        value={priority === undefined ? MIXED : (priority ?? NONE_MARK)}
+        options={PRIORITY_MARKS}
+        onChange={(next) => void mark(next === NONE_MARK ? null : (next as PayPriority))}
+        ariaLabel="Estado"
+        className="[&>button]:py-[6px]"
+      />
+      {accounts.length > 1 && (
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+          Pagar desde
+          <Select
+            size="sm"
+            aria-label="Pagar desde"
+            value={payFrom === undefined ? MIXED : (payFrom ?? "")}
+            options={[
+              ...(payFrom === undefined ? [{ value: MIXED, label: "Pagar desde…" }] : []),
+              { value: "", label: "Sin cuenta" },
+              ...accounts,
+            ]}
+            disabled={busy}
+            onChange={(event) =>
+              event.target.value !== MIXED &&
+              void run(() =>
+                cashDb.updatePayables(ids, { payFromAccountId: event.target.value || null }),
+              )
+            }
+            className="min-w-[180px]"
+          />
+        </span>
+      )}
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+        Pagar el
+        <DateField
+          value={payOn ?? null}
+          nullable
+          variant="dark"
+          placeholder="—"
+          ariaLabel="Fecha de pago"
+          disabled={busy}
+          onChange={(date) => void run(() => cashDb.updatePayables(ids, { payOn: date }))}
+        />
+      </span>
       {/* The cash LABEL, beside the priority: put on and taken off without touching the mark. */}
       <Button
         size="sm"
         variant="secondary"
         disabled={busy}
+        aria-pressed={cash === true}
         icon={<Coins size={13} />}
-        onClick={() => void run(() => cashDb.updatePayables(ids, { cash: true }))}
+        className={cn(cash === true && "bg-positive/15 text-positive")}
+        onClick={() => void run(() => cashDb.updatePayables(ids, { cash: cash !== true }))}
       >
         Cash
       </Button>
@@ -305,48 +372,27 @@ function BulkBar({
         size="sm"
         variant="secondary"
         disabled={busy}
-        onClick={() => void run(() => cashDb.updatePayables(ids, { cash: false }))}
-      >
-        Quitar cash
-      </Button>
-      <span className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/30 px-2 text-[12px] font-semibold">
-        Programar
-        <DateField
-          value={payOn}
-          variant="dark"
-          ariaLabel="Fecha programada"
-          onChange={(date) => date && setPayOn(date)}
-        />
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy}
-          onClick={() => void run(() => cashDb.updatePayables(ids, { payOn }))}
-        >
-          Aplicar
-        </Button>
-      </span>
-      <Button
-        size="sm"
-        disabled={busy}
-        className="bg-positive hover:bg-positive/90"
+        icon={<CheckCircle2 size={13} />}
         onClick={() => void run(() => cashDb.settlePayables(ids, asOf).then(onDone))}
       >
         Marcar pagado
       </Button>
-      <button
-        type="button"
-        onClick={onDone}
-        className="px-1 text-[12.5px] font-semibold text-white/75 hover:text-white"
-      >
-        Quitar selección
-      </button>
     </div>
   );
 }
 
-const GROUP_ROW_PX = 38;
-const PAYABLE_ROW_PX = 46;
+/** The bar's estado, the sheet's ESTADO column; `MIXED` lights nothing, `NONE_MARK` is «Sin marcar». */
+const MIXED = "mixed";
+const NONE_MARK = "none";
+const PRIORITY_MARKS: { value: string; label: string }[] = [
+  { value: "urgent", label: "Urgente" },
+  { value: "pending", label: "Pendiente" },
+  { value: NONE_MARK, label: "Sin marcar" },
+];
+
+const GROUP_ROW_PX = 36;
+// One line per document, like the sheet: the description is a column of its own, not a second line.
+const PAYABLE_ROW_PX = 38;
 const TOTAL_ROW_PX = 41;
 const ROW_OVERSCAN = 10;
 
@@ -371,10 +417,10 @@ const GroupRow = memo(function GroupRow({
     // the eye finds where one supplier ends and the next begins without reading the labels.
     <GridRow
       onClick={() => onToggleGroup(group.key)}
-      className="h-[40px] bg-brand-soft hover:bg-brand-soft"
+      className="h-[36px] bg-brand-soft hover:bg-brand-soft"
     >
       <Cell />
-      <Cell>
+      <Cell colSpan={2}>
         <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand">
           <Caret size={14} className="text-brand" />
           {group.label}
@@ -457,20 +503,21 @@ function VirtualPayablesGrid({
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
         <table
           className="w-full table-fixed border-separate border-spacing-0"
-          style={{ minWidth: 1100 }}
+          style={{ minWidth: 1130 }}
         >
           {/* Widths declared, not measured: with an automatic layout the document column took
                 the slack of the whole card and pushed the figures out of sight. */}
           <colgroup>
-            <col style={{ width: 44 }} />
+            <col style={{ width: 40 }} />
+            <col style={{ width: 300 }} />
             <col />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 92 }} />
+            <col style={{ width: 108 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 120 }} />
-            <col style={{ width: 110 }} />
-            <col style={{ width: 130 }} />
-            <col style={{ width: 104 }} />
+            <col style={{ width: 118 }} />
             <col style={{ width: 96 }} />
+            <col style={{ width: 98 }} />
           </colgroup>
           <thead>
             <tr>
@@ -483,6 +530,7 @@ function VirtualPayablesGrid({
                 />
               </HeadCell>
               <HeadCell className="sticky top-0 z-[2]">Proveedor · documento</HeadCell>
+              <HeadCell className="sticky top-0 z-[2]">Detalle</HeadCell>
               <HeadCell className="sticky top-0 z-[2]">Emisión</HeadCell>
               <HeadCell className="sticky top-0 z-[2]">Vence</HeadCell>
               <HeadCell className="sticky top-0 z-[2]" align="right">
@@ -531,7 +579,7 @@ function VirtualPayablesGrid({
                 <tr key="total" className="h-[41px] bg-brand text-white">
                   <Cell className="border-b-0" />
                   <Cell
-                    colSpan={5}
+                    colSpan={6}
                     className="border-b-0 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
                   >
                     {totalLabel}
@@ -572,7 +620,7 @@ const PayableRow = memo(function PayableRow({
   // source: which system a document came from is in the header's cut line.
   const sub = payableDetail(payable, { center: hasCenters || payable.source !== "manual" });
   return (
-    <GridRow onClick={() => onOpen(payable.id)} className={cn("h-[46px]", settled && "opacity-60")}>
+    <GridRow onClick={() => onOpen(payable.id)} className={cn("h-[38px]", settled && "opacity-60")}>
       {/* Selecting must not open: the checkbox cell swallows its click. */}
       <Cell onClick={(event) => event.stopPropagation()}>
         <Checkbox
@@ -586,12 +634,13 @@ const PayableRow = memo(function PayableRow({
         {/* The row's accessible way in: a real button on its title, so the detail opens from the
             keyboard; the whole row opens it on click, the checkbox beside it selects without opening. */}
         {/* The document and its two states on ONE line: what it is, how late it is, whether it is
-            marked — read left to right without hunting two columns to the right. */}
-        <span className="flex min-w-0 items-center gap-2">
+            marked — read left to right without hunting two columns to the right. The NUMBER never
+            gives way (it is what identifies the row); what runs short is clipped on the right. */}
+        <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
           <button
             type="button"
             onClick={() => onOpen(payable.id)}
-            className="min-w-0 truncate text-left font-mono text-[12px] text-ink hover:text-brand"
+            className="shrink-0 text-left font-mono text-[12px] text-ink hover:text-brand"
           >
             {documentLabel(payable) || payable.supplier}
           </button>
@@ -599,7 +648,11 @@ const PayableRow = memo(function PayableRow({
           {payable.priority && <PriorityBadge priority={payable.priority} />}
           {payable.cash && <CashBadge />}
         </span>
-        {sub && <span className="block truncate text-[11.5px] text-muted">{sub}</span>}
+      </Cell>
+      <Cell className="text-[12px] text-muted">
+        <span className="block truncate" title={sub || undefined}>
+          {sub}
+        </span>
       </Cell>
       <Cell>
         <span className="tabular-nums text-ink-soft">

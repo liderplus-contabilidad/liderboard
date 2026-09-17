@@ -24,11 +24,15 @@ interface BadgeProps {
    * `positive` / `negative` = status pill (amber/green/red). */
   variant?: BadgeVariant;
   className?: string;
+  /** The long form of an abbreviated pill, on hover. */
+  title?: string;
   children: ReactNode;
 }
 
-export function Badge({ variant = "soft", className, children }: BadgeProps) {
+export function Badge({ variant = "soft", className, title, children }: BadgeProps) {
   return (
-    <span className={cn("inline-flex items-center", VARIANTS[variant], className)}>{children}</span>
+    <span className={cn("inline-flex items-center", VARIANTS[variant], className)} title={title}>
+      {children}
+    </span>
   );
 }

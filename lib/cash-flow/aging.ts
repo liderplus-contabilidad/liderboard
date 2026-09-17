@@ -57,6 +57,16 @@ export function agingLabel(aging: Pick<Aging, "side" | "bucket">): string {
   return aging.side === "overdue" ? `Vencida por ${span}` : `Por vencer ${span}`;
 }
 
+/**
+ * «Vencida 30 d» · «Vence +120 d» — the grid's pill. One line, always: the long label wrapped to
+ * two lines inside the document cell and truncated the document NUMBER to make room, which is the
+ * one thing in the row that identifies the document.
+ */
+export function agingShortLabel(aging: Pick<Aging, "side" | "bucket">): string {
+  const span = aging.bucket === "120+" ? "+120 d" : `${aging.bucket} d`;
+  return aging.side === "overdue" ? `Vencida ${span}` : `Vence ${span}`;
+}
+
 export function agingSideLabel(side: AgingSide): string {
   return side === "overdue" ? "Vencida" : "Por vencer";
 }

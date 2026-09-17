@@ -9,6 +9,7 @@ import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
 import { documentLabel, money, payableDetail } from "./derive";
 import { accountLabel, centerName, type DerivedFlow } from "./flow";
+import { derivePaymentMatrix, matrixTable } from "./matrix";
 import type { BankAccount, CashFlowCenter, FlowIncome } from "./types";
 
 export interface FlowReportHeader {
@@ -21,7 +22,7 @@ export interface FlowReportHeader {
 }
 
 export interface FlowReportSection {
-  id: "accounts" | "remaining" | "incomes" | "payments" | "settled" | "loans";
+  id: "accounts" | "remaining" | "incomes" | "payments" | "matrix" | "settled" | "loans";
   title: string;
   table: ChartTable;
 }
@@ -38,6 +39,8 @@ export function buildFlowReport(input: {
   incomes: readonly FlowIncome[];
   accounts: readonly BankAccount[];
   centers: readonly CashFlowCenter[];
+  /** Whether the empresa keeps a check register: the matrix's «Cheques no cobrados» column. */
+  hasChecks?: boolean;
   generatedAt: Date;
 }): FlowReport {
   const { derived, centers, accounts, incomes } = input;
@@ -212,6 +215,17 @@ export function buildFlowReport(input: {
       ? [{ id: "incomes" as const, title: "Ingresos proyectados", table: incomesTable }]
       : []),
     { id: "payments", title: "Pagos marcados por proveedor", table: paymentsTable },
+    // The flow's other shape, printed ALWAYS there is something marked: on paper there are no
+    // controls, so the screen's «Ver como» decides nothing here.
+    ...(derived.lines.length > 0
+      ? [
+          {
+            id: "matrix" as const,
+            title: "Matriz de pagos",
+            table: matrixTable(derivePaymentMatrix(derived, centers, input.hasChecks ?? false)),
+          },
+        ]
+      : []),
     ...(derived.settled.length > 0
       ? [{ id: "settled" as const, title: "Pagado en esta fecha", table: settledTable }]
       : []),

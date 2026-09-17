@@ -297,6 +297,18 @@ sobregiro · centro) in «Configurar».
   pendiente, saldo final, faltante and the LOANS between centers (a document of HC paid from an
   account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
   same `DerivedFlow`.
+- **Flujo is the WORKING sheet** (the book's `FJ dd-mm-aaaa`): «Pagos marcados» is edited in place
+  —estado · cuenta · urgente/pendiente · fecha de pago · quitar— and every cell writes ONE field of
+  the DOCUMENT (`priority` · `payFromAccountId` · `approved` · `payOn`) through `db.ts`; it is a
+  second surface for the same mark Cuentas por pagar writes, never a copy. `approvedFromTyped` is
+  the one reading of a typed amount (`< saldo` partial · `= saldo` whole, stored `null` · `> saldo`
+  clamped). The flow is fed from there too: «Agregar de la cartera» (`flow-cartera-picker.tsx`,
+  marks urgente) and «Agregar obligación» (`markAs`). Cuentas por pagar's bulk bar has «Pagar desde».
+- **The matrix is the flow's other shape** (`matrix.ts`, COMISERSA's `FLUJO MATRIZ`): one row per
+  account, one column per BENEFICIARIO with marked documents (by marked total desc), cell = Σ urgente
+  - pendiente paid from that account. DERIVED, never stored, READ-ONLY (a cell can add several
+    documents and a document has one account). «Ver como» lista · matriz in the «Flujo de bancos»
+    header, drawn only with something marked; the report and the Excel de flujo print it ALWAYS.
 - Uploads are by label with a registry (`upload/registry.ts`: `contifico` · `dingoo`, first match
   over EVERY sheet, plus the module's OWN `liderplus.ts`, which is how «Exportar · Cartera» comes back
   as it left — marks included, REPLACING the cartera instead of merging as a cut; the check register

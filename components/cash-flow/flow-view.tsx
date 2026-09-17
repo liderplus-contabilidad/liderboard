@@ -6,43 +6,72 @@ import {
   Copy,
   Flag,
   Landmark,
+  ListPlus,
   Plus,
   Scale,
   Trash2,
   TrendingUp,
   Waves,
+  X,
 } from "lucide-react";
-import { type ReactNode, useCallback, useMemo } from "react";
+import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { DataGrid, GridRow } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
+import { DateField } from "@/components/ui/date-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NumericInput } from "@/components/ui/numeric-input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
 import * as cashDb from "@/lib/cash-flow/db";
-import { documentLabel, kindLabel, money, payableDetail } from "@/lib/cash-flow/derive";
+import {
+  approvedFromTyped,
+  documentLabel,
+  kindLabel,
+  money,
+  payableDetail,
+  type SupplierGroup,
+} from "@/lib/cash-flow/derive";
 import { accountLabel, centerName, copyFlowFrom, type FlowLine } from "@/lib/cash-flow/flow";
-import type { BankAccount, FlowIncome } from "@/lib/cash-flow/types";
+import { derivePaymentMatrix, type PaymentMatrix } from "@/lib/cash-flow/matrix";
+import type { FlowIncome, PayPriority } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
+import { FlowCarteraPicker } from "./flow-cartera-picker";
+import { ManualPayablePanel } from "./manual-payable-panel";
 
 const NONE = "";
 
+/** The flow's two shapes: the sheet's list (bank block + payments) and COMISERSA's `FLUJO MATRIZ`. */
+type FlowShape = "lista" | "matriz";
+const FLOW_SHAPES: { value: FlowShape; label: string }[] = [
+  { value: "lista", label: "Lista" },
+  { value: "matriz", label: "Matriz" },
+];
+
 /**
- * The flow OF the cut date: the accounts table (the cells with a field are the CAPTURE — saldo;
- * everything else is `deriveFlow`), the projected incomes, the marked documents grouped by supplier
- * and, for an empresa with centers, the loans between them. It is `FLUJO MATRIZ`, `FJ dd-mm` and
- * `FLUJO DE BANCOS` at once: the columns that were typed are now read from Cheques and from the
- * marks in Cuentas por pagar.
+ * The flow OF the cut date — the WORKING sheet: the accounts table (the cells with a field are the
+ * CAPTURE — saldo; everything else is `deriveFlow`), the projected incomes, the marked documents
+ * grouped by supplier and EDITED there (`MarkedSection`), and, for an empresa with centers, the
+ * loans between them. It is `FLUJO MATRIZ`, `FJ dd-mm` and `FLUJO DE BANCOS` at once: the columns
+ * that were typed are now read from Cheques and from the marks, and the marks are written here or
+ * in Cuentas por pagar alike. «Ver como» turns the block into the matrix (`matrix.ts`).
  *
- * Nothing here is stored but the balances and the incomes (`db.saveFlow`, one record per date).
+ * Nothing here is stored but the balances and the incomes (`db.saveFlow`, one record per date):
+ * every edit of the list goes to the DOCUMENT.
  */
 export function FlowView() {
   const { activeClientId, centers, checks, asOf, flow, previous, derived } = useCashFlowData();
+  // The shape is a control of ONE card, read by nothing else, so it lives here and is not kept.
+  const [shape, setShape] = useState<FlowShape>("lista");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+  const openManual = useCallback(() => setManualOpen(true), []);
 
   const setBalance = useCallback(
     (accountId: string, value: number | null) => {
@@ -77,6 +106,13 @@ export function FlowView() {
   const hasChecks = checks.length > 0;
   const dateLabel = formatDayMonthYear(asOf) ?? asOf;
   const { totals } = derived;
+  // With nothing marked there is nothing to shape: the switch renders nothing and the list stays.
+  const shapeable = derived.lines.length > 0;
+  const asMatrix = shapeable && shape === "matriz";
+  const matrix = useMemo(
+    () => (asMatrix ? derivePaymentMatrix(derived, centers, hasChecks) : null),
+    [asMatrix, derived, centers, hasChecks],
+  );
 
   if (!activeClientId) {
     return <CashFlowEmptyState />;
@@ -114,6 +150,17 @@ export function FlowView() {
             title={`Flujo de bancos · ${dateLabel}`}
             hint={flow ? undefined : "Sin captura para esta fecha"}
           >
+            {shapeable && (
+              <span className="flex items-center gap-2">
+                <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+                <SegmentedControl
+                  value={shape}
+                  options={FLOW_SHAPES}
+                  onChange={setShape}
+                  ariaLabel="Ver como"
+                />
+              </span>
+            )}
             {previous && (
               <Button
                 variant="secondary"
@@ -128,6 +175,8 @@ export function FlowView() {
 
           {derived.accounts.length === 0 ? (
             <EmptyState icon={<Waves size={22} />}>Ninguna cuenta del centro marcado.</EmptyState>
+          ) : matrix ? (
+            <PaymentMatrixTable matrix={matrix} />
           ) : (
             <DataGrid minWidth={hasChecks ? 1100 : 980}>
               <thead>
@@ -152,19 +201,21 @@ export function FlowView() {
               <tbody>
                 {derived.accounts.map((row) => (
                   <tr key={row.account.id}>
+                    {/* One line, as the sheet's row: the account and, after the dot, its center. */}
                     <Cell>
-                      <span className="block font-semibold text-ink">
+                      <span className="block truncate font-semibold text-ink">
                         {accountLabel(row.account, [])}
+                        {hasCenters && (
+                          <span className="font-normal text-faint">
+                            {" · "}
+                            {row.account.centerId
+                              ? centerName(row.account.centerId, centers)
+                              : "De la empresa"}
+                          </span>
+                        )}
                       </span>
-                      {hasCenters && (
-                        <span className="block text-[11px] text-faint">
-                          {row.account.centerId
-                            ? centerName(row.account.centerId, centers)
-                            : "De la empresa"}
-                        </span>
-                      )}
                     </Cell>
-                    <Cell numeric className="bg-marked/40 p-1">
+                    <Cell numeric control className="bg-marked/40">
                       <NumericInput
                         value={flow?.balances[row.account.id] ?? null}
                         nullable
@@ -179,7 +230,7 @@ export function FlowView() {
                     </Cell>
                     {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
                       but it is captured here, where the sheet writes it, and not only in Configurar. */}
-                    <Cell numeric className="bg-marked/40 p-1">
+                    <Cell numeric control className="bg-marked/40">
                       <NumericInput
                         value={row.account.overdraft}
                         format="currency"
@@ -263,7 +314,7 @@ export function FlowView() {
           )}
         </FlowSection>
 
-        <MarkedSection />
+        {!asMatrix && <MarkedSection onPickFromCartera={openPicker} onAddManual={openManual} />}
 
         {/* The sheet's «SALDO FALTANTE» row, right under the TOTAL it is read against: its three
             figures — after everything marked, after only the urgent, after only the pending. */}
@@ -300,7 +351,129 @@ export function FlowView() {
           </FlowSection>
         )}
       </div>
+      <FlowCarteraPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
+      {manualOpen && <ManualPayablePanel markAs="urgent" onClose={() => setManualOpen(false)} />}
     </CashFlowEmptyState>
+  );
+}
+
+/**
+ * COMISERSA's `FLUJO MATRIZ` on screen: the bank figures, one column per beneficiario, what each
+ * account pays and what it keeps. Read-only (`matrix.ts` says why); the first column and the last
+ * stay in view while the beneficiarios scroll under them.
+ */
+function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
+  const leading = 4 + (matrix.hasChecks ? 1 : 0);
+  return (
+    <DataGrid minWidth={480 + leading * 120 + matrix.beneficiaries.length * 130}>
+      <thead>
+        <tr>
+          <HeadCell sticky="left" width={220}>
+            Cuenta
+          </HeadCell>
+          <HeadCell align="right" width={120}>
+            Saldo
+          </HeadCell>
+          <HeadCell align="right" width={120}>
+            Sobregiro
+          </HeadCell>
+          <HeadCell align="right" width={120}>
+            Ingresos
+          </HeadCell>
+          <HeadCell align="right" width={120}>
+            Total bancos
+          </HeadCell>
+          {matrix.hasChecks && (
+            <HeadCell align="right" width={120}>
+              Cheques no cobr.
+            </HeadCell>
+          )}
+          {matrix.beneficiaries.map((column) => (
+            <HeadCell
+              key={column.key}
+              align="right"
+              width={130}
+              className="whitespace-normal leading-[1.2]"
+            >
+              {column.label}
+            </HeadCell>
+          ))}
+          <HeadCell align="right" width={130}>
+            Total marcado
+          </HeadCell>
+          <HeadCell align="right" width={130} sticky="right">
+            Saldo final
+          </HeadCell>
+        </tr>
+      </thead>
+      <tbody>
+        {matrix.rows.map((row) => {
+          const total = row.kind === "total";
+          const loose = row.kind === "unassigned";
+          const cells = (
+            <>
+              <Cell
+                sticky="left"
+                strong={total}
+                className={loose ? "text-[11.5px] text-faint" : "font-semibold text-ink"}
+              >
+                {row.label}
+              </Cell>
+              <Cell numeric strong={total}>
+                {loose ? "" : money(row.bank.balance)}
+              </Cell>
+              <Cell numeric strong={total}>
+                {loose ? "" : money(row.bank.overdraft)}
+              </Cell>
+              <Cell numeric strong={total} tone="muted">
+                {money(row.bank.incomes)}
+              </Cell>
+              <Cell numeric strong={total}>
+                {loose ? "" : money(row.bank.bankTotal)}
+              </Cell>
+              {matrix.hasChecks && (
+                <Cell numeric strong={total} tone="muted">
+                  {loose ? "" : money(row.bank.outstanding)}
+                </Cell>
+              )}
+              {matrix.beneficiaries.map((column) => {
+                const value = row.cells[column.key] ?? 0;
+                return (
+                  <Cell
+                    key={column.key}
+                    numeric
+                    strong={total}
+                    className={value > 0 ? "text-warning" : "text-faint"}
+                  >
+                    {value > 0 ? money(value) : "—"}
+                  </Cell>
+                );
+              })}
+              <Cell numeric strong className="text-warning">
+                {money(row.marked)}
+              </Cell>
+              <Cell
+                numeric
+                strong
+                sticky="right"
+                {...(row.remaining !== null ? { value: row.remaining } : {})}
+              >
+                {row.remaining === null ? "" : money(row.remaining)}
+              </Cell>
+            </>
+          );
+          return total ? (
+            <tr key={row.id} className="bg-surface-muted">
+              {cells}
+            </tr>
+          ) : (
+            <GridRow key={row.id} muted={loose}>
+              {cells}
+            </GridRow>
+          );
+        })}
+      </tbody>
+    </DataGrid>
   );
 }
 
@@ -517,17 +690,56 @@ function IncomesSection({
  * green: it is what «Saldo faltante» is read against, so it sits at the END of the list, filled,
  * and not in a corner of the header.
  */
-function MarkedSection() {
+/**
+ * «Pagos marcados» — the WORKING list, the sheet's `FECHA · ESTADO · PAGOS PENDIENTES · SALDO ·
+ * URGENTE · PENDIENTE · FECHA DE PAGO` block. Every editable cell writes ONE field of the document
+ * (`priority`, `payFromAccountId`, `approved`, `payOn`) through `db.ts` as it loses focus — a
+ * drawer per cell is slower than the sheet it replaces — and the provider's live query re-derives
+ * the flow, so the bank table above recomputes as the tiles do. It is a second SURFACE for the same
+ * mark Cuentas por pagar writes, never a copy: the flow stores nothing of it.
+ *
+ * Of Urgente and Pendiente the EDITABLE cell is the one the priority makes editable; the other is
+ * what `markedSplit` leaves. Both write `approved` through `approvedFromTyped` (the saldo itself is
+ * the whole, stored as `null`).
+ */
+function MarkedSection({
+  onPickFromCartera,
+  onAddManual,
+}: {
+  onPickFromCartera: () => void;
+  onAddManual: () => void;
+}) {
   const { derived, accounts, centers, asOf } = useCashFlowData();
-  const accountName = useMemo(
-    () => new Map(accounts.map((account) => [account.id, accountLabel(account, centers)])),
+  const accountOptions = useMemo(
+    () => [
+      { value: NONE, label: "Sin cuenta" },
+      ...accounts.map((account) => ({ value: account.id, label: accountLabel(account, centers) })),
+    ],
     [accounts, centers],
   );
   const lineById = useMemo(
     () => new Map(derived.lines.map((line) => [line.payable.id, line])),
     [derived.lines],
   );
+  const patch = useCallback((id: string, fields: cashDb.PayablePatch) => {
+    void cashDb.updatePayable(id, fields);
+  }, []);
   const total = derived.totals.urgent + derived.totals.pending;
+  const adders = (
+    <>
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<ListPlus size={13} />}
+        onClick={onPickFromCartera}
+      >
+        Agregar de la cartera
+      </Button>
+      <Button variant="secondary" size="sm" icon={<Plus size={13} />} onClick={onAddManual}>
+        Agregar obligación
+      </Button>
+    </>
+  );
 
   return (
     <FlowSection>
@@ -535,82 +747,95 @@ function MarkedSection() {
         icon={<Flag size={15} />}
         title="Pagos marcados"
         hint={pluralize(derived.lines.length, "documento")}
-      />
-      <div className="overflow-hidden rounded-[13px] border border-border bg-surface">
-        {derived.groups.length === 0 ? (
-          <p className="px-4 py-4 text-[12.5px] text-faint">Sin pagos marcados.</p>
-        ) : (
-          <table className="w-full table-fixed border-collapse">
-            <colgroup>
-              <col />
-              <col style={{ width: 104 }} />
-              <col style={{ width: 104 }} />
-              <col style={{ width: 190 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 130 }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <HeadCell>Proveedor · documento</HeadCell>
-                <HeadCell>Emisión</HeadCell>
-                <HeadCell>Vence</HeadCell>
-                <HeadCell>Cuenta</HeadCell>
-                <HeadCell>Programado</HeadCell>
-                <HeadCell align="right">Saldo</HeadCell>
-                <HeadCell align="right">Urgente</HeadCell>
-                <HeadCell align="right">Pendiente</HeadCell>
-              </tr>
-            </thead>
-            <tbody>
-              {derived.groups.map((group) => (
-                <GroupRows
-                  key={group.key}
-                  group={group}
-                  asOf={asOf}
-                  accounts={accounts}
-                  accountName={accountName}
-                  lineById={lineById}
-                />
-              ))}
-              <tr className="bg-brand text-white">
-                <Cell
-                  colSpan={5}
-                  className="border-b-0 py-3 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
-                >
-                  Total
-                </Cell>
-                <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
-                  {money(total)}
-                </Cell>
-                <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
-                  {money(derived.totals.urgent)}
-                </Cell>
-                <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
-                  {money(derived.totals.pending)}
-                </Cell>
-              </tr>
-            </tbody>
-          </table>
-        )}
-      </div>
+      >
+        {adders}
+      </SectionHeading>
+      {derived.groups.length === 0 ? (
+        <EmptyState icon={<Flag size={22} />}>
+          <span className="flex flex-col items-center gap-3 text-center">
+            <span>Sin pagos marcados.</span>
+            <span className="flex items-center gap-2">{adders}</span>
+          </span>
+        </EmptyState>
+      ) : (
+        <DataGrid minWidth={1120} className="table-fixed">
+          <colgroup>
+            <col />
+            <col style={{ width: 96 }} />
+            <col style={{ width: 132 }} />
+            <col style={{ width: 210 }} />
+            <col style={{ width: 128 }} />
+            <col style={{ width: 112 }} />
+            <col style={{ width: 124 }} />
+            <col style={{ width: 124 }} />
+            <col style={{ width: 44 }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <HeadCell>Proveedor · documento</HeadCell>
+              <HeadCell>Vence</HeadCell>
+              <HeadCell>Estado</HeadCell>
+              <HeadCell>Cuenta</HeadCell>
+              <HeadCell>Fecha de pago</HeadCell>
+              <HeadCell align="right">Saldo</HeadCell>
+              <HeadCell align="right">Urgente</HeadCell>
+              <HeadCell align="right">Pendiente</HeadCell>
+              <HeadCell />
+            </tr>
+          </thead>
+          <tbody>
+            {derived.groups.map((group) => (
+              <GroupRows
+                key={group.key}
+                group={group}
+                asOf={asOf}
+                accountOptions={accountOptions}
+                lineById={lineById}
+                onPatch={patch}
+              />
+            ))}
+            <tr className="bg-brand text-white">
+              <Cell
+                colSpan={5}
+                className="border-b-0 py-3 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
+              >
+                Total
+              </Cell>
+              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+                {money(total)}
+              </Cell>
+              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+                {money(derived.totals.urgent)}
+              </Cell>
+              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+                {money(derived.totals.pending)}
+              </Cell>
+              <Cell className="border-b-0" />
+            </tr>
+          </tbody>
+        </DataGrid>
+      )}
     </FlowSection>
   );
 }
 
+const PRIORITY_OPTIONS = [
+  { value: "urgent", label: "Urgente" },
+  { value: "pending", label: "Pendiente" },
+];
+
 function GroupRows({
   group,
   asOf,
-  accounts,
-  accountName,
+  accountOptions,
   lineById,
+  onPatch,
 }: {
-  group: ReturnType<typeof useCashFlowData>["derived"]["groups"][number];
+  group: SupplierGroup;
   asOf: string;
-  accounts: BankAccount[];
-  accountName: Map<string, string>;
+  accountOptions: { value: string; label: string }[];
   lineById: Map<string, FlowLine>;
+  onPatch: (id: string, fields: cashDb.PayablePatch) => void;
 }) {
   const sum = (key: "urgent" | "pending") =>
     group.payables.reduce((acc, payable) => acc + (lineById.get(payable.id)?.[key] ?? 0), 0);
@@ -636,53 +861,136 @@ function GroupRows({
         <Cell numeric className="font-semibold text-ink">
           {pending > 0 ? money(pending) : ""}
         </Cell>
+        <Cell />
       </GridRow>
       {group.payables.map((payable) => {
         const line = lineById.get(payable.id);
-        const amount = line?.amount ?? 0;
-        return (
-          <tr key={payable.id}>
-            <Cell className="pl-7">
-              <span className="block truncate font-mono text-[12px] text-muted">
-                {documentLabel(payable) || payable.supplier}
-              </span>
-              {payableDetail(payable, { center: false }) && (
-                <span className="block truncate text-[11px] text-faint">
-                  {payableDetail(payable, { center: false })}
-                </span>
-              )}
-            </Cell>
-            <Cell className="tabular-nums text-muted">
-              {formatDayMonthYear(payable.issuedOn) ?? "—"}
-            </Cell>
-            <Cell
-              className={cn(
-                "tabular-nums",
-                payable.dueOn && payable.dueOn < asOf
-                  ? "font-semibold text-negative"
-                  : "text-muted",
-              )}
-            >
-              {formatDayMonthYear(payable.dueOn) ?? "—"}
-            </Cell>
-            <Cell className="truncate text-muted">
-              {payable.payFromAccountId
-                ? (accountName.get(payable.payFromAccountId) ?? "—")
-                : accounts.length === 1
-                  ? (accountName.get(accounts[0].id) ?? "—")
-                  : "Sin cuenta"}
-            </Cell>
-            <Cell className="tabular-nums text-muted">
-              {formatDayMonthYear(payable.payOn) ?? "—"}
-            </Cell>
-            <Cell numeric>{money(amount)}</Cell>
-            <Cell numeric className="text-warning">
-              {line && line.urgent > 0 ? money(line.urgent) : ""}
-            </Cell>
-            <Cell numeric>{line && line.pending > 0 ? money(line.pending) : ""}</Cell>
-          </tr>
-        );
+        return line ? (
+          <MarkedRow
+            key={payable.id}
+            line={line}
+            asOf={asOf}
+            accountOptions={accountOptions}
+            onPatch={onPatch}
+          />
+        ) : null;
       })}
     </>
   );
 }
+
+/** One marked document, its cells writing the document's own fields as they lose focus. */
+const MarkedRow = memo(function MarkedRow({
+  line,
+  asOf,
+  accountOptions,
+  onPatch,
+}: {
+  line: FlowLine;
+  asOf: string;
+  accountOptions: { value: string; label: string }[];
+  onPatch: (id: string, fields: cashDb.PayablePatch) => void;
+}) {
+  const { payable } = line;
+  const urgentEditable = line.priority === "urgent";
+  const commitAmount = (typed: number | null) =>
+    onPatch(payable.id, { approved: approvedFromTyped(typed, payable.balance) });
+  return (
+    <tr className="h-[42px]">
+      {/* One line, as the sheet's «PAGOS PENDIENTES» cell: the number and what it is for. */}
+      <Cell className="pl-7">
+        <span
+          className="flex min-w-0 items-baseline gap-2 overflow-hidden whitespace-nowrap"
+          title={payableDetail(payable, { center: false }) || undefined}
+        >
+          <span className="shrink-0 font-mono text-[12px] text-ink">
+            {documentLabel(payable) || payable.supplier}
+          </span>
+          {payableDetail(payable, { center: false }) && (
+            <span className="min-w-0 truncate text-[11.5px] text-muted">
+              {payableDetail(payable, { center: false })}
+            </span>
+          )}
+        </span>
+      </Cell>
+      <Cell
+        className={cn(
+          "tabular-nums",
+          payable.dueOn && payable.dueOn < asOf ? "font-semibold text-negative" : "text-muted",
+        )}
+      >
+        {formatDayMonthYear(payable.dueOn) ?? "—"}
+      </Cell>
+      <Cell control>
+        <Select
+          size="sm"
+          aria-label={`Estado de ${payable.supplier}`}
+          value={line.priority}
+          options={PRIORITY_OPTIONS}
+          onChange={(event) => onPatch(payable.id, { priority: event.target.value as PayPriority })}
+        />
+      </Cell>
+      <Cell control>
+        <Select
+          size="sm"
+          aria-label={`Cuenta que paga ${payable.supplier}`}
+          value={payable.payFromAccountId ?? NONE}
+          options={accountOptions}
+          onChange={(event) =>
+            onPatch(payable.id, { payFromAccountId: event.target.value || null })
+          }
+        />
+      </Cell>
+      <Cell control>
+        <DateField
+          value={payable.payOn}
+          nullable
+          variant="cell"
+          placeholder="—"
+          ariaLabel={`Fecha de pago de ${payable.supplier}`}
+          onChange={(payOn) => onPatch(payable.id, { payOn })}
+        />
+      </Cell>
+      <Cell numeric>{money(payable.balance)}</Cell>
+      <Cell numeric control={urgentEditable} className={cn(urgentEditable && "bg-marked/40")}>
+        {urgentEditable ? (
+          <NumericInput
+            value={line.urgent}
+            nullable
+            format="amount"
+            placeholder="0.00"
+            ariaLabel={`Urgente de ${payable.supplier}`}
+            onCommit={commitAmount}
+          />
+        ) : (
+          <span className="text-faint">{line.urgent > 0 ? money(line.urgent) : ""}</span>
+        )}
+      </Cell>
+      <Cell numeric control={!urgentEditable} className={cn(!urgentEditable && "bg-marked/40")}>
+        {urgentEditable ? (
+          <span className="text-faint">{line.pending > 0 ? money(line.pending) : ""}</span>
+        ) : (
+          <NumericInput
+            value={line.pending}
+            nullable
+            format="amount"
+            placeholder="0.00"
+            ariaLabel={`Pendiente de ${payable.supplier}`}
+            onCommit={commitAmount}
+          />
+        )}
+      </Cell>
+      <Cell control>
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          icon={<X size={13} />}
+          aria-label={`Quitar ${payable.supplier} del flujo`}
+          title="Quitar del flujo"
+          onClick={() => onPatch(payable.id, { priority: null })}
+        />
+      </Cell>
+    </tr>
+  );
+});

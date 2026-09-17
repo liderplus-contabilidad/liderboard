@@ -5,6 +5,7 @@ import {
   kindLabel,
   normalizeKind,
   documentLabel,
+  approvedFromTyped,
   markedSplit,
   payableDetail,
   groupBySupplier,
@@ -49,6 +50,19 @@ describe("markedAmount", () => {
   it("is the approved amount, else the balance", () => {
     expect(markedAmount(payable({ balance: 891.4 }))).toBe(891.4);
     expect(markedAmount(payable({ balance: 891.4, approved: 200 }))).toBe(200);
+  });
+});
+
+describe("approvedFromTyped", () => {
+  it("keeps a partial, turns the whole into null, clamps above the saldo, allows zero", () => {
+    expect(approvedFromTyped(1066.67, 2133.33)).toBe(1066.67);
+    expect(approvedFromTyped(2133.33, 2133.33)).toBeNull();
+    expect(approvedFromTyped(5000, 720)).toBeNull();
+    expect(approvedFromTyped(0, 720)).toBe(0);
+    expect(approvedFromTyped(-5, 720)).toBe(0);
+    expect(approvedFromTyped(null, 720)).toBeNull();
+    expect(approvedFromTyped(Number.NaN, 720)).toBeNull();
+    expect(approvedFromTyped(100.005, 720)).toBe(100.01);
   });
 });
 

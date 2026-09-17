@@ -94,6 +94,22 @@ export function markedSplit(
   return { urgent: amount, pending: rest };
 }
 
+/**
+ * What a figure TYPED in the flow's Urgente or Pendiente cell means for `approved` — the sheet's
+ * way of writing a partial: less than the saldo is that much (the rest reads on the other side
+ * through `markedSplit`); the saldo itself is the WHOLE, stored as `null` and never as the balance
+ * (a stored balance would turn into a silent partial the day a reload changes it); more than the
+ * saldo is the saldo; `null` or an empty cell is the whole too. Zero is allowed: marked, nothing
+ * out now.
+ */
+export function approvedFromTyped(typed: number | null, balance: number): number | null {
+  if (typed === null || !Number.isFinite(typed)) {
+    return null;
+  }
+  const amount = Math.round(Math.max(0, typed) * 100) / 100;
+  return amount >= balance ? null : amount;
+}
+
 export interface PayableTotals {
   /** Open balance of everything, by side at the cut date. */
   total: number;
