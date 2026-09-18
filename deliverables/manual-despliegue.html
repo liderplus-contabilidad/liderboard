@@ -1,3 +1,4 @@
+<meta charset="utf-8" />
 <title>Manual de Despliegue</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -514,7 +515,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 8 sep 2026</span>
+      <span><b>Actualizado</b> 17 sep 2026</span>
       <span><b>Rama de producción</b> main</span>
       <span><b>Plataforma</b> Vercel</span>
     </div>
@@ -905,7 +906,11 @@ app/(dashboard)/payroll/[periodId]/[employeeId]/page.tsx</code></pre>
           reconstruye volviendo a subir los reportes del sistema contable. En
           <em>Reportería de ingresos</em> la descarga sí existe, pero
           <strong>no se vuelve a subir</strong>: lo que ese módulo guarda se teclea en su cajón de
-          registro, así que su Excel sirve para cotejar y archivar, no para reponer.
+          registro, así que su Excel sirve para cotejar y archivar, no para reponer. En
+          <em>Cuentas por Pagar</em> el respaldo es el Excel «Cartera» de la pestaña Cartera —vuelve
+          a entrar con sus marcas y aprobaciones y <strong>reemplaza</strong> la cartera—, más el
+          «Control de cheques» y el «Cargas cash», que también se cargan de vuelta; los flujos
+          capturados (saldos e ingresos por fecha) no tienen Excel de retorno y se reponen a mano.
         </li>
       </ul>
 
@@ -937,11 +942,13 @@ app/(dashboard)/payroll/[periodId]/[employeeId]/page.tsx</code></pre>
       <ul class="check">
         <li>El dominio carga y redirige a <code>/profit-loss</code>.</li>
         <li>
-          Los tres módulos abren desde el menú lateral: Pérdidas y Ganancias, Ocupaciones y Rol de
-          Pagos.
+          Los cuatro módulos abren desde el menú lateral: Pérdidas y Ganancias, Ocupaciones, Rol de
+          Pagos y Cuentas por Pagar.
         </li>
         <li>Con datos ya cargados en ese navegador, siguen ahí después del despliegue.</li>
-        <li>Una carga de Excel funciona de extremo a extremo en cualquiera de los tres módulos.</li>
+        <li>
+          Una carga de Excel funciona de extremo a extremo en cualquiera de los cuatro módulos.
+        </li>
         <li>Una descarga a Excel se genera y vuelve a subirse sin errores.</li>
         <li>El comprobante en PDF de Rol de Pagos se descarga y abre.</li>
         <li>

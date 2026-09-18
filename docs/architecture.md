@@ -1986,6 +1986,131 @@ vendió cero recibe `minHeight`, una losa a ras. Es la misma distinción `null` 
 el panel, dicha en el único lenguaje que un sólido tiene: ausencia de cuerpo contra cuerpo de altura
 cero.
 
+**CUENTAS POR PAGAR** (`/cash-flow`, módulo de primer nivel) sustituye siete libros que se copiaban
+unos a otros: la cartera por pagar bajada de Contífico o de Dingoo y pegada en un resumen, los
+saldos de banco copiados a mano, una cifra de «cheques girados y no cobrados» que salía de OTRO
+libro (`CHEQUES INICIO`, doce mil filas desde 2017) y una hoja `FJ dd-mm-aaaa` por cada fecha en la
+que se decidía qué se paga —sesenta y cinco en un año—. Leídos por rótulo, esos libros son cuatro
+COSAS (la cartera, el control de cheques, el flujo a una fecha y el «formato ideal» de otra entidad
+que ya las junta) y tres COSTURAS que hoy son copias a mano: cheques → flujo, detalle → resumen y
+cartera → decisión. El módulo convierte cada costura en una lectura, y de ahí sale casi todo lo
+que sigue.
+
+**Lista de empresas propia, como Rol de Pagos, y no colgada de PyG.** Lo que este módulo necesita
+de una empresa —sus cuentas bancarias con su sobregiro, sus centros (HA · HC · HK en Comisersa)—
+es lo que PyG no tiene, y Comisersa como empresa del flujo (tres centros sobre cuatro cuentas) no
+coincide necesariamente con cómo está partida en PyG. El rótulo de centro que trae la cartera
+(«CULTURA MANOR») se conserva tal cual y nunca tiene que casar con un centro de PyG. Es también por
+lo que la pestaña se llama «Cartera» y no «Cuentas por pagar»: el título del módulo ya lo dice, y
+un header que nombra dos veces lo mismo se queda sin sitio en un portátil de 1366 px.
+
+**Una sola tabla `payables` con `source`.** Un documento de Contífico o de Dingoo y una obligación
+que ningún sistema exporta (SRI, IESS, arriendo, sueldos, cuotas, préstamos) son la MISMA fila con
+distinta `source`. Dos tablas habrían obligado al flujo, al Excel y al informe a unir dos lecturas
+para pintar una lista. El id de un documento se compone de lo que el archivo dice —empresa ·
+sistema · proveedor normalizado · tipo · número (`identity.ts`)— y por eso es ESTABLE entre
+cortes: recargar es un `put` que conserva la marca y las cuatro columnas de trabajo; una
+obligación manual lleva uuid.
+
+**Un corte reemplaza y conserva; lo ausente se liquida, nunca se borra** (`cut.ts`, `mergeCut`).
+Lo que viene se upserta copiando de la fila anterior su marca (`priority` · `payOn` ·
+`payFromAccountId` · `cash`) y sus cuatro columnas de trabajo; lo abierto de la misma `source` que
+no viene pasa a `settled` con la fecha del corte. Solo de la misma `source`, y las manuales nunca
+se liquidan por ausencia sino con un botón. Se archivan y no se borran porque un flujo de hace dos
+semanas sigue apuntando a ellas y tiene que poder imprimirse igual. `db.applyCut` lo ejecuta en
+una transacción y guarda el corte vigente en `meta`, que es lo que las tiles imprimen como
+«Contífico al dd/mm/aaaa».
+
+**La antigüedad es una función y no una columna** (`aging.ts`, `agingOf(dueOn, asOf)`). Los tramos
+«por vencer / vencida 30·60·90·120·+120» que Contífico escribe son ciertos SOLO el día de la
+descarga, y Dingoo ni siquiera declara corte; el libro que el módulo reemplaza los arrastraba
+congelados. Se descartan en la puerta y la grilla, las tiles, Resumen, el Excel y el flujo piden
+esta única definición a la fecha que se mire. Es el mismo defecto que Reportería de ingresos
+corrigió del suyo: una cifra congelada a la fecha en que se copió.
+
+**Y esa fecha es UN control global de la barra: la FECHA DE CORTE** (`asOf` en el provider, hoy por
+defecto, chip «Al dd/mm/aaaa» si es otra). La leen por igual las cuatro pestañas fechadas
+—Resumen, la antigüedad de Cartera, los no cobrados de Cheques y el registro de Flujo—; «Cargas
+cash» es una lista viva y no la lee. Se consideró derivarla (hoy en Cartera, la fecha de cada
+flujo en Flujo) y se descartó: el usuario quiere «ver cómo estaba» un día pasado, y dos fechas
+distintas en dos pestañas que se leen juntas eran una contradicción esperando ocurrir.
+
+**La marca de pago vive en el DOCUMENTO, no en un flujo.** `priority` (urgente · pendiente ·
+`null`), `payOn`, `payFromAccountId` y las cuatro columnas del `REPORTE CXP` (observación · aprobado
+como MONTO · revisión final · notificado) están sobre la fila. Es lo que el mockup y el formato
+ideal hacen, y lo que evita marcar la misma factura en cada flujo nuevo. Lo que un documento
+marcado aporta al flujo es `markedAmount = approved ?? balance` (`derive.ts`): el monto aprobado si
+se escribió, si no el saldo entero. La figura del «exactamente uno» aparece aquí como en todos los
+módulos: con UNA cuenta bancaria, `deriveFlow` ya asigna a ella lo que no declara cuenta; con
+varias, lo sin cuenta suma en la fila de la empresa y en ninguna cuenta.
+
+**`cash` es una ETIQUETA aparte de la prioridad, y no un tercer valor de ella.** Las hojas
+`PROVEEDOR HC/HK` del libro de Comisersa escriben «CASH» en una columna y «OK» en otra sobre el
+mismo subtotal: dos lecturas del mismo documento, no una elección. La primera ronda la tomó por
+una tercera marca excluyente y el usuario la corrigió —un documento es urgente Y cash a la vez—.
+Con un campo propio nada de `deriveFlow`, `markedSplit` ni Resumen cambia: la etiqueta solo decide
+qué lista «Cargas cash». `cut.ts` la conserva en la recarga como conserva la prioridad, `db.ts` v4
+la escribe en `false` sobre lo ya guardado, y viaja en la columna «Cash» del Excel «Cartera», que
+`liderplus.ts` lee como OPCIONAL porque las carteras exportadas antes no la traen.
+
+**La app pasa a ser el registro de cheques, y «girados y no cobrados» es una lectura A UNA FECHA.**
+Un cheque tiene un PASO —un orden de cuatro (realizado → firmado → entregado → cobrado), la línea
+de tiempo del mockup y las cuatro X del libro— y una bandera `voided` ORTOGONAL: un cheque
+entregado puede anularse sin perder hasta dónde llegó. `outstandingChecks(checks, accountId, asOf)`
+(`checks.ts`) cuenta lo no anulado, emitido hasta `asOf` y con `cashedOn` nulo o posterior, esté en
+el paso que esté: lo que el flujo necesita es «salió de la chequera y no volvió». Guarda
+`cashedOn` y no solo el paso para que el flujo del 5 de agosto siga leyendo su cifra aunque el
+cheque se cobre el 9. Al cargar, el BANCO se resuelve por `normalizeLabel` contra el banco de cada
+cuenta de la empresa; lo que no casa (CAJA, CRUCE, ANULADO, RECAUDACION TC) queda «sin cuenta»:
+visible, asignable en lote y fuera de toda suma.
+
+**Un flujo guarda solo sus capturas y deriva el resto** (`flows`, única por empresa y fecha:
+saldos por cuenta e ingresos proyectados). `deriveFlow` (`flow.ts`) produce por cuenta disponible
+(saldo + sobregiro), no cobrados a la fecha, ingresos, urgente y pendiente de los documentos que
+la nombran, saldo final y faltante, la fila de la empresa como suma, las líneas agrupadas por
+proveedor con las manuales bajo su clase, y los PRÉSTAMOS entre centros: un documento de HC pagado
+desde una cuenta de HA ES el préstamo, sin que nadie lo teclee —lo que `CARGAS CASH` hacía escribir
+en columnas HA-HC / HC-HA—. Nada se escribe; Resumen, el informe impreso y el Excel de flujo leen
+este mismo `DerivedFlow`. Los egresos fijos son obligaciones manuales en la cartera y no columnas,
+que es lo que permite que Nomik (una cuenta, sin centros) y Comisersa (cuatro cuentas, tres
+centros) sean la MISMA pantalla: lo que no aplica no se dibuja.
+
+**Las cargas son por rótulo y con registro de estrategias** (`upload/registry.ts`: `contifico` ·
+`dingoo`, primera que casa gana sobre TODAS las hojas del libro; el control de cheques es una
+carga aparte, `checks-log.ts`), y las dos PROPONEN lo que el archivo ya sabe: el registro sus
+bancos (`bank-labels.ts` → `createAccountsForBanks`, con las cajas y los cruces listados pero no
+sugeridos) y la cartera sus centros (`center-labels.ts` → `createCentersForLabels`), premarcados y
+creados antes de escribir las filas, en vez de pedirle al usuario que teclee lo que el libro ya
+dice. El módulo tiene además su PROPIO formato, `liderplus.ts`: el Excel «Cartera» vuelve a entrar
+como salió, marcas incluidas, y REEMPLAZA la cartera en lugar de fundirse como un corte — es la
+misma ida y vuelta que Ocupaciones y Rol de Pagos ofrecen, y el respaldo que el usuario tiene.
+Los fixtures de prueba son sintéticos con la forma EXACTA de los libros reales; los reales
+(proveedores reales) no están en el repo.
+
+**«Cargas cash» es la hoja del libro con UN solo juego de columnas** (`cash-entries.ts`,
+`deriveCashMatrix`): una por centro en el orden de la empresa —o «Monto» sin centros—, una de
+PRÉSTAMO por cada par (de → a) que alguna fila de ESA sección use (nunca las seis combinaciones
+vacías) y «Sin centro» solo cuando PROVEEDORES lo necesita. MOVIMIENTO INICIAL y VARIOS son filas
+escritas a mano (`cashEntries`: un monto por centro y un préstamo opcional por fila, porque el
+libro escribe UNA fila con varias columnas y su lectura debe seguir siendo una) y PROVEEDORES es
+DERIVADA de los documentos abiertos con la etiqueta `cash`, un renglón por proveedor bajo el
+centro que resuelva su rótulo. Es una lista VIVA que la fecha de corte no toca: el libro no tiene
+una hoja por corte para esta matriz, y una copia por fecha de tres listas manuales se desincroniza
+de la cartera al día siguiente. Se edita en línea —para una tabla de diez filas de tres campos,
+un cajón por celda es más lento que el Excel que reemplaza—, y la hoja CARGA además de exportarse
+(`upload/cash-entries.ts`: bloques por TÍTULO, columnas por rótulo resueltas en la puerta por
+`cashColumnRole`, cada bloque REEMPLAZANDO su sección entera), con la misma forma que escribe el
+Excel, así que da la vuelta.
+
+**Los cuatro Excel y el informe impreso son las salidas, y Resumen no tiene ninguna.** Cartera
+(las columnas del `REPORTE CXP` más las marcas, el que vuelve a entrar), Cheques (las catorce
+columnas del control, con «X» en REALIZADO/FIRMADO/ENTREGADO para todo cheque no anulado y en
+DEPOSITADO para los cobrados), Flujo (las mismas secciones que el papel) y Cargas cash (los tres
+bloques apilados como el libro), todos por `cash-flow-export-actions.tsx` sobre el control único
+del app. El informe del flujo es el quinto sobre `ReportLayer` y no estrena nada. `money`
+(`derive.ts`) es el importe del módulo, siempre con centavos: una cartera se cuadra al centavo o no
+se cuadra.
+
 ### Cuentas por Pagar — Flujo como hoja de trabajo y la matriz
 
 **La lista de «Pagos marcados» de Flujo es una SEGUNDA SUPERFICIE de los mismos campos del

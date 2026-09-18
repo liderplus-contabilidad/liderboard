@@ -1,3 +1,4 @@
+<meta charset="utf-8" />
 <title>Documento de Entrega</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -623,7 +624,7 @@
       <div class="card">
         <div class="card-head">
           <h4>Módulos entregados</h4>
-          <span>3 módulos · 3 submódulos</span>
+          <span>4 módulos · 3 submódulos</span>
         </div>
         <div class="scroller">
           <table>
@@ -690,6 +691,21 @@
                   contiene, en un cajón de registro por año.
                 </td>
               </tr>
+              <tr>
+                <td class="k">Cuentas por Pagar</td>
+                <td>
+                  Módulo con lista de empresas propia (centros y cuentas bancarias con sobregiro):
+                  carga de la cartera por pagar de Contífico o Dingoo como cortes que conservan las
+                  marcas y liquidan lo que deja de venir, antigüedad derivada a una fecha de corte
+                  global, obligaciones manuales (SRI, IESS, arriendo, sueldos…), marca de pago
+                  —urgente, pendiente, cuenta, fecha, etiqueta cash— y las cuatro columnas de
+                  aprobación; registro de cheques con su línea de tiempo y los «girados y no
+                  cobrados» a una fecha; flujo de pagos por cuenta que captura solo saldos e
+                  ingresos y deriva el resto, incluidos los préstamos entre centros y la matriz
+                  cuentas × beneficiarios; la hoja «Cargas cash»; un Excel por pestaña y el flujo
+                  impreso.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -707,7 +723,10 @@
           <em>Ventas por servicio</em>, donde el Excel es la fuente y el respaldo son los reportes
           originales. En <em>Reportería de ingresos</em> la descarga existe y es un respaldo
           parcial: lo capturado a mano viaja en ella, pero la venta que la acompaña se vuelve a
-          derivar del estado de resultados cargado en Pérdidas y Ganancias.
+          derivar del estado de resultados cargado en Pérdidas y Ganancias. En
+          <em>Cuentas por Pagar</em> el Excel «Cartera» vuelve a entrar con sus marcas y reemplaza
+          la cartera; el control de cheques y la hoja «Cargas cash» también se recargan; los flujos
+          capturados por fecha no tienen archivo de retorno.
         </p>
       </div>
     </section>
@@ -766,7 +785,7 @@
 
       <div class="card">
         <div class="card-head">
-          <h4>Evidencia al 8 de septiembre de 2026</h4>
+          <h4>Evidencia al 17 de septiembre de 2026</h4>
           <span>rama main</span>
         </div>
         <div class="scroller">
@@ -781,9 +800,9 @@
               <tr>
                 <td class="k">Pruebas automatizadas</td>
                 <td>
-                  <strong>3.054 pruebas en 138 archivos, todas pasan</strong> (<code>pnpm test</code
+                  <strong>3.387 pruebas en 174 archivos, todas pasan</strong> (<code>pnpm test</code
                   >). Cubren la capa de cálculo: motor de nómina, análisis financiero, consolidados,
-                  lectura y escritura de Excel.
+                  antigüedad y flujo de pagos, lectura y escritura de Excel.
                 </td>
               </tr>
               <tr>
@@ -847,6 +866,11 @@
         <li>
           <strong>Sin migración de datos históricos.</strong> La carga de períodos anteriores la
           realiza la firma con los archivos que ya posee.
+        </li>
+        <li>
+          <strong>Sin conciliación bancaria ni pagos ejecutados.</strong> En Cuentas por Pagar el
+          saldo de cada cuenta se captura a mano, como hoy, y la aplicación no registra el pago de
+          una factura: el siguiente corte de cartera dice qué quedó abierto.
         </li>
         <li>
           <strong>Sin capacitación adicional</strong> más allá de la entrega del manual de usuario y
