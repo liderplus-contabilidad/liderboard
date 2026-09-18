@@ -503,13 +503,15 @@ function VirtualPayablesGrid({
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
         <table
           className="w-full table-fixed border-separate border-spacing-0"
-          style={{ minWidth: 1130 }}
+          style={{ minWidth: 1290 }}
         >
           {/* Widths declared, not measured: with an automatic layout the document column took
-                the slack of the whole card and pushed the figures out of sight. */}
+                the slack of the whole card and pushed the figures out of sight. The document column
+                is sized to its WIDEST line — number · «Vencida +120 d» · «Pendiente» · «Cash» — so a
+                state pill is never the part that gets clipped. */}
           <colgroup>
             <col style={{ width: 40 }} />
-            <col style={{ width: 300 }} />
+            <col style={{ width: 460 }} />
             <col />
             <col style={{ width: 92 }} />
             <col style={{ width: 92 }} />
