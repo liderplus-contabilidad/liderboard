@@ -55,6 +55,20 @@ const NONE = "";
 /** A flow without notes: one frozen object instead of a new `{}` per render. */
 const NO_NOTES: Readonly<Record<string, string>> = Object.freeze({});
 
+/** The two marks of payment each own a GROUND, the printed flow's and its Excel's too: the whole
+ *  column wears it, zeros included, so urgent and pending read as two columns at a glance even on
+ *  a flow with nothing urgent. */
+const URGENT_GROUND = "bg-marked";
+const PENDING_GROUND = "bg-surface-calc-strong";
+
+/** The urgent is ALWAYS bold, its zeros too — it is the column read first — in plain ink: the
+ *  amber is its ground, never its figures. */
+const URGENT_TONE = cn(URGENT_GROUND, "font-bold text-ink");
+
+function pendingTone(amount: number): string {
+  return cn(PENDING_GROUND, amount > 0 && "font-semibold");
+}
+
 type NoteWriter = (key: string, text: string) => void;
 
 /** The flow's two shapes: the sheet's list (bank block + payments) and COMISERSA's `FLUJO MATRIZ`. */
@@ -309,10 +323,12 @@ export function FlowView() {
                         {money(row.outstanding)}
                       </Cell>
                     )}
-                    <Cell numeric className="text-warning">
+                    <Cell numeric className={URGENT_TONE}>
                       {money(row.urgent)}
                     </Cell>
-                    <Cell numeric>{money(row.pending)}</Cell>
+                    <Cell numeric className={pendingTone(row.pending)}>
+                      {money(row.pending)}
+                    </Cell>
                     <Cell numeric strong sticky="right" value={row.remaining}>
                       {money(row.remaining)}
                     </Cell>
@@ -332,10 +348,12 @@ export function FlowView() {
                     ))}
                     {hasIncomes && <Cell numeric>{money(derived.unassignedIncomes)}</Cell>}
                     {hasChecks && <Cell />}
-                    <Cell numeric className="text-warning">
+                    <Cell numeric className={URGENT_TONE}>
                       {money(derived.unassignedMarked.urgent)}
                     </Cell>
-                    <Cell numeric>{money(derived.unassignedMarked.pending)}</Cell>
+                    <Cell numeric className={pendingTone(derived.unassignedMarked.pending)}>
+                      {money(derived.unassignedMarked.pending)}
+                    </Cell>
                     <Cell sticky="right" />
                   </GridRow>
                 )}
@@ -365,7 +383,7 @@ export function FlowView() {
                       {money(totals.outstanding)}
                     </Cell>
                   )}
-                  <Cell numeric strong className="text-warning">
+                  <Cell numeric className={URGENT_TONE}>
                     {money(totals.urgent)}
                   </Cell>
                   <Cell numeric strong>
@@ -986,10 +1004,11 @@ function GroupRows({
         <Cell numeric strong value={urgent + pending}>
           {money(urgent + pending)}
         </Cell>
-        <Cell numeric className="font-semibold text-warning">
+        {/* The two marks' columns run unbroken through the supplier's heading, as on paper. */}
+        <Cell numeric className={URGENT_TONE}>
           {urgent > 0 ? money(urgent) : ""}
         </Cell>
-        <Cell numeric className="font-semibold text-ink">
+        <Cell numeric className={cn(PENDING_GROUND, "font-semibold text-ink")}>
           {pending > 0 ? money(pending) : ""}
         </Cell>
         <Cell />
@@ -1104,11 +1123,7 @@ const MarkedRow = memo(function MarkedRow({
         />
       </Cell>
       <Cell numeric>{money(payable.balance)}</Cell>
-      <Cell
-        numeric
-        control={urgentEditable}
-        className={cn(urgentEditable && "bg-marked/40", NOTE_HOST)}
-      >
+      <Cell numeric control={urgentEditable} className={cn(URGENT_GROUND, NOTE_HOST)}>
         {note("urgent", "Urgente")}
         {urgentEditable ? (
           <NumericInput
@@ -1118,16 +1133,13 @@ const MarkedRow = memo(function MarkedRow({
             placeholder="0.00"
             ariaLabel={`Urgente de ${payable.supplier}`}
             onCommit={commitAmount}
+            className="font-bold"
           />
         ) : (
-          <span className="text-faint">{line.urgent > 0 ? money(line.urgent) : ""}</span>
+          <span className="font-bold text-ink">{line.urgent > 0 ? money(line.urgent) : ""}</span>
         )}
       </Cell>
-      <Cell
-        numeric
-        control={!urgentEditable}
-        className={cn(!urgentEditable && "bg-marked/40", NOTE_HOST)}
-      >
+      <Cell numeric control={!urgentEditable} className={cn(PENDING_GROUND, NOTE_HOST)}>
         {note("pending", "Pendiente")}
         {urgentEditable ? (
           <span className="text-faint">{line.pending > 0 ? money(line.pending) : ""}</span>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildFlowWorkbook } from "./export/flow-workbook";
 import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { deriveFlow } from "./flow";
-import { buildFlowReport } from "./report";
+import { buildFlowReport, cellPaint } from "./report";
 import type { BankAccount, Payable } from "./types";
 
 const ACCOUNTS: BankAccount[] = [
@@ -251,6 +251,66 @@ describe("buildFlowReport", () => {
       ["FAC 1", 1, "Lo pidió gerencia"],
       ["FAC 1", 7, "Aprobado"],
     ]);
+  });
+
+  it("says what each printed column and row means, so the paper can colour it", () => {
+    const tones = (id: string) => report.sections.find((section) => section.id === id);
+    expect(tones("accounts")?.columnTones).toEqual({
+      Urgente: "urgent",
+      Pendiente: "pending",
+      "Cheques no cobrados": "outstanding",
+      "Saldo final": "signed",
+    });
+    expect(tones("accounts")?.rowTones).toEqual({ total: "total" });
+    expect(tones("remaining")?.columnTones).toEqual({ Saldo: "signed" });
+    // Every supplier's heading is a group row; the documents under it are plain.
+    expect(tones("payments")?.rowTones).toEqual({
+      "g-nuna": "group",
+      "g-pallasco palomo": "group",
+      total: "total",
+    });
+    expect(tones("payments")?.columnTones).toEqual({ Urgente: "urgent", Pendiente: "pending" });
+  });
+
+  it("paints the marks of payment whole, other figures only when they say something", () => {
+    const accounts = report.sections.find((section) => section.id === "accounts")!;
+    expect(cellPaint(accounts, "prod", "Urgente", "$720.00")).toBe("urgent");
+    // The marks of payment paint their whole column, zeros included; other tones skip a zero.
+    expect(cellPaint(accounts, "prod", "Urgente", "$0.00")).toBe("urgent");
+    expect(cellPaint(accounts, "prod", "Pendiente", "")).toBe("pending");
+    expect(cellPaint(accounts, "prod", "Cheques no cobrados", "$0.00")).toBeNull();
+    expect(cellPaint(accounts, "prod", "Saldo final", "-$5,201.39")).toBe("negative");
+    expect(cellPaint(accounts, "prod", "Saldo final", "$9,981.41")).toBe("positive");
+    expect(cellPaint(accounts, "prod", "Saldo", "$6,677.34")).toBeNull();
+    // The total row is painted whole: its cells take no tone of their own.
+    expect(cellPaint(accounts, "total", "Urgente", "$720.00")).toBeNull();
+    // A supplier's heading keeps the marks' columns in their own paint, and nothing else.
+    const payments = report.sections.find((section) => section.id === "payments")!;
+    expect(cellPaint(payments, "g-nuna", "Urgente", "$0.00")).toBe("urgent");
+    expect(cellPaint(payments, "g-nuna", "Pendiente", "$975.93")).toBe("pending");
+    expect(cellPaint(payments, "g-nuna", "Saldo", "$975.93")).toBeNull();
+  });
+
+  it("wears the same colours in the Excel: the urgent in amber, the total on the brand ground", () => {
+    const ws = buildFlowWorkbook(report).getWorksheet("FLUJO")!;
+    const argbOf = (fill: unknown) =>
+      (fill as { fgColor?: { argb?: string } } | undefined)?.fgColor?.argb;
+    let urgent: string | undefined;
+    let total: string | undefined;
+    let finalBalance: unknown;
+    ws.eachRow((row) => {
+      // The first section's rows: the account and its total («Flujo de bancos»).
+      if (row.getCell(1).value === "PRODUBANCO" && urgent === undefined) {
+        urgent = argbOf(row.getCell(6).fill);
+        finalBalance = row.getCell(8).value;
+      }
+      if (row.getCell(1).value === "Total" && total === undefined) {
+        total = argbOf(row.getCell(1).fill);
+      }
+    });
+    expect(urgent).toBe("FFFEF3C7");
+    expect(total).toBe("FF1E3A5F");
+    expect(finalBalance).toBe("▲ $9,981.41");
   });
 
   it("writes no comment without notes", () => {

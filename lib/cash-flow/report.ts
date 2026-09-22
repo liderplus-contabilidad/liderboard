@@ -29,6 +29,67 @@ export interface FlowCellNote {
   text: string;
 }
 
+/**
+ * What a printed cell IS, so the paper can wear the screen's colours without the pure layer naming
+ * one: `urgent` is what must leave first (the screen's amber), `pending` what can wait (a quiet
+ * ground of its own, so the two columns are told apart at a glance), `outstanding` the checks already
+ * written (the screen's check ink), `signed` a figure whose SIGN is the reading (a faltante is red,
+ * with its ▼). The view translates each to a token; the Excel reads none.
+ */
+export type FlowCellTone = "urgent" | "pending" | "outstanding" | "signed";
+/** What a printed row IS: a supplier's heading over its documents, or the table's closing sum. */
+export type FlowRowTone = "group" | "total";
+
+/** How a printed cell is PAINTED — the tone once the figure is read. The two marks of payment paint
+ *  their WHOLE column, zeros included, so urgent and pending read as two columns even on a flow
+ *  with nothing urgent; any other tone leaves a zero or an empty cell plain, and a signed figure is
+ *  painted by its sign. */
+export type FlowCellPaint = "urgent" | "pending" | "outstanding" | "negative" | "positive";
+
+/** The glyph a signed figure always carries: the colour never travels alone. */
+export const SIGN_GLYPH: Record<"negative" | "positive", string> = {
+  negative: "▼",
+  positive: "▲",
+};
+
+/** Whether a formatted figure says something: an empty cell or a zero does not. */
+export function hasFigure(value: string | null): value is string {
+  return value !== null && /[1-9]/.test(value);
+}
+
+/**
+ * The ONE rule of which printed cell is painted and how — the PDF and the Excel both ask it, so the
+ * two papers cannot colour different cells. The total row wins over its cells; a heading wins over
+ * every cell but the two marks of payment.
+ */
+export function cellPaint(
+  section: FlowReportSection,
+  rowId: string,
+  column: string,
+  value: string | null,
+): FlowCellPaint | null {
+  const tone = section.columnTones?.[column];
+  const rowTone = section.rowTones?.[rowId];
+  // The TOTAL row is painted whole. A supplier's heading keeps the two marks' columns in their own
+  // ground and ink, so the columns run unbroken and a heading's zero never reads in brand blue.
+  if (!tone || rowTone === "total") {
+    return null;
+  }
+  if (tone === "urgent" || tone === "pending") {
+    return tone;
+  }
+  if (rowTone) {
+    return null;
+  }
+  if (!hasFigure(value)) {
+    return null;
+  }
+  if (tone === "signed") {
+    return value.trim().startsWith("-") ? "negative" : "positive";
+  }
+  return tone;
+}
+
 export interface FlowReportSection {
   id: "accounts" | "remaining" | "incomes" | "payments" | "matrix" | "settled" | "loans";
   title: string;
@@ -36,6 +97,10 @@ export interface FlowReportSection {
   /** The screen's cell notes that fall in this table — the Excel writes them as comments, the
    *  printed report ignores them (on paper there is nothing to hover). */
   notes?: FlowCellNote[];
+  /** Column name → tone, for the columns that mean something beyond a figure. */
+  columnTones?: Record<string, FlowCellTone>;
+  /** Row id → tone; a row absent here is an ordinary line. */
+  rowTones?: Record<string, FlowRowTone>;
 }
 
 export interface FlowReport {
@@ -264,6 +329,15 @@ export function buildFlowReport(input: {
     ]),
   );
   const withNotes = (found: FlowCellNote[]) => (found.length > 0 ? { notes: found } : {});
+  // The same readings the screen colours: the urgent in amber, the checks in their ink, what is left
+  // by its sign — and the closing row of every table, and each supplier's heading, as rows apart.
+  const TOTAL: Record<string, FlowRowTone> = { total: "total" };
+  const bankTones: Record<string, FlowCellTone> = {
+    Urgente: "urgent",
+    Pendiente: "pending",
+    "Cheques no cobrados": "outstanding",
+    "Saldo final": "signed",
+  };
 
   const sections: FlowReportSection[] = [
     {
@@ -271,14 +345,22 @@ export function buildFlowReport(input: {
       title: "Flujo de bancos",
       table: accountsTable,
       ...withNotes(accountNotes),
+      columnTones: bankTones,
+      rowTones: TOTAL,
     },
-    { id: "remaining", title: "Saldo faltante o sobrante", table: remainingTable },
+    {
+      id: "remaining",
+      title: "Saldo faltante o sobrante",
+      table: remainingTable,
+      columnTones: { Saldo: "signed" },
+    },
     ...(incomes.length > 0
       ? [
           {
             id: "incomes" as const,
             title: "Ingresos",
             table: incomesTable,
+            rowTones: TOTAL,
           },
         ]
       : []),
@@ -287,6 +369,11 @@ export function buildFlowReport(input: {
       title: "Pagos marcados por proveedor",
       table: paymentsTable,
       ...withNotes(paymentNotes),
+      columnTones: { Urgente: "urgent", Pendiente: "pending" },
+      rowTones: {
+        ...Object.fromEntries(derived.groups.map((group) => [`g-${group.key}`, "group" as const])),
+        ...TOTAL,
+      },
     },
     // The flow's other shape, printed ALWAYS there is something marked: on paper there are no
     // controls, so the screen's «Ver como» decides nothing here.
@@ -296,11 +383,20 @@ export function buildFlowReport(input: {
             id: "matrix" as const,
             title: "Matriz de pagos",
             table: matrixTable(derivePaymentMatrix(derived, centers, input.hasChecks ?? false)),
+            columnTones: bankTones,
+            rowTones: TOTAL,
           },
         ]
       : []),
     ...(derived.settled.length > 0
-      ? [{ id: "settled" as const, title: "Pagado en esta fecha", table: settledTable }]
+      ? [
+          {
+            id: "settled" as const,
+            title: "Pagado en esta fecha",
+            table: settledTable,
+            rowTones: TOTAL,
+          },
+        ]
       : []),
     ...(derived.loans.length > 0
       ? [{ id: "loans" as const, title: "Préstamos entre centros", table: loansTable }]

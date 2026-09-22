@@ -6,9 +6,38 @@
 import ExcelJS from "exceljs";
 import { writeLetterhead } from "@/lib/excel-logo";
 import type { EntityLogo } from "@/lib/logos";
-import type { FlowReport } from "../report";
+import {
+  cellPaint,
+  hasFigure,
+  type FlowCellPaint,
+  type FlowRowTone,
+  type FlowReport,
+  SIGN_GLYPH,
+} from "../report";
 
 const COLUMNS = 9;
+
+/** The colours the PDF wears, for a sheet that cannot read a CSS variable: each ARGB mirrors its
+ *  `@theme` token (brand-soft is its 8 % over white, flattened). */
+const BRAND = "FF1E3A5F";
+const BRAND_SOFT = "FFEDEFF2";
+const WHITE = "FFFFFFFF";
+const ROW_PAINT: Record<FlowRowTone, { fill: string; font: string }> = {
+  total: { fill: BRAND, font: WHITE },
+  group: { fill: BRAND_SOFT, font: BRAND },
+};
+/** Only the two marks of payment take a GROUND; the rest is told by its ink. */
+const CELL_PAINT: Record<FlowCellPaint, { font: string; fill?: string }> = {
+  urgent: { font: "FF1E293B", fill: "FFFEF3C7" },
+  pending: { font: "FF1E293B", fill: "FFEAF0F6" },
+  outstanding: { font: "FFA21CAF" },
+  negative: { font: "FFDC2626" },
+  positive: { font: "FF16A34A" },
+};
+
+function solid(argb: string): ExcelJS.Fill {
+  return { type: "pattern", pattern: "solid", fgColor: { argb } };
+}
 
 export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
@@ -32,10 +61,43 @@ export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJ
     const header = ws.addRow(["", ...section.table.columns]);
     header.font = { bold: true };
     for (const row of section.table.rows) {
-      const written = ws.addRow([row.label, ...row.values.map((value) => value ?? "")]);
+      const paints = row.values.map((value, index) =>
+        cellPaint(section, row.id, section.table.columns[index] ?? "", value),
+      );
+      // A signed figure carries its glyph here as on paper: the colour never travels alone.
+      const values = row.values.map((value, index) => {
+        const paint = paints[index];
+        return paint === "negative" || paint === "positive"
+          ? `${SIGN_GLYPH[paint]} ${value}`
+          : (value ?? "");
+      });
+      const written = ws.addRow([row.label, ...values]);
       if (row.emphasis) {
         written.font = { bold: true };
       }
+      const rowTone = section.rowTones?.[row.id];
+      if (rowTone) {
+        const { fill, font } = ROW_PAINT[rowTone];
+        for (let column = 1; column <= values.length + 1; column += 1) {
+          const cell = written.getCell(column);
+          cell.fill = solid(fill);
+          cell.font = { bold: true, color: { argb: font } };
+        }
+      }
+      paints.forEach((paint, index) => {
+        if (!paint) return;
+        const cell = written.getCell(index + 2);
+        const { font, fill } = CELL_PAINT[paint];
+        // A mark of payment grounds its whole column. The urgent is ALWAYS bold, its zeros too; the
+        // pending only where it says something.
+        cell.font = {
+          bold: paint === "urgent" || hasFigure(row.values[index] ?? null),
+          color: { argb: font },
+        };
+        if (fill) {
+          cell.fill = solid(fill);
+        }
+      });
       // The screen's cell notes, as the comments the book's sheets carried: `column` counts from
       // the label (0), and ExcelJS counts from 1.
       for (const note of section.notes ?? []) {
