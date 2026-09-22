@@ -526,7 +526,7 @@ export function bankHistoryCard(
   return {
     id: "history",
     title: "Total bancos por fecha de flujo",
-    subtitle: "Lo capturado en cada flujo: saldo + ingresos proyectados + sobregiro",
+    subtitle: "Lo capturado en cada flujo: saldo + ingresos + sobregiro",
     option: {
       ...baseOption(categoryAxis(labels), currencyAxis(), legendFor(false)),
       series: [

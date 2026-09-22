@@ -293,7 +293,7 @@ sobregiro · centro) in «Configurar».
   of «girados y no cobrados», counted whatever the step. A bank label the empresa's accounts do not
   match is «sin cuenta»: visible, assignable in bulk, in no sum.
 - **A flow stores only its captures** (`flows`, unique per empresa and date: balances per account and
-  the projected incomes). `flow.ts` (`deriveFlow`) derives disponible, no cobrados, urgente,
+  the incomes, one bank column per label). `flow.ts` (`deriveFlow`) derives disponible, no cobrados, urgente,
   pendiente, saldo final, faltante and the LOANS between centers (a document of HC paid from an
   account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
   same `DerivedFlow`.

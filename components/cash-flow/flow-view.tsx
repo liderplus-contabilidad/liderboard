@@ -55,7 +55,7 @@ const FLOW_SHAPES: { value: FlowShape; label: string }[] = [
 
 /**
  * The flow OF the cut date — the WORKING sheet: the accounts table (the cells with a field are the
- * CAPTURE — saldo; everything else is `deriveFlow`), the projected incomes, the marked documents
+ * CAPTURE — saldo; everything else is `deriveFlow`), the incomes (one bank column per label), the marked documents
  * grouped by supplier and EDITED there (`MarkedSection`), and, for an empresa with centers, the
  * loans between them. It is `FLUJO MATRIZ`, `FJ dd-mm` and `FLUJO DE BANCOS` at once: the columns
  * that were typed are now read from Cheques and from the marks, and the marks are written here or
@@ -105,7 +105,7 @@ export function FlowView() {
   // register (Nomik) has no «cheques no cobrados» to subtract.
   const hasChecks = checks.length > 0;
   const dateLabel = formatDayMonthYear(asOf) ?? asOf;
-  const { totals } = derived;
+  const { totals, incomeColumns } = derived;
   // With nothing marked there is nothing to shape: the switch renders nothing and the list stays.
   const shapeable = derived.lines.length > 0;
   const asMatrix = shapeable && shape === "matriz";
@@ -178,14 +178,24 @@ export function FlowView() {
           ) : matrix ? (
             <PaymentMatrixTable matrix={matrix} />
           ) : (
-            <DataGrid minWidth={hasChecks ? 1100 : 980}>
+            <DataGrid minWidth={(hasChecks ? 980 : 860) + incomeColumns.length * 130}>
               <thead>
                 <tr>
                   <HeadCell width={220}>Cuenta</HeadCell>
                   <HeadCell align="right" width={130}>
                     Saldo
                   </HeadCell>
-                  <HeadCell align="right">Ingresos proy.</HeadCell>
+                  {/* One column per income label: each ADDS to the bank total beside it. */}
+                  {incomeColumns.map((column) => (
+                    <HeadCell
+                      key={column.key}
+                      align="right"
+                      width={130}
+                      className="whitespace-normal leading-[1.2]"
+                    >
+                      {column.label}
+                    </HeadCell>
+                  ))}
                   <HeadCell align="right" width={130}>
                     Sobregiro
                   </HeadCell>
@@ -225,9 +235,11 @@ export function FlowView() {
                         onCommit={(value) => setBalance(row.account.id, value)}
                       />
                     </Cell>
-                    <Cell numeric tone="muted">
-                      {money(row.incomes)}
-                    </Cell>
+                    {incomeColumns.map((column) => (
+                      <Cell key={column.key} numeric tone="muted">
+                        {money(column.byAccount[row.account.id] ?? 0)}
+                      </Cell>
+                    ))}
                     {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
                       but it is captured here, where the sheet writes it, and not only in Configurar. */}
                     <Cell numeric control className="bg-marked/40">
@@ -267,9 +279,11 @@ export function FlowView() {
                     <Cell className="text-[11.5px] text-faint" colSpan={2}>
                       Sin cuenta asignada
                     </Cell>
-                    <Cell numeric tone="muted">
-                      {money(derived.unassignedIncomes)}
-                    </Cell>
+                    {incomeColumns.map((column) => (
+                      <Cell key={column.key} numeric tone="muted">
+                        {money(column.unassigned)}
+                      </Cell>
+                    ))}
                     <Cell colSpan={hasChecks ? 3 : 2} />
                     <Cell numeric className="text-warning">
                       {money(derived.unassignedMarked.urgent)}
@@ -285,9 +299,11 @@ export function FlowView() {
                   <Cell numeric strong value={totals.balance}>
                     {money(totals.balance)}
                   </Cell>
-                  <Cell numeric strong>
-                    {money(totals.incomes)}
-                  </Cell>
+                  {incomeColumns.map((column) => (
+                    <Cell key={column.key} numeric strong>
+                      {money(column.total)}
+                    </Cell>
+                  ))}
                   <Cell numeric strong>
                     {money(totals.overdraft)}
                   </Cell>
@@ -363,7 +379,7 @@ export function FlowView() {
  * stay in view while the beneficiarios scroll under them.
  */
 function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
-  const leading = 4 + (matrix.hasChecks ? 1 : 0);
+  const leading = 3 + matrix.incomeColumns.length + (matrix.hasChecks ? 1 : 0);
   return (
     <DataGrid minWidth={480 + leading * 120 + matrix.beneficiaries.length * 130}>
       <thead>
@@ -377,9 +393,16 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
           <HeadCell align="right" width={120}>
             Sobregiro
           </HeadCell>
-          <HeadCell align="right" width={120}>
-            Ingresos
-          </HeadCell>
+          {matrix.incomeColumns.map((column) => (
+            <HeadCell
+              key={column.key}
+              align="right"
+              width={120}
+              className="whitespace-normal leading-[1.2]"
+            >
+              {column.label}
+            </HeadCell>
+          ))}
           <HeadCell align="right" width={120}>
             Total bancos
           </HeadCell>
@@ -425,9 +448,11 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
               <Cell numeric strong={total}>
                 {loose ? "" : money(row.bank.overdraft)}
               </Cell>
-              <Cell numeric strong={total} tone="muted">
-                {money(row.bank.incomes)}
-              </Cell>
+              {matrix.incomeColumns.map((column) => (
+                <Cell key={column.key} numeric strong={total} tone="muted">
+                  {money(row.bank.incomeCells[column.key] ?? 0)}
+                </Cell>
+              ))}
               <Cell numeric strong={total}>
                 {loose ? "" : money(row.bank.bankTotal)}
               </Cell>
@@ -613,7 +638,7 @@ function IncomesSection({
 
   return (
     <FlowSection>
-      <SectionHeading icon={<TrendingUp size={15} />} title="Ingresos proyectados">
+      <SectionHeading icon={<TrendingUp size={15} />} title="Ingresos">
         <span className="text-[13px] font-semibold tabular-nums text-brand">{money(total)}</span>
         <Button
           variant="secondary"
@@ -643,8 +668,8 @@ function IncomesSection({
             >
               <input
                 defaultValue={income.concept}
-                placeholder="Proyección de ventas"
-                aria-label="Concepto del ingreso"
+                placeholder="Etiqueta (p. ej. Reservas)"
+                aria-label="Etiqueta del ingreso"
                 onBlur={(event) =>
                   event.target.value !== income.concept &&
                   update(income.id, { concept: event.target.value })

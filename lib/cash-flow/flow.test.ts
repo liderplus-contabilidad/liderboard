@@ -336,6 +336,55 @@ describe("deriveFlow · Comisersa (four accounts, three centers)", () => {
   });
 });
 
+describe("deriveFlow · incomes", () => {
+  const accounts: BankAccount[] = [
+    { id: "a", clientId: "c", bank: "PRODUBANCO", number: "", overdraft: 0, centerId: null },
+    { id: "b", clientId: "c", bank: "PICHINCHA", number: "", overdraft: 0, centerId: null },
+  ];
+
+  it("writes one column per label, adds every income to its bank, and keeps the loose one apart", () => {
+    const derived = deriveFlow({
+      date: "2026-08-05",
+      flow: {
+        id: "f",
+        clientId: "c",
+        date: "2026-08-05",
+        balances: { a: 100, b: 200 },
+        incomes: [
+          { id: "1", concept: "Reservas", amount: 300, accountId: "a" },
+          { id: "2", concept: "Cheque X efectivizar", amount: 50, accountId: "b" },
+          { id: "3", concept: " reservas ", amount: 20, accountId: "b" },
+          { id: "4", concept: "", amount: 10, accountId: null },
+        ],
+      },
+      accounts,
+      centers: [],
+      checks: [],
+      payables: [],
+    });
+    expect(derived.incomeColumns).toEqual([
+      {
+        key: "reservas",
+        label: "Reservas",
+        byAccount: { a: 300, b: 20 },
+        unassigned: 0,
+        total: 320,
+      },
+      {
+        key: "cheque x efectivizar",
+        label: "Cheque X efectivizar",
+        byAccount: { b: 50 },
+        unassigned: 0,
+        total: 50,
+      },
+      { key: "ingreso", label: "Ingreso", byAccount: {}, unassigned: 10, total: 10 },
+    ]);
+    expect(derived.accounts.map((row) => row.bankTotal)).toEqual([400, 270]);
+    expect(derived.totals.incomes).toBe(380);
+    expect(derived.totals.bankTotal).toBe(680);
+  });
+});
+
 describe("copying", () => {
   const flows: PaymentFlow[] = [
     { id: "a", clientId: "c", date: "2026-08-05", balances: { x: 1 }, incomes: [] },

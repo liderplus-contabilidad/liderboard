@@ -70,11 +70,11 @@ describe("buildFlowReport", () => {
     ]);
     expect(report.header.dateLabel).toBe("05/08/2026");
     const accounts = report.sections[0].table;
+    // No income captured: no income column.
     expect(accounts.rows[0].values).toEqual([
       "$6,677.34",
       "$5,000.00",
       "$11,677.34",
-      "$0.00",
       "$0.00",
       "$720.00",
       "$975.93",
@@ -120,7 +120,7 @@ describe("buildFlowReport", () => {
       "Saldo",
       "Sobregiro",
       "Disponible",
-      "Ingresos",
+      "Reservas",
       "Cheques no cobrados",
       "Urgente",
       "Pendiente",
@@ -146,7 +146,6 @@ describe("buildFlowReport", () => {
     expect(matrix.table.columns).toEqual([
       "Saldo",
       "Sobregiro",
-      "Ingresos",
       "Total bancos",
       "NUNA",
       "PALLASCO PALOMO",
@@ -157,7 +156,6 @@ describe("buildFlowReport", () => {
     expect(matrix.table.rows[0].values).toEqual([
       "$6,677.34",
       "$5,000.00",
-      "$0.00",
       "$11,677.34",
       "$975.93",
       "$720.00",

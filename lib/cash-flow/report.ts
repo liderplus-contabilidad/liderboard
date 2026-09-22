@@ -8,7 +8,7 @@ import { formatDayMonthYear, formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
 import { documentLabel, money, payableDetail } from "./derive";
-import { accountLabel, centerName, type DerivedFlow } from "./flow";
+import { accountLabel, centerName, type DerivedFlow, incomeLabel } from "./flow";
 import { derivePaymentMatrix, matrixTable } from "./matrix";
 import type { BankAccount, CashFlowCenter, FlowIncome } from "./types";
 
@@ -54,7 +54,7 @@ export function buildFlowReport(input: {
       "Saldo",
       "Sobregiro",
       "Disponible",
-      "Ingresos",
+      ...derived.incomeColumns.map((column) => column.label),
       "Cheques no cobrados",
       "Urgente",
       "Pendiente",
@@ -68,7 +68,7 @@ export function buildFlowReport(input: {
           row.balance,
           row.account.overdraft,
           row.available,
-          row.incomes,
+          ...derived.incomeColumns.map((column) => column.byAccount[row.account.id] ?? 0),
           row.outstanding,
           row.urgent,
           row.pending,
@@ -84,7 +84,7 @@ export function buildFlowReport(input: {
           derived.totals.balance,
           derived.totals.overdraft,
           derived.totals.available,
-          derived.totals.incomes,
+          ...derived.incomeColumns.map((column) => column.total),
           derived.totals.outstanding,
           derived.totals.urgent,
           derived.totals.pending,
@@ -99,7 +99,7 @@ export function buildFlowReport(input: {
     rows: [
       ...incomes.map((income) => ({
         id: income.id,
-        label: income.concept || "Ingreso",
+        label: incomeLabel(income),
         values: [label(income.accountId), money(income.amount)],
       })),
       {
@@ -212,7 +212,7 @@ export function buildFlowReport(input: {
     { id: "accounts", title: "Flujo de bancos", table: accountsTable },
     { id: "remaining", title: "Saldo faltante o sobrante", table: remainingTable },
     ...(incomes.length > 0
-      ? [{ id: "incomes" as const, title: "Ingresos proyectados", table: incomesTable }]
+      ? [{ id: "incomes" as const, title: "Ingresos", table: incomesTable }]
       : []),
     { id: "payments", title: "Pagos marcados por proveedor", table: paymentsTable },
     // The flow's other shape, printed ALWAYS there is something marked: on paper there are no

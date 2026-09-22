@@ -7,7 +7,10 @@
  * the screen, Resumen, the report and the Excel all read.
  *
  * Per account: `available = balance + overdraft`, `incomes`, `bankTotal = available + incomes` (the
- * «TOTAL BANCOS» of the Nomik sheet: saldo + ingresos + sobregiro), `outstanding` (checks),
+ * «TOTAL BANCOS» of the Nomik sheet: saldo + ingresos + sobregiro). Every income is an INCOME —
+ * none is «proyectado» apart — and each LABEL is a column of its own (`incomeColumns`), the way
+ * the sheet writes «PROYECCION INGRESOS RESERVAS» beside the saldo: two incomes with the same label
+ * (`normalizeLabel`) are one column, and `incomes` is the sum of a row's columns. `outstanding` (checks),
  * `urgent`, `pending`, `remaining = bankTotal − outstanding − urgent − pending`, `shortfall =
  * max(0, −remaining)`. The company row is the sum, with two more readings the sheet's «SALDO
  * FALTANTE» row writes beside the first: what would remain paying ONLY the urgent, and ONLY the
@@ -46,6 +49,22 @@ export interface AccountFlow {
   pending: number;
   remaining: number;
   shortfall: number;
+}
+
+/** One income LABEL as a column of the bank table: what it adds to each account. */
+export interface IncomeColumn {
+  key: string;
+  label: string;
+  /** Account id → what this label adds to it. Absent means 0. */
+  byAccount: Record<string, number>;
+  /** What this label adds with no account chosen — the company row only. */
+  unassigned: number;
+  total: number;
+}
+
+/** The label an income is shown and grouped under: an unnamed one is just «Ingreso». */
+export function incomeLabel(income: FlowIncome): string {
+  return income.concept.trim() || "Ingreso";
 }
 
 export interface FlowTotals {
@@ -91,6 +110,8 @@ export interface DerivedFlow {
   totals: FlowTotals;
   /** Incomes not tied to any account — they still add to the company row. */
   unassignedIncomes: number;
+  /** One column per income label, in the order they were first captured. */
+  incomeColumns: IncomeColumn[];
   /** Marked documents without an account — in the company row, in no account. */
   unassignedMarked: { urgent: number; pending: number };
   /** Every marked open document, grouped by supplier for the paper. */
@@ -131,14 +152,28 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
 
   const incomesByAccount = new Map<string, number>();
   let unassignedIncomes = 0;
+  const incomeColumns = new Map<string, IncomeColumn>();
   for (const income of flow?.incomes ?? []) {
+    const label = incomeLabel(income);
+    const key = normalizeLabel(label);
+    const column = incomeColumns.get(key) ?? {
+      key,
+      label,
+      byAccount: {},
+      unassigned: 0,
+      total: 0,
+    };
+    incomeColumns.set(key, column);
+    column.total = round2(column.total + income.amount);
     const chosen = accounts.some((account) => account.id === income.accountId)
       ? income.accountId
       : onlyAccount;
     if (chosen) {
       incomesByAccount.set(chosen, (incomesByAccount.get(chosen) ?? 0) + income.amount);
+      column.byAccount[chosen] = round2((column.byAccount[chosen] ?? 0) + income.amount);
     } else {
       unassignedIncomes += income.amount;
+      column.unassigned = round2(column.unassigned + income.amount);
     }
   }
 
@@ -229,6 +264,7 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
     accounts: accountFlows,
     totals,
     unassignedIncomes: round2(unassignedIncomes),
+    incomeColumns: [...incomeColumns.values()],
     unassignedMarked: {
       urgent: round2(unassignedMarked.urgent),
       pending: round2(unassignedMarked.pending),

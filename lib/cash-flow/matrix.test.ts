@@ -139,6 +139,7 @@ describe("derivePaymentMatrix", () => {
         balance: account.balance,
         overdraft: account.account.overdraft,
         incomes: account.incomes,
+        incomeCells: { reservas: account.account.id === "ha-pich" ? 500 : 0 },
         bankTotal: account.bankTotal,
         outstanding: account.outstanding,
       });
@@ -209,7 +210,7 @@ describe("matrixTable", () => {
     expect(table.columns).toEqual([
       "Saldo",
       "Sobregiro",
-      "Ingresos",
+      "Reservas",
       "Total bancos",
       "ARRIENDO",
       "SRI",
