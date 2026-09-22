@@ -126,10 +126,10 @@ describe("bankHistoryCard", () => {
     },
     { id: "3", clientId: "c", date: "2026-09-20", balances: { a: 1 }, incomes: [] },
   ];
-  it("draws the captured total bancos per flow date up to the cut, from two flows on", () => {
+  it("draws the captured total bancos (saldo + sobregiro, incomes apart) per flow date up to the cut, from two flows on", () => {
     const card = bankHistoryCard(flows, ONE, AS_OF)!;
     expect(card.table.columns).toEqual(["05/08/2026", "07/08/2026"]);
-    expect(card.option?.series[0].data).toEqual([11677.34, 9419.27]);
+    expect(card.option?.series[0].data).toEqual([11677.34, 9319.27]);
     expect(bankHistoryCard(flows.slice(0, 1), ONE, AS_OF)).toBeNull();
   });
 });

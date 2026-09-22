@@ -13,7 +13,7 @@
  *   3. «¿A quién le debo más?» — the ranking of open balances, EMPHASIS form: one hue for the
  *      suppliers, the neutral for «Otros», a direct label with the share.
  *   4. «¿Cómo viene el saldo en bancos?» — the captured balances by flow date, a line: only what
- *      was CAPTURED (saldo + ingresos + sobregiro), because the marks are live and a past saldo
+ *      was CAPTURED (saldo + sobregiro), because the marks are live and a past saldo
  *      final cannot be reconstructed honestly. Drawn from two flows on.
  *   5. «¿Qué cuenta queda corta?» — total bancos against saldo final per account, from two accounts
  *      on: with one, the tiles already say it and a one-bar chart is an axis for one figure.
@@ -498,11 +498,10 @@ export function bankHistoryCard(
       const balance = Object.entries(flow.balances)
         .filter(([id]) => ids.has(id))
         .reduce((acc, [, v]) => acc + v, 0);
-      const incomes = flow.incomes.reduce((acc, income) => acc + income.amount, 0);
       return {
         date: flow.date,
         balance,
-        total: Math.round((balance + incomes + overdraft) * 100) / 100,
+        total: Math.round((balance + overdraft) * 100) / 100,
       };
     });
   if (points.length < 2) {
@@ -526,7 +525,7 @@ export function bankHistoryCard(
   return {
     id: "history",
     title: "Total bancos por fecha de flujo",
-    subtitle: "Lo capturado en cada flujo: saldo + ingresos + sobregiro",
+    subtitle: "Lo capturado en cada flujo: saldo + sobregiro",
     option: {
       ...baseOption(categoryAxis(labels), currencyAxis(), legendFor(false)),
       series: [

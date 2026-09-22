@@ -119,8 +119,9 @@ describe("buildFlowReport", () => {
     expect(accounts.columns).toEqual([
       "Saldo",
       "Sobregiro",
-      "Disponible",
+      "Total bancos",
       "Reservas",
+      "Total ingresos",
       "Cheques no cobrados",
       "Urgente",
       "Pendiente",
@@ -131,6 +132,7 @@ describe("buildFlowReport", () => {
       "$6,677.34",
       "$5,000.00",
       "$11,677.34",
+      "$1,200.00",
       "$1,200.00",
       "$0.00",
       "$720.00",

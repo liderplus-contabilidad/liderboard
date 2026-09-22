@@ -1,6 +1,7 @@
 /**
  * The flow's OTHER shape: COMISERSA's `FLUJO MATRIZ`. One row per bank account, the bank figures
- * first (saldo · sobregiro · one column per INCOME label · total bancos · cheques no cobrados), then ONE COLUMN PER
+ * first (saldo · sobregiro · total bancos · one column per INCOME label · total ingresos · cheques
+ * no cobrados), then ONE COLUMN PER
  * BENEFICIARIO with marked documents, then what the account pays in all and what is left. A cell
  * answers «how much of whom from where»: the sum of urgente + pendiente of that beneficiario's
  * marked documents whose paying account is that row's. The split between urgente and pendiente is
@@ -137,7 +138,7 @@ export function derivePaymentMatrix(
         overdraft: 0,
         incomes: derived.unassignedIncomes,
         incomeCells: incomeCellsOf((column) => column.unassigned),
-        bankTotal: derived.unassignedIncomes,
+        bankTotal: 0,
         outstanding: 0,
       },
       cells: unassigned,
@@ -178,8 +179,9 @@ export function matrixTable(matrix: PaymentMatrix): ChartTable {
     columns: [
       "Saldo",
       "Sobregiro",
-      ...matrix.incomeColumns.map((column) => column.label),
       "Total bancos",
+      ...matrix.incomeColumns.map((column) => column.label),
+      ...(matrix.incomeColumns.length > 0 ? ["Total ingresos"] : []),
       ...(matrix.hasChecks ? ["Cheques no cobrados"] : []),
       ...matrix.beneficiaries.map((column) => column.label),
       "Total marcado",
@@ -194,8 +196,9 @@ export function matrixTable(matrix: PaymentMatrix): ChartTable {
         values: [
           bank ? "" : money(row.bank.balance),
           bank ? "" : money(row.bank.overdraft),
-          ...matrix.incomeColumns.map((column) => money(row.bank.incomeCells[column.key] ?? 0)),
           bank ? "" : money(row.bank.bankTotal),
+          ...matrix.incomeColumns.map((column) => money(row.bank.incomeCells[column.key] ?? 0)),
+          ...(matrix.incomeColumns.length > 0 ? [money(row.bank.incomes)] : []),
           ...(matrix.hasChecks ? [bank ? "" : money(row.bank.outstanding)] : []),
           ...matrix.beneficiaries.map((column) => money(row.cells[column.key] ?? 0)),
           money(row.marked),

@@ -106,6 +106,7 @@ export function FlowView() {
   const hasChecks = checks.length > 0;
   const dateLabel = formatDayMonthYear(asOf) ?? asOf;
   const { totals, incomeColumns } = derived;
+  const hasIncomes = incomeColumns.length > 0;
   // With nothing marked there is nothing to shape: the switch renders nothing and the list stays.
   const shapeable = derived.lines.length > 0;
   const asMatrix = shapeable && shape === "matriz";
@@ -125,8 +126,9 @@ export function FlowView() {
           <StatTile
             label="Total bancos"
             value={money(totals.bankTotal)}
-            hint={`Saldo ${money(totals.balance)} + ingresos ${money(totals.incomes)} + sobregiro ${money(totals.overdraft)}`}
+            hint={`Saldo ${money(totals.balance)} + sobregiro ${money(totals.overdraft)}`}
           />
+          {hasIncomes && <StatTile label="Total ingresos" value={money(totals.incomes)} />}
           {hasChecks && <StatTile label="Cheques no cobrados" value={money(totals.outstanding)} />}
           <StatTile
             label="Marcado para pago"
@@ -178,14 +180,23 @@ export function FlowView() {
           ) : matrix ? (
             <PaymentMatrixTable matrix={matrix} />
           ) : (
-            <DataGrid minWidth={(hasChecks ? 980 : 860) + incomeColumns.length * 130}>
+            <DataGrid
+              minWidth={
+                (hasChecks ? 980 : 860) + (hasIncomes ? (incomeColumns.length + 1) * 130 : 0)
+              }
+            >
               <thead>
                 <tr>
                   <HeadCell width={220}>Cuenta</HeadCell>
                   <HeadCell align="right" width={130}>
                     Saldo
                   </HeadCell>
-                  {/* One column per income label: each ADDS to the bank total beside it. */}
+                  <HeadCell align="right" width={130}>
+                    Sobregiro
+                  </HeadCell>
+                  <HeadCell align="right">Total bancos</HeadCell>
+                  {/* One column per income label, then their sum: the banks first, what comes in
+                      after, and the saldo final adds the two. */}
                   {incomeColumns.map((column) => (
                     <HeadCell
                       key={column.key}
@@ -196,10 +207,11 @@ export function FlowView() {
                       {column.label}
                     </HeadCell>
                   ))}
-                  <HeadCell align="right" width={130}>
-                    Sobregiro
-                  </HeadCell>
-                  <HeadCell align="right">Total bancos</HeadCell>
+                  {hasIncomes && (
+                    <HeadCell align="right" width={130}>
+                      Total ingresos
+                    </HeadCell>
+                  )}
                   {hasChecks && <HeadCell align="right">Cheques no cobr.</HeadCell>}
                   <HeadCell align="right">Urgente</HeadCell>
                   <HeadCell align="right">Pendiente</HeadCell>
@@ -235,11 +247,6 @@ export function FlowView() {
                         onCommit={(value) => setBalance(row.account.id, value)}
                       />
                     </Cell>
-                    {incomeColumns.map((column) => (
-                      <Cell key={column.key} numeric tone="muted">
-                        {money(column.byAccount[row.account.id] ?? 0)}
-                      </Cell>
-                    ))}
                     {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
                       but it is captured here, where the sheet writes it, and not only in Configurar. */}
                     <Cell numeric control className="bg-marked/40">
@@ -256,6 +263,16 @@ export function FlowView() {
                     <Cell numeric strong value={row.bankTotal}>
                       {money(row.bankTotal)}
                     </Cell>
+                    {incomeColumns.map((column) => (
+                      <Cell key={column.key} numeric tone="muted">
+                        {money(column.byAccount[row.account.id] ?? 0)}
+                      </Cell>
+                    ))}
+                    {hasIncomes && (
+                      <Cell numeric strong>
+                        {money(row.incomes)}
+                      </Cell>
+                    )}
                     {hasChecks && (
                       <Cell numeric className="text-crosslink">
                         {money(row.outstanding)}
@@ -276,7 +293,7 @@ export function FlowView() {
                   derived.unassignedMarked.pending > 0 ||
                   derived.unassignedIncomes > 0) && (
                   <GridRow muted>
-                    <Cell className="text-[11.5px] text-faint" colSpan={2}>
+                    <Cell className="text-[11.5px] text-faint" colSpan={4}>
                       Sin cuenta asignada
                     </Cell>
                     {incomeColumns.map((column) => (
@@ -284,7 +301,12 @@ export function FlowView() {
                         {money(column.unassigned)}
                       </Cell>
                     ))}
-                    <Cell colSpan={hasChecks ? 3 : 2} />
+                    {hasIncomes && (
+                      <Cell numeric tone="muted">
+                        {money(derived.unassignedIncomes)}
+                      </Cell>
+                    )}
+                    {hasChecks && <Cell />}
                     <Cell numeric className="text-warning">
                       {money(derived.unassignedMarked.urgent)}
                     </Cell>
@@ -299,17 +321,22 @@ export function FlowView() {
                   <Cell numeric strong value={totals.balance}>
                     {money(totals.balance)}
                   </Cell>
-                  {incomeColumns.map((column) => (
-                    <Cell key={column.key} numeric strong>
-                      {money(column.total)}
-                    </Cell>
-                  ))}
                   <Cell numeric strong>
                     {money(totals.overdraft)}
                   </Cell>
                   <Cell numeric strong>
                     {money(totals.bankTotal)}
                   </Cell>
+                  {incomeColumns.map((column) => (
+                    <Cell key={column.key} numeric strong>
+                      {money(column.total)}
+                    </Cell>
+                  ))}
+                  {hasIncomes && (
+                    <Cell numeric strong>
+                      {money(totals.incomes)}
+                    </Cell>
+                  )}
                   {hasChecks && (
                     <Cell numeric strong className="text-crosslink">
                       {money(totals.outstanding)}
@@ -379,7 +406,9 @@ export function FlowView() {
  * stay in view while the beneficiarios scroll under them.
  */
 function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
-  const leading = 3 + matrix.incomeColumns.length + (matrix.hasChecks ? 1 : 0);
+  const hasIncomes = matrix.incomeColumns.length > 0;
+  const leading =
+    3 + (hasIncomes ? matrix.incomeColumns.length + 1 : 0) + (matrix.hasChecks ? 1 : 0);
   return (
     <DataGrid minWidth={480 + leading * 120 + matrix.beneficiaries.length * 130}>
       <thead>
@@ -393,6 +422,9 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
           <HeadCell align="right" width={120}>
             Sobregiro
           </HeadCell>
+          <HeadCell align="right" width={120}>
+            Total bancos
+          </HeadCell>
           {matrix.incomeColumns.map((column) => (
             <HeadCell
               key={column.key}
@@ -403,9 +435,11 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
               {column.label}
             </HeadCell>
           ))}
-          <HeadCell align="right" width={120}>
-            Total bancos
-          </HeadCell>
+          {hasIncomes && (
+            <HeadCell align="right" width={120}>
+              Total ingresos
+            </HeadCell>
+          )}
           {matrix.hasChecks && (
             <HeadCell align="right" width={120}>
               Cheques no cobr.
@@ -448,14 +482,19 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
               <Cell numeric strong={total}>
                 {loose ? "" : money(row.bank.overdraft)}
               </Cell>
+              <Cell numeric strong={total}>
+                {loose ? "" : money(row.bank.bankTotal)}
+              </Cell>
               {matrix.incomeColumns.map((column) => (
                 <Cell key={column.key} numeric strong={total} tone="muted">
                   {money(row.bank.incomeCells[column.key] ?? 0)}
                 </Cell>
               ))}
-              <Cell numeric strong={total}>
-                {loose ? "" : money(row.bank.bankTotal)}
-              </Cell>
+              {hasIncomes && (
+                <Cell numeric strong>
+                  {money(row.bank.incomes)}
+                </Cell>
+              )}
               {matrix.hasChecks && (
                 <Cell numeric strong={total} tone="muted">
                   {loose ? "" : money(row.bank.outstanding)}

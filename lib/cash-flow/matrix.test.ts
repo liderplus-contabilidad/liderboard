@@ -210,8 +210,9 @@ describe("matrixTable", () => {
     expect(table.columns).toEqual([
       "Saldo",
       "Sobregiro",
-      "Reservas",
       "Total bancos",
+      "Reservas",
+      "Total ingresos",
       "ARRIENDO",
       "SRI",
       "TAPIA LLIVIPUMA",
@@ -222,8 +223,9 @@ describe("matrixTable", () => {
     expect(table.rows[0].values).toEqual([
       "-$7,465.16",
       "$15,000.00",
-      "$0.00",
       "$7,534.84",
+      "$0.00",
+      "$0.00",
       "$9,200.00",
       "$3,536.23",
       "$0.00",

@@ -49,12 +49,14 @@ export function buildFlowReport(input: {
     return account ? accountLabel(account, centers) : "Sin cuenta";
   };
 
+  const hasIncomes = derived.incomeColumns.length > 0;
   const accountsTable: ChartTable = {
     columns: [
       "Saldo",
       "Sobregiro",
-      "Disponible",
+      "Total bancos",
       ...derived.incomeColumns.map((column) => column.label),
+      ...(hasIncomes ? ["Total ingresos"] : []),
       "Cheques no cobrados",
       "Urgente",
       "Pendiente",
@@ -67,8 +69,9 @@ export function buildFlowReport(input: {
         values: [
           row.balance,
           row.account.overdraft,
-          row.available,
+          row.bankTotal,
           ...derived.incomeColumns.map((column) => column.byAccount[row.account.id] ?? 0),
+          ...(hasIncomes ? [row.incomes] : []),
           row.outstanding,
           row.urgent,
           row.pending,
@@ -77,14 +80,15 @@ export function buildFlowReport(input: {
       })),
       {
         id: "total",
-        label: "Total bancos",
+        label: "Total",
         emphasis: true,
         // The same order as the rows above — the printed total is read column by column.
         values: [
           derived.totals.balance,
           derived.totals.overdraft,
-          derived.totals.available,
+          derived.totals.bankTotal,
           ...derived.incomeColumns.map((column) => column.total),
+          ...(hasIncomes ? [derived.totals.incomes] : []),
           derived.totals.outstanding,
           derived.totals.urgent,
           derived.totals.pending,

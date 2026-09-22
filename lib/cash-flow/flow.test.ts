@@ -342,7 +342,7 @@ describe("deriveFlow · incomes", () => {
     { id: "b", clientId: "c", bank: "PICHINCHA", number: "", overdraft: 0, centerId: null },
   ];
 
-  it("writes one column per label, adds every income to its bank, and keeps the loose one apart", () => {
+  it("writes one column per label, keeps them out of total bancos and adds them to the saldo final", () => {
     const derived = deriveFlow({
       date: "2026-08-05",
       flow: {
@@ -379,9 +379,12 @@ describe("deriveFlow · incomes", () => {
       },
       { key: "ingreso", label: "Ingreso", byAccount: {}, unassigned: 10, total: 10 },
     ]);
-    expect(derived.accounts.map((row) => row.bankTotal)).toEqual([400, 270]);
+    expect(derived.accounts.map((row) => row.bankTotal)).toEqual([100, 200]);
+    expect(derived.accounts.map((row) => row.incomes)).toEqual([300, 70]);
+    expect(derived.accounts.map((row) => row.remaining)).toEqual([400, 270]);
+    expect(derived.totals.bankTotal).toBe(300);
     expect(derived.totals.incomes).toBe(380);
-    expect(derived.totals.bankTotal).toBe(680);
+    expect(derived.totals.remaining).toBe(680);
   });
 });
 
