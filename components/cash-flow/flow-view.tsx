@@ -264,7 +264,7 @@ export function FlowView() {
                       {money(row.bankTotal)}
                     </Cell>
                     {incomeColumns.map((column) => (
-                      <Cell key={column.key} numeric tone="muted">
+                      <Cell key={column.key} numeric>
                         {money(column.byAccount[row.account.id] ?? 0)}
                       </Cell>
                     ))}
@@ -281,9 +281,7 @@ export function FlowView() {
                     <Cell numeric className="text-warning">
                       {money(row.urgent)}
                     </Cell>
-                    <Cell numeric tone="muted">
-                      {money(row.pending)}
-                    </Cell>
+                    <Cell numeric>{money(row.pending)}</Cell>
                     <Cell numeric strong sticky="right" value={row.remaining}>
                       {money(row.remaining)}
                     </Cell>
@@ -297,22 +295,16 @@ export function FlowView() {
                       Sin cuenta asignada
                     </Cell>
                     {incomeColumns.map((column) => (
-                      <Cell key={column.key} numeric tone="muted">
+                      <Cell key={column.key} numeric>
                         {money(column.unassigned)}
                       </Cell>
                     ))}
-                    {hasIncomes && (
-                      <Cell numeric tone="muted">
-                        {money(derived.unassignedIncomes)}
-                      </Cell>
-                    )}
+                    {hasIncomes && <Cell numeric>{money(derived.unassignedIncomes)}</Cell>}
                     {hasChecks && <Cell />}
                     <Cell numeric className="text-warning">
                       {money(derived.unassignedMarked.urgent)}
                     </Cell>
-                    <Cell numeric tone="muted">
-                      {money(derived.unassignedMarked.pending)}
-                    </Cell>
+                    <Cell numeric>{money(derived.unassignedMarked.pending)}</Cell>
                     <Cell sticky="right" />
                   </GridRow>
                 )}
@@ -486,7 +478,7 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
                 {loose ? "" : money(row.bank.bankTotal)}
               </Cell>
               {matrix.incomeColumns.map((column) => (
-                <Cell key={column.key} numeric strong={total} tone="muted">
+                <Cell key={column.key} numeric strong={total}>
                   {money(row.bank.incomeCells[column.key] ?? 0)}
                 </Cell>
               ))}
@@ -496,7 +488,7 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
                 </Cell>
               )}
               {matrix.hasChecks && (
-                <Cell numeric strong={total} tone="muted">
+                <Cell numeric strong={total}>
                   {loose ? "" : money(row.bank.outstanding)}
                 </Cell>
               )}
@@ -659,6 +651,17 @@ function Remaining({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** One income line: etiqueta · monto · cuenta · quitar — the header row reads the same grid. The
+ *  three fields SHARE the width (2 : 1 : 1), so the card is filled and no field sits far from the
+ *  others. */
+const INCOME_ROW = "grid items-center gap-3";
+const INCOME_COLUMNS = "grid-cols-[minmax(0,2fr)_minmax(160px,1fr)_minmax(200px,1fr)_auto]";
+/** With ONE account there is nothing to choose: no «Cuenta» column, and the monto takes its share. */
+const INCOME_COLUMNS_ONE_ACCOUNT = "grid-cols-[minmax(0,2fr)_minmax(160px,1fr)_auto]";
+/** A typed field of the line: a box with its border, so what can be written is seen at once. */
+const INCOME_FIELD =
+  "rounded-lg border border-border bg-surface px-[9px] py-1.5 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand";
+
 function IncomesSection({
   incomes,
   onChange,
@@ -674,6 +677,8 @@ function IncomesSection({
   const update = (id: string, patch: Partial<FlowIncome>) =>
     onChange(incomes.map((income) => (income.id === id ? { ...income, ...patch } : income)));
   const total = incomes.reduce((acc, income) => acc + income.amount, 0);
+  const choosesAccount = accounts.length > 1;
+  const row = cn(INCOME_ROW, choosesAccount ? INCOME_COLUMNS : INCOME_COLUMNS_ONE_ACCOUNT);
 
   return (
     <FlowSection>
@@ -700,11 +705,21 @@ function IncomesSection({
       </SectionHeading>
       {incomes.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[13px] border border-border bg-surface px-4 py-1">
+          {/* The fields are named once, above, so the amount reads as a field and not as a figure. */}
+          <li
+            aria-hidden
+            className={cn(
+              row,
+              "pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint",
+            )}
+          >
+            <span>Etiqueta</span>
+            <span className="text-right">Monto</span>
+            {choosesAccount && <span>Cuenta</span>}
+            <span />
+          </li>
           {incomes.map((income) => (
-            <li
-              key={income.id}
-              className="grid grid-cols-[1fr_150px_220px_auto] items-center gap-2 py-1.5"
-            >
+            <li key={income.id} className={cn(row, "py-1.5")}>
               <input
                 defaultValue={income.concept}
                 placeholder="Etiqueta (p. ej. Reservas)"
@@ -713,15 +728,17 @@ function IncomesSection({
                   event.target.value !== income.concept &&
                   update(income.id, { concept: event.target.value })
                 }
-                className="rounded-lg border border-border bg-surface px-[9px] py-1.5 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+                className={cn(INCOME_FIELD, "font-sans")}
               />
               <NumericInput
                 value={income.amount}
                 format="currency"
                 ariaLabel="Monto del ingreso"
+                placeholder="0.00"
                 onCommit={(value) => update(income.id, { amount: value ?? 0 })}
+                className={INCOME_FIELD}
               />
-              {accounts.length > 1 ? (
+              {choosesAccount && (
                 <Select
                   size="sm"
                   aria-label="Cuenta del ingreso"
@@ -729,8 +746,6 @@ function IncomesSection({
                   options={options}
                   onChange={(event) => update(income.id, { accountId: event.target.value || null })}
                 />
-              ) : (
-                <span />
               )}
               <Button
                 variant="danger"

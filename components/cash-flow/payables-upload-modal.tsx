@@ -277,12 +277,8 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
                       <Cell className="tabular-nums text-muted">
                         {formatDayMonthYear(row.dueOn) ?? "—"}
                       </Cell>
-                      <Cell numeric tone="muted">
-                        {money(row.amount)}
-                      </Cell>
-                      <Cell numeric tone="muted">
-                        {money(row.payments)}
-                      </Cell>
+                      <Cell numeric>{money(row.amount)}</Cell>
+                      <Cell numeric>{money(row.payments)}</Cell>
                       <Cell numeric strong value={row.balance}>
                         {money(row.balance)}
                       </Cell>
