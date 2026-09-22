@@ -881,7 +881,9 @@ function MarkedSection({
           </span>
         </EmptyState>
       ) : (
-        <DataGrid minWidth={1120} className="table-fixed">
+        <DataGrid minWidth={1260} className="table-fixed">
+          {/* The fixed columns take 970 px; the document keeps at least ~290 px, and below that the
+              grid scrolls sideways rather than squeezing the detail into a column of words. */}
           <colgroup>
             <col />
             <col style={{ width: 96 }} />
@@ -1028,6 +1030,7 @@ const MarkedRow = memo(function MarkedRow({
 }) {
   const { payable } = line;
   const docLabel = documentLabel(payable) || payable.supplier;
+  const detail = payableDetail(payable, { center: false });
   /** The note corner of one working cell of this document, of this date. */
   const note = (field: PayableNoteField, what: string) => {
     const key = payableNoteKey(payable.id, field);
@@ -1044,18 +1047,17 @@ const MarkedRow = memo(function MarkedRow({
     onPatch(payable.id, { approved: approvedFromTyped(typed, payable.balance) });
   return (
     <tr className="h-[42px]">
-      {/* One line, as the sheet's «PAGOS PENDIENTES» cell: the number and what it is for. */}
+      {/* The sheet's «PAGOS PENDIENTES» cell: the number and what it is for. On one line where it
+          fits; where it does not, the detail WRAPS under the number instead of being clipped — what
+          a payment is for is read before paying it, on any screen. */}
       <Cell className="pl-7">
-        <span
-          className="flex min-w-0 items-baseline gap-2 overflow-hidden whitespace-nowrap"
-          title={payableDetail(payable, { center: false }) || undefined}
-        >
-          <span className="shrink-0 font-mono text-[12px] text-ink">
-            {documentLabel(payable) || payable.supplier}
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5">
+          <span className="shrink-0 whitespace-nowrap font-mono text-[12px] text-ink">
+            {docLabel}
           </span>
-          {payableDetail(payable, { center: false }) && (
-            <span className="min-w-0 truncate text-[11.5px] text-muted">
-              {payableDetail(payable, { center: false })}
+          {detail && (
+            <span className="min-w-0 break-words text-[11.5px] leading-[1.35] text-muted">
+              {detail}
             </span>
           )}
         </span>
