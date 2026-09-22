@@ -71,8 +71,10 @@ Next.js **App Router**. `app/(dashboard)/layout.tsx` renders the persistent shel
 `<main>`) and mounts each module's DATA PROVIDER — a provider lives there because the HEADER reads
 from the same state the panel does (`ActiveClient` shows PyG's cliente and Ocupaciones' hotel). The
 open TAB lives there too (`module-tab-state.tsx`): the header paints title · tabs · export · selector
-in ONE row, the page paints toolbar · notice · panel, and `module-views.tsx` is the one registry both
-read. Layout persistence is also why the sidebar's collapse state needs no store.
+in ONE row (export + selector are one right-hand group that WRAPS under the tabs when the row runs
+short — a 1366 px laptop with the sidebar open — rather than leaving the screen), the page paints
+toolbar · notice · panel, and `module-views.tsx` is the one registry both read. Layout persistence
+is also why the sidebar's collapse state needs no store.
 
 **Module registry is the single source of truth.** `lib/modules.ts` (`MODULES`, `DEFAULT_MODULE`,
 `findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header title.
@@ -264,6 +266,67 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   (`replaceExternalYears`, one transaction) — never a «Ventas» the estado de resultados answers.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
+**Cuentas por Pagar** · `/cash-flow` (Resumen · Cartera · Cheques · Flujo · Cargas cash) · `lib/cash-flow/` ·
+its own Dexie base `liderboard-cash-flow` v4 (v1–v2 retire a lost prototype, v4 adds `cashEntries`) partitioned by `clientId`; its own list of EMPRESAS (like
+Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
+sobregiro · centro) in «Configurar».
+
+- **The FECHA DE CORTE is one control of the bar, read by the four dated tabs** (Cargas cash is a live list) (`asOf` in the provider,
+  today by default, chip «Al dd/mm/aaaa» otherwise). Nothing ages, sums or captures at any other date.
+- **ONE table for what is owed** (`payables`): a Contífico/Dingoo document and a manual obligation
+  (SRI, IESS, arriendo, sueldos…) are the same row with a different `source`. `identity.ts` composes
+  a document's id from what the file says, so a reload upserts and KEEPS the mark and the four
+  working columns; `cut.ts` (`mergeCut`) settles what the same `source` stopped bringing and never
+  deletes — a flow of two weeks ago still reads it.
+- **The aging is a function** (`aging.ts`: `agingOf(dueOn, asOf)`), never a stored column: the
+  buckets Contífico writes are true only on the day of the download, so they are discarded at the
+  door and the grid, Resumen and the flow all ask this one definition.
+- **The mark of payment lives in the DOCUMENT** (`priority` urgente · pendiente · sin marcar, `payOn`,
+  `payFromAccountId`), never in a flow, and what a marked document contributes is `markedAmount` =
+  `approved ?? balance` (`derive.ts`). «Marcar pagado» settles by hand. **`cash` is a LABEL beside
+  the priority, never a value of it** (the `PROVEEDOR` sheets write «CASH» in one column and «OK» in
+  another): a document is urgent AND cash at once, the flow reads nothing of it, and it only decides
+  what «Cargas cash» lists. It survives a reload (`cut.ts`) and travels in the cartera Excel's
+  «Cash» column, which `liderplus.ts` reads as OPTIONAL.
+- **A check has a STEP and a VOIDED flag** (`made → signed → delivered → cashed`; `voided`
+  orthogonal) and stores `cashedOn`: `checks.ts` (`outstandingChecks` at a date) is the one definition
+  of «girados y no cobrados», counted whatever the step. A bank label the empresa's accounts do not
+  match is «sin cuenta»: visible, assignable in bulk, in no sum.
+- **A flow stores only its captures** (`flows`, unique per empresa and date: balances per account and
+  the projected incomes). `flow.ts` (`deriveFlow`) derives disponible, no cobrados, urgente,
+  pendiente, saldo final, faltante and the LOANS between centers (a document of HC paid from an
+  account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
+  same `DerivedFlow`.
+- **Flujo is the WORKING sheet** (the book's `FJ dd-mm-aaaa`): «Pagos marcados» is edited in place
+  —estado · cuenta · urgente/pendiente · fecha de pago · quitar— and every cell writes ONE field of
+  the DOCUMENT (`priority` · `payFromAccountId` · `approved` · `payOn`) through `db.ts`; it is a
+  second surface for the same mark Cuentas por pagar writes, never a copy. `approvedFromTyped` is
+  the one reading of a typed amount (`< saldo` partial · `= saldo` whole, stored `null` · `> saldo`
+  clamped). The flow is fed from there too: «Agregar de la cartera» (`flow-cartera-picker.tsx`,
+  marks urgente) and «Agregar obligación» (`markAs`). Cuentas por pagar's bulk bar has «Pagar desde».
+- **The matrix is the flow's other shape** (`matrix.ts`, COMISERSA's `FLUJO MATRIZ`): one row per
+  account, one column per BENEFICIARIO with marked documents (by marked total desc), cell = Σ urgente
+  - pendiente paid from that account. DERIVED, never stored, READ-ONLY (a cell can add several
+    documents and a document has one account). «Ver como» lista · matriz in the «Flujo de bancos»
+    header, drawn only with something marked; the report and the Excel de flujo print it ALWAYS.
+- Uploads are by label with a registry (`upload/registry.ts`: `contifico` · `dingoo`, first match
+  over EVERY sheet, plus the module's OWN `liderplus.ts`, which is how «Exportar · Cartera» comes back
+  as it left — marks included, REPLACING the cartera instead of merging as a cut; the check register
+  is `checks-log.ts`, a separate load). Both uploads PROPOSE what the file already knows: the
+  register its banks (`bank-labels.ts` → `createAccountsForBanks`), the cartera its centers
+  (`center-labels.ts` → `createCentersForLabels`), pre-checked, created before the rows are written. **«Cargas cash»** (`cash-entries.ts`) is the book's sheet of
+  three matrices with ONE set of columns — a center each, a LOAN column per (de → a) pair some row
+  of that section uses, «Sin centro» only when PROVEEDORES needs it: MOVIMIENTO INICIAL and VARIOS
+  are hand-written rows (`cashEntries`, a monto per center + optional loan, edited in line, a live
+  list the cut date does not touch) and PROVEEDORES is DERIVED from the open documents carrying the
+  `cash` label, one row per supplier. The sheet LOADS too (`upload/cash-entries.ts`, blocks by
+  TITLE, columns by label resolved at the door by `cashColumnRole`, each block REPLACING its
+  section whole — the same shape the export writes, so it round-trips). The four Excels
+  (`export/`) and the printed flow
+  (`report.ts` → `ReportTable`) are the module's outputs, all through `cash-flow-export-actions.tsx`;
+  Resumen has none. `money` (`derive.ts`) is the module's amount,
+  always with cents.
+
 ### Shared UI
 
 - **`components/ui/export-actions.tsx` is the app's ONE export control** — «Cargar Excel» ·
@@ -286,7 +349,8 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
 - **`chart.tsx` is the sole `echarts.init` caller** (partial imports, SVG renderer). `ChartCard`
   pairs an `option` with its table twin, capped to the chart's height, and offers `headerSlot` /
   `footerSlot`, plus `expandable` — «Ampliar», which opens the chart ALONE in a `Modal fill`.
-  `expandable` is **off by default** (one screen wants it, fifteen do not) and renders nothing when
+  `expandable` is **off by default** (every module SCREEN asks for it; the reports and the cards
+  inside a `Modal`/`SidePanel`, already read alone, do not) and renders nothing when
   the card is collapsed, has no series, or is showing its table twin.
 - **The third dimension is a SEPARATE type.** `Chart3DOption` (`grid3D` required, `is3DOption`
   discriminates) never widens `ChartOption`, so «no chart declares two `yAxis`» keeps meaning what it

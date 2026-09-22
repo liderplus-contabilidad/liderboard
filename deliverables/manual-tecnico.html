@@ -1,3 +1,4 @@
+<meta charset="utf-8" />
 <title>Manual Técnico LiderPlus</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -552,6 +553,10 @@
     background: var(--other);
     color: var(--other-ink);
   }
+  .mod.cash .tag {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
   .mod h4 {
     margin: 0 0 4px;
     font-size: 14.5px;
@@ -618,7 +623,7 @@
     </p>
     <div class="meta-strip">
       <span><b>Versión</b> 0.1.0</span>
-      <span><b>Actualizado</b> 8 sep 2026</span>
+      <span><b>Actualizado</b> 17 sep 2026</span>
       <span><b>Rama</b> main</span>
       <span><b>Repositorio</b> liderplboard</span>
     </div>
@@ -694,6 +699,15 @@
             evolución de sueldos por área.
           </p>
         </div>
+        <div class="mod cash">
+          <span class="tag">/cash-flow</span>
+          <h4>Cuentas por Pagar</h4>
+          <p>
+            La cartera por pagar de Contífico o Dingoo a una fecha de corte, el control de cheques y
+            el flujo de pagos por cuenta bancaria, derivado de las marcas de cada documento. Lista
+            de empresas propia, con centros y cuentas.
+          </p>
+        </div>
       </div>
 
       <h3>La decisión fundacional: sin servidor</h3>
@@ -732,8 +746,8 @@
           <div class="lname">app/<em>Rutas</em></div>
           <p>
             <code>app/(dashboard)/</code> es un grupo de rutas cuyo <code>layout.tsx</code> monta el
-            shell persistente (sidebar + header + main) y los tres proveedores de datos. Cada módulo
-            es una página estática en <code>app/(dashboard)/&lt;slug&gt;/page.tsx</code>.
+            shell persistente (sidebar + header + main) y los cuatro proveedores de datos. Cada
+            módulo es una página estática en <code>app/(dashboard)/&lt;slug&gt;/page.tsx</code>.
           </p>
         </div>
         <div class="layer view">
@@ -780,7 +794,10 @@
           <code>lib/profit-loss/upload/registry.ts</code> recorre una lista ordenada y gana la
           primera que reconoce el archivo. Cada estrategia (MicroPlus, Dingoo, mensual por centros,
           mensual simple, libro propio de la app) posee su forma de hoja, su convención de códigos y
-          su regla de signo, sin tocar el núcleo.
+          su regla de signo, sin tocar el núcleo. Cuentas por Pagar repite el patrón
+          (<code>lib/cash-flow/upload/registry.ts</code>: Contífico, Dingoo y el Excel propio del
+          módulo) y añade que la carga <strong>propone</strong> lo que el archivo ya sabe — sus
+          centros de costo, sus bancos — antes de escribir una fila.
         </li>
         <li>
           <strong>Lo derivado no se persiste.</strong> Consolidados, totales de período, resúmenes
@@ -1063,11 +1080,11 @@
     <section id="datos">
       <h2><span class="num">04</span> Modelo de datos</h2>
       <p class="section-note">
-        Cinco bases IndexedDB independientes. No comparten tablas ni claves: un cliente de P&amp;G y
-        un cliente de Rol de Pagos son entidades distintas aunque se llamen igual. Las dos que
-        comparten una <em>identidad</em> con otra son <code>liderboard-sales</code> y
-        <code>liderboard-revenue</code>, ambas particionadas por el <code>clientId</code> de P&amp;G
-        — lo compartido es el cliente, nunca el almacén.
+        Seis bases IndexedDB independientes. No comparten tablas ni claves: un cliente de P&amp;G,
+        uno de Rol de Pagos y una empresa de Cuentas por Pagar son entidades distintas aunque se
+        llamen igual. Las dos que comparten una <em>identidad</em> con otra son
+        <code>liderboard-sales</code> y <code>liderboard-revenue</code>, ambas particionadas por el
+        <code>clientId</code> de P&amp;G — lo compartido es el cliente, nunca el almacén.
       </p>
 
       <div class="card">
@@ -1111,6 +1128,15 @@
                 <td class="t">1</td>
                 <td class="t">external</td>
                 <td><code>clientId</code> (el de P&amp;G)</td>
+              </tr>
+              <tr>
+                <td class="k">liderboard-cash-flow</td>
+                <td class="t">4</td>
+                <td class="t">
+                  clients · centers · accounts · payables · checks · flows · cashEntries · meta ·
+                  active
+                </td>
+                <td><code>clientId</code> (empresa propia)</td>
               </tr>
             </tbody>
           </table>
@@ -1712,6 +1738,193 @@
           trabajo, donde P&amp;G no tiene nada que decir. El índice compuesto es
           <strong>único</strong>, así que reescribir un mes lo <strong>reemplaza</strong> por
           construcción.
+        </figcaption>
+      </figure>
+
+      <h3>Diagrama ER — Cuentas por Pagar</h3>
+      <figure>
+        <div class="fig-body">
+          <svg
+            viewBox="0 0 900 660"
+            role="img"
+            aria-label="Diagrama entidad-relación de la base liderboard-cash-flow"
+          >
+            <g class="er-line">
+              <path d="M 200 90 L 200 130 L 300 130" />
+              <path d="M 200 90 L 200 260 L 300 260" />
+              <path d="M 200 90 L 200 450 L 300 450" />
+              <path d="M 200 90 L 200 580 L 300 580" />
+              <path d="M 450 200 L 450 240" />
+              <path d="M 560 370 L 560 410" />
+              <path d="M 680 330 L 730 330" />
+              <path d="M 450 540 L 450 560" />
+            </g>
+            <text x="250" y="122" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="250" y="252" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="250" y="442" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="250" y="572" text-anchor="middle" class="er-card">1 : N</text>
+            <text x="470" y="224" text-anchor="middle" class="er-card">centerId</text>
+            <text x="620" y="394" text-anchor="middle" class="er-card">payFromAccountId</text>
+            <text x="705" y="344" text-anchor="middle" class="er-card" style="font-size: 8px">
+              accountId
+            </text>
+            <text x="520" y="554" text-anchor="middle" class="er-card">loan : from · to</text>
+
+            <rect x="30" y="30" width="170" height="60" rx="10" class="er-box" />
+            <rect x="30" y="30" width="170" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="30" y1="58" x2="200" y2="58" class="er-rule" />
+            <text x="44" y="49" class="er-title">clients</text>
+            <text x="44" y="77" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id · name · logo?
+            </text>
+
+            <rect x="300" y="100" width="380" height="100" rx="10" class="er-box" />
+            <rect x="300" y="100" width="380" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="300" y1="128" x2="680" y2="128" class="er-rule" />
+            <text x="314" y="119" class="er-title">centers</text>
+            <text x="314" y="147" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="314" y="165" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              clientId
+            </text>
+            <text x="314" y="183" class="er-field">name : string (HA · HC · HK)</text>
+
+            <rect x="300" y="240" width="380" height="130" rx="10" class="er-box" />
+            <rect x="300" y="240" width="380" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="300" y1="268" x2="680" y2="268" class="er-rule" />
+            <text x="314" y="259" class="er-title">accounts</text>
+            <text x="314" y="287" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="314" y="305" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              clientId
+            </text>
+            <text x="314" y="323" class="er-field">bank · number · label?</text>
+            <text x="314" y="341" class="er-field">overdraft : number</text>
+            <text x="314" y="359" class="er-field">
+              <tspan class="er-key">FK</tspan>
+              centerId : uuid | null
+            </text>
+
+            <rect x="730" y="30" width="150" height="190" rx="10" class="er-box" />
+            <rect x="730" y="30" width="150" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="730" y1="58" x2="880" y2="58" class="er-rule" />
+            <text x="744" y="49" class="er-title">flows</text>
+            <text x="744" y="77" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : uuid
+            </text>
+            <text x="744" y="95" class="er-field">
+              <tspan class="er-key">UQ</tspan>
+              [clientId+date]
+            </text>
+            <text x="744" y="113" class="er-field">date : ISO</text>
+            <text x="744" y="131" class="er-field">balances : {cuenta: n}</text>
+            <text x="744" y="149" class="er-field">incomes : []</text>
+            <text x="744" y="180" class="er-field" style="font-size: 10px">solo lo capturado;</text>
+            <text x="744" y="196" class="er-field" style="font-size: 10px">
+              el resto: deriveFlow
+            </text>
+
+            <rect x="730" y="240" width="150" height="180" rx="10" class="er-box" />
+            <rect x="730" y="240" width="150" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="730" y1="268" x2="880" y2="268" class="er-rule" />
+            <text x="744" y="259" class="er-title">checks</text>
+            <text x="744" y="287" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id (egreso)
+            </text>
+            <text x="744" y="305" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              [clientId+
+            </text>
+            <text x="744" y="319" class="er-field">accountId]</text>
+            <text x="744" y="341" class="er-field">bank · payee · number</text>
+            <text x="744" y="359" class="er-field">amount · issuedOn</text>
+            <text x="744" y="377" class="er-field">step : made→cashed</text>
+            <text x="744" y="395" class="er-field">voided · cashedOn</text>
+
+            <rect x="300" y="410" width="380" height="130" rx="10" class="er-box" />
+            <rect x="300" y="410" width="380" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="300" y1="438" x2="680" y2="438" class="er-rule" />
+            <text x="314" y="429" class="er-title">payables</text>
+            <text x="314" y="457" class="er-field">
+              <tspan class="er-key">PK</tspan>
+              id : empresa::source::proveedor::tipo::número
+            </text>
+            <text x="314" y="475" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              [clientId+status] · [clientId+source]
+            </text>
+            <text x="314" y="493" class="er-field">
+              source · supplier · docType · docNumber · dueOn
+            </text>
+            <text x="314" y="511" class="er-field">
+              amount · payments · balance · centerName · kind?
+            </text>
+            <text x="314" y="529" class="er-field">
+              priority · cash · payOn · approved · status · cutDate
+            </text>
+
+            <rect x="300" y="560" width="380" height="80" rx="10" class="er-box" />
+            <rect x="300" y="560" width="380" height="28" rx="10" class="er-box er-box-head" />
+            <line x1="300" y1="588" x2="680" y2="588" class="er-rule" />
+            <text x="314" y="579" class="er-title">cashEntries</text>
+            <text x="314" y="607" class="er-field">
+              <tspan class="er-key">IX</tspan>
+              [clientId+section] · date · detail
+            </text>
+            <text x="314" y="625" class="er-field">
+              amounts : {centerId: n} · loan? · observation
+            </text>
+
+            <rect
+              x="730"
+              y="470"
+              width="150"
+              height="70"
+              rx="10"
+              class="er-box"
+              style="stroke-dasharray: 4 3"
+            />
+            <rect
+              x="730"
+              y="470"
+              width="150"
+              height="28"
+              rx="10"
+              class="er-box er-box-head"
+              style="stroke-dasharray: 4 3"
+            />
+            <line x1="730" y1="498" x2="880" y2="498" class="er-rule" />
+            <text x="744" y="489" class="er-title">meta · active</text>
+            <text x="744" y="517" class="er-field" style="font-size: 10px">
+              corte vigente por fuente;
+            </text>
+            <text x="744" y="531" class="er-field" style="font-size: 10px">la empresa abierta</text>
+          </svg>
+        </div>
+        <figcaption>
+          <code>liderboard-cash-flow</code> v4. La empresa es <strong>propia</strong> —no la de
+          P&amp;G— porque lo que este módulo necesita de ella (cuentas bancarias con sobregiro,
+          centros) ningún estado de resultados lo tiene. <code>payables</code> es
+          <strong>una sola tabla</strong> para todo lo que se debe: un documento de Contífico o
+          Dingoo y una obligación manual son la misma fila con distinta <code>source</code>, y su
+          <code>id</code> se compone de lo que el archivo dice, así que un corte nuevo hace
+          <code>put</code> y conserva la marca de pago. La
+          <strong>marca vive en el documento</strong> (<code>priority</code>,
+          <code>payFromAccountId</code>, <code>payOn</code>, la etiqueta <code>cash</code> aparte) y
+          no en el flujo: <code>flows</code> guarda solo saldos e ingresos capturados a una fecha,
+          único por empresa y fecha, y <code>deriveFlow</code>
+          arma el resto en cada render — incluido el préstamo entre centros, que es un documento de
+          un centro pagado desde la cuenta de otro. Nada de antigüedad se guarda: es
+          <code>agingOf(dueOn, asOf)</code>.
         </figcaption>
       </figure>
     </section>
@@ -2754,6 +2967,309 @@
         </div>
       </div>
 
+      <h3>liderboard-cash-flow</h3>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>clients · centers · accounts</h4>
+          <span>La empresa del módulo y lo que declara en «Configurar»</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Tabla · campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">clients.id <span class="pk">PK</span> · name · logo?</td>
+                <td class="t">uuid · string · EntityLogo</td>
+                <td>
+                  La empresa. Lista propia, no la de P&amp;G ni la de Rol de Pagos. El logo encabeza
+                  el flujo impreso.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">
+                  centers.id <span class="pk">PK</span> · clientId <span class="ix">IX</span> · name
+                </td>
+                <td class="t">uuid · uuid · string</td>
+                <td>
+                  Una unidad de negocio (HA · HC · HK). Opcional: sin centros, todo control que
+                  hable de ellos no se dibuja. La carga de cartera los propone a partir de los
+                  rótulos del archivo.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">
+                  accounts.id <span class="pk">PK</span> · clientId <span class="ix">IX</span>
+                </td>
+                <td class="t">uuid · uuid</td>
+                <td>
+                  Una cuenta bancaria de la empresa. La carga de cheques las propone por banco.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">accounts.bank · number · label?</td>
+                <td class="t">string</td>
+                <td>
+                  El banco como lo escribe el libro de cheques (es el rótulo contra el que la carga
+                  resuelve la cuenta), el número y un nombre propio opcional.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">accounts.overdraft · centerId</td>
+                <td class="t">number · uuid | null</td>
+                <td>
+                  El sobregiro que el flujo suma al saldo (disponible = saldo + sobregiro) y el
+                  centro dueño de la cuenta, o <code>null</code> si es de la empresa entera.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>payables</h4>
+          <span>
+            Lo que se debe · <code>id</code>, índices <code>clientId</code>,
+            <code>[clientId+status]</code>, <code>[clientId+source]</code>
+          </span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span></td>
+                <td class="t">string</td>
+                <td>
+                  <code
+                    >&lt;clientId&gt;::&lt;source&gt;::&lt;proveedor
+                    normalizado&gt;::&lt;tipo&gt;::&lt;número&gt;</code
+                  >
+                  para un documento importado (<code>identity.ts</code>); uuid para una obligación
+                  manual. Estable entre cortes: recargar es un <code>put</code> que conserva lo
+                  anotado.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">source</td>
+                <td class="t">"contifico" | "dingoo" | "manual"</td>
+                <td>
+                  De dónde vino. Es lo único que distingue un documento de una obligación: comparten
+                  tabla para que el flujo, el Excel y el informe pinten una sola lista.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">supplier · supplierTaxId · docType · docNumber · description</td>
+                <td class="t">string</td>
+                <td>Lo que el archivo dice del documento. No se edita.</td>
+              </tr>
+              <tr>
+                <td class="k">issuedOn · dueOn</td>
+                <td class="t">ISO | null</td>
+                <td>
+                  Emisión y vencimiento. La antigüedad NO se guarda:
+                  <code>agingOf(dueOn, asOf)</code>
+                  la deriva a la fecha de corte, y los tramos que trae Contífico se descartan al
+                  leer.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">amount · withholdings · payments · balance</td>
+                <td class="t">number</td>
+                <td>Valor del documento, retenciones, abonos y saldo, tal como vinieron.</td>
+              </tr>
+              <tr>
+                <td class="k">centerName · kind?</td>
+                <td class="t">string | null · PayableKind</td>
+                <td>
+                  El rótulo de centro del archivo, tal cual (se resuelve contra
+                  <code>centers</code> por <code>normalizeLabel</code>, nunca se reescribe), y la
+                  clase de una manual (sri · iess · arriendo · sueldos · cuota · prestamo · otros, o
+                  una propia).
+                </td>
+              </tr>
+              <tr>
+                <td class="k">priority · payOn · payFromAccountId</td>
+                <td class="t">"urgent" | "pending" | null · ISO | null · uuid | null</td>
+                <td>
+                  La <strong>marca de pago</strong>, sobre el documento y no en un flujo: qué tan
+                  urgente, para cuándo y desde qué cuenta. Lo que un documento marcado aporta al
+                  flujo es <code>approved ?? balance</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cash</td>
+                <td class="t">boolean</td>
+                <td>
+                  Etiqueta <strong>aparte</strong> de la prioridad («CASH» en las hojas PROVEEDOR):
+                  se paga en efectivo. Solo decide qué lista Cargas cash; el flujo de bancos no la
+                  lee. v4 la escribe en <code>false</code> sobre lo anterior.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">observation · approved · finalReview · notified</td>
+                <td class="t">string · number | null · boolean · boolean</td>
+                <td>
+                  Las cuatro columnas de trabajo del <code>REPORTE CXP</code>.
+                  <code>approved</code> es un MONTO; <code>null</code> significa «el saldo entero»,
+                  y por eso teclear el saldo se guarda como <code>null</code> — un saldo guardado se
+                  volvería un parcial silencioso el día que una recarga lo cambiara.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">status · settledOn · cutDate</td>
+                <td class="t">"open" | "settled" · ISO | null · ISO</td>
+                <td>
+                  Abierta o liquidada, cuándo, y el corte que la trajo o actualizó (hoy para las
+                  manuales). Lo liquidado nunca se borra: un flujo anterior lo sigue leyendo.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>checks</h4>
+          <span>
+            El registro de cheques · <code>id</code>, índices <code>clientId</code>,
+            <code>[clientId+accountId]</code>
+          </span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">id <span class="pk">PK</span> · voucher</td>
+                <td class="t">string</td>
+                <td>El N° de egreso es la identidad: recargar el libro upserta por egreso.</td>
+              </tr>
+              <tr>
+                <td class="k">bank · accountId</td>
+                <td class="t">string · uuid | null</td>
+                <td>
+                  El banco como lo escribe el libro y la cuenta resuelta contra
+                  <code>accounts</code>. Lo que no casa (CAJA, CRUCE, ANULADO) queda
+                  <code>null</code>: «sin cuenta», visible y fuera de toda suma, asignable en lote.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">payee · number · amount · issuedOn · place · note</td>
+                <td class="t">string · string · number · ISO | null · string</td>
+                <td>Beneficiario, número de cheque, valor, emisión, lugar y notas.</td>
+              </tr>
+              <tr>
+                <td class="k">step · voided</td>
+                <td class="t">"made" | "signed" | "delivered" | "cashed" · boolean</td>
+                <td>
+                  El paso alcanzado —un ORDEN, la línea de tiempo— y la anulación, ortogonal: un
+                  cheque entregado se anula sin perder hasta dónde llegó.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cashedOn</td>
+                <td class="t">ISO | null</td>
+                <td>
+                  Cuándo se cobró. Se guarda además del paso para que «girados y no cobrados A UNA
+                  FECHA» siga siendo cierto para un flujo anterior a ese día.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h4>flows · cashEntries · meta</h4>
+          <span>Lo capturado a una fecha, la matriz de caja y el corte vigente</span>
+        </div>
+        <div class="scroller">
+          <table>
+            <thead>
+              <tr>
+                <th>Tabla · campo</th>
+                <th>Tipo</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="k">
+                  flows.id <span class="pk">PK</span> · [clientId+date] <span class="ix">UQ</span>
+                </td>
+                <td class="t">uuid · ISO</td>
+                <td>Un flujo por empresa y fecha: el registro DE la fecha de corte.</td>
+              </tr>
+              <tr>
+                <td class="k">flows.balances · incomes</td>
+                <td class="t">{accountId: number} · FlowIncome[]</td>
+                <td>
+                  Lo único que un flujo guarda: el saldo tecleado por cuenta y los ingresos
+                  proyectados (concepto, monto, cuenta o <code>null</code>). Disponible, no
+                  cobrados, urgente, pendiente, faltante y préstamos los deriva
+                  <code>deriveFlow</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">
+                  cashEntries.id <span class="pk">PK</span> · [clientId+section]
+                  <span class="ix">IX</span>
+                </td>
+                <td class="t">uuid · "initial" | "misc"</td>
+                <td>
+                  Una fila escrita a mano de MOVIMIENTO INICIAL o VARIOS. PROVEEDORES no tiene
+                  tabla: se deriva de los documentos abiertos con <code>cash</code>.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cashEntries.date · detail · amounts · loan · observation</td>
+                <td class="t">ISO · string · {centerId: number} · CashLoan | null · string</td>
+                <td>
+                  Un monto por centro (clave <code>""</code> = «Monto» sin centros) y un préstamo
+                  opcional <code>{fromCenterId, toCenterId, amount}</code>. Las claves son ids, no
+                  rótulos: renombrar un centro no las pierde; borrarlo deja la clave huérfana, que
+                  la matriz ignora.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">
+                  meta.key <span class="pk">PK</span> · clientId · source · cutDate · companyName ·
+                  loadedAt
+                </td>
+                <td class="t">"clientId::source" · …</td>
+                <td>
+                  El corte vigente por empresa y fuente: lo que las tiles imprimen como «Contífico
+                  al dd/mm/aaaa».
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="callout">
         <span class="label">Por qué las cuatro cifras admiten <code>null</code></span>
         <p>
@@ -2780,10 +3296,13 @@
           en Reportería de ingresos <strong>todo lo que se ve es derivado</strong>: la venta es la
           raíz 4 del estado, y el promedio mensual, las tres participaciones y el crecimiento contra
           cada año anterior se recalculan en cada render — lo único guardado son las tres cifras que
-          ningún plan de cuentas contiene. Los parámetros del cálculo de nómina (SBU, tasas del
-          IESS, multiplicadores de hora extra) hoy son la constante
-          <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para guardarse junto al período
-          cuando cambien por año, pero todavía no tienen columna.
+          ningún plan de cuentas contiene. En Cuentas por Pagar lo derivado es la antigüedad de cada
+          documento, el flujo entero salvo sus capturas (disponible, no cobrados, urgente,
+          pendiente, saldo final, faltante, préstamos entre centros), la matriz cuentas ×
+          beneficiarios, los «girados y no cobrados» a una fecha y la matriz PROVEEDORES de Cargas
+          cash. Los parámetros del cálculo de nómina (SBU, tasas del IESS, multiplicadores de hora
+          extra) hoy son la constante <code>DEFAULT_PAYROLL_PARAMETERS</code>; están diseñados para
+          guardarse junto al período cuando cambien por año, pero todavía no tienen columna.
         </p>
       </div>
     </section>
@@ -2901,6 +3420,27 @@
                   <em>índices</em>, no campos, y ese campo no está indexado por nada. Lo que una
                   fila escrita antes necesita no es una migración sino un valor por omisión, y
                   <code>db.ts</code> se lo da en la puerta.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cash-flow</td>
+                <td class="t">1→2→3</td>
+                <td>
+                  La v1 fue un prototipo que nunca se publicó y cuyo código se perdió: sus filas no
+                  tienen esta forma. La v2 <strong>borra</strong> cada tabla que pudo dejar en un
+                  navegador y la v3 crea el esquema real —Dexie no cambia una clave primaria en
+                  sitio, así que el borrado es su propia versión—. Una instalación limpia pasa por
+                  las tres en una transacción.
+                </td>
+              </tr>
+              <tr>
+                <td class="k">cash-flow</td>
+                <td class="t">4</td>
+                <td>
+                  Se agrega <code>cashEntries</code> (índice <code>[clientId+section]</code>) para
+                  las filas manuales de «Cargas cash», y el <code>upgrade</code> recorre
+                  <code>payables</code> escribiendo <code>cash: false</code> donde falte. Ningún
+                  índice existente cambia.
                 </td>
               </tr>
             </tbody>

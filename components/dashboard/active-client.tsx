@@ -102,6 +102,11 @@ export interface EntityLabels {
   subject: string;
   /** Lowercase plural: «clientes», «hoteles». */
   plural: string;
+  /**
+   * `true` when the subject is a feminine noun («empresa»). The phrases agree with it —«Sin empresa
+   * seleccionada», «Nombre de la empresa»— because a noun alone cannot say which article it takes.
+   */
+  feminine?: boolean;
   /** What a rename does NOT touch, in the module's own words. */
   renameKeeps: string;
   /**
@@ -116,6 +121,25 @@ export interface EntityLabels {
    *  costo» is not «centro de costo» + «s», and a rule that tried would be right in one module and
    *  wrong in the other. */
   centerPlural?: string;
+}
+
+/** The words that agree with the subject's gender, resolved once per `EntityLabels`. */
+function agreement(labels: EntityLabels) {
+  const f = labels.feminine === true;
+  return {
+    /** «del cliente» · «de la empresa» */
+    del: f ? "de la" : "del",
+    /** «al del cliente» · «al de la empresa» */
+    alDel: f ? "al de la" : "al del",
+    /** «el del cliente» · «el de la empresa» */
+    elDel: f ? "el de la" : "el del",
+    /** «El cliente se crea vacío» · «La empresa se crea vacía» */
+    El: f ? "La" : "El",
+    vacio: f ? "vacía" : "vacío",
+    pronoun: f ? "ella" : "él",
+    Ningun: f ? "Ninguna" : "Ningún",
+    seleccionado: f ? "seleccionada" : "seleccionado",
+  };
 }
 
 /** PyG's, which is what introduced the block, and that is why they are also the default. */
@@ -171,7 +195,8 @@ export function ActiveClient({
   labels = DEFAULT_ENTITY_LABELS,
 }: ActiveClientProps) {
   const hasClient = Boolean(client?.name);
-  const name = client?.name ?? emptyLabel ?? `Sin ${labels.subject} seleccionado`;
+  const words = agreement(labels);
+  const name = client?.name ?? emptyLabel ?? `Sin ${labels.subject} ${words.seleccionado}`;
   const interactive = clients !== undefined;
 
   const [open, setOpen] = useState(false);
@@ -348,7 +373,7 @@ export function ActiveClient({
           {visible.length === 0 ? (
             <EmptyState className="py-5">
               {query
-                ? `Ningún ${labels.subject} coincide con lo que buscas.`
+                ? `${words.Ningun} ${labels.subject} coincide con lo que buscas.`
                 : `Todavía no hay ${labels.plural}.`}
             </EmptyState>
           ) : (
@@ -580,6 +605,7 @@ export function ClientNameDialog({
     return null;
   }
   const creating = mode === "create";
+  const words = agreement(labels);
   // The two words travel together or not at all: half a section headed «Logos por» with no subject
   // is worse than none.
   const centerWords =
@@ -628,7 +654,7 @@ export function ClientNameDialog({
 
         <label className="mt-4 flex flex-col gap-1.5">
           <span className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-            Nombre del {labels.subject}
+            Nombre {words.del} {labels.subject}
           </span>
           <input
             ref={inputRef}
@@ -650,7 +676,7 @@ export function ClientNameDialog({
             value={logo}
             onChange={onLogoChange}
             disabled={busy}
-            hint={`Opcional. Acompaña al nombre del ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
+            hint={`Opcional. Acompaña al nombre ${words.del} ${labels.subject} en el header, en los Excel y en el comprobante en PDF.`}
           />
         </div>
 
@@ -670,8 +696,8 @@ export function ClientNameDialog({
               <span className="text-[11px] text-faintest">opcional</span>
             </div>
             <p className="text-[11.5px] text-faint">
-              Su nombre acompaña al del {labels.subject} en el PDF y en el Excel, y su logo va a la
-              derecha del membrete. Sin centro todo queda como está.
+              Su nombre acompaña {words.alDel} {labels.subject} en el PDF y en el Excel, y su logo
+              va a la derecha del membrete. Sin centro todo queda como está.
             </p>
             <label className="mt-0.5 flex flex-col gap-1">
               <span className="text-[11px] font-medium text-ink-soft">Nombre del centro</span>
@@ -691,7 +717,7 @@ export function ClientNameDialog({
                 onChange={(next) => onCostCenterChange({ ...costCenter, logo: next })}
                 disabled={busy}
                 label="Logo del centro"
-                hint={`Opcional. Va a la derecha del membrete; el del ${labels.subject} encabeza a la izquierda.`}
+                hint={`Opcional. Va a la derecha del membrete; ${words.elDel} ${labels.subject} encabeza a la izquierda.`}
               />
             </div>
             {costCenterError && (
@@ -764,7 +790,7 @@ export function ClientNameDialog({
               <span className="text-[11px] text-faintest">opcional</span>
             </div>
             <p className="text-[11.5px] text-faint">
-              En la hoja de cada {centerWords.subject}, el logo del {labels.subject} va a la
+              En la hoja de cada {centerWords.subject}, el logo {words.del} {labels.subject} va a la
               izquierda y el suyo a la derecha.
             </p>
             {/* Past four centers the list scrolls instead of pushing «Guardar» off screen: the
@@ -787,8 +813,9 @@ export function ClientNameDialog({
 
         {creating && (
           <p className="mt-4 rounded-[9px] bg-surface-muted px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-soft">
-            Los datos se cargan después. El {labels.subject} se crea vacío y entras a él con{" "}
-            <strong className="font-semibold">Cargar Excel</strong> habilitado.
+            Los datos se cargan después. {words.El} {labels.subject} se crea {words.vacio} y entras
+            a {words.pronoun} con <strong className="font-semibold">Cargar Excel</strong>{" "}
+            habilitado.
           </p>
         )}
 

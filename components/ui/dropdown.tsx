@@ -177,6 +177,10 @@ function PositionedPanel({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        // Escape closes THIS panel only: a `<dialog>` under it (`SidePanel`, `Modal`) takes the same
+        // key as its own close request, and without the default prevented a calendar opened inside
+        // a drawer took the whole drawer with it.
+        event.preventDefault();
         setOpen(false);
       }
     };

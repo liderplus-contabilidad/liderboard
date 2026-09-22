@@ -1,6 +1,9 @@
 import {
   BarChart3,
   BedDouble,
+  Coins,
+  FileText,
+  LayoutDashboard,
   LineChart,
   Microscope,
   Receipt,
@@ -9,10 +12,20 @@ import {
   TrendingUp,
   Users,
   UsersRound,
+  Wallet,
+  Waves,
   type LucideIcon,
 } from "lucide-react";
 
-export type ModuleTabId = "graficos" | "datos" | "analisis";
+export type ModuleTabId =
+  | "graficos"
+  | "datos"
+  | "analisis"
+  | "resumen"
+  | "cxp"
+  | "cheques"
+  | "flujo"
+  | "cargas";
 
 export interface ModuleTab {
   id: ModuleTabId;
@@ -27,6 +40,15 @@ export interface ModuleTab {
 const TAB_GRAFICOS: ModuleTab = { id: "graficos", label: "Gráficos", icon: BarChart3 };
 const TAB_DATOS: ModuleTab = { id: "datos", label: "Datos", icon: Table2 };
 const TAB_ANALISIS: ModuleTab = { id: "analisis", label: "Análisis", icon: Microscope };
+
+/** Flujo de caja's four: a reading, the two registers and the flow they feed. */
+const TAB_RESUMEN: ModuleTab = { id: "resumen", label: "Resumen", icon: LayoutDashboard };
+// «Cartera» and not «Cuentas por pagar»: the title beside it already says that, and a header
+// that names the same thing twice runs out of room on a 1366 px laptop.
+const TAB_CXP: ModuleTab = { id: "cxp", label: "Cartera", icon: FileText };
+const TAB_CHEQUES: ModuleTab = { id: "cheques", label: "Cheques", icon: Receipt };
+const TAB_FLUJO: ModuleTab = { id: "flujo", label: "Flujo", icon: Waves };
+const TAB_CARGAS: ModuleTab = { id: "cargas", label: "Cargas cash", icon: Coins };
 
 /**
  * A module's SUBITEM: a page hanging off it (`/<parent>/<child>`) rendered indented under its parent
@@ -135,6 +157,18 @@ export const MODULES: DashboardModule[] = [
         icon: Users,
       },
     ],
+  },
+  // Flujo de caja keeps its OWN list of empresas, like Rol de Pagos, and does not hang off PyG: what
+  // it needs of an empresa —its bank accounts, their overdraft, its business units— is data PyG does
+  // not hold, and Comisersa as an empresa of the flow (HA · HC · HK over four accounts) is not
+  // necessarily how it is partitioned in PyG. The cost-center label a cartera brings («CULTURA
+  // MANOR») is kept verbatim and never has to match a PyG center.
+  {
+    slug: "cash-flow",
+    label: "Cuentas por Pagar",
+    title: "Cuentas por pagar",
+    icon: Wallet,
+    tabs: [TAB_RESUMEN, TAB_CXP, TAB_CHEQUES, TAB_FLUJO, TAB_CARGAS],
   },
 ];
 

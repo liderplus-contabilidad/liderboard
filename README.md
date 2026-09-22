@@ -54,6 +54,7 @@ components/profit-loss/  composiciones específicas de Pérdidas y Ganancias
   └ revenue/             subitem Reportería de ingresos (barra, tarjetas, cajón, informe)
 components/occupancy/    composiciones específicas de Ocupaciones (tabs, grilla y gráficas)
   └ charts/              vista de Gráficos, mapa de calor y panel del día
+components/cash-flow/    composiciones de Cuentas por Pagar (las cinco pestañas, paneles, cargas)
 lib/modules.ts           registro de módulos (única fuente de verdad de la navegación)
 lib/format.ts            helpers de formato de toda la app (moneda EC, número, porcentaje)
 lib/date.ts              etiquetas de calendario compartidas (meses en español)
@@ -72,6 +73,8 @@ lib/occupancy/charts/    traducción pura: marcas → consulta → opción de EC
 lib/payroll/             capa pura de Rol de Pagos (motor, asiento, comprobante, export) + Dexie
 lib/sales/               capa pura de Ventas por servicio (upload, derive, cards, informe) + Dexie
 lib/revenue/             capa pura de Reportería de ingresos (derive, ratio, growth, cards) + Dexie
+lib/cash-flow/           capa pura de Cuentas por Pagar (aging, cut, checks, flow, matrix, cash-entries,
+                         upload/, export/, report) + Dexie
 lib/report/              lo compartido por los informes imprimibles (qué orientación y qué cuerpo)
 openspec/                especificación viva: propuestas de cambio y specs por capacidad
 ```
@@ -227,8 +230,9 @@ cede es el cuerpo y luego los CENTAVOS —que el tooltip y la tabla gemela conse
 Los módulos y su navegación salen de `lib/modules.ts`. Cada módulo expone las vistas
 **Gráficos** y **Datos**; **Pérdidas y Ganancias** añade además **Análisis**. Tienen datos reales
 hoy **PyG** (Datos, Gráficos y Análisis, más los subitems **Ventas por servicio** y **Reportería de
-ingresos**), **Ocupaciones** (Datos y Gráficos) y **Rol de Pagos** (períodos, comprobantes, asiento
-y el subitem **Sueldos por Áreas**).
+ingresos**), **Ocupaciones** (Datos y Gráficos), **Rol de Pagos** (períodos, comprobantes, asiento
+y el subitem **Sueldos por Áreas**) y **Cuentas por Pagar** (Resumen · Cartera · Cheques · Flujo ·
+Cargas cash, con su propia lista de empresas; ver «Cuentas por Pagar» más abajo).
 
 Qué pieza de la interfaz aporta cada módulo se declara en el registro `MODULE_VIEWS` de
 `ModuleTabs` (`rightSlot` · `toolbar` · `panel`); un módulo que no esté ahí renderiza
@@ -473,7 +477,9 @@ aparte—; aportan solo su dominio. La galería viva está en `/docs/components#
 Qué ofrece cada módulo: PyG «Excel completo» · «Un mes en crudo» · «Informe PDF» (o «Excel
 consolidado» · «Informe PDF»); Ventas «Excel con tus datos» · «Informe PDF»; Reportería «Informe
 PDF»; Costo personal «Excel con tus datos»; Ocupaciones «Excel con tus datos»; Rol de Pagos (detalle)
-«Rol de pagos» · «Roles individuales» (ZIP de PDF); Sueldos por Áreas «Informe PDF».
+«Rol de pagos» · «Roles individuales» (ZIP de PDF); Sueldos por Áreas «Informe PDF»; Cuentas por
+Pagar, una salida por pestaña: Cartera «Cartera» (el Excel que vuelve a entrar), Cheques «Control de
+cheques», Flujo «Reporte de flujo» · «Excel de flujo», Cargas cash «Cargas cash», y Resumen ninguna.
 
 **Para un módulo nuevo:** escribe `components/<módulo>/<módulo>-export-actions.tsx` que cablee
 tu proveedor, tu modal de carga y tu vista previa sobre `<ExportActions/>`, y decláralo en el
@@ -847,6 +853,51 @@ estado de resultados y se recalcula en cada render.
 - **Estado vacío propio**: si el cliente no tiene ningún estado cargado, la pantalla nombra el paso
   que falta, dice de qué módulo es y lleva ahí — no ofrece una carga que no escribiría nada.
 
+## Cuentas por Pagar
+
+`/cash-flow` sustituye el flujo de pagos que cada empresa armaba a mano en Excel: la cartera por
+pagar bajada de **Contífico** o de **Dingoo**, los saldos de banco copiados, una cifra de «cheques
+girados y no cobrados» sacada de otro libro y una hoja por cada fecha en la que se decidía qué se
+paga. Cinco pestañas conectadas —**Resumen · Cartera · Cheques · Flujo · Cargas cash**— sobre una
+base Dexie propia (`liderboard-cash-flow`) y una **lista de empresas propia**, como Rol de Pagos:
+lo que este módulo necesita de una empresa (cuentas bancarias con sobregiro, centros) no lo tiene
+PyG. Cada empresa lo declara en **«Configurar»**.
+
+- **La fecha de corte es un control de la barra** («Corte», hoy por defecto, chip «Al dd/mm/aaaa»
+  si es otra) y la leen las cuatro pestañas fechadas por igual: nada se envejece, suma ni captura a
+  otra fecha. Cargas cash es una lista viva y no la lee.
+- **Cartera** es una sola tabla para lo que se debe: un documento de Contífico/Dingoo y una
+  obligación manual (SRI, IESS, arriendo, sueldos…) son la misma fila con distinta `source`. La
+  **antigüedad se deriva** a la fecha de corte (`aging.ts`); los tramos que trae el archivo se
+  descartan. **Una carga es un corte**: lo que viene se actualiza conservando marcas y aprobaciones,
+  lo que deja de venir se **liquida** (nunca se borra; «Ver liquidadas» lo muestra). El archivo
+  **propone sus centros** al cargarse. La **marca de pago** —urgente · pendiente · sin marcar, fecha
+  programada, cuenta que paga— y las cuatro columnas de trabajo del `REPORTE CXP` (observación ·
+  aprobado · revisión final · notificación) viven en el documento; la etiqueta **«Cash»** va aparte
+  de la prioridad (un documento es urgente y cash a la vez) y solo decide qué lista Cargas cash. Se
+  marca desde el detalle o en lote desde la barra de selección.
+- **Cheques** es el registro: el libro `CHEQUES INICIO` entra como histórico (y **propone sus
+  bancos** como cuentas), y de ahí en adelante cada cheque avanza por su línea de tiempo
+  (realizado → firmado → entregado → cobrado, más anulado). «Girados y no cobrados» es una lectura
+  a la fecha de corte; un banco que no casa con ninguna cuenta queda «sin cuenta», visible y
+  asignable en lote.
+- **Flujo** guarda solo lo capturado a esa fecha —saldo por cuenta e ingresos proyectados— y
+  deriva el resto (`flow.ts`): disponible, no cobrados, urgente, pendiente, saldo final, faltante y
+  los **préstamos entre centros** (un documento de un centro pagado desde la cuenta de otro). Es la
+  hoja de trabajo: «Pagos marcados» se edita en línea (estado · cuenta · monto · fecha) y cada celda
+  escribe el documento, no una copia; «Agregar de la cartera» marca urgentes; «Ver como matriz» es
+  el `FLUJO MATRIZ` (cuentas × beneficiarios), derivado y de solo lectura.
+- **Cargas cash** son las tres matrices del libro —MOVIMIENTO INICIAL y VARIOS escritas a mano, con
+  un monto por centro y un préstamo opcional por fila; PROVEEDORES derivada de los documentos con la
+  etiqueta cash— con una columna por centro y una de préstamo por cada par usado. La hoja se carga
+  y se exporta con la misma forma.
+- **Salidas** por el control único del app, una por pestaña: Excel «Cartera» (vuelve a entrar como
+  salió, marcas incluidas, y **reemplaza** la cartera), «Control de cheques», «Reporte de flujo»
+  (imprimible) · «Excel de flujo», «Cargas cash». Resumen no exporta.
+- **Datos de demostración**: `pnpm gen:testdata` escribe bajo `.context/generated/cuentas-por-pagar/`
+  una cartera de Contífico en dos cortes, un control de cheques y una hoja de Cargas cash de un
+  hotel inventado (ver el README generado).
+
 ## Ocupaciones (análisis hotelero)
 
 La pestaña **Datos** carga los `OCUPACION_*.xlsx` reales del contador y los deja navegables por
@@ -1174,9 +1225,9 @@ obligatorios; RUC y correo, no— y ese diálogo es el compartido: PyG y Ocupaci
 - **Un cliente sin esos datos no bloquea nada**: descarga igual, con el logo y el nombre. Qué falta
   lo dice el diálogo del cliente, que es donde se llena.
 
-## Informes imprimibles (PyG, Sueldos por Áreas, Ventas por servicio y Reportería de ingresos)
+## Informes imprimibles (PyG, Sueldos por Áreas, Ventas por servicio, Reportería de ingresos y Cuentas por Pagar)
 
-Cuatro pantallas ofrecen **«Informe PDF»** como una entrada de su menú «Exportar» (en la cabecera,
+Cinco pantallas ofrecen un **informe imprimible** como una entrada de su menú «Exportar» (en la cabecera,
 nunca entre las marcas de la barra de filtros: pedir un informe no es seleccionar nada) que abre una
 vista previa a ancho de página y deja que el
 navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación de PDF en código.
@@ -1208,6 +1259,11 @@ navegador genere el PDF (_Destino → Guardar como PDF_) — no hay generación 
   tiene columna fija, `hover` y un cuerpo de 12 px que en el papel no significan nada—, y toma el
   tamaño de letra que dicta `statementFit`. Nació dentro de Ventas por servicio con la nota de que
   una tercera copia era el momento de unirlas; Reportería de ingresos fue esa tercera.
+- **Cuentas por Pagar** (`components/cash-flow/flow-report-preview.tsx`, sobre `lib/cash-flow/report.ts`):
+  el flujo de pagos a la fecha de corte —flujo de bancos, saldo faltante o sobrante, ingresos
+  proyectados, pagos marcados por proveedor, préstamos entre centros y, con algo marcado, la matriz
+  cuentas × beneficiarios—, leyendo el mismo `DerivedFlow` que la pantalla y el Excel de flujo; en el
+  papel la matriz se imprime siempre, porque en el papel no hay «Ver como».
 - **Sueldos por Áreas** (`components/payroll/salaries/report/`): cabecera compacta —cliente, rango
   de periodos, cuántas áreas y fecha de generación— seguida del **consolidado por área** y **una
   sección por área**, cada una con su tabla y su gráfica impresas JUNTAS (sin el interruptor «Ver

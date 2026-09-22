@@ -23,7 +23,14 @@ Las capturas del manual de usuario se tomaron con los **datos de demostración**
 la base de trabajo del navegador.
 
 Las de **Pérdidas y Ganancias**, **Ventas por servicio** y **Reportería de ingresos** se rehicieron
-el 8 sep 2026 y están al día. Las de **Ocupaciones** y **Rol de Pagos** son de una sesión anterior:
+el 8 sep 2026 y están al día. Las de **Cuentas por Pagar** se tomaron el 17 sep 2026 con el set
+`cuentas-por-pagar/` del mismo generador (un hotel inventado, HOTELERA CUMBRE S.A.), cargado en
+este orden: la cartera del 15/09 —aceptando los dos centros que propone—, el control de cheques
+—aceptando los dos bancos—, «Configurar» para nombrar las cuentas, ponerles sobregiro y centro,
+marcas en lote y en el detalle, una obligación SRI, el flujo con saldos e ingresos, la hoja de
+Cargas cash y, al final, la cartera del 30/09 para la captura de «Ver liquidadas». Las pantallas
+de tabla se capturaron a 1680 px de ancho, porque a 1400 la cartera —que declara sus anchos— se
+desplaza en horizontal y esconde las columnas de la derecha. Las de **Ocupaciones** y **Rol de Pagos** son de una sesión anterior:
 su contenido no ha cambiado, pero el menú lateral que sale al fondo todavía no muestra los subitems
 de Pérdidas y Ganancias. Rehacerlas pide datos de demostración de esos dos módulos, que
 `gen:testdata` no produce.
@@ -43,11 +50,9 @@ los estilos y los diagramas van dentro del propio archivo, y la única petición
 tipografía IBM Plex desde Google Fonts (sin ella cae a la tipografía del sistema y se lee igual).
 Para enviarlo como PDF, imprimir desde el navegador con «Guardar como PDF».
 
-Los cuatro están escritos en UTF-8, pero solo `manual-usuario.html` lo **declara**, con un
-`<meta charset="utf-8" />` en su primera línea. Los otros tres dependen de que el navegador lo
-adivine, y donde no lo adivina —servido por HTTP sin cabecera de charset, por ejemplo— las tildes
-salen rotas: «CÃ³mo» en vez de «Cómo». Es una línea al principio del archivo, y conviene añadírsela
-a los tres cuando se toquen.
+Los cuatro están escritos en UTF-8 y lo **declaran**, con un `<meta charset="utf-8" />` en su
+primera línea: sin ella, servidos por HTTP sin cabecera de charset las tildes salían rotas («CÃ³mo»
+en vez de «Cómo»). Un documento nuevo debe empezar por esa misma línea.
 
 ## Al imprimir el documento de entrega
 

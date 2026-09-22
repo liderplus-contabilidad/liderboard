@@ -16,13 +16,19 @@
  * Deterministic: the values come from a PRNG seeded with the (line, year, month, account) itself, with
  * no `Math.random` and no dates, so regenerating produces the same bytes and a test can pin figures.
  *
+ * Cuentas por Pagar has its own set beside these (`test-data/cash-flow.mts`): a cartera at two
+ * cuts, a check register and a `CARGAS CASH` sheet for one invented hotel, under
+ * `cuentas-por-pagar/`.
+ *
  * Run with `pnpm gen:testdata`.
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
+import { writeCashFlowSet } from "./test-data/cash-flow.mts";
 import { CLINICA_2026 } from "./test-data/clinica-2026.mts";
+import { excelSerial, rand, randRange, round2 } from "./test-data/prng.mts";
 import { RUBROS, type AccountSpec, type Rubro } from "./test-data/rubros.mts";
 
 type Cell = string | number | null;
@@ -32,35 +38,6 @@ const OUT_DIR = join(ROOT, ".context", "generated");
 const YEARS = [2024, 2025, 2026];
 /** The last column of the by-centers format; the contract reads it by POSITION, always at the end. */
 const SIN_CENTRO = "SIN CENTRO DE COSTO";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// A PRNG seeded by string — determinism with no `Math.random`.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function hashString(text: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-/** mulberry32 over the seed's hash: [0, 1). */
-function rand(seed: string): number {
-  let t = (hashString(seed) + 0x6d2b79f5) >>> 0;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-function randRange(seed: string, min: number, max: number): number {
-  return min + rand(seed) * (max - min);
-}
-
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The chart of accounts, flattened and numbered by position.
@@ -362,12 +339,6 @@ function writeWorkbook(
 
 function lastDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-}
-
-/** Excel's date serial (days since 30/12/1899), which is how MicroPlus' sample stores its printing
- * date. */
-function excelSerial(year: number, month: number, day: number): number {
-  return Math.round((Date.UTC(year, month, day) - Date.UTC(1899, 11, 30)) / 86_400_000);
 }
 
 function dmy(day: number, month: number, year: number): string {
@@ -815,6 +786,24 @@ sintéticos.
 - Los planes traen hojas a distinta profundidad, cadenas de un solo hijo, cuentas de contrapartida
   en negativo, cuentas que existen pero nunca se mueven, códigos SALTADOS (\`5.3\` cuelga \`5.3.02\` y
   \`5.3.03\`, sin \`5.3.01\`) y un nivel que el informe se salta entero.
+
+
+## Cuentas por Pagar (\`cuentas-por-pagar/\`)
+
+Un hotel inventado, **HOTELERA CUMBRE S.A.**, con dos centros («CUMBRE ALTA» · «CUMBRE CENTRO»)
+que el propio archivo propone al cargarse. Ningún estado de resultados: este módulo no lee PyG.
+
+- \`cartera-contifico-2026-09-15.xlsx\` y \`cartera-contifico-2026-09-30.xlsx\` — la «Cartera por
+  Pagar (Detallado)» de Contífico en **dos cortes**: catorce proveedores, una fila de subtotal por
+  proveedor y una por documento, tramos de antigüedad escritos como los imprime el sistema (la app
+  los descarta y los deriva a la fecha de corte). El segundo corte deja de traer los documentos ya
+  pagados, sube los abonos y trae dos nuevos: cargarlo sobre el primero es lo que muestra un corte
+  que liquida sin borrar.
+- \`control-de-cheques.xlsx\` — el libro \`CHEQUES INICIO\` (hoja «PAGO A PROVEEDORES», cabecera en la
+  fila 4): 34 cheques de PRODUBANCO, PICHINCHA y CAJA con fechas como seriales de Excel, las cuatro
+  X y el ESTADO libre, uno anulado y tres egresos prenumerados vacíos al final.
+- \`cargas-cash.xlsx\` — la hoja \`CARGAS CASH\` con sus tres bloques (MOVIMIENTO INICIAL · VARIOS ·
+  PROVEEDORES), una columna por centro y una de préstamo «CUMBRE ALTA-CUMBRE CENTRO».
 `;
 }
 
@@ -1091,6 +1080,10 @@ function main(): void {
     `${JSON.stringify({ anios: YEARS, rubros: manifests }, null, 2)}\n`,
   );
   writeFileSync(join(OUT_DIR, "README.md"), readme(manifests));
+  // Cuentas por Pagar loads nothing of the above: its set is the cartera, the check register and
+  // the cash sheet of one invented hotel, written by its own module.
+  files += writeCashFlowSet(OUT_DIR);
+  console.log(`  cuentas-por-pagar: cartera en dos cortes, cheques y cargas cash`);
   console.log(`Listo: ${files} archivos en ${OUT_DIR}`);
 }
 

@@ -3,13 +3,28 @@
 import { ChevronDown, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { MODULES } from "@/lib/modules";
+
+/**
+ * Under this width the sidebar starts COLLAPSED. It is Tailwind's `2xl`: on the office laptops
+ * (1366 · 1440 · 1512 px) the open rail takes a fifth of the screen, Cuentas por Pagar's header
+ * —five tabs and three controls— wraps to a second line beside it, and every grid loses the width
+ * of two columns. The user's own toggle wins after that: this only decides how the app OPENS.
+ */
+const COLLAPSED_BELOW_PX = 1536;
 
 export function DashboardSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  // Read once, after mount: the server cannot know the window, so the rail renders open and snaps
+  // shut on a laptop in the first client frame — the same snap the toggle does, never a transition.
+  useEffect(() => {
+    if (window.innerWidth < COLLAPSED_BELOW_PX) {
+      setCollapsed(true);
+    }
+  }, []);
   // What is stored is what is COLLAPSED and not what is expanded: a new module with children is born
   // visible without having to be seeded into this state, which is the rule that makes subitems
   // discoverable.
