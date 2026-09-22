@@ -14,6 +14,7 @@
 import Dexie, { type Table } from "dexie";
 import { normalizeLabel, sortByName, type EntityLogo } from "@/lib/workspaces";
 import { mergeCut, type IncomingPayable } from "./cut";
+import { applyNotes } from "./cell-notes";
 import { todayISO } from "./dates";
 import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
@@ -696,12 +697,18 @@ export async function getFlow(clientId: string, date: string): Promise<PaymentFl
 
 /**
  * Writes the flow OF a date: creates it on the first edit, updates it afterwards. `patch` may bring
- * balances (merged by account) and/or the whole income list.
+ * balances (merged by account), the whole income list and/or a patch of cell notes (`applyNotes`:
+ * merged by key, `null` removes) — two notes written one after the other never step on each other.
  */
 export async function saveFlow(
   clientId: string,
   date: string,
-  patch: { balances?: Record<string, number>; incomes?: PaymentFlow["incomes"] },
+  patch: {
+    balances?: Record<string, number>;
+    incomes?: PaymentFlow["incomes"];
+    /** Cell key → text, or `null` to remove it; applied over the notes already saved. */
+    notes?: Record<string, string | null>;
+  },
 ): Promise<PaymentFlow> {
   return db.transaction("rw", db.flows, async () => {
     const existing = await getFlow(clientId, date);
@@ -710,6 +717,7 @@ export async function saveFlow(
           ...existing,
           balances: { ...existing.balances, ...(patch.balances ?? {}) },
           incomes: patch.incomes ?? existing.incomes,
+          notes: applyNotes(existing.notes, patch.notes),
         }
       : {
           id: crypto.randomUUID(),
@@ -717,6 +725,7 @@ export async function saveFlow(
           date,
           balances: patch.balances ?? {},
           incomes: patch.incomes ?? [],
+          notes: applyNotes(undefined, patch.notes),
         };
     await db.flows.put(next);
     return next;

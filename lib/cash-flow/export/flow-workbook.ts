@@ -1,6 +1,7 @@
 /**
  * «Excel de flujo»: the report's sections on ONE sheet, each headed by its title, with the same
- * figures the paper prints — `report.ts` is the one builder, so the two cannot disagree.
+ * figures the paper prints — `report.ts` is the one builder, so the two cannot disagree — plus the
+ * flow's cell notes as Excel comments, which the paper does not print.
  */
 import ExcelJS from "exceljs";
 import { writeLetterhead } from "@/lib/excel-logo";
@@ -34,6 +35,13 @@ export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJ
       const written = ws.addRow([row.label, ...row.values.map((value) => value ?? "")]);
       if (row.emphasis) {
         written.font = { bold: true };
+      }
+      // The screen's cell notes, as the comments the book's sheets carried: `column` counts from
+      // the label (0), and ExcelJS counts from 1.
+      for (const note of section.notes ?? []) {
+        if (note.rowId === row.id) {
+          written.getCell(note.column + 1).note = note.text;
+        }
       }
     }
   }

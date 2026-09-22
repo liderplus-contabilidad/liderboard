@@ -121,6 +121,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
               accounts,
               centers,
               hasChecks: checks.length > 0,
+              notes: flow?.notes ?? {},
               generatedAt: new Date(),
             });
             const blob = await shared.workbookToBlob(mod.buildFlowWorkbook(report, logo));

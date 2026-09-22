@@ -223,6 +223,23 @@ describe("flows", () => {
       "2026-08-05",
     ]);
   });
+
+  it("merges cell notes by key, removes a null or blank one, and keeps them to their date", async () => {
+    await saveFlow(clientId, "2026-08-05", { notes: { "balance:a": " Cierre del lunes " } });
+    await saveFlow(clientId, "2026-08-05", { notes: { "overdraft:a": "Aprobado" } });
+    expect((await getFlow(clientId, "2026-08-05"))?.notes).toEqual({
+      "balance:a": "Cierre del lunes",
+      "overdraft:a": "Aprobado",
+    });
+    await saveFlow(clientId, "2026-08-05", {
+      notes: { "balance:a": null, "overdraft:a": "  " },
+    });
+    // A balance written after the notes does not touch them, and the other date has none.
+    await saveFlow(clientId, "2026-08-05", { balances: { a: 1 } });
+    expect((await getFlow(clientId, "2026-08-05"))?.notes).toEqual({});
+    await saveFlow(clientId, "2026-08-07", { balances: { a: 1 } });
+    expect((await getFlow(clientId, "2026-08-07"))?.notes).toEqual({});
+  });
 });
 
 describe("cash entries", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildFlowWorkbook } from "./export/flow-workbook";
+import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { deriveFlow } from "./flow";
 import { buildFlowReport } from "./report";
 import type { BankAccount, Payable } from "./types";
@@ -191,5 +192,71 @@ describe("buildFlowReport", () => {
     expect(labels).toContain("Pagos marcados por proveedor");
     expect(labels).toContain("Matriz de pagos");
     expect(labels).toContain("Total");
+  });
+
+  it("places each cell note on its cell and writes it as an Excel comment", () => {
+    const income = { id: "i", concept: "Reservas", amount: 1200, accountId: "prod" };
+    const withNotes = buildFlowReport({
+      clientName: "Nomik",
+      derived: deriveFlow({
+        date: "2026-08-05",
+        flow: {
+          id: "f",
+          clientId: "c",
+          date: "2026-08-05",
+          balances: { prod: 6677.34 },
+          incomes: [income],
+        },
+        accounts: ACCOUNTS,
+        centers: [],
+        payables: [payable({})],
+        checks: [],
+      }),
+      incomes: [income],
+      accounts: ACCOUNTS,
+      centers: [],
+      notes: {
+        [balanceNoteKey("prod")]: "Cierre del lunes",
+        [overdraftNoteKey("prod")]: "Aprobado por el banco",
+        [payableNoteKey("p", "priority")]: "Lo pidió gerencia",
+        [payableNoteKey("p", "urgent")]: "Aprobado",
+        // A note whose cell is gone (an account removed) is read by nobody.
+        [balanceNoteKey("gone")]: "Huérfana",
+      },
+      generatedAt: new Date(2026, 7, 5, 10, 0),
+    });
+    const notesOf = (id: string) => withNotes.sections.find((section) => section.id === id)?.notes;
+    expect(notesOf("accounts")).toEqual([
+      { rowId: "prod", column: 1, text: "Cierre del lunes" },
+      { rowId: "prod", column: 2, text: "Aprobado por el banco" },
+    ]);
+    expect(notesOf("incomes")).toBeUndefined();
+    expect(notesOf("payments")).toEqual([
+      { rowId: "p", column: 0, text: "Lo pidió gerencia" },
+      { rowId: "p", column: 6, text: "Aprobado" },
+    ]);
+
+    const ws = buildFlowWorkbook(withNotes).getWorksheet("FLUJO")!;
+    const comments: [unknown, number, unknown][] = [];
+    ws.eachRow((row) =>
+      row.eachCell((cell, column) => {
+        if (cell.note) {
+          comments.push([row.getCell(1).value, column, cell.note]);
+        }
+      }),
+    );
+    expect(comments).toEqual([
+      ["PRODUBANCO", 2, "Cierre del lunes"],
+      ["PRODUBANCO", 3, "Aprobado por el banco"],
+      ["FAC 1", 1, "Lo pidió gerencia"],
+      ["FAC 1", 7, "Aprobado"],
+    ]);
+  });
+
+  it("writes no comment without notes", () => {
+    const ws = buildFlowWorkbook(report).getWorksheet("FLUJO")!;
+    let comments = 0;
+    ws.eachRow((row) => row.eachCell((cell) => void (cell.note && (comments += 1))));
+    expect(comments).toBe(0);
   });
 });

@@ -173,6 +173,9 @@ export interface PaymentFlow {
   date: string;
   balances: Record<string, number>;
   incomes: FlowIncome[];
+  /** The Excel-style note of each editable cell of the flow, by `cell-notes.ts`'s keys. Optional: a
+   *  flow saved before notes existed reads as none. Of THIS date — «Copiar del …» never brings it. */
+  notes?: Record<string, string>;
 }
 
 /** The two hand-written matrices of `CARGAS CASH`; the third (PROVEEDORES) is derived. */

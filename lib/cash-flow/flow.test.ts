@@ -413,6 +413,10 @@ describe("copying", () => {
     expect(copy.balances).toEqual({ x: 2 });
     expect(copy.incomes[0]).toMatchObject({ concept: "Reservas", amount: 10 });
     expect(copy.incomes[0].id).not.toBe("i");
+    // The notes speak of THEIR date: a copy never brings them.
+    expect(
+      copyFlowFrom({ ...flows[1], notes: { "balance:x": "Nota" } }, "2026-08-10"),
+    ).not.toHaveProperty("notes");
   });
 });
 

@@ -296,7 +296,10 @@ sobregiro · centro) in «Configurar».
   the incomes, one bank column per label). `flow.ts` (`deriveFlow`) derives disponible, no cobrados, urgente,
   pendiente, saldo final, faltante and the LOANS between centers (a document of HC paid from an
   account of HA) — what `CARGAS CASH` used to be typed as. Resumen, the report and the Excel read this
-  same `DerivedFlow`.
+  same `DerivedFlow`. The flow also stores its CELL NOTES (`notes`, Excel-style comments on each
+  account's saldo and sobregiro, and on the five working cells of «Pagos marcados»): `cell-notes.ts` is the one place a cell's key is composed,
+  `components/ui/cell-note.tsx` draws the corner and its portal panel, the Excel de flujo writes
+  them as `cell.note`, the printed report ignores them, and «Copiar del …» never brings them.
 - **Flujo is the WORKING sheet** (the book's `FJ dd-mm-aaaa`): «Pagos marcados» is edited in place
   —estado · cuenta · urgente/pendiente · fecha de pago · quitar— and every cell writes ONE field of
   the DOCUMENT (`priority` · `payFromAccountId` · `approved` · `payOn`) through `db.ts`; it is a

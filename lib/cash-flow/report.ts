@@ -7,6 +7,7 @@ import type { ChartTable } from "@/lib/charts/types";
 import { formatDayMonthYear, formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
+import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { documentLabel, money, payableDetail } from "./derive";
 import { accountLabel, centerName, type DerivedFlow, incomeLabel } from "./flow";
 import { derivePaymentMatrix, matrixTable } from "./matrix";
@@ -21,10 +22,20 @@ export interface FlowReportHeader {
   lineCount: number;
 }
 
+/** A cell note, placed on the row the Excel writes: `column` 0 is the row's label, 1…n its values. */
+export interface FlowCellNote {
+  rowId: string;
+  column: number;
+  text: string;
+}
+
 export interface FlowReportSection {
   id: "accounts" | "remaining" | "incomes" | "payments" | "matrix" | "settled" | "loans";
   title: string;
   table: ChartTable;
+  /** The screen's cell notes that fall in this table — the Excel writes them as comments, the
+   *  printed report ignores them (on paper there is nothing to hover). */
+  notes?: FlowCellNote[];
 }
 
 export interface FlowReport {
@@ -41,9 +52,31 @@ export function buildFlowReport(input: {
   centers: readonly CashFlowCenter[];
   /** Whether the empresa keeps a check register: the matrix's «Cheques no cobrados» column. */
   hasChecks?: boolean;
+  /** The flow's cell notes (`PaymentFlow.notes`). */
+  notes?: Readonly<Record<string, string>>;
   generatedAt: Date;
 }): FlowReport {
   const { derived, centers, accounts, incomes } = input;
+  const notes = input.notes ?? {};
+  /** The notes of one table: each `[rowId, column name — null for the label —, key]` that has a
+   *  note becomes a cell. The column is FOUND by its name, so a table that gains a column (one per
+   *  income label) still puts every note in its place; a row the table does not write has none. */
+  const notesIn = (
+    table: ChartTable,
+    cells: readonly (readonly [rowId: string, column: string | null, key: string])[],
+  ): FlowCellNote[] => {
+    const rows = new Set(table.rows.map((row) => row.id));
+    return cells.flatMap(([rowId, column, key]) => {
+      const text = notes[key];
+      // + 1: `column` counts from the row's label (0); a column the table lacks lands on 0 too,
+      // which only the label may use.
+      const index = column === null ? 0 : table.columns.indexOf(column) + 1;
+      if (!text || !rows.has(rowId) || (column !== null && index === 0)) {
+        return [];
+      }
+      return [{ rowId, column: index, text }];
+    });
+  };
   const label = (accountId: string | null) => {
     const account = accounts.find((candidate) => candidate.id === accountId);
     return account ? accountLabel(account, centers) : "Sin cuenta";
@@ -212,13 +245,49 @@ export function buildFlowReport(input: {
     })),
   };
 
+  const accountNotes = notesIn(
+    accountsTable,
+    derived.accounts.flatMap((row) => [
+      [row.account.id, "Saldo", balanceNoteKey(row.account.id)] as const,
+      [row.account.id, "Sobregiro", overdraftNoteKey(row.account.id)] as const,
+    ]),
+  );
+  // The report has no «Estado» column: the state's note goes on the document's own name.
+  const paymentNotes = notesIn(
+    paymentsTable,
+    derived.lines.flatMap(({ payable }) => [
+      [payable.id, null, payableNoteKey(payable.id, "priority")] as const,
+      [payable.id, "Cuenta", payableNoteKey(payable.id, "account")] as const,
+      [payable.id, "Programado", payableNoteKey(payable.id, "payOn")] as const,
+      [payable.id, "Urgente", payableNoteKey(payable.id, "urgent")] as const,
+      [payable.id, "Pendiente", payableNoteKey(payable.id, "pending")] as const,
+    ]),
+  );
+  const withNotes = (found: FlowCellNote[]) => (found.length > 0 ? { notes: found } : {});
+
   const sections: FlowReportSection[] = [
-    { id: "accounts", title: "Flujo de bancos", table: accountsTable },
+    {
+      id: "accounts",
+      title: "Flujo de bancos",
+      table: accountsTable,
+      ...withNotes(accountNotes),
+    },
     { id: "remaining", title: "Saldo faltante o sobrante", table: remainingTable },
     ...(incomes.length > 0
-      ? [{ id: "incomes" as const, title: "Ingresos", table: incomesTable }]
+      ? [
+          {
+            id: "incomes" as const,
+            title: "Ingresos",
+            table: incomesTable,
+          },
+        ]
       : []),
-    { id: "payments", title: "Pagos marcados por proveedor", table: paymentsTable },
+    {
+      id: "payments",
+      title: "Pagos marcados por proveedor",
+      table: paymentsTable,
+      ...withNotes(paymentNotes),
+    },
     // The flow's other shape, printed ALWAYS there is something marked: on paper there are no
     // controls, so the screen's «Ver como» decides nothing here.
     ...(derived.lines.length > 0

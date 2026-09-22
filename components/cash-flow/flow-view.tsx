@@ -18,12 +18,19 @@ import { memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { DataGrid, GridRow } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
+import { CellNote, NOTE_HOST } from "@/components/ui/cell-note";
 import { DateField } from "@/components/ui/date-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
+import {
+  balanceNoteKey,
+  overdraftNoteKey,
+  payableNoteKey,
+  type PayableNoteField,
+} from "@/lib/cash-flow/cell-notes";
 import * as cashDb from "@/lib/cash-flow/db";
 import {
   approvedFromTyped,
@@ -45,6 +52,10 @@ import { FlowCarteraPicker } from "./flow-cartera-picker";
 import { ManualPayablePanel } from "./manual-payable-panel";
 
 const NONE = "";
+/** A flow without notes: one frozen object instead of a new `{}` per render. */
+const NO_NOTES: Readonly<Record<string, string>> = Object.freeze({});
+
+type NoteWriter = (key: string, text: string) => void;
 
 /** The flow's two shapes: the sheet's list (bank block + payments) and COMISERSA's `FLUJO MATRIZ`. */
 type FlowShape = "lista" | "matriz";
@@ -89,6 +100,15 @@ export function FlowView() {
     },
     [activeClientId, asOf],
   );
+  // A cell's note is of THIS date: it goes in the date's flow, merged by key (`applyNotes`).
+  const setNote = useCallback(
+    (key: string, text: string) => {
+      if (activeClientId) {
+        void cashDb.saveFlow(activeClientId, asOf, { notes: { [key]: text } });
+      }
+    },
+    [activeClientId, asOf],
+  );
   const copyPrevious = useCallback(() => {
     if (activeClientId && previous) {
       const copy = copyFlowFrom(previous, asOf);
@@ -100,6 +120,7 @@ export function FlowView() {
   }, [activeClientId, previous, asOf]);
 
   const incomes = flow?.incomes ?? [];
+  const notes = flow?.notes ?? NO_NOTES;
   const hasCenters = centers.length > 0;
   // A column that means nothing for the open data renders nothing: an empresa that keeps no check
   // register (Nomik) has no «cheques no cobrados» to subtract.
@@ -237,7 +258,12 @@ export function FlowView() {
                         )}
                       </span>
                     </Cell>
-                    <Cell numeric control className="bg-marked/40">
+                    <Cell numeric control className={cn("bg-marked/40", NOTE_HOST)}>
+                      <CellNote
+                        note={notes[balanceNoteKey(row.account.id)]}
+                        label={`Saldo de ${accountLabel(row.account, centers)}`}
+                        onChange={(text) => setNote(balanceNoteKey(row.account.id), text)}
+                      />
                       <NumericInput
                         value={flow?.balances[row.account.id] ?? null}
                         nullable
@@ -249,7 +275,12 @@ export function FlowView() {
                     </Cell>
                     {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
                       but it is captured here, where the sheet writes it, and not only in Configurar. */}
-                    <Cell numeric control className="bg-marked/40">
+                    <Cell numeric control className={cn("bg-marked/40", NOTE_HOST)}>
+                      <CellNote
+                        note={notes[overdraftNoteKey(row.account.id)]}
+                        label={`Sobregiro de ${accountLabel(row.account, centers)}`}
+                        onChange={(text) => setNote(overdraftNoteKey(row.account.id), text)}
+                      />
                       <NumericInput
                         value={row.account.overdraft}
                         format="currency"
@@ -349,7 +380,14 @@ export function FlowView() {
           )}
         </FlowSection>
 
-        {!asMatrix && <MarkedSection onPickFromCartera={openPicker} onAddManual={openManual} />}
+        {!asMatrix && (
+          <MarkedSection
+            notes={notes}
+            onNote={setNote}
+            onPickFromCartera={openPicker}
+            onAddManual={openManual}
+          />
+        )}
 
         {/* The sheet's «SALDO FALTANTE» row, right under the TOTAL it is read against: its three
             figures — after everything marked, after only the urgent, after only the pending. */}
@@ -705,16 +743,18 @@ function IncomesSection({
       </SectionHeading>
       {incomes.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[13px] border border-border bg-surface px-4 py-1">
-          {/* The fields are named once, above, so the amount reads as a field and not as a figure. */}
+          {/* The fields are named once, above, so the amount reads as a field and not as a figure.
+              Every name starts where its field's text starts (the fields' 9 px): a right-aligned
+              «Monto» ran into the «Cuenta» beside it and read as one label. */}
           <li
             aria-hidden
             className={cn(
               row,
-              "pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint",
+              "pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint [&>span]:px-[9px]",
             )}
           >
             <span>Etiqueta</span>
-            <span className="text-right">Monto</span>
+            <span>Monto</span>
             {choosesAccount && <span>Cuenta</span>}
             <span />
           </li>
@@ -782,9 +822,13 @@ function IncomesSection({
  * the whole, stored as `null`).
  */
 function MarkedSection({
+  notes,
+  onNote,
   onPickFromCartera,
   onAddManual,
 }: {
+  notes: Readonly<Record<string, string>>;
+  onNote: NoteWriter;
   onPickFromCartera: () => void;
   onAddManual: () => void;
 }) {
@@ -870,6 +914,8 @@ function MarkedSection({
                 asOf={asOf}
                 accountOptions={accountOptions}
                 lineById={lineById}
+                notes={notes}
+                onNote={onNote}
                 onPatch={patch}
               />
             ))}
@@ -908,12 +954,16 @@ function GroupRows({
   asOf,
   accountOptions,
   lineById,
+  notes,
+  onNote,
   onPatch,
 }: {
   group: SupplierGroup;
   asOf: string;
   accountOptions: { value: string; label: string }[];
   lineById: Map<string, FlowLine>;
+  notes: Readonly<Record<string, string>>;
+  onNote: NoteWriter;
   onPatch: (id: string, fields: cashDb.PayablePatch) => void;
 }) {
   const sum = (key: "urgent" | "pending") =>
@@ -950,6 +1000,8 @@ function GroupRows({
             line={line}
             asOf={asOf}
             accountOptions={accountOptions}
+            notes={notes}
+            onNote={onNote}
             onPatch={onPatch}
           />
         ) : null;
@@ -963,14 +1015,30 @@ const MarkedRow = memo(function MarkedRow({
   line,
   asOf,
   accountOptions,
+  notes,
+  onNote,
   onPatch,
 }: {
   line: FlowLine;
   asOf: string;
   accountOptions: { value: string; label: string }[];
+  notes: Readonly<Record<string, string>>;
+  onNote: NoteWriter;
   onPatch: (id: string, fields: cashDb.PayablePatch) => void;
 }) {
   const { payable } = line;
+  const docLabel = documentLabel(payable) || payable.supplier;
+  /** The note corner of one working cell of this document, of this date. */
+  const note = (field: PayableNoteField, what: string) => {
+    const key = payableNoteKey(payable.id, field);
+    return (
+      <CellNote
+        note={notes[key]}
+        label={`${what} de ${docLabel}`}
+        onChange={(text) => onNote(key, text)}
+      />
+    );
+  };
   const urgentEditable = line.priority === "urgent";
   const commitAmount = (typed: number | null) =>
     onPatch(payable.id, { approved: approvedFromTyped(typed, payable.balance) });
@@ -1000,7 +1068,8 @@ const MarkedRow = memo(function MarkedRow({
       >
         {formatDayMonthYear(payable.dueOn) ?? "—"}
       </Cell>
-      <Cell control>
+      <Cell control className={NOTE_HOST}>
+        {note("priority", "Estado")}
         <Select
           size="sm"
           aria-label={`Estado de ${payable.supplier}`}
@@ -1009,7 +1078,8 @@ const MarkedRow = memo(function MarkedRow({
           onChange={(event) => onPatch(payable.id, { priority: event.target.value as PayPriority })}
         />
       </Cell>
-      <Cell control>
+      <Cell control className={NOTE_HOST}>
+        {note("account", "Cuenta")}
         <Select
           size="sm"
           aria-label={`Cuenta que paga ${payable.supplier}`}
@@ -1020,7 +1090,8 @@ const MarkedRow = memo(function MarkedRow({
           }
         />
       </Cell>
-      <Cell control>
+      <Cell control className={NOTE_HOST}>
+        {note("payOn", "Fecha de pago")}
         <DateField
           value={payable.payOn}
           nullable
@@ -1031,7 +1102,12 @@ const MarkedRow = memo(function MarkedRow({
         />
       </Cell>
       <Cell numeric>{money(payable.balance)}</Cell>
-      <Cell numeric control={urgentEditable} className={cn(urgentEditable && "bg-marked/40")}>
+      <Cell
+        numeric
+        control={urgentEditable}
+        className={cn(urgentEditable && "bg-marked/40", NOTE_HOST)}
+      >
+        {note("urgent", "Urgente")}
         {urgentEditable ? (
           <NumericInput
             value={line.urgent}
@@ -1045,7 +1121,12 @@ const MarkedRow = memo(function MarkedRow({
           <span className="text-faint">{line.urgent > 0 ? money(line.urgent) : ""}</span>
         )}
       </Cell>
-      <Cell numeric control={!urgentEditable} className={cn(!urgentEditable && "bg-marked/40")}>
+      <Cell
+        numeric
+        control={!urgentEditable}
+        className={cn(!urgentEditable && "bg-marked/40", NOTE_HOST)}
+      >
+        {note("pending", "Pendiente")}
         {urgentEditable ? (
           <span className="text-faint">{line.pending > 0 ? money(line.pending) : ""}</span>
         ) : (
