@@ -11,8 +11,10 @@ import * as cashDb from "@/lib/cash-flow/db";
 import { documentLabel, groupBySupplier, money, payableDetail } from "@/lib/cash-flow/derive";
 import { matchesSearch } from "@/lib/cash-flow/filters";
 import { cn } from "@/lib/cn";
+import type { Payable } from "@/lib/cash-flow/types";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
+import { normalizeLabel } from "@/lib/workspaces";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 /**
@@ -24,22 +26,77 @@ import { useCashFlowData } from "./cash-flow-data-provider";
  * it is what the pick changes.
  */
 export function FlowCarteraPicker({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { payables, asOf } = useCashFlowData();
-  const [query, setQuery] = useState("");
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
-  const [busy, setBusy] = useState(false);
-
+  const { payables } = useCashFlowData();
   const candidates = useMemo(
     () => payables.filter((payable) => payable.status === "open" && payable.priority === null),
     [payables],
   );
-  const groups = useMemo(
-    () =>
-      groupBySupplier(
-        query.trim() ? candidates.filter((payable) => matchesSearch(payable, query)) : candidates,
-      ),
-    [candidates, query],
+  return (
+    <CarteraPicker
+      open={open}
+      title="Agregar de la cartera"
+      candidates={candidates}
+      emptyText="Toda la cartera ya está en el flujo."
+      restLabel="sin marcar"
+      confirmLabel={(count) => (count > 0 ? `Agregar ${count} al flujo` : "Agregar al flujo")}
+      onConfirm={(picked) =>
+        cashDb.updatePayables(
+          picked.map((payable) => payable.id),
+          { priority: "urgent" },
+        )
+      }
+      onClose={onClose}
+    />
   );
+}
+
+/**
+ * THE CARTERA AS A PICKER — the one list both «Agregar de la cartera» (Flujo) and «Documentos que
+ * paga» (a check) open: the candidates grouped by beneficiario as the cartera lists them, a search,
+ * a checkbox per document and per group. What confirming DOES is the caller's; the picked documents
+ * reach it in the order the list shows them, which is the order a check's abono fills them in.
+ * `preferSupplier` lifts that beneficiario's group to the top — the check's own payee.
+ */
+export function CarteraPicker({
+  open,
+  title,
+  candidates,
+  emptyText,
+  restLabel,
+  confirmLabel,
+  preferSupplier,
+  onConfirm,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  candidates: readonly Payable[];
+  /** Said when there is nothing to pick at all. */
+  emptyText: string;
+  /** How the footer names what is listed while nothing is picked: «12 documentos sin marcar». */
+  restLabel: string;
+  confirmLabel: (count: number) => string;
+  preferSupplier?: string;
+  onConfirm: (picked: Payable[]) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const { asOf } = useCashFlowData();
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const [busy, setBusy] = useState(false);
+
+  const groups = useMemo(() => {
+    const grouped = groupBySupplier(
+      query.trim() ? candidates.filter((payable) => matchesSearch(payable, query)) : candidates,
+    );
+    const preferred = normalizeLabel(preferSupplier ?? "");
+    if (!preferred) {
+      return grouped;
+    }
+    const own = (label: string) => (normalizeLabel(label) === preferred ? 0 : 1);
+    // A stable sort: the rest keep the cartera's order (descending balance).
+    return [...grouped].sort((a, b) => own(a.label) - own(b.label));
+  }, [candidates, query, preferSupplier]);
   const visibleIds = useMemo(
     () => new Set(groups.flatMap((group) => group.payables.map((payable) => payable.id))),
     [groups],
@@ -77,13 +134,16 @@ export function FlowCarteraPicker({ open, onClose }: { open: boolean; onClose: (
     onClose();
   };
   const confirm = async () => {
-    const ids = [...picked].filter((id) => candidates.some((payable) => payable.id === id));
-    if (ids.length === 0) {
+    // In the order on screen, whatever order they were clicked in.
+    const chosen = groups.flatMap((group) =>
+      group.payables.filter((payable) => picked.has(payable.id)),
+    );
+    if (chosen.length === 0) {
       return;
     }
     setBusy(true);
     try {
-      await cashDb.updatePayables(ids, { priority: "urgent" });
+      await onConfirm(chosen);
       close();
     } finally {
       setBusy(false);
@@ -91,7 +151,7 @@ export function FlowCarteraPicker({ open, onClose }: { open: boolean; onClose: (
   };
 
   return (
-    <Modal open={open} title="Agregar de la cartera" width={640} onClose={close}>
+    <Modal open={open} title={title} width={640} onClose={close}>
       <div className="flex flex-col gap-3">
         <SearchInput
           size="sm"
@@ -100,9 +160,7 @@ export function FlowCarteraPicker({ open, onClose }: { open: boolean; onClose: (
           onChange={setQuery}
         />
         {candidates.length === 0 ? (
-          <EmptyState icon={<FileText size={22} />}>
-            Toda la cartera ya está en el flujo.
-          </EmptyState>
+          <EmptyState icon={<FileText size={22} />}>{emptyText}</EmptyState>
         ) : groups.length === 0 ? (
           <EmptyState icon={<FileText size={22} />}>Ningún documento coincide.</EmptyState>
         ) : (
@@ -174,14 +232,14 @@ export function FlowCarteraPicker({ open, onClose }: { open: boolean; onClose: (
           <span className="text-[12px] text-muted">
             {picked.size > 0
               ? `${pluralize(picked.size, "documento")} · ${money(pickedTotal)}`
-              : `${pluralize(visibleIds.size, "documento")} sin marcar`}
+              : `${pluralize(visibleIds.size, "documento")} ${restLabel}`}
           </span>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" disabled={busy} onClick={close}>
               Cancelar
             </Button>
             <Button size="sm" disabled={busy || picked.size === 0} onClick={() => void confirm()}>
-              {picked.size > 0 ? `Agregar ${picked.size} al flujo` : "Agregar al flujo"}
+              {confirmLabel(picked.size)}
             </Button>
           </div>
         </div>

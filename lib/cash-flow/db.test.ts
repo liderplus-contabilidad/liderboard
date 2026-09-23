@@ -28,6 +28,7 @@ import {
   saveFlow,
   settlePayables,
   updateCashEntry,
+  updateCheck,
   updatePayables,
 } from "./db";
 import { parseChecksLog } from "./upload/checks-log";
@@ -157,6 +158,24 @@ describe("checks", () => {
 
     await importChecks(clientId, log.checks);
     expect(await listChecks(clientId)).toHaveLength(7);
+  });
+
+  it("keeps what only the comprobante reads across a reload of the book", async () => {
+    const log = parseChecksLog(CHECKS_GRID);
+    await importChecks(clientId, log.checks);
+    const [first] = await listChecks(clientId);
+    const payment = { payableId: "p", docNumber: "76", issuedOn: null, balance: 10, amount: 10 };
+    await updateCheck(first!.id, {
+      payeeTaxId: " 1804586061001 ",
+      payeeAddress: "",
+      payments: [payment],
+    });
+
+    await importChecks(clientId, log.checks);
+    const reloaded = (await listChecks(clientId)).find((check) => check.id === first!.id);
+    expect(reloaded?.payeeTaxId).toBe("1804586061001");
+    expect(reloaded?.payeeAddress).toBeUndefined();
+    expect(reloaded?.payments).toEqual([payment]);
   });
 
   it("assigns a bank label to an account in bulk and clears it when the account goes", async () => {

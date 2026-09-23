@@ -306,7 +306,8 @@ sobregiro · centro) in «Configurar».
   second surface for the same mark Cuentas por pagar writes, never a copy. `approvedFromTyped` is
   the one reading of a typed amount (`< saldo` partial · `= saldo` whole, stored `null` · `> saldo`
   clamped). The flow is fed from there too: «Agregar de la cartera» (`flow-cartera-picker.tsx`,
-  marks urgente) and «Agregar obligación» (`markAs`). Cuentas por pagar's bulk bar has «Pagar desde».
+  marks urgente; its `CarteraPicker` is also what a check's «Documentos que paga» opens) and
+  «Agregar obligación» (`markAs`). Cuentas por pagar's bulk bar has «Pagar desde».
 - **The matrix is the flow's other shape** (`matrix.ts`, COMISERSA's `FLUJO MATRIZ`): one row per
   account, one column per BENEFICIARIO with marked documents (by marked total desc), cell = Σ urgente
   - pendiente paid from that account. DERIVED, never stored, READ-ONLY (a cell can add several
@@ -327,7 +328,16 @@ sobregiro · centro) in «Configurar».
   section whole — the same shape the export writes, so it round-trips). The four Excels
   (`export/`) and the printed flow
   (`report.ts` → `ReportTable`) are the module's outputs, all through `cash-flow-export-actions.tsx`;
-  Resumen has none. `money` (`derive.ts`) is the module's amount,
+  Resumen has none. **A check prints two PDFs** from its panel (`check-print/`, the payslip's three
+  layers: `words.ts` · `layout.ts` / `voucher.ts` + `voucher-layout.ts` → `PrintPage` → `render.ts`,
+  the only `pdf-lib`): the CHECK on the account's form (`BankAccount.checkLayout`, mm, default
+  measured from the firm's real checks, «Imprimir prueba» with guides) and the COMPROBANTE DE EGRESO
+  (A4: the entry's STANDARD codes `STANDARD_LEDGER`, and `Check.payments` — a SNAPSHOT of each
+  document paid, so a reprint never changes). The comprobante opens first in `VoucherFormModal`,
+  the paper's shape with every text an input: what is missing is completed THERE and kept — the
+  letterhead on the empresa (`CashFlowClient.letterhead`, lines as typed), the beneficiary's id and
+  address on the check, which `knownPayeeDetails` brings to every later check to them (derived from
+  the other checks and the cartera, never a directory of its own). `money` (`derive.ts`) is the module's amount,
   always with cents.
 
 ### Shared UI

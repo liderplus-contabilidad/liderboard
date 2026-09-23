@@ -15,6 +15,7 @@ import Dexie, { type Table } from "dexie";
 import { normalizeLabel, sortByName, type EntityLogo } from "@/lib/workspaces";
 import { mergeCut, type IncomingPayable } from "./cut";
 import { applyNotes } from "./cell-notes";
+import type { CheckLayout } from "./check-print/layout";
 import { todayISO } from "./dates";
 import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
@@ -31,6 +32,7 @@ import type {
   Payable,
   PayableKind,
   PaymentFlow,
+  VoucherLetterhead,
 } from "./types";
 
 interface ActiveClientRow {
@@ -134,6 +136,14 @@ export async function updateClient(
   logo: EntityLogo | null,
 ): Promise<void> {
   await db.clients.update(clientId, { name, logo: logo ?? undefined });
+}
+
+/** Keeps the comprobante's letterhead as typed in its window. `null` removes it. */
+export async function updateClientLetterhead(
+  clientId: string,
+  letterhead: VoucherLetterhead | null,
+): Promise<void> {
+  await db.clients.update(clientId, { letterhead: letterhead ?? undefined });
 }
 
 /**
@@ -299,6 +309,7 @@ export async function listAccounts(clientId: string): Promise<BankAccount[]> {
 
 export type BankAccountInput = Pick<BankAccount, "bank" | "number" | "overdraft" | "centerId"> & {
   label?: string;
+  checkLayout?: Partial<CheckLayout>;
 };
 
 export async function addAccount(clientId: string, input: BankAccountInput): Promise<BankAccount> {
@@ -605,8 +616,19 @@ export async function importChecks(
     const previous = new Map(
       (await db.checks.where("clientId").equals(clientId).toArray()).map((row) => [row.id, row]),
     );
+    // Same for what only the comprobante asks — the beneficiary's id and address, and the
+    // documents the check pays: the book carries none of them, so a reload must not erase them.
     await db.checks.bulkPut(
-      rows.map((row) => ({ ...row, note: previous.get(row.id)?.note ?? "" })),
+      rows.map((row) => {
+        const kept = previous.get(row.id);
+        return {
+          ...row,
+          note: kept?.note ?? "",
+          ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
+          ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
+          ...(kept?.payments?.length ? { payments: kept.payments } : {}),
+        };
+      }),
     );
   });
   return { written: rows.length, unassigned };
@@ -621,7 +643,14 @@ export async function addCheck(clientId: string, input: CheckInput): Promise<Che
 }
 
 export async function updateCheck(id: string, patch: Partial<CheckInput>): Promise<void> {
-  await db.checks.update(id, patch);
+  // An emptied id or address is removed, so an absent field keeps meaning «not declared».
+  await db.checks.update(id, {
+    ...patch,
+    ...(patch.payeeTaxId !== undefined ? { payeeTaxId: patch.payeeTaxId.trim() || undefined } : {}),
+    ...(patch.payeeAddress !== undefined
+      ? { payeeAddress: patch.payeeAddress.trim() || undefined }
+      : {}),
+  });
 }
 
 export async function deleteCheck(id: string): Promise<void> {
