@@ -84,7 +84,8 @@ export function parseChecksLog(grid: Grid): ParsedChecksLog {
       step = "made";
     }
     const issuedOn = toISODate(row[issuedCol]);
-    const cashedOn = step === "cashed" ? (toISODate(read(row, cashedCol)) ?? issuedOn) : null;
+    const collectionDate = toISODate(read(row, cashedCol));
+    const cashedOn = step === "cashed" ? (collectionDate ?? issuedOn) : null;
     checks.push({
       voucher,
       bank,
@@ -95,6 +96,7 @@ export function parseChecksLog(grid: Grid): ParsedChecksLog {
       step,
       voided,
       cashedOn,
+      ...(step !== "cashed" && collectionDate ? { expectedCashOn: collectionDate } : {}),
       place: cellText(read(row, placeCol)),
     });
   }

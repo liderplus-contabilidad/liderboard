@@ -1,13 +1,13 @@
 "use client";
 
 import { BellRing, ChevronDown, Pencil } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldBox, FormField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import * as cashDb from "@/lib/cash-flow/db";
-import { todayISO } from "@/lib/cash-flow/dates";
+import { useReminderToday } from "./use-reminder-today";
 import { money } from "@/lib/cash-flow/derive";
 import { accountLabel } from "@/lib/cash-flow/flow";
 import { overdraftDatesError, overdraftNotice } from "@/lib/cash-flow/overdraft";
@@ -19,19 +19,10 @@ import { OverdraftDateFields } from "./overdraft-date-fields";
 
 export function OverdraftNotices() {
   const { accounts, centers } = useCashFlowData();
-  const [today, setToday] = useState(todayISO);
+  const today = useReminderToday();
   const [expanded, setExpanded] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const detailsId = useId();
-  useEffect(() => {
-    const refresh = () => setToday(todayISO());
-    const timer = window.setInterval(refresh, 60_000);
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, []);
   // Undated credit lines remain visible so their first reminder can be set here.
   const notices = accounts
     .filter((account) => account.overdraft > 0)

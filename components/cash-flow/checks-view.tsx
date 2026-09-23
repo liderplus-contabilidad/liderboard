@@ -1,10 +1,14 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Plus, Receipt, Upload } from "lucide-react";
+import { TriangleAlert, Plus, Receipt, Upload } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { GridRow } from "@/components/data-table/data-grid";
+import { Badge } from "@/components/ui/badge";
+import { DateField } from "@/components/ui/date-field";
+import { pendingCollections } from "@/lib/cash-flow/check-collection";
+import { useReminderToday } from "./use-reminder-today";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
@@ -40,8 +44,8 @@ import { ChecksUploadModal } from "./checks-upload-modal";
  * `<thead>` and the native scroll.
  */
 
-/** Declared, not measured: the window is computed from it. Two lines of 12.5 px plus the padding. */
-const CHECK_ROW_PX = 41;
+/** Fixed height includes the editable planned date and its collection warning. */
+const CHECK_ROW_PX = 100;
 const ROW_OVERSCAN = 12;
 export function ChecksView() {
   const { activeClientId, accounts, centers, checks, visibleChecks, checkFilters, asOf } =
@@ -170,6 +174,11 @@ function VirtualChecksTable({
   accountNames: Map<string, string>;
   onOpen: (id: string) => void;
 }) {
+  const today = useReminderToday();
+  const notices = useMemo(
+    () => new Map(pendingCollections(sorted, today).map((notice) => [notice.check.id, notice])),
+    [sorted, today],
+  );
   const scroller = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: sorted.length,
@@ -188,7 +197,7 @@ function VirtualChecksTable({
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
         <table
           className="w-full table-fixed border-separate border-spacing-0"
-          style={{ minWidth: 980 }}
+          style={{ minWidth: 1080 }}
         >
           <colgroup>
             <col style={{ width: 90 }} />
@@ -196,7 +205,7 @@ function VirtualChecksTable({
             <col />
             <col style={{ width: 100 }} />
             <col style={{ width: 120 }} />
-            <col style={{ width: 100 }} />
+            <col style={{ width: 240 }} />
             <col style={{ width: 100 }} />
             <col style={{ width: 170 }} />
           </colgroup>
@@ -209,8 +218,8 @@ function VirtualChecksTable({
               <HeadCell className="sticky top-0 z-[2]" align="right">
                 Valor
               </HeadCell>
+              <HeadCell className="sticky top-0 z-[2]">Cobro / advertencia</HeadCell>
               <HeadCell className="sticky top-0 z-[2]">Emisión</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Cobro</HeadCell>
               <HeadCell className="sticky top-0 z-[2]">Avance</HeadCell>
             </tr>
           </thead>
@@ -222,6 +231,7 @@ function VirtualChecksTable({
                 <CheckRow
                   key={check.id}
                   check={check}
+                  notice={notices.get(check.id)}
                   accountName={
                     accountNames.get(check.accountId ?? "") ?? `${check.bank || "—"} · sin cuenta`
                   }
@@ -282,16 +292,19 @@ export function StepDots({ check }: { check: Pick<Check, "step" | "voided"> }) {
 const CheckRow = memo(function CheckRow({
   check,
   accountName,
+  notice,
   onOpen,
 }: {
   check: Check;
   accountName: string;
+  notice?: ReturnType<typeof pendingCollections>[number];
   onOpen: (id: string) => void;
 }) {
+  const [error, setError] = useState<string>();
   return (
     <GridRow
       onClick={() => onOpen(check.id)}
-      className={cn("h-[41px]", check.voided && "opacity-60")}
+      className={cn("h-[100px]", check.voided && "opacity-60")}
     >
       <Cell className="font-mono text-[12px] text-muted">{check.voucher}</Cell>
       <Cell className={cn("truncate", !check.accountId && "text-warning")}>{accountName}</Cell>
@@ -310,8 +323,57 @@ const CheckRow = memo(function CheckRow({
       <Cell numeric strong value={check.amount}>
         {money(check.amount)}
       </Cell>
+      <Cell
+        control
+        onClick={(event) => event.stopPropagation()}
+        className={cn(
+          "tabular-nums",
+          notice?.variant === "negative"
+            ? "bg-negative/5"
+            : notice?.variant === "warning" && "bg-warning/5",
+        )}
+      >
+        {notice ? (
+          <div className="flex flex-col gap-1 px-2 py-1">
+            <DateField
+              value={check.expectedCashOn ?? null}
+              nullable
+              variant="cell"
+              ariaLabel={`Cobro previsto del cheque ${check.number || check.voucher}`}
+              onChange={(expectedCashOn) => {
+                void cashDb.updateCheck(check.id, { expectedCashOn }).then(
+                  () => setError(undefined),
+                  () => setError("No se guardó la fecha. Intenta de nuevo."),
+                );
+              }}
+            />
+            {error ? (
+              <span role="alert" title={error} className="truncate text-[11px] text-negative">
+                {error}
+              </span>
+            ) : (
+              <Badge
+                variant={notice.variant}
+                className="self-start whitespace-nowrap gap-1"
+                title="Días calculados desde hoy"
+              >
+                <TriangleAlert size={13} aria-hidden />
+                {notice.label}
+              </Badge>
+            )}
+            <span className="text-[11px] font-semibold text-muted">
+              Revisar fondos: {money(check.amount)}
+            </span>
+          </div>
+        ) : (
+          <span className="px-3.5 text-muted">
+            {check.voided
+              ? "Anulado"
+              : `Cobrado${check.cashedOn ? ` · ${formatDayMonthYear(check.cashedOn)}` : ""}`}
+          </span>
+        )}
+      </Cell>
       <Cell className="tabular-nums text-muted">{formatDayMonthYear(check.issuedOn) ?? "—"}</Cell>
-      <Cell className="tabular-nums text-muted">{formatDayMonthYear(check.cashedOn) ?? "—"}</Cell>
       <Cell>
         <StepDots check={check} />
       </Cell>

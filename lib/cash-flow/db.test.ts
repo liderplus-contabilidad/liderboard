@@ -318,3 +318,36 @@ describe("overdraft dates", () => {
     });
   });
 });
+
+describe("planned check collection dates", () => {
+  it("persists the reminder through a register reload and allows clearing it", async () => {
+    const parsed = parseChecksLog(CHECKS_GRID).checks;
+    await importChecks(clientId, parsed);
+    const [check] = await listChecks(clientId);
+    await updateCheck(check.id, { expectedCashOn: "2026-10-01" });
+    await importChecks(clientId, parsed);
+    expect((await listChecks(clientId)).find((row) => row.id === check.id)?.expectedCashOn).toBe(
+      "2026-10-01",
+    );
+    await updateCheck(check.id, { expectedCashOn: null });
+    expect(
+      (await listChecks(clientId)).find((row) => row.id === check.id)?.expectedCashOn,
+    ).toBeNull();
+  });
+});
+
+it("imports a planned collection date for an already loaded pending check", async () => {
+  const parsed = parseChecksLog(CHECKS_GRID).checks.filter(
+    (check) => !check.voided && check.step !== "cashed",
+  );
+  await importChecks(clientId, parsed);
+  await importChecks(
+    clientId,
+    parsed.map((check) => ({ ...check, expectedCashOn: "2026-10-01" })),
+  );
+  expect(
+    (await listChecks(clientId)).every(
+      (check) => check.expectedCashOn === "2026-10-01" && check.cashedOn === null,
+    ),
+  ).toBe(true);
+});

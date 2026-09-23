@@ -165,6 +165,8 @@ export interface Check {
   step: CheckStep;
   voided: boolean;
   cashedOn: string | null;
+  /** Planned collection date, independent of the actual cashing date and issue date. */
+  expectedCashOn?: string | null;
   place: string;
   note: string;
   /** The beneficiary's cédula / RUC and address, for the comprobante. Optional: empty prints nothing. */
@@ -285,5 +287,6 @@ export interface ParsedCheck {
   step: CheckStep;
   voided: boolean;
   cashedOn: string | null;
+  expectedCashOn?: string | null;
   place: string;
 }

@@ -366,6 +366,17 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
               onChange={(issuedOn) => commit({ issuedOn })}
             />
           </FormField>
+          <FormField
+            label="Fecha prevista de cobro"
+            hint="Activa el aviso para preparar fondos en el banco"
+          >
+            <DateField
+              value={draft.expectedCashOn ?? null}
+              nullable
+              ariaLabel="Fecha prevista de cobro"
+              onChange={(expectedCashOn) => commit({ expectedCashOn })}
+            />
+          </FormField>
           <TextField
             label="Lugar"
             value={draft.place}

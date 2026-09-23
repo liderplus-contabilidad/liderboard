@@ -620,6 +620,7 @@ export async function importChecks(
       step: check.step,
       voided: check.voided,
       cashedOn: check.cashedOn,
+      expectedCashOn: check.expectedCashOn,
       place: check.place,
       note: "",
     };
@@ -637,6 +638,7 @@ export async function importChecks(
         return {
           ...row,
           note: kept?.note ?? "",
+          expectedCashOn: kept?.expectedCashOn ?? row.expectedCashOn ?? null,
           ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
           ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
           ...(kept?.payments?.length ? { payments: kept.payments } : {}),

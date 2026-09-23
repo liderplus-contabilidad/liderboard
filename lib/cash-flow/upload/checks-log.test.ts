@@ -42,3 +42,24 @@ describe("parseChecksLog", () => {
     expect(byVoucher.get("15563")).toMatchObject({ step: "cashed", cashedOn: "2024-07-18" });
   });
 });
+
+it("uses the collection date as planned while a check remains pending", () => {
+  const header = [
+    "N° EGRESO",
+    "BANCO",
+    "NOMBRE",
+    "CHEQUE",
+    "VALOR",
+    "FECHA DE EMISION",
+    "ESTADO",
+    "FECHA DE COBRO",
+  ];
+  const pending = ["1", "Banco", "Proveedor", "100", 500, "20/09/2026", "ENTREGADO", "30/09/2026"];
+  expect(parseChecksLog([header, pending]).checks[0]).toMatchObject({
+    cashedOn: null,
+    expectedCashOn: "2026-09-30",
+  });
+  expect(
+    parseChecksLog([header, [...pending.slice(0, 6), "COBRADO", "30/09/2026"]]).checks[0],
+  ).toMatchObject({ cashedOn: "2026-09-30", step: "cashed" });
+});
