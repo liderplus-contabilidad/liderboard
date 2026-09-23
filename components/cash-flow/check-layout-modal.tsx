@@ -7,7 +7,7 @@ import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { Modal } from "@/components/ui/modal";
 import { NumericInput } from "@/components/ui/numeric-input";
 import * as cashDb from "@/lib/cash-flow/db";
-import { downloadCheckTest } from "@/lib/cash-flow/check-print/download";
+import { createCheckTestPdf, type PdfPreview } from "@/lib/cash-flow/check-print/download";
 import {
   CHECK_FIELD_LABELS,
   CHECK_FIELDS,
@@ -17,6 +17,8 @@ import {
   type CheckLayout,
 } from "@/lib/cash-flow/check-print/layout";
 import type { BankAccount } from "@/lib/cash-flow/types";
+
+import { CheckPdfPreview } from "./check-pdf-preview";
 
 const POSITION_PARTS: readonly { key: keyof CheckFieldPosition; label: string }[] = [
   { key: "x", label: "Izq." },
@@ -41,6 +43,8 @@ export function CheckLayoutModal({
   onClose: () => void;
 }) {
   const [layout, setLayout] = useState<CheckLayout>(() => resolveCheckLayout(account.checkLayout));
+  const [pdf, setPdf] = useState<PdfPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const save = useCallback(
@@ -59,8 +63,11 @@ export function CheckLayoutModal({
 
   const test = useCallback(async () => {
     setBusy(true);
+    setError(null);
     try {
-      await downloadCheckTest({ ...account, checkLayout: layout }, date);
+      setPdf(await createCheckTestPdf({ ...account, checkLayout: layout }, date));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo generar el PDF.");
     } finally {
       setBusy(false);
     }
@@ -156,6 +163,13 @@ export function CheckLayoutModal({
           </div>
         </section>
 
+        {error && (
+          <p role="alert" className="text-[12px] text-negative">
+            {error}
+          </p>
+        )}
+        {pdf && <CheckPdfPreview pdf={pdf} onClose={() => setPdf(null)} />}
+
         <div className="flex items-center gap-2 border-t border-border-soft pt-4">
           <Button
             variant="ghost"
@@ -172,7 +186,7 @@ export function CheckLayoutModal({
             disabled={busy}
             onClick={() => void test()}
           >
-            {busy ? "Generando…" : "Imprimir prueba"}
+            {busy ? "Generando…" : "Ver PDF de prueba"}
           </Button>
         </div>
       </div>

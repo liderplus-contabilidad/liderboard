@@ -23,9 +23,12 @@ function toWinAnsi(text: string): string {
 export async function renderPrintPages(
   build: (measure: MeasureText) => readonly PrintPage[],
 ): Promise<Uint8Array> {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, PrintScaling, rgb } = await import("pdf-lib");
 
   const pdf = await PDFDocument.create();
+  const preferences = pdf.catalog.getOrCreateViewerPreferences();
+  preferences.setPrintScaling(PrintScaling.None);
+  preferences.setPickTrayByPDFSize(true);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const measure: MeasureText = (text, size, isBold) =>

@@ -18,7 +18,7 @@ import type { MeasureText, PrintPage, PrintRect, PrintText } from "./types";
 import { amountInWords } from "./words";
 
 /** One datum's place on the form, in mm from the check's top-left corner. `y` is the BASELINE;
- *  `width` is the room it has before it shrinks. */
+ *  `width` is the available room; overflowing data is rejected without resizing. */
 export interface CheckFieldPosition {
   x: number;
   y: number;
@@ -73,10 +73,6 @@ export function resolveCheckLayout(stored: Partial<CheckLayout> | undefined): Ch
 
 export const mmToPt = (mm: number) => (mm * 72) / 25.4;
 
-/** The smallest a datum shrinks to before the words split in two lines: 70 % of the size. */
-const MIN_SCALE = 0.7;
-const SHRINK_STEP = 0.5;
-/** From the first line of the words to the second, as a multiple of the size. */
 const LINE_PITCH = 1.3;
 
 const INK = "#000000";
@@ -115,38 +111,6 @@ export const SAMPLE_CHECK: Omit<CheckPrintInput, "date"> = {
   amount: 9200,
 };
 
-/** The largest size ≥ 70 % that fits `width`, or `null` when not even that does. */
-function fittingSize(
-  text: string,
-  width: number,
-  size: number,
-  measure: MeasureText,
-): number | null {
-  for (let candidate = size; candidate >= size * MIN_SCALE - 1e-9; candidate -= SHRINK_STEP) {
-    if (measure(text, candidate, false) <= width) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/** Splits `text` by words into two lines as balanced as the width allows: the first as full as it
- *  fits, the rest on the second. */
-function splitInTwo(text: string, width: number, size: number, measure: MeasureText): string[] {
-  const words = text.split(" ");
-  let first = "";
-  let index = 0;
-  for (; index < words.length; index += 1) {
-    const candidate = first ? `${first} ${words[index]}` : words[index];
-    if (first && measure(candidate, size, false) > width) {
-      break;
-    }
-    first = candidate;
-  }
-  const rest = words.slice(index).join(" ");
-  return rest ? [first, rest] : [first];
-}
-
 /**
  * The check as a page: the four data at the layout's positions, shifted by its calibration. With
  * `guides`, the SAME page plus the form's outline and a labelled box per field — one route of
@@ -158,6 +122,25 @@ export function placeCheck(
   measure: MeasureText,
   { guides = false }: { guides?: boolean } = {},
 ): PrintPage {
+  const positive = [
+    layout.width,
+    layout.height,
+    layout.fontSize,
+    ...CHECK_FIELDS.map((field) => layout[field].width),
+  ];
+  const coordinates = [
+    layout.offsetX,
+    layout.offsetY,
+    ...CHECK_FIELDS.flatMap((field) => [layout[field].x, layout[field].y]),
+  ];
+  if (
+    positive.some((value) => !Number.isFinite(value) || value <= 0) ||
+    coordinates.some((value) => !Number.isFinite(value))
+  ) {
+    throw new Error(
+      "Revisa el formato del banco: las dimensiones, los anchos y el tamaño de letra deben ser positivos y las posiciones válidas.",
+    );
+  }
   const size = layout.fontSize;
   const texts: PrintText[] = [];
   const rects: PrintRect[] = [];
@@ -177,17 +160,22 @@ export function placeCheck(
       color: INK,
     });
 
-    const fitted = fittingSize(value, width, size, measure);
-    if (fitted !== null) {
-      texts.push(text(value, fitted, y));
-    } else if (field === "words") {
-      // Only the words are long enough to need a second line; the other three keep the smallest size.
-      splitInTwo(value, width, size, measure).forEach((line, index) =>
-        texts.push(text(line, size, y + index * size * LINE_PITCH)),
+    if (measure(value, size, false) > width) {
+      throw new Error(
+        `${CHECK_FIELD_LABELS[field]} no cabe en el ancho configurado. Revisa el dato o el formato de cheque de esta cuenta.`,
       );
-    } else {
-      texts.push(text(value, size * MIN_SCALE, y));
     }
+    if (
+      x < 0 ||
+      y - size < 0 ||
+      x + width > mmToPt(layout.width) ||
+      y + size * 0.25 > mmToPt(layout.height)
+    ) {
+      throw new Error(
+        `${CHECK_FIELD_LABELS[field]} queda fuera del cheque con las medidas y la calibración configuradas.`,
+      );
+    }
+    texts.push(text(value, size, y));
 
     if (guides) {
       rects.push({ x, y: y - size, width, height: size * LINE_PITCH, stroke: GUIDE });

@@ -8,7 +8,11 @@ import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { SidePanel } from "@/components/ui/side-panel";
 import { CHECK_STEP_LABELS, CHECK_STEPS, nextVoucher, stepIndex } from "@/lib/cash-flow/checks";
-import { downloadCheck, downloadVoucher } from "@/lib/cash-flow/check-print/download";
+import {
+  createCheckPdf,
+  downloadVoucher,
+  type PdfPreview,
+} from "@/lib/cash-flow/check-print/download";
 import { knownPayeeDetails } from "@/lib/cash-flow/check-print/payee";
 import { buildVoucherDocument, type VoucherDocument } from "@/lib/cash-flow/check-print/voucher";
 import * as cashDb from "@/lib/cash-flow/db";
@@ -16,6 +20,7 @@ import { money } from "@/lib/cash-flow/derive";
 import type { Check, CheckPayment, CheckStep, Payable } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 
+import { CheckPdfPreview } from "./check-pdf-preview";
 import { AccountPicker } from "./account-picker";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CheckPaymentsSection } from "./check-payments-section";
@@ -59,6 +64,7 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
         },
   );
   const [error, setError] = useState<string | undefined>();
+  const [pdf, setPdf] = useState<PdfPreview | null>(null);
   const [printing, setPrinting] = useState(false);
   const [voucherDraft, setVoucherDraft] = useState<VoucherDocument | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
@@ -172,12 +178,16 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
     setPrinting(true);
     setPrintError(null);
     try {
-      await downloadCheck(
-        { payee: draft.payee, amount: draft.amount, date: printDate, number: draft.number },
-        account,
+      setPdf(
+        await createCheckPdf(
+          { payee: draft.payee, amount: draft.amount, date: printDate, number: draft.number },
+          account,
+        ),
       );
-    } catch {
-      setPrintError("No se pudo generar el PDF. Intenta de nuevo.");
+    } catch (error) {
+      setPrintError(
+        error instanceof Error ? error.message : "No se pudo generar el PDF. Intenta de nuevo.",
+      );
     } finally {
       setPrinting(false);
     }
@@ -402,7 +412,7 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
                   disabled={printing}
                   onClick={() => void printCheck()}
                 >
-                  {printing ? "Generando…" : "Imprimir cheque"}
+                  {printing ? "Generando…" : "Ver PDF e imprimir"}
                 </Button>
               )}
               <Button
@@ -427,6 +437,8 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             )}
           </section>
         )}
+
+        {pdf && <CheckPdfPreview pdf={pdf} onClose={() => setPdf(null)} />}
 
         {voucherDraft && (
           <VoucherFormModal

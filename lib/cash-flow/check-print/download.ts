@@ -1,7 +1,6 @@
 /**
- * The three PDFs' names and their download. Thin on purpose: `downloadBlob` is the app's one way of
- * downloading, `render.ts` comes in through a dynamic import, and all that is decided here is what
- * each file is called — the way the firm's own checks were named, `Cheque-5751-ENI-ECUADOR-S-A.pdf`.
+ * Builds check PDFs for preview and printing; vouchers retain their explicit download.
+ * Rendering is imported dynamically and never writes to the account's configuration.
  */
 import { downloadBlob } from "@/lib/download";
 import { placeCheck, resolveCheckLayout, SAMPLE_CHECK, type CheckPrintInput } from "./layout";
@@ -9,6 +8,11 @@ import type { MeasureText, PrintPage } from "./types";
 import type { BankAccount } from "../types";
 import type { VoucherDocument } from "./voucher";
 import { layoutVoucher } from "./voucher-layout";
+
+export interface PdfPreview {
+  blob: Blob;
+  filename: string;
+}
 
 /** A piece of a file name: no accents, no spaces, no punctuation. */
 function slug(text: string): string {
@@ -40,42 +44,46 @@ export function checkTestFilename(account: Pick<BankAccount, "bank" | "number">)
   return joinName("Prueba-Cheque", account.bank, account.number);
 }
 
-async function download(
+async function buildPdf(
   build: (measure: MeasureText) => readonly PrintPage[],
   filename: string,
-): Promise<void> {
+): Promise<PdfPreview> {
   const { renderPrintPages } = await import("./render");
   const bytes = await renderPrintPages(build);
-  downloadBlob(new Blob([bytes.slice().buffer], { type: "application/pdf" }), filename);
+  return { blob: new Blob([bytes.slice().buffer], { type: "application/pdf" }), filename };
 }
 
-export function downloadCheck(
+export function createCheckPdf(
   input: CheckPrintInput & { number: string },
   account: Pick<BankAccount, "checkLayout">,
-): Promise<void> {
+): Promise<PdfPreview> {
   const layout = resolveCheckLayout(account.checkLayout);
-  return download(
+  return buildPdf(
     (measure) => [placeCheck(input, layout, measure)],
     checkFilename(input.number, input.payee),
   );
 }
 
 /** The alignment test: the same check with the form's outline and a labelled box per field. */
-export function downloadCheckTest(
+export function createCheckTestPdf(
   account: Pick<BankAccount, "bank" | "number" | "checkLayout">,
   date: string,
-): Promise<void> {
+): Promise<PdfPreview> {
   const layout = resolveCheckLayout(account.checkLayout);
-  return download(
+  return buildPdf(
     (measure) => [placeCheck({ ...SAMPLE_CHECK, date }, layout, measure, { guides: true })],
     checkTestFilename(account),
   );
 }
 
-export function downloadVoucher(
+export async function downloadVoucher(
   document: VoucherDocument,
   voucher: string,
   payee: string,
 ): Promise<void> {
-  return download((measure) => layoutVoucher(document, measure), voucherFilename(voucher, payee));
+  const pdf = await buildPdf(
+    (measure) => layoutVoucher(document, measure),
+    voucherFilename(voucher, payee),
+  );
+  downloadBlob(pdf.blob, pdf.filename);
 }

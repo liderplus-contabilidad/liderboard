@@ -39,17 +39,23 @@ describe("placeCheck", () => {
     });
   });
 
-  it("shrinks a long datum and splits only the words in two lines", () => {
+  it("rejects overflow instead of changing the configured font or adding lines", () => {
     const narrow = resolveCheckLayout({ words: { x: 22, y: 34, width: 60 } });
-    const page = placeCheck({ ...ENI, amount: 777_777.77 }, narrow, measure);
-    const words = page.texts.filter((text) => text.y >= 96);
-    expect(words.length).toBeGreaterThanOrEqual(2);
-    expect(
-      words
-        .slice(0, 2)
-        .map((text) => text.text)
-        .join(" "),
-    ).toContain("SETECIENTOS");
+    expect(() => placeCheck(ENI, narrow, measure)).toThrow("Monto en letras no cabe");
+    expect(() =>
+      placeCheck({ ...ENI, payee: "NOMBRE ".repeat(40) }, DEFAULT_CHECK_LAYOUT, measure),
+    ).toThrow("Beneficiario no cabe");
+  });
+
+  it("rejects invalid dimensions and calibration outside the paper", () => {
+    for (const width of [0, -1, NaN, Infinity]) {
+      expect(() => placeCheck(ENI, { ...DEFAULT_CHECK_LAYOUT, width }, measure)).toThrow(
+        "formato del banco",
+      );
+    }
+    expect(() => placeCheck(ENI, { ...DEFAULT_CHECK_LAYOUT, offsetX: 100 }, measure)).toThrow(
+      "fuera del cheque",
+    );
   });
 
   it("draws the outline and a labelled box per field with guides", () => {
