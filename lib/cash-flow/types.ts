@@ -60,6 +60,9 @@ export interface BankAccount {
   label?: string;
   /** The credit line the flow adds to the balance: `disponible = saldo + sobregiro`. */
   overdraft: number;
+  /** Optional reminder dates; they do not change the credit line in flow calculations. */
+  overdraftStartsOn?: string | null;
+  overdraftEndsOn?: string | null;
   /** The unit that owns it, or `null` for an account of the empresa as a whole. */
   centerId: string | null;
   /** Where each datum falls on THIS chequebook's form, partial: `resolveCheckLayout` completes it

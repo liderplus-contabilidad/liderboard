@@ -27,6 +27,7 @@ import {
   listPayables,
   saveFlow,
   settlePayables,
+  updateAccount,
   updateCashEntry,
   updateCheck,
   updatePayables,
@@ -286,5 +287,34 @@ describe("cash entries", () => {
     await deleteClient(other);
     expect(await listCashEntries(other)).toHaveLength(0);
     expect(await listCashEntries(clientId)).toHaveLength(1);
+  });
+});
+
+describe("overdraft dates", () => {
+  it("persists dates, rejects inverted edits and allows removing reminders", async () => {
+    const account = await addAccount(clientId, {
+      bank: "Banco",
+      number: "1",
+      overdraft: 500,
+      centerId: null,
+      overdraftStartsOn: "2026-09-01",
+      overdraftEndsOn: "2026-09-30",
+    });
+    expect((await listAccounts(clientId))[0]).toMatchObject({
+      overdraftStartsOn: "2026-09-01",
+      overdraftEndsOn: "2026-09-30",
+    });
+    await expect(updateAccount(account.id, { overdraftEndsOn: "2026-08-31" })).rejects.toThrow(
+      "fecha de fin",
+    );
+    expect((await listAccounts(clientId))[0].overdraftEndsOn).toBe("2026-09-30");
+    await updateAccount(account.id, { overdraftEndsOn: "2026-10-15" });
+    expect((await listAccounts(clientId))[0].overdraftEndsOn).toBe("2026-10-15");
+    await updateAccount(account.id, { overdraftStartsOn: null, overdraftEndsOn: null });
+    expect((await listAccounts(clientId))[0]).toMatchObject({
+      overdraftStartsOn: null,
+      overdraftEndsOn: null,
+      overdraft: 500,
+    });
   });
 });

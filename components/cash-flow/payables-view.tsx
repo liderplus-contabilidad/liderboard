@@ -39,6 +39,7 @@ import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
+import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
 import { ManualPayablePanel } from "./manual-payable-panel";
 import { AgingBadge, ApprovalDots, CashBadge, PriorityBadge } from "./payable-badges";
@@ -166,6 +167,7 @@ export function PayablesView() {
   return (
     <CashFlowEmptyState needsAccounts={false}>
       <div className="flex h-full flex-col gap-4 px-7 py-5">
+        <OverdraftNotices />
         <div className="flex gap-3">
           <StatTile
             label="Total por pagar"

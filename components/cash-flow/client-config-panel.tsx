@@ -2,6 +2,8 @@
 
 import { ChevronRight, Landmark, MapPin, Plus, Printer, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { OverdraftDateFields } from "./overdraft-date-fields";
+import { overdraftDatesError } from "@/lib/cash-flow/overdraft";
 import { Button } from "@/components/ui/button";
 import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
@@ -169,6 +171,10 @@ function AccountsSection({
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
   const [overdraft, setOverdraft] = useState<number | null>(0);
+  const [overdraftStartsOn, setOverdraftStartsOn] = useState<string | null>(null);
+  const [overdraftEndsOn, setOverdraftEndsOn] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string>();
+  const [accountError, setAccountError] = useState<{ id: string; message: string } | null>(null);
   const [centerId, setCenterId] = useState<string>(NO_CENTER);
   const [error, setError] = useState<string | undefined>();
   const { asOf } = useCashFlowData();
@@ -198,20 +204,30 @@ function AccountsSection({
       setError("Escribe el banco.");
       return;
     }
+    const dateError = overdraftDatesError({ overdraftStartsOn, overdraftEndsOn });
+    if (dateError) {
+      setDateError(dateError);
+      return;
+    }
     await cashDb.addAccount(clientId, {
       bank,
       number,
       label: name,
       overdraft: overdraft ?? 0,
+      overdraftStartsOn,
+      overdraftEndsOn,
       centerId: centerId || null,
     });
     setBank("");
     setNumber("");
     setName("");
     setOverdraft(0);
+    setOverdraftStartsOn(null);
+    setOverdraftEndsOn(null);
+    setDateError(undefined);
     setCenterId(NO_CENTER);
     setError(undefined);
-  }, [clientId, bank, number, name, overdraft, centerId]);
+  }, [clientId, bank, number, name, overdraft, centerId, overdraftStartsOn, overdraftEndsOn]);
 
   return (
     <section className="flex flex-col gap-3">
@@ -314,6 +330,18 @@ function AccountsSection({
                       />
                     </FieldBox>
                   </FormField>
+                  <OverdraftDateFields
+                    startsOn={account.overdraftStartsOn ?? null}
+                    endsOn={account.overdraftEndsOn ?? null}
+                    error={accountError?.id === account.id ? accountError.message : undefined}
+                    onChange={(patch) => {
+                      void cashDb.updateAccount(account.id, patch).then(
+                        () => setAccountError(null),
+                        (error: Error) =>
+                          setAccountError({ id: account.id, message: error.message }),
+                      );
+                    }}
+                  />
                   {centers.length > 0 && (
                     <div className="col-span-2">
                       <Select
@@ -371,6 +399,16 @@ function AccountsSection({
             />
           </FieldBox>
         </FormField>
+        <OverdraftDateFields
+          startsOn={overdraftStartsOn}
+          endsOn={overdraftEndsOn}
+          error={dateError}
+          onChange={(patch) => {
+            if ("overdraftStartsOn" in patch) setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
+            if ("overdraftEndsOn" in patch) setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
+            setDateError(undefined);
+          }}
+        />
         {centers.length > 0 && (
           <Select
             label="Centro"

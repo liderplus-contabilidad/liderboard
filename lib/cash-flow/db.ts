@@ -17,6 +17,7 @@ import { mergeCut, type IncomingPayable } from "./cut";
 import { applyNotes } from "./cell-notes";
 import type { CheckLayout } from "./check-print/layout";
 import { todayISO } from "./dates";
+import { overdraftDatesError } from "./overdraft";
 import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
 import { cashColumnRole, type ParsedCashSheet } from "./upload/cash-entries";
@@ -309,10 +310,14 @@ export async function listAccounts(clientId: string): Promise<BankAccount[]> {
 
 export type BankAccountInput = Pick<BankAccount, "bank" | "number" | "overdraft" | "centerId"> & {
   label?: string;
+  overdraftStartsOn?: string | null;
+  overdraftEndsOn?: string | null;
   checkLayout?: Partial<CheckLayout>;
 };
 
 export async function addAccount(clientId: string, input: BankAccountInput): Promise<BankAccount> {
+  const error = overdraftDatesError(input);
+  if (error) throw new Error(error);
   const label = input.label?.trim();
   const account: BankAccount = {
     id: crypto.randomUUID(),
@@ -321,6 +326,8 @@ export async function addAccount(clientId: string, input: BankAccountInput): Pro
     number: input.number.trim(),
     ...(label ? { label } : {}),
     overdraft: input.overdraft,
+    overdraftStartsOn: input.overdraftStartsOn ?? null,
+    overdraftEndsOn: input.overdraftEndsOn ?? null,
     centerId: input.centerId,
   };
   await db.accounts.add(account);
@@ -331,12 +338,18 @@ export async function updateAccount(
   accountId: string,
   patch: Partial<BankAccountInput>,
 ): Promise<void> {
-  await db.accounts.update(accountId, {
-    ...patch,
-    ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
-    ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
-    // An emptied label is removed, so the account goes back to bank + number.
-    ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+  await db.transaction("rw", db.accounts, async () => {
+    const account = await db.accounts.get(accountId);
+    if (!account) return;
+    const error = overdraftDatesError({ ...account, ...patch });
+    if (error) throw new Error(error);
+    await db.accounts.update(accountId, {
+      ...patch,
+      ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
+      ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
+      // An emptied label is removed, so the account goes back to bank + number.
+      ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+    });
   });
 }
 
