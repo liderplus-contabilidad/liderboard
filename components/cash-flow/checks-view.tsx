@@ -7,7 +7,14 @@ import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { GridRow } from "@/components/data-table/data-grid";
 import { Badge } from "@/components/ui/badge";
 import { DateField } from "@/components/ui/date-field";
-import { pendingCollections } from "@/lib/cash-flow/check-collection";
+import {
+  pendingCollections,
+  collectionView,
+  COLLECTION_FILTERS,
+  type CollectionFilter,
+  type CollectionOrder,
+} from "@/lib/cash-flow/check-collection";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useReminderToday } from "./use-reminder-today";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,6 +59,9 @@ export function ChecksView() {
     useCashFlowData();
   const [openId, setOpenId] = useState<string | null | "new">(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const today = useReminderToday();
+  const [collectionFilter, setCollectionFilter] = useState<CollectionFilter>("all");
+  const [collectionOrder, setCollectionOrder] = useState<CollectionOrder>("issued");
 
   const outstanding = useMemo(() => outstandingByAccount(checks, asOf), [checks, asOf]);
   const outstandingTotal = useMemo(
@@ -59,6 +69,7 @@ export function ChecksView() {
     [outstanding],
   );
   const filtered =
+    collectionFilter !== "all" ||
     checkFilters.accountIds.length > 0 ||
     checkFilters.steps.length > 0 ||
     checkFilters.years.length > 0 ||
@@ -72,14 +83,9 @@ export function ChecksView() {
     () => (openId && openId !== "new" ? (checks.find((row) => row.id === openId) ?? null) : null),
     [checks, openId],
   );
-  const sorted = useMemo(
-    () =>
-      [...visibleChecks].sort(
-        (a, b) =>
-          (b.issuedOn ?? "").localeCompare(a.issuedOn ?? "") ||
-          (b.voucher ?? "").localeCompare(a.voucher ?? "", undefined, { numeric: true }),
-      ),
-    [visibleChecks],
+  const { rows: sorted, counts: collectionCounts } = useMemo(
+    () => collectionView(visibleChecks, today, collectionFilter, collectionOrder),
+    [visibleChecks, today, collectionFilter, collectionOrder],
   );
   const visibleTotal = useMemo(
     () => sorted.filter((check) => !check.voided).reduce((acc, check) => acc + check.amount, 0),
@@ -140,6 +146,35 @@ export function ChecksView() {
           </Button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <SegmentedControl
+            ariaLabel="Filtrar por advertencia de cobro"
+            className="flex-wrap"
+            value={collectionFilter}
+            options={COLLECTION_FILTERS.map(({ value, label }) => ({
+              value,
+              label: `${label} (${collectionCounts[value]})`,
+            }))}
+            onChange={(value) => {
+              setCollectionFilter(value);
+              if (value !== "all") setCollectionOrder("collection");
+            }}
+          />
+          <Select
+            size="sm"
+            aria-label="Ordenar cheques"
+            value={collectionOrder}
+            options={[
+              { value: "issued", label: "Orden: emisión más reciente" },
+              { value: "collection", label: "Orden: cobro más próximo" },
+            ]}
+            onChange={(event) => setCollectionOrder(event.target.value as CollectionOrder)}
+          />
+          <span className="text-[11px] text-faint">
+            Avisos al {formatDayMonthYear(today)} · Sobre los filtros actuales
+          </span>
+        </div>
+
         {sorted.length === 0 ? (
           <EmptyState icon={<Receipt size={22} />}>
             {checks.length === 0 ? (
@@ -154,7 +189,12 @@ export function ChecksView() {
             )}
           </EmptyState>
         ) : (
-          <VirtualChecksTable sorted={sorted} accountNames={accountNames} onOpen={setOpenId} />
+          <VirtualChecksTable
+            key={`${collectionFilter}:${collectionOrder}`}
+            sorted={sorted}
+            accountNames={accountNames}
+            onOpen={setOpenId}
+          />
         )}
       </div>
 
