@@ -15,9 +15,10 @@ interface NumericInputProps {
    * `amount` = always two decimals and NO symbol («1,234.00»), for a column that already names its
    * unit — it is what gets compared against a spreadsheet cell by cell; `currency` = the same, with
    * the symbol («$1,234.00»), for a column whose header names a CONCEPT and not a unit; `plain` = a
-   * grouped number with no padding («30»), for a quantity.
+   * grouped number with no padding («30»), for a quantity. `precise` keeps every stored decimal
+   * for physical measurements, so focusing and blurring cannot round their configuration.
    */
-  format?: "amount" | "currency" | "plain";
+  format?: "amount" | "currency" | "plain" | "precise";
   /** With `true`, emptying the field emits `null`; without it, emptying reverts to the previous value
    *  instead of inventing a zero. */
   nullable?: boolean;
@@ -63,7 +64,9 @@ export function NumericInput({
         ? formatAmount(value)
         : format === "currency"
           ? formatCurrency(value, { cents: true })
-          : formatNumber(value);
+          : format === "precise"
+            ? String(value)
+            : formatNumber(value);
 
   const commit = useCallback(
     (text: string) => {

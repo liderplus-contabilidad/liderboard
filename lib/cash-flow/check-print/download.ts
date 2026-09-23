@@ -55,9 +55,9 @@ async function buildPdf(
 
 export function createCheckPdf(
   input: CheckPrintInput & { number: string },
-  account: Pick<BankAccount, "checkLayout">,
+  account: Pick<BankAccount, "bank" | "checkLayout">,
 ): Promise<PdfPreview> {
-  const layout = resolveCheckLayout(account.checkLayout);
+  const layout = resolveCheckLayout(account.checkLayout, account.bank);
   return buildPdf(
     (measure) => [placeCheck(input, layout, measure)],
     checkFilename(input.number, input.payee),
@@ -69,7 +69,7 @@ export function createCheckTestPdf(
   account: Pick<BankAccount, "bank" | "number" | "checkLayout">,
   date: string,
 ): Promise<PdfPreview> {
-  const layout = resolveCheckLayout(account.checkLayout);
+  const layout = resolveCheckLayout(account.checkLayout, account.bank);
   return buildPdf(
     (measure) => [placeCheck({ ...SAMPLE_CHECK, date }, layout, measure, { guides: true })],
     checkTestFilename(account),

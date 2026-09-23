@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CHECK_LAYOUT,
+  PICHINCHA_CHECK_LAYOUT,
   checkAmountText,
   checkPlaceText,
   placeCheck,
@@ -66,6 +67,42 @@ describe("placeCheck", () => {
 });
 
 describe("resolveCheckLayout", () => {
+  it.each(["Pichincha", "BANCO PICHINCHA", "  Banco   Pichincha  ", "pichincha"])(
+    "uses the supplied Pichincha format for %s",
+    (bank) => {
+      expect(resolveCheckLayout(undefined, bank)).toEqual(PICHINCHA_CHECK_LAYOUT);
+      expect(resolveCheckLayout({}, bank)).toEqual(PICHINCHA_CHECK_LAYOUT);
+    },
+  );
+
+  it.each(["Produbanco", "Banco Guayaquil", "", "Cooperativa Pichincha"])(
+    "keeps the original default for %s",
+    (bank) => expect(resolveCheckLayout(undefined, bank)).toEqual(DEFAULT_CHECK_LAYOUT),
+  );
+
+  it("preserves legacy customizations and resets to the named bank's default", () => {
+    const stored = { width: 185, offsetX: 1.5, city: "Quito" };
+    const resolved = resolveCheckLayout(stored, "Banco Pichincha");
+    expect(resolved).toMatchObject({ ...stored, format: "standard" });
+    expect(resolved.payee).toEqual(DEFAULT_CHECK_LAYOUT.payee);
+    expect(resolveCheckLayout(undefined, "Banco Pichincha")).toEqual(PICHINCHA_CHECK_LAYOUT);
+    expect(stored).toEqual({ width: 185, offsetX: 1.5, city: "Quito" });
+  });
+
+  it("keeps customized Pichincha coordinates, calibration and text format", () => {
+    const stored = {
+      format: "pichincha" as const,
+      offsetX: 2,
+      city: "Quito",
+      payee: { x: 160 } as never,
+    };
+    const resolved = resolveCheckLayout(stored, "Pichincha");
+    expect(resolved).toMatchObject({ format: "pichincha", offsetX: 2, city: "Quito" });
+    expect(resolved.payee).toEqual({ ...PICHINCHA_CHECK_LAYOUT.payee, x: 160 });
+    resolved.filler!.x = 1;
+    expect(PICHINCHA_CHECK_LAYOUT.filler!.x).not.toBe(1);
+  });
+
   it("completes a partial stored layout with the default, field by field", () => {
     const layout = resolveCheckLayout({ city: "Ambato", payee: { x: 40 } as never });
     expect(layout.city).toBe("Ambato");

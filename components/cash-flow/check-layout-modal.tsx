@@ -42,17 +42,19 @@ export function CheckLayoutModal({
   date: string;
   onClose: () => void;
 }) {
-  const [layout, setLayout] = useState<CheckLayout>(() => resolveCheckLayout(account.checkLayout));
+  const [layout, setLayout] = useState<CheckLayout>(() =>
+    resolveCheckLayout(account.checkLayout, account.bank),
+  );
   const [pdf, setPdf] = useState<PdfPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const save = useCallback(
     (next: CheckLayout | undefined) => {
-      setLayout(next ?? resolveCheckLayout(undefined));
+      setLayout(next ?? resolveCheckLayout(undefined, account.bank));
       void cashDb.updateAccount(account.id, { checkLayout: next });
     },
-    [account.id],
+    [account.id, account.bank],
   );
 
   const setNumber = (key: "width" | "height" | "fontSize" | "offsetX" | "offsetY", value: number) =>
@@ -77,7 +79,7 @@ export function CheckLayoutModal({
     <FieldBox>
       <NumericInput
         value={value}
-        format="plain"
+        format="precise"
         align="left"
         ariaLabel={label}
         onCommit={(next) => next !== null && onCommit(next)}
@@ -95,10 +97,16 @@ export function CheckLayoutModal({
     >
       <div className="flex flex-col gap-5">
         <p className="text-[12.5px] leading-relaxed text-muted">
-          Medidas en milímetros desde la esquina superior izquierda del cheque; la altura es la de
-          la línea donde se apoya el texto. Imprime a «Tamaño real» (100 %) y ajusta con una prueba
+          Medidas en milímetros desde la esquina superior izquierda del papel; la altura es la de la
+          línea donde se apoya el texto. Imprime a «Tamaño real» (100 %) y ajusta con una prueba
           sobre un cheque real.
         </p>
+        {layout.format === "pichincha" && (
+          <p className="text-[12.5px] text-muted">
+            Formato Pichincha: hoja A4 horizontal, monto con coma decimal, fecha AAAA/MM/DD y
+            asteriscos de relleno. Las posiciones se miden desde la hoja A4.
+          </p>
+        )}
 
         <section className="grid grid-cols-4 gap-3">
           <FormField label="Ancho (mm)">
@@ -120,6 +128,29 @@ export function CheckLayoutModal({
             }
           />
         </section>
+
+        {layout.format === "pichincha" && layout.filler && (
+          <section>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+              Línea de asteriscos (mm)
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              {POSITION_PARTS.map((part) => (
+                <FormField key={part.key} label={part.label}>
+                  {mm(
+                    layout.filler![part.key],
+                    (value) =>
+                      save({
+                        ...layout,
+                        filler: { ...layout.filler!, [part.key]: value },
+                      }),
+                    `Línea de asteriscos: ${part.label}`,
+                  )}
+                </FormField>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
