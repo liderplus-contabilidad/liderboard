@@ -1,14 +1,18 @@
 /**
  * The flow, DERIVED. A `PaymentFlow` stores only what was captured at a date — a balance per account
- * and the projected incomes — and everything the paper shows is computed here from that, from the
+ * and the incomes — and everything the paper shows is computed here from that, from the
  * accounts (their overdraft), from the check register (`outstandingByAccount` at the date) and from
  * the documents' MARKS (`priority`, `payFromAccountId`, `markedAmount`). It is the third seam of the
  * old workbooks — cheques → flujo, detalle → resumen, cartera → decisión — turned into one function
  * the screen, Resumen, the report and the Excel all read.
  *
- * Per account: `available = balance + overdraft`, `incomes`, `bankTotal = available + incomes` (the
- * «TOTAL BANCOS» of the Nomik sheet: saldo + ingresos + sobregiro), `outstanding` (checks),
- * `urgent`, `pending`, `remaining = bankTotal − outstanding − urgent − pending`, `shortfall =
+ * Per account: `bankTotal = available = balance + overdraft` («TOTAL BANCOS»: what the banks hold,
+ * the incomes apart), then `incomes` («TOTAL INGRESOS»), read in that order on screen and on paper;
+ * the saldo final adds the two. Every income is an INCOME —
+ * none is «proyectado» apart — and each LABEL is a column of its own (`incomeColumns`), the way
+ * the sheet writes «PROYECCION INGRESOS RESERVAS» beside the saldo: two incomes with the same label
+ * (`normalizeLabel`) are one column, and `incomes` is the sum of a row's columns. `outstanding` (checks),
+ * `urgent`, `pending`, `remaining = bankTotal + incomes − outstanding − urgent − pending`, `shortfall =
  * max(0, −remaining)`. The company row is the sum, with two more readings the sheet's «SALDO
  * FALTANTE» row writes beside the first: what would remain paying ONLY the urgent, and ONLY the
  * pending. A marked document with NO account chosen counts in the company row and in no account:
@@ -38,14 +42,31 @@ export interface AccountFlow {
   account: BankAccount;
   balance: number;
   available: number;
-  /** Saldo + ingresos + sobregiro — the sheet's «TOTAL BANCOS». */
+  /** Saldo + sobregiro — «TOTAL BANCOS», the incomes apart. */
   bankTotal: number;
   outstanding: number;
+  /** Σ the row's income columns — «TOTAL INGRESOS». */
   incomes: number;
   urgent: number;
   pending: number;
   remaining: number;
   shortfall: number;
+}
+
+/** One income LABEL as a column of the bank table: what it adds to each account. */
+export interface IncomeColumn {
+  key: string;
+  label: string;
+  /** Account id → what this label adds to it. Absent means 0. */
+  byAccount: Record<string, number>;
+  /** What this label adds with no account chosen — the company row only. */
+  unassigned: number;
+  total: number;
+}
+
+/** The label an income is shown and grouped under: an unnamed one is just «Ingreso». */
+export function incomeLabel(income: FlowIncome): string {
+  return income.concept.trim() || "Ingreso";
 }
 
 export interface FlowTotals {
@@ -91,6 +112,8 @@ export interface DerivedFlow {
   totals: FlowTotals;
   /** Incomes not tied to any account — they still add to the company row. */
   unassignedIncomes: number;
+  /** One column per income label, in the order they were first captured. */
+  incomeColumns: IncomeColumn[];
   /** Marked documents without an account — in the company row, in no account. */
   unassignedMarked: { urgent: number; pending: number };
   /** Every marked open document, grouped by supplier for the paper. */
@@ -131,14 +154,28 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
 
   const incomesByAccount = new Map<string, number>();
   let unassignedIncomes = 0;
+  const incomeColumns = new Map<string, IncomeColumn>();
   for (const income of flow?.incomes ?? []) {
+    const label = incomeLabel(income);
+    const key = normalizeLabel(label);
+    const column = incomeColumns.get(key) ?? {
+      key,
+      label,
+      byAccount: {},
+      unassigned: 0,
+      total: 0,
+    };
+    incomeColumns.set(key, column);
+    column.total = round2(column.total + income.amount);
     const chosen = accounts.some((account) => account.id === income.accountId)
       ? income.accountId
       : onlyAccount;
     if (chosen) {
       incomesByAccount.set(chosen, (incomesByAccount.get(chosen) ?? 0) + income.amount);
+      column.byAccount[chosen] = round2((column.byAccount[chosen] ?? 0) + income.amount);
     } else {
       unassignedIncomes += income.amount;
+      column.unassigned = round2(column.unassigned + income.amount);
     }
   }
 
@@ -185,8 +222,8 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
     const out = outstanding.get(account.id) ?? 0;
     const incomes = incomesByAccount.get(account.id) ?? 0;
     const paid = markedByAccount.get(account.id) ?? { urgent: 0, pending: 0 };
-    const bankTotal = round2(available + incomes);
-    const remaining = round2(bankTotal - out - paid.urgent - paid.pending);
+    const bankTotal = round2(available);
+    const remaining = round2(bankTotal + incomes - out - paid.urgent - paid.pending);
     return {
       account,
       balance,
@@ -217,8 +254,8 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
     remainingUrgentOnly: 0,
     remainingPendingOnly: 0,
   };
-  totals.bankTotal = round2(totals.available + totals.incomes);
-  const cleared = round2(totals.bankTotal - totals.outstanding);
+  totals.bankTotal = totals.available;
+  const cleared = round2(totals.bankTotal + totals.incomes - totals.outstanding);
   totals.remaining = round2(cleared - totals.urgent - totals.pending);
   totals.shortfall = totals.remaining < 0 ? -totals.remaining : 0;
   totals.remainingUrgentOnly = round2(cleared - totals.urgent);
@@ -229,6 +266,7 @@ export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
     accounts: accountFlows,
     totals,
     unassignedIncomes: round2(unassignedIncomes),
+    incomeColumns: [...incomeColumns.values()],
     unassignedMarked: {
       urgent: round2(unassignedMarked.urgent),
       pending: round2(unassignedMarked.pending),

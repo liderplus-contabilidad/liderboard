@@ -14,6 +14,7 @@
  */
 
 import type { EntityLogo } from "@/lib/workspaces";
+import type { CheckLayout } from "./check-print/layout";
 
 /** The module's empresa: a name chosen by the user. Same shape as `NamedEntity` of `lib/workspaces`,
  *  so the generic name rules apply. Its centers and accounts live in their own tables. */
@@ -22,6 +23,16 @@ export interface CashFlowClient {
   name: string;
   /** Heads the printed flow, like every other module's letterhead. Not indexed. */
   logo?: EntityLogo;
+  /** The comprobante de egreso's letterhead, AS TYPED in its window the last time — which is how
+   *  it is captured: the next comprobante of the empresa is born with it. Absent, the name alone. */
+  letterhead?: VoucherLetterhead;
+}
+
+/** The letterhead as the paper prints it: the name in bold and its lines (razón social · RUC,
+ *  location, phones) — lines and not fields, because that is what the window edits. */
+export interface VoucherLetterhead {
+  name: string;
+  lines: string[];
 }
 
 /**
@@ -49,8 +60,14 @@ export interface BankAccount {
   label?: string;
   /** The credit line the flow adds to the balance: `disponible = saldo + sobregiro`. */
   overdraft: number;
+  /** Optional reminder dates; they do not change the credit line in flow calculations. */
+  overdraftStartsOn?: string | null;
+  overdraftEndsOn?: string | null;
   /** The unit that owns it, or `null` for an account of the empresa as a whole. */
   centerId: string | null;
+  /** Where each datum falls on THIS chequebook's form, partial: `resolveCheckLayout` completes it
+   *  with the default. Per account and not per bank — two chequebooks of one bank can differ. */
+  checkLayout?: Partial<CheckLayout>;
 }
 
 export type PayableSource = "contifico" | "dingoo" | "manual";
@@ -148,8 +165,28 @@ export interface Check {
   step: CheckStep;
   voided: boolean;
   cashedOn: string | null;
+  /** Planned collection date, independent of the actual cashing date and issue date. */
+  expectedCashOn?: string | null;
   place: string;
   note: string;
+  /** The beneficiary's cédula / RUC and address, for the comprobante. Optional: empty prints nothing. */
+  payeeTaxId?: string;
+  payeeAddress?: string;
+  /** The documents of the cartera this check pays — what the comprobante lists. */
+  payments?: CheckPayment[];
+}
+
+/**
+ * One document a check pays, as a SNAPSHOT of the day it was linked: the saldo anterior is a fact of
+ * that day, and the next load of the cartera will bring the document at zero — a comprobante printed
+ * again next month must still say what it said. `amount` is the abono; the saldo actual is derived.
+ */
+export interface CheckPayment {
+  payableId: string;
+  docNumber: string;
+  issuedOn: string | null;
+  balance: number;
+  amount: number;
 }
 
 /** A projected income of a flow: free concept, so it fits «PROYECCION INGRESOS RESERVAS» (Nomik),
@@ -173,6 +210,9 @@ export interface PaymentFlow {
   date: string;
   balances: Record<string, number>;
   incomes: FlowIncome[];
+  /** The Excel-style note of each editable cell of the flow, by `cell-notes.ts`'s keys. Optional: a
+   *  flow saved before notes existed reads as none. Of THIS date — «Copiar del …» never brings it. */
+  notes?: Record<string, string>;
 }
 
 /** The two hand-written matrices of `CARGAS CASH`; the third (PROVEEDORES) is derived. */
@@ -247,5 +287,6 @@ export interface ParsedCheck {
   step: CheckStep;
   voided: boolean;
   cashedOn: string | null;
+  expectedCashOn?: string | null;
   place: string;
 }

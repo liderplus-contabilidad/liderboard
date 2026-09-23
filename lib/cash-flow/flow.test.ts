@@ -336,6 +336,58 @@ describe("deriveFlow · Comisersa (four accounts, three centers)", () => {
   });
 });
 
+describe("deriveFlow · incomes", () => {
+  const accounts: BankAccount[] = [
+    { id: "a", clientId: "c", bank: "PRODUBANCO", number: "", overdraft: 0, centerId: null },
+    { id: "b", clientId: "c", bank: "PICHINCHA", number: "", overdraft: 0, centerId: null },
+  ];
+
+  it("writes one column per label, keeps them out of total bancos and adds them to the saldo final", () => {
+    const derived = deriveFlow({
+      date: "2026-08-05",
+      flow: {
+        id: "f",
+        clientId: "c",
+        date: "2026-08-05",
+        balances: { a: 100, b: 200 },
+        incomes: [
+          { id: "1", concept: "Reservas", amount: 300, accountId: "a" },
+          { id: "2", concept: "Cheque X efectivizar", amount: 50, accountId: "b" },
+          { id: "3", concept: " reservas ", amount: 20, accountId: "b" },
+          { id: "4", concept: "", amount: 10, accountId: null },
+        ],
+      },
+      accounts,
+      centers: [],
+      checks: [],
+      payables: [],
+    });
+    expect(derived.incomeColumns).toEqual([
+      {
+        key: "reservas",
+        label: "Reservas",
+        byAccount: { a: 300, b: 20 },
+        unassigned: 0,
+        total: 320,
+      },
+      {
+        key: "cheque x efectivizar",
+        label: "Cheque X efectivizar",
+        byAccount: { b: 50 },
+        unassigned: 0,
+        total: 50,
+      },
+      { key: "ingreso", label: "Ingreso", byAccount: {}, unassigned: 10, total: 10 },
+    ]);
+    expect(derived.accounts.map((row) => row.bankTotal)).toEqual([100, 200]);
+    expect(derived.accounts.map((row) => row.incomes)).toEqual([300, 70]);
+    expect(derived.accounts.map((row) => row.remaining)).toEqual([400, 270]);
+    expect(derived.totals.bankTotal).toBe(300);
+    expect(derived.totals.incomes).toBe(380);
+    expect(derived.totals.remaining).toBe(680);
+  });
+});
+
 describe("copying", () => {
   const flows: PaymentFlow[] = [
     { id: "a", clientId: "c", date: "2026-08-05", balances: { x: 1 }, incomes: [] },
@@ -361,6 +413,10 @@ describe("copying", () => {
     expect(copy.balances).toEqual({ x: 2 });
     expect(copy.incomes[0]).toMatchObject({ concept: "Reservas", amount: 10 });
     expect(copy.incomes[0].id).not.toBe("i");
+    // The notes speak of THEIR date: a copy never brings them.
+    expect(
+      copyFlowFrom({ ...flows[1], notes: { "balance:x": "Nota" } }, "2026-08-10"),
+    ).not.toHaveProperty("notes");
   });
 });
 

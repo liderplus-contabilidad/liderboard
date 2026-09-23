@@ -14,7 +14,10 @@
 import Dexie, { type Table } from "dexie";
 import { normalizeLabel, sortByName, type EntityLogo } from "@/lib/workspaces";
 import { mergeCut, type IncomingPayable } from "./cut";
+import { applyNotes } from "./cell-notes";
+import type { CheckLayout } from "./check-print/layout";
 import { todayISO } from "./dates";
+import { overdraftDatesError } from "./overdraft";
 import { accountRef } from "./export/cartera-workbook";
 import { checkId, payableId } from "./identity";
 import { cashColumnRole, type ParsedCashSheet } from "./upload/cash-entries";
@@ -30,6 +33,7 @@ import type {
   Payable,
   PayableKind,
   PaymentFlow,
+  VoucherLetterhead,
 } from "./types";
 
 interface ActiveClientRow {
@@ -133,6 +137,14 @@ export async function updateClient(
   logo: EntityLogo | null,
 ): Promise<void> {
   await db.clients.update(clientId, { name, logo: logo ?? undefined });
+}
+
+/** Keeps the comprobante's letterhead as typed in its window. `null` removes it. */
+export async function updateClientLetterhead(
+  clientId: string,
+  letterhead: VoucherLetterhead | null,
+): Promise<void> {
+  await db.clients.update(clientId, { letterhead: letterhead ?? undefined });
 }
 
 /**
@@ -298,9 +310,14 @@ export async function listAccounts(clientId: string): Promise<BankAccount[]> {
 
 export type BankAccountInput = Pick<BankAccount, "bank" | "number" | "overdraft" | "centerId"> & {
   label?: string;
+  overdraftStartsOn?: string | null;
+  overdraftEndsOn?: string | null;
+  checkLayout?: Partial<CheckLayout>;
 };
 
 export async function addAccount(clientId: string, input: BankAccountInput): Promise<BankAccount> {
+  const error = overdraftDatesError(input);
+  if (error) throw new Error(error);
   const label = input.label?.trim();
   const account: BankAccount = {
     id: crypto.randomUUID(),
@@ -309,6 +326,8 @@ export async function addAccount(clientId: string, input: BankAccountInput): Pro
     number: input.number.trim(),
     ...(label ? { label } : {}),
     overdraft: input.overdraft,
+    overdraftStartsOn: input.overdraftStartsOn ?? null,
+    overdraftEndsOn: input.overdraftEndsOn ?? null,
     centerId: input.centerId,
   };
   await db.accounts.add(account);
@@ -319,12 +338,18 @@ export async function updateAccount(
   accountId: string,
   patch: Partial<BankAccountInput>,
 ): Promise<void> {
-  await db.accounts.update(accountId, {
-    ...patch,
-    ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
-    ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
-    // An emptied label is removed, so the account goes back to bank + number.
-    ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+  await db.transaction("rw", db.accounts, async () => {
+    const account = await db.accounts.get(accountId);
+    if (!account) return;
+    const error = overdraftDatesError({ ...account, ...patch });
+    if (error) throw new Error(error);
+    await db.accounts.update(accountId, {
+      ...patch,
+      ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
+      ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
+      // An emptied label is removed, so the account goes back to bank + number.
+      ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+    });
   });
 }
 
@@ -595,6 +620,7 @@ export async function importChecks(
       step: check.step,
       voided: check.voided,
       cashedOn: check.cashedOn,
+      expectedCashOn: check.expectedCashOn,
       place: check.place,
       note: "",
     };
@@ -604,8 +630,20 @@ export async function importChecks(
     const previous = new Map(
       (await db.checks.where("clientId").equals(clientId).toArray()).map((row) => [row.id, row]),
     );
+    // Same for what only the comprobante asks — the beneficiary's id and address, and the
+    // documents the check pays: the book carries none of them, so a reload must not erase them.
     await db.checks.bulkPut(
-      rows.map((row) => ({ ...row, note: previous.get(row.id)?.note ?? "" })),
+      rows.map((row) => {
+        const kept = previous.get(row.id);
+        return {
+          ...row,
+          note: kept?.note ?? "",
+          expectedCashOn: kept?.expectedCashOn ?? row.expectedCashOn ?? null,
+          ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
+          ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
+          ...(kept?.payments?.length ? { payments: kept.payments } : {}),
+        };
+      }),
     );
   });
   return { written: rows.length, unassigned };
@@ -620,7 +658,14 @@ export async function addCheck(clientId: string, input: CheckInput): Promise<Che
 }
 
 export async function updateCheck(id: string, patch: Partial<CheckInput>): Promise<void> {
-  await db.checks.update(id, patch);
+  // An emptied id or address is removed, so an absent field keeps meaning «not declared».
+  await db.checks.update(id, {
+    ...patch,
+    ...(patch.payeeTaxId !== undefined ? { payeeTaxId: patch.payeeTaxId.trim() || undefined } : {}),
+    ...(patch.payeeAddress !== undefined
+      ? { payeeAddress: patch.payeeAddress.trim() || undefined }
+      : {}),
+  });
 }
 
 export async function deleteCheck(id: string): Promise<void> {
@@ -696,12 +741,18 @@ export async function getFlow(clientId: string, date: string): Promise<PaymentFl
 
 /**
  * Writes the flow OF a date: creates it on the first edit, updates it afterwards. `patch` may bring
- * balances (merged by account) and/or the whole income list.
+ * balances (merged by account), the whole income list and/or a patch of cell notes (`applyNotes`:
+ * merged by key, `null` removes) — two notes written one after the other never step on each other.
  */
 export async function saveFlow(
   clientId: string,
   date: string,
-  patch: { balances?: Record<string, number>; incomes?: PaymentFlow["incomes"] },
+  patch: {
+    balances?: Record<string, number>;
+    incomes?: PaymentFlow["incomes"];
+    /** Cell key → text, or `null` to remove it; applied over the notes already saved. */
+    notes?: Record<string, string | null>;
+  },
 ): Promise<PaymentFlow> {
   return db.transaction("rw", db.flows, async () => {
     const existing = await getFlow(clientId, date);
@@ -710,6 +761,7 @@ export async function saveFlow(
           ...existing,
           balances: { ...existing.balances, ...(patch.balances ?? {}) },
           incomes: patch.incomes ?? existing.incomes,
+          notes: applyNotes(existing.notes, patch.notes),
         }
       : {
           id: crypto.randomUUID(),
@@ -717,6 +769,7 @@ export async function saveFlow(
           date,
           balances: patch.balances ?? {},
           incomes: patch.incomes ?? [],
+          notes: applyNotes(undefined, patch.notes),
         };
     await db.flows.put(next);
     return next;

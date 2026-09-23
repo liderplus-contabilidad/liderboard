@@ -256,7 +256,7 @@ const ManualRow = memo(function ManualRow({
       {columns.map((column) =>
         column.kind === "loan" ? (
           // The loan's column is READ: its figure comes from the row's loan, edited beside.
-          <Cell key={column.id} numeric tone="muted">
+          <Cell key={column.id} numeric>
             {loan && loanColumnId(loan) === column.id ? money(loan.amount) : ""}
           </Cell>
         ) : (
@@ -345,9 +345,7 @@ function SuppliersSection({
           <tbody>
             {section.rows.map((row) => (
               <GridRow key={row.id} onClick={() => onOpen(row)}>
-                <Cell className="tabular-nums" tone="muted">
-                  {formatDayMonthYear(row.date) ?? row.date}
-                </Cell>
+                <Cell className="tabular-nums">{formatDayMonthYear(row.date) ?? row.date}</Cell>
                 <Cell>
                   <span className="block font-semibold text-ink">{row.detail}</span>
                   {row.payableIds && row.payableIds.length > 1 && (
@@ -361,7 +359,7 @@ function SuppliersSection({
                     {row.cells[column.id] !== undefined ? money(row.cells[column.id]) : ""}
                   </Cell>
                 ))}
-                <Cell tone="muted" />
+                <Cell />
                 <Cell />
               </GridRow>
             ))}

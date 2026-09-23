@@ -1,7 +1,9 @@
 "use client";
 
-import { Landmark, MapPin, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Landmark, MapPin, Plus, Printer, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { OverdraftDateFields } from "./overdraft-date-fields";
+import { overdraftDatesError } from "@/lib/cash-flow/overdraft";
 import { Button } from "@/components/ui/button";
 import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
@@ -10,9 +12,11 @@ import { SidePanel } from "@/components/ui/side-panel";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { sameCenterName } from "@/lib/cash-flow/flow";
+import { cn } from "@/lib/cn";
 import type { BankAccount, CashFlowCenter } from "@/lib/cash-flow/types";
 
 import { useCashFlowData } from "./cash-flow-data-provider";
+import { CheckLayoutModal } from "./check-layout-modal";
 
 const NO_CENTER = "";
 
@@ -23,6 +27,9 @@ const NO_CENTER = "";
  *
  * Centers first because an account names its center: with none declared, the account rows do not
  * offer the choice at all (the control that means nothing renders nothing).
+ *
+ * Each account also carries its CHECK FORMAT, beside its own row. The comprobante's letterhead is not
+ * here: it is completed in the comprobante's own window and kept from there.
  */
 export function ClientConfigPanel({ onClose }: { onClose: () => void }) {
   const { activeClientId, activeClient, centers, accounts } = useCashFlowData();
@@ -130,6 +137,27 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
   );
 }
 
+/** What a FOLDED row says under its heading: bank · number, the overdraft and the center. */
+function accountSummary(account: BankAccount, centers: readonly CashFlowCenter[]): string {
+  const center = centers.find((candidate) => candidate.id === account.centerId)?.name;
+  return [
+    account.label?.trim() ? [account.bank, account.number].filter(Boolean).join(" · ") : null,
+    `Sobregiro ${money(account.overdraft)}`,
+    centers.length > 0 ? (center ?? "De la empresa") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The row's heading: the user's name for the account, else bank + number. */
+function accountTitle(account: BankAccount): string {
+  return (
+    account.label?.trim() ||
+    [account.bank, account.number].filter(Boolean).join(" · ") ||
+    "Cuenta sin banco"
+  );
+}
+
 function AccountsSection({
   clientId,
   centers,
@@ -143,8 +171,28 @@ function AccountsSection({
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
   const [overdraft, setOverdraft] = useState<number | null>(0);
+  const [overdraftStartsOn, setOverdraftStartsOn] = useState<string | null>(null);
+  const [overdraftEndsOn, setOverdraftEndsOn] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string>();
+  const [accountError, setAccountError] = useState<{ id: string; message: string } | null>(null);
   const [centerId, setCenterId] = useState<string>(NO_CENTER);
   const [error, setError] = useState<string | undefined>();
+  const { asOf } = useCashFlowData();
+  const [formatting, setFormatting] = useState<BankAccount | null>(null);
+  // The accounts OPEN to edit. All start folded: an empresa can hold several, and the list must
+  // read as a list of accounts before it reads as a stack of forms.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = useCallback(
+    (id: string) =>
+      setExpanded((current) => {
+        const next = new Set(current);
+        if (!next.delete(id)) {
+          next.add(id);
+        }
+        return next;
+      }),
+    [],
+  );
 
   const centerOptions = [
     { value: NO_CENTER, label: "De la empresa" },
@@ -156,20 +204,30 @@ function AccountsSection({
       setError("Escribe el banco.");
       return;
     }
+    const dateError = overdraftDatesError({ overdraftStartsOn, overdraftEndsOn });
+    if (dateError) {
+      setDateError(dateError);
+      return;
+    }
     await cashDb.addAccount(clientId, {
       bank,
       number,
       label: name,
       overdraft: overdraft ?? 0,
+      overdraftStartsOn,
+      overdraftEndsOn,
       centerId: centerId || null,
     });
     setBank("");
     setNumber("");
     setName("");
     setOverdraft(0);
+    setOverdraftStartsOn(null);
+    setOverdraftEndsOn(null);
+    setDateError(undefined);
     setCenterId(NO_CENTER);
     setError(undefined);
-  }, [clientId, bank, number, name, overdraft, centerId]);
+  }, [clientId, bank, number, name, overdraft, centerId, overdraftStartsOn, overdraftEndsOn]);
 
   return (
     <section className="flex flex-col gap-3">
@@ -177,63 +235,129 @@ function AccountsSection({
       {accounts.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
           {accounts.map((account) => (
-            <li key={account.id} className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 py-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
-                  <span className="truncate">{account.bank}</span>
-                  {account.number && (
-                    <span className="font-mono text-[12px] font-normal text-muted">
-                      {account.number}
+            <li key={account.id} className="flex flex-col gap-2.5 px-3.5 py-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-expanded={expanded.has(account.id)}
+                  onClick={() => toggle(account.id)}
+                  className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-canvas"
+                >
+                  <ChevronRight
+                    size={15}
+                    className={cn(
+                      "shrink-0 text-faint transition-transform",
+                      expanded.has(account.id) && "rotate-90",
+                    )}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-ink">
+                      {accountTitle(account)}
                     </span>
-                  )}
-                  <input
+                    {!expanded.has(account.id) && (
+                      <span className="block truncate text-[11.5px] tabular-nums text-faint">
+                        {accountSummary(account, centers)}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Printer size={13} />}
+                  onClick={() => setFormatting(account)}
+                >
+                  Formato de cheque
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  iconOnly
+                  icon={<Trash2 size={14} />}
+                  aria-label={`Eliminar cuenta ${account.bank} ${account.number}`}
+                  onClick={() => void cashDb.deleteAccount(account.id)}
+                />
+              </div>
+              {expanded.has(account.id) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <TextField
+                    label="Banco"
+                    defaultValue={account.bank}
+                    placeholder="PRODUBANCO"
+                    hint="Como lo escribe el registro de cheques"
+                    onBlur={(event) => {
+                      const value = event.target.value.trim();
+                      if (!value) {
+                        // The bank is what a check's label resolves by: it cannot be left empty.
+                        event.target.value = account.bank;
+                      } else if (value !== account.bank) {
+                        void cashDb.updateAccount(account.id, { bank: value });
+                      }
+                    }}
+                  />
+                  <TextField
+                    label="Número"
+                    variant="mono"
+                    defaultValue={account.number}
+                    placeholder="80010385"
+                    onBlur={(event) => {
+                      if (event.target.value.trim() !== account.number) {
+                        void cashDb.updateAccount(account.id, { number: event.target.value });
+                      }
+                    }}
+                  />
+                  <TextField
+                    label="Nombre"
+                    hint="Opcional"
                     defaultValue={account.label ?? ""}
-                    placeholder="Nombre (Produbanco HA)"
-                    aria-label={`Nombre de la cuenta ${account.bank} ${account.number}`}
+                    placeholder="Produbanco HA"
                     onBlur={(event) => {
                       if (event.target.value.trim() !== (account.label ?? "")) {
                         void cashDb.updateAccount(account.id, { label: event.target.value });
                       }
                     }}
-                    className="ml-auto w-[160px] rounded-lg border border-transparent bg-transparent px-2 py-1 text-[12px] font-normal text-ink outline-none placeholder:text-faint hover:border-border focus:border-brand focus:bg-surface"
                   />
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-faint">
-                  <span className="flex items-center gap-1.5">
-                    Sobregiro
-                    <NumericInput
-                      value={account.overdraft}
-                      format="currency"
-                      ariaLabel={`Sobregiro de ${account.bank}`}
-                      className="w-[110px]"
-                      onCommit={(value) =>
-                        void cashDb.updateAccount(account.id, { overdraft: value ?? 0 })
-                      }
-                    />
-                  </span>
+                  <FormField label="Sobregiro">
+                    <FieldBox>
+                      <NumericInput
+                        value={account.overdraft}
+                        format="currency"
+                        align="left"
+                        ariaLabel={`Sobregiro de ${account.bank}`}
+                        onCommit={(value) =>
+                          void cashDb.updateAccount(account.id, { overdraft: value ?? 0 })
+                        }
+                      />
+                    </FieldBox>
+                  </FormField>
+                  <OverdraftDateFields
+                    startsOn={account.overdraftStartsOn ?? null}
+                    endsOn={account.overdraftEndsOn ?? null}
+                    error={accountError?.id === account.id ? accountError.message : undefined}
+                    onChange={(patch) => {
+                      void cashDb.updateAccount(account.id, patch).then(
+                        () => setAccountError(null),
+                        (error: Error) =>
+                          setAccountError({ id: account.id, message: error.message }),
+                      );
+                    }}
+                  />
                   {centers.length > 0 && (
-                    <Select
-                      size="sm"
-                      aria-label={`Centro de ${account.bank}`}
-                      value={account.centerId ?? NO_CENTER}
-                      options={centerOptions}
-                      onChange={(event) =>
-                        void cashDb.updateAccount(account.id, {
-                          centerId: event.target.value || null,
-                        })
-                      }
-                    />
+                    <div className="col-span-2">
+                      <Select
+                        label="Centro"
+                        value={account.centerId ?? NO_CENTER}
+                        options={centerOptions}
+                        onChange={(event) =>
+                          void cashDb.updateAccount(account.id, {
+                            centerId: event.target.value || null,
+                          })
+                        }
+                      />
+                    </div>
                   )}
                 </div>
-              </div>
-              <Button
-                variant="danger"
-                size="sm"
-                iconOnly
-                icon={<Trash2 size={14} />}
-                aria-label={`Eliminar cuenta ${account.bank} ${account.number}`}
-                onClick={() => void cashDb.deleteAccount(account.id)}
-              />
+              )}
             </li>
           ))}
         </ul>
@@ -275,6 +399,16 @@ function AccountsSection({
             />
           </FieldBox>
         </FormField>
+        <OverdraftDateFields
+          startsOn={overdraftStartsOn}
+          endsOn={overdraftEndsOn}
+          error={dateError}
+          onChange={(patch) => {
+            if ("overdraftStartsOn" in patch) setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
+            if ("overdraftEndsOn" in patch) setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
+            setDateError(undefined);
+          }}
+        />
         {centers.length > 0 && (
           <Select
             label="Centro"
@@ -289,6 +423,9 @@ function AccountsSection({
           Agregar cuenta
         </Button>
       </div>
+      {formatting && (
+        <CheckLayoutModal account={formatting} date={asOf} onClose={() => setFormatting(null)} />
+      )}
     </section>
   );
 }

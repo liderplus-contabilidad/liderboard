@@ -2,8 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { ReportBand, ReportLayer, ReportSheet } from "@/components/ui/report-layer";
-import { ReportTable } from "@/components/ui/report-table";
-import { buildFlowReport, flowReportSubtitle } from "@/lib/cash-flow/report";
+import {
+  type ReportCellStyle,
+  type ReportRowStyle,
+  ReportTable,
+} from "@/components/ui/report-table";
+import type { ChartTableRow } from "@/lib/charts/types";
+import {
+  buildFlowReport,
+  cellPaint,
+  hasFigure,
+  type FlowCellPaint,
+  type FlowReportSection,
+  type FlowRowTone,
+  flowReportSubtitle,
+  SIGN_GLYPH,
+} from "@/lib/cash-flow/report";
 import { statementFit } from "@/lib/report/page-fit";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
@@ -63,7 +77,12 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
         {report.sections.map((section) => (
           <section key={section.id} className="print-section flex flex-col gap-3">
             <h2 className="text-[14px] font-semibold text-ink">{section.title}</h2>
-            <ReportTable table={section.table} fit={fit} />
+            <ReportTable
+              table={section.table}
+              fit={fit}
+              rowStyle={(row) => rowStyleOf(section, row)}
+              cellStyle={(row, column, value) => cellStyleOf(section, row, column, value)}
+            />
           </section>
         ))}
         <footer className="mt-4 grid grid-cols-3 gap-8 pt-10 text-center text-[11.5px] text-muted">
@@ -76,6 +95,49 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
       </ReportSheet>
     </ReportLayer>
   );
+}
+
+/**
+ * The screen's colours on paper, by what each row and column MEANS (`report.ts` says it): the total
+ * on the brand ground as the screen closes its tables, each supplier's heading in the brand tint,
+ * the two marks of payment on a GROUND of their own — the urgent amber, the pending a quiet
+ * blue-grey — with their figures in plain ink, so the paper tells them apart at a glance; the checks in their ink, and a saldo by
+ * its sign, always with its ▲/▼, never the colour alone.
+ */
+const ROW_STYLE: Record<FlowRowTone, ReportRowStyle> = {
+  total: { className: "bg-brand", ink: "font-bold text-white" },
+  group: { className: "bg-brand-soft", ink: "font-bold text-brand" },
+};
+
+function rowStyleOf(section: FlowReportSection, row: ChartTableRow): ReportRowStyle | undefined {
+  const tone = section.rowTones?.[row.id];
+  return tone ? ROW_STYLE[tone] : undefined;
+}
+
+const CELL_STYLE: Record<FlowCellPaint, ReportCellStyle> = {
+  urgent: { ink: "bg-marked font-bold text-ink" },
+  pending: { ink: "bg-surface-calc-strong font-bold text-ink" },
+  outstanding: { ink: "font-semibold text-crosslink" },
+  negative: { ink: "font-bold text-negative", glyph: SIGN_GLYPH.negative },
+  positive: { ink: "font-bold text-positive", glyph: SIGN_GLYPH.positive },
+};
+
+function cellStyleOf(
+  section: FlowReportSection,
+  row: ChartTableRow,
+  column: string,
+  value: string | null,
+): ReportCellStyle | undefined {
+  const paint = cellPaint(section, row.id, column, value);
+  if (!paint) {
+    return undefined;
+  }
+  // A mark of payment grounds its whole column. The urgent is ALWAYS bold, its zeros too;
+  // the pending is bold only where it says something.
+  if (paint === "pending" && !hasFigure(value)) {
+    return { ink: "bg-surface-calc-strong font-semibold text-ink-soft" };
+  }
+  return CELL_STYLE[paint];
 }
 
 function Field({ label, value }: { label: string; value: string }) {

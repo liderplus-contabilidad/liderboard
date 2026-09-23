@@ -39,6 +39,7 @@ import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
+import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
 import { ManualPayablePanel } from "./manual-payable-panel";
 import { AgingBadge, ApprovalDots, CashBadge, PriorityBadge } from "./payable-badges";
@@ -131,6 +132,22 @@ export function PayablesView() {
       return next;
     });
   }, []);
+  // A supplier's box: with every document of the group selected it clears them, otherwise it
+  // selects all of them — the same rule as the head's «todo lo visible», narrowed to one supplier.
+  const selectGroup = useCallback((group: SupplierGroup) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      const all = group.payables.every((payable) => current.has(payable.id));
+      for (const payable of group.payables) {
+        if (all) {
+          next.delete(payable.id);
+        } else {
+          next.add(payable.id);
+        }
+      }
+      return next;
+    });
+  }, []);
   const selectAll = useCallback(() => {
     setSelected((current) =>
       current.size >= visibleIds.size && visibleIds.size > 0 ? new Set() : new Set(visibleIds),
@@ -150,6 +167,7 @@ export function PayablesView() {
   return (
     <CashFlowEmptyState needsAccounts={false}>
       <div className="flex h-full flex-col gap-4 px-7 py-5">
+        <OverdraftNotices />
         <div className="flex gap-3">
           <StatTile
             label="Total por pagar"
@@ -235,6 +253,7 @@ export function PayablesView() {
             totalLabel={`Total ${hasActiveFilters(payableFilters) ? "filtrado" : ""}`}
             total={totals.total}
             onSelectAll={selectAll}
+            onSelectGroup={selectGroup}
             onToggleGroup={toggleGroup}
             onToggle={toggle}
             onOpen={setOpenId}
@@ -405,10 +424,15 @@ type GridItem =
 const GroupRow = memo(function GroupRow({
   group,
   collapsed,
+  checked,
+  onSelectGroup,
   onToggleGroup,
 }: {
   group: SupplierGroup;
   collapsed: boolean;
+  /** Every document of the supplier is selected. */
+  checked: boolean;
+  onSelectGroup: (group: SupplierGroup) => void;
   onToggleGroup: (key: string) => void;
 }) {
   const Caret = collapsed ? ChevronRight : ChevronDown;
@@ -419,7 +443,15 @@ const GroupRow = memo(function GroupRow({
       onClick={() => onToggleGroup(group.key)}
       className="h-[36px] bg-brand-soft hover:bg-brand-soft"
     >
-      <Cell />
+      {/* Selecting must not collapse: the checkbox cell swallows its click. */}
+      <Cell onClick={(event) => event.stopPropagation()}>
+        <Checkbox
+          size={16}
+          checked={checked}
+          ariaLabel={`Seleccionar todas las facturas de ${group.label}`}
+          onChange={() => onSelectGroup(group)}
+        />
+      </Cell>
       <Cell colSpan={2}>
         <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand">
           <Caret size={14} className="text-brand" />
@@ -466,6 +498,7 @@ function VirtualPayablesGrid({
   totalLabel,
   total,
   onSelectAll,
+  onSelectGroup,
   onToggleGroup,
   onToggle,
   onOpen,
@@ -478,6 +511,7 @@ function VirtualPayablesGrid({
   totalLabel: string;
   total: number;
   onSelectAll: () => void;
+  onSelectGroup: (group: SupplierGroup) => void;
   onToggleGroup: (key: string) => void;
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
@@ -558,6 +592,8 @@ function VirtualPayablesGrid({
                     key={row.key}
                     group={row.group}
                     collapsed={row.collapsed}
+                    checked={row.group.payables.every((payable) => selected.has(payable.id))}
+                    onSelectGroup={onSelectGroup}
                     onToggleGroup={onToggleGroup}
                   />
                 );

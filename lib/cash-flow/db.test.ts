@@ -27,7 +27,9 @@ import {
   listPayables,
   saveFlow,
   settlePayables,
+  updateAccount,
   updateCashEntry,
+  updateCheck,
   updatePayables,
 } from "./db";
 import { parseChecksLog } from "./upload/checks-log";
@@ -159,6 +161,24 @@ describe("checks", () => {
     expect(await listChecks(clientId)).toHaveLength(7);
   });
 
+  it("keeps what only the comprobante reads across a reload of the book", async () => {
+    const log = parseChecksLog(CHECKS_GRID);
+    await importChecks(clientId, log.checks);
+    const [first] = await listChecks(clientId);
+    const payment = { payableId: "p", docNumber: "76", issuedOn: null, balance: 10, amount: 10 };
+    await updateCheck(first!.id, {
+      payeeTaxId: " 1804586061001 ",
+      payeeAddress: "",
+      payments: [payment],
+    });
+
+    await importChecks(clientId, log.checks);
+    const reloaded = (await listChecks(clientId)).find((check) => check.id === first!.id);
+    expect(reloaded?.payeeTaxId).toBe("1804586061001");
+    expect(reloaded?.payeeAddress).toBeUndefined();
+    expect(reloaded?.payments).toEqual([payment]);
+  });
+
   it("assigns a bank label to an account in bulk and clears it when the account goes", async () => {
     await importChecks(clientId, parseChecksLog(CHECKS_GRID).checks);
     const pich = await addAccount(clientId, {
@@ -223,6 +243,23 @@ describe("flows", () => {
       "2026-08-05",
     ]);
   });
+
+  it("merges cell notes by key, removes a null or blank one, and keeps them to their date", async () => {
+    await saveFlow(clientId, "2026-08-05", { notes: { "balance:a": " Cierre del lunes " } });
+    await saveFlow(clientId, "2026-08-05", { notes: { "overdraft:a": "Aprobado" } });
+    expect((await getFlow(clientId, "2026-08-05"))?.notes).toEqual({
+      "balance:a": "Cierre del lunes",
+      "overdraft:a": "Aprobado",
+    });
+    await saveFlow(clientId, "2026-08-05", {
+      notes: { "balance:a": null, "overdraft:a": "  " },
+    });
+    // A balance written after the notes does not touch them, and the other date has none.
+    await saveFlow(clientId, "2026-08-05", { balances: { a: 1 } });
+    expect((await getFlow(clientId, "2026-08-05"))?.notes).toEqual({});
+    await saveFlow(clientId, "2026-08-07", { balances: { a: 1 } });
+    expect((await getFlow(clientId, "2026-08-07"))?.notes).toEqual({});
+  });
 });
 
 describe("cash entries", () => {
@@ -251,4 +288,66 @@ describe("cash entries", () => {
     expect(await listCashEntries(other)).toHaveLength(0);
     expect(await listCashEntries(clientId)).toHaveLength(1);
   });
+});
+
+describe("overdraft dates", () => {
+  it("persists dates, rejects inverted edits and allows removing reminders", async () => {
+    const account = await addAccount(clientId, {
+      bank: "Banco",
+      number: "1",
+      overdraft: 500,
+      centerId: null,
+      overdraftStartsOn: "2026-09-01",
+      overdraftEndsOn: "2026-09-30",
+    });
+    expect((await listAccounts(clientId))[0]).toMatchObject({
+      overdraftStartsOn: "2026-09-01",
+      overdraftEndsOn: "2026-09-30",
+    });
+    await expect(updateAccount(account.id, { overdraftEndsOn: "2026-08-31" })).rejects.toThrow(
+      "fecha de fin",
+    );
+    expect((await listAccounts(clientId))[0].overdraftEndsOn).toBe("2026-09-30");
+    await updateAccount(account.id, { overdraftEndsOn: "2026-10-15" });
+    expect((await listAccounts(clientId))[0].overdraftEndsOn).toBe("2026-10-15");
+    await updateAccount(account.id, { overdraftStartsOn: null, overdraftEndsOn: null });
+    expect((await listAccounts(clientId))[0]).toMatchObject({
+      overdraftStartsOn: null,
+      overdraftEndsOn: null,
+      overdraft: 500,
+    });
+  });
+});
+
+describe("planned check collection dates", () => {
+  it("persists the reminder through a register reload and allows clearing it", async () => {
+    const parsed = parseChecksLog(CHECKS_GRID).checks;
+    await importChecks(clientId, parsed);
+    const [check] = await listChecks(clientId);
+    await updateCheck(check.id, { expectedCashOn: "2026-10-01" });
+    await importChecks(clientId, parsed);
+    expect((await listChecks(clientId)).find((row) => row.id === check.id)?.expectedCashOn).toBe(
+      "2026-10-01",
+    );
+    await updateCheck(check.id, { expectedCashOn: null });
+    expect(
+      (await listChecks(clientId)).find((row) => row.id === check.id)?.expectedCashOn,
+    ).toBeNull();
+  });
+});
+
+it("imports a planned collection date for an already loaded pending check", async () => {
+  const parsed = parseChecksLog(CHECKS_GRID).checks.filter(
+    (check) => !check.voided && check.step !== "cashed",
+  );
+  await importChecks(clientId, parsed);
+  await importChecks(
+    clientId,
+    parsed.map((check) => ({ ...check, expectedCashOn: "2026-10-01" })),
+  );
+  expect(
+    (await listChecks(clientId)).every(
+      (check) => check.expectedCashOn === "2026-10-01" && check.cashedOn === null,
+    ),
+  ).toBe(true);
 });
