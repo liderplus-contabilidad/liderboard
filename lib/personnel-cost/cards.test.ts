@@ -95,9 +95,9 @@ describe("Planta vs Externos", () => {
     expect(total?.type).toBe("line");
     // La línea ES el techo de la pila: enero suma 55,989.00 + 48,214.12.
     expect(total?.data[0]).toBeCloseTo(104203.12, 2);
-    // La línea muestra el total y cada banda muestra su propio monto.
+    // El total conserva su etiqueta; las barras se consultan al pasar el cursor.
     expect(total?.label).toBeDefined();
-    expect(bars.every((entry) => entry.label?.show)).toBe(true);
+    expect(bars.every((entry) => !entry.label?.show)).toBe(true);
   });
 
   it("la tabla gemela cierra en el total real de cada mes", () => {
@@ -435,12 +435,11 @@ describe("La cifra sobre la columna", () => {
     expect(flat(groups.option).grid?.outerBoundsContain).toBe("axisLabel");
   });
 
-  it("el skyline muestra los montos de cada barra en negrita", () => {
+  it("el skyline muestra los montos solo al pasar el cursor", () => {
     const { groups } = cards([goldenYear()], [], SPAN, "skyline");
     expect(
       (groups.option as Chart3DOption).series.every(
-        (entry) =>
-          entry.type === "bar3D" && entry.label?.show && entry.label.textStyle?.fontWeight === 700,
+        (entry) => entry.type === "bar3D" && !entry.label?.show && entry.emphasis?.label?.show,
       ),
     ).toBe(true);
   });
