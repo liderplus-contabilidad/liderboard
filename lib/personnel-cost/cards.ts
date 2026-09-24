@@ -51,7 +51,6 @@ import type {
   ChartTableRow,
   ChartTooltip,
 } from "@/lib/charts/types";
-import { is3DOption } from "@/lib/charts/types";
 import {
   fitDirectLabel,
   labelDistance,
@@ -757,21 +756,35 @@ function evolutionRows(input: PersonnelCardsInput): {
   const year = years[0];
   const months = year?.months ?? [];
 
-  // A TYPED exercise has no groups, so what it compares is its two SECTIONS. It is not a third shape
-  // of the card: it is the same question —«qué parte de este mes es cada cosa»— answered at the only
-  // level that year knows, which is the level the old sheet wrote.
+  // Historical No afiliados and Honorarios select the same rows: draw one series with both
+  // names, or the selected group's name, so the total never counts those amounts twice.
   if (year && year.groups.length === 0 && year.legacyRows.length > 0) {
+    const byGroup = marked.size > 0 && (input.sections?.length ?? 0) === 0;
+    const nonAffiliated = byGroup && marked.has("no-afiliados");
+    const fees = byGroup && marked.has("honorarios-medicos");
+    const externalLabel =
+      byGroup && nonAffiliated !== fees
+        ? nonAffiliated
+          ? "No afiliados"
+          : "Honorarios médicos"
+        : "No afiliados / Honorarios";
     return {
       months,
-      depthLabel: "Sección",
-      rows: year.sections.map(({ section }) => ({
-        id: section.id,
-        name: section.label,
-        color: colorForPersonnel(section.id),
-        values: months.map(
-          (month) => year.sections.find((e) => e.section.id === section.id)?.monthly[month] ?? null,
-        ),
-      })),
+      depthLabel: "Grupo",
+      rows: year.sections.map(({ section, monthly }) => {
+        const id =
+          section.id === "planta"
+            ? "afiliados"
+            : nonAffiliated && !fees
+              ? "no-afiliados"
+              : "honorarios-medicos";
+        return {
+          id,
+          name: section.id === "planta" ? "Afiliados" : externalLabel,
+          color: colorForPersonnel(id),
+          values: months.map((month) => monthly[month] ?? null),
+        };
+      }),
     };
   }
 
@@ -1507,9 +1520,6 @@ export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards 
   const groups = buildGroupsCard(input);
   const shares = buildSharesCard(input);
   const sections = buildSectionsCard(input);
-  const canShow = input.groups.length === 0 || (input.sections?.length ?? 0) > 0;
-  if (canShow) showAmounts(sections.option);
-  if (canShow) showAmounts(groups.card.option);
   return {
     sections,
     groups: groups.card,
@@ -1518,41 +1528,4 @@ export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards 
     sharesCrumbs: shares.crumbs,
     skylineAvailable: groups.skylineAvailable,
   };
-}
-
-/** Persistent amounts use labels so the normal hover tooltip remains available. */
-function showAmounts(option: ChartOption | Chart3DOption | null): void {
-  if (!option) return;
-  const blue = colorForPersonnel("planta");
-  const ink = (color: string | undefined) =>
-    color === blue || color === stageColor(blue) ? CHART_INK.onFill : CHART_INK.strong;
-  if (is3DOption(option)) {
-    for (const series of option.series) {
-      if (series.type !== "bar3D") continue;
-      series.label = {
-        textStyle: {
-          color: ink(series.itemStyle?.color),
-          fontWeight: 700,
-          fontSize: 11.5,
-          fontFamily: CHART_FONT,
-        },
-        show: true,
-        formatter: (param) => moneyExact(param.value[2]),
-      };
-    }
-    return;
-  }
-  for (const series of option.series) {
-    if (series.type !== "bar") continue;
-    series.label = {
-      show: true,
-      position: "inside",
-      color: ink(series.itemStyle?.color),
-      fontWeight: 700,
-      fontSize: 10,
-      formatter: (param) =>
-        param.value === null || param.value === undefined ? "" : moneyExact(Number(param.value)),
-    };
-    series.labelLayout = { hideOverlap: false };
-  }
 }
