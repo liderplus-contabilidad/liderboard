@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import {
@@ -124,8 +126,16 @@ const NO_MONTHS: SalesMonth[] = [];
 
 export function SalesDataProvider({ children }: { children: ReactNode }) {
   const { activeClientId, activeClient, isConsolidated } = usePygData();
-  const [rawFilters, setRawFilters] = useState<SalesFilters>(emptyFilters);
-  const [hideEmptyMonths, setHideEmptyMonths] = useState(false);
+  const [rawFilters, setRawFilters] = useFilterState<SalesFilters>(
+    "sales.rawFilters",
+    activeClientId,
+    emptyFilters,
+  );
+  const [hideEmptyMonths, setHideEmptyMonths] = useFilterState(
+    "sales.hideEmptyMonths",
+    activeClientId,
+    false,
+  );
   // The SCREEN opens in three dimensions; the pure layer's default stays flat so the printed report
   // cannot inherit a canvas by omission. See `SCREEN_EVOLUTION_VIEW`.
   const [evolutionView, setEvolutionView] = useState<EvolutionView>(SCREEN_EVOLUTION_VIEW);
@@ -249,31 +259,34 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
     () => buildSalesCards(cardsInput, { hideEmptyMonths, evolutionView, servicesView, payersView }),
     [cardsInput, hideEmptyMonths, evolutionView, servicesView, payersView],
   );
-  const toggleEmptyMonths = useCallback(() => setHideEmptyMonths((current) => !current), []);
+  const toggleEmptyMonths = useCallback(
+    () => setHideEmptyMonths((current) => !current),
+    [setHideEmptyMonths],
+  );
 
   const toggleYear = useCallback(
     (year: number) => setRawFilters((current) => withYearToggled(current, year, years)),
-    [years],
+    [years, setRawFilters],
   );
   const selectAllYears = useCallback(
     () => setRawFilters((current) => withAllYears(current, years)),
-    [years],
+    [years, setRawFilters],
   );
   const toggleMonth = useCallback(
     (monthIndex: number) =>
       setRawFilters((current) => withMonthToggled(current, monthIndex, universe.months)),
-    [universe.months],
+    [universe.months, setRawFilters],
   );
-  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
+  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), [setRawFilters]);
   const serviceCodes = useMemo(
     () => universe.services.map((service) => service.code),
     [universe.services],
   );
   const toggleService = useCallback(
     (code: string) => setRawFilters((current) => withServiceToggled(current, code, serviceCodes)),
-    [serviceCodes],
+    [serviceCodes, setRawFilters],
   );
-  const clearServices = useCallback(() => setRawFilters(withServicesCleared), []);
+  const clearServices = useCallback(() => setRawFilters(withServicesCleared), [setRawFilters]);
 
   const importMonths = useCallback(
     async (parsed: readonly ParsedSalesMonth[]) => {
@@ -288,7 +301,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
         setRawFilters({ years: [last.year], months: [], services: [] });
       }
     },
-    [clientId],
+    [clientId, setRawFilters],
   );
 
   const value = useMemo<SalesDataValue>(

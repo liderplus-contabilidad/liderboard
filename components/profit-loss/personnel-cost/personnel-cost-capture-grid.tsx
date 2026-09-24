@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useCallback, type ClipboardEvent } from "react";
+import { memo, useCallback, useMemo, type ClipboardEvent } from "react";
+import type { PersonnelGroupId, PersonnelSectionId } from "@/lib/personnel-cost/accounts";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { formatCurrencyOrDash, formatPercent } from "@/lib/format";
@@ -8,6 +9,7 @@ import { parsePastedGrid } from "@/lib/paste";
 import {
   EMPTY_LEGACY_AMOUNTS,
   PERSONNEL_LEGACY_COST_ROWS,
+  legacyRowsInGroups,
   type PersonnelLegacyAmounts,
   type PersonnelLegacyRowId,
   type PersonnelLegacySeries,
@@ -21,6 +23,8 @@ interface PersonnelCostCaptureGridProps {
    * of these months only, so the figure at the end of a row is the figure of the columns beside it.
    */
   months: readonly number[];
+  groups: readonly PersonnelGroupId[];
+  sections: readonly PersonnelSectionId[];
   /**
    * The year's VENTAS as the app resolves them — raíz 4 where the estado de resultados has the month,
    * «Reportería de ingresos» where it does not. Read and never written here: this table shows the
@@ -35,7 +39,7 @@ interface PersonnelCostCaptureGridProps {
   ) => void;
 }
 
-/** The rows a paste can land on, in the order they are DRAWN. */
+/** All stored rows, including hidden ones whose values a paste must preserve. */
 const ROW_IDS: readonly PersonnelLegacyRowId[] = PERSONNEL_LEGACY_COST_ROWS.map((row) => row.id);
 
 /**
@@ -68,10 +72,13 @@ const ROW_IDS: readonly PersonnelLegacyRowId[] = PERSONNEL_LEGACY_COST_ROWS.map(
 export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
   series,
   months,
+  groups,
+  sections,
   revenue: revenueSeries,
   onCommit,
   onPasteMonths,
 }: PersonnelCostCaptureGridProps) {
+  const rows = useMemo(() => legacyRowsInGroups(groups, sections), [groups, sections]);
   /**
    * A block copied out of Excel, landing where the cursor is.
    *
@@ -120,7 +127,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
       };
 
       grid.forEach((line, rowOffset) => {
-        const row = ROW_IDS[anchorRow + rowOffset];
+        const row = rows[anchorRow + rowOffset]?.id;
         if (!row) {
           // CLIPPED and never wrapped: a block of six lines pasted onto «Factura familia» fills the
           // two under it and drops the rest. Wrapping round to the first line would silently rewrite
@@ -144,7 +151,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
           .map(([monthIndex, amounts]) => ({ monthIndex, amounts })),
       );
     },
-    [series, months, onPasteMonths],
+    [series, months, rows, onPasteMonths],
   );
 
   const total = (row: PersonnelLegacyRowId) => {
@@ -189,7 +196,7 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
           </tr>
         </thead>
         <tbody onPaste={handlePaste}>
-          {PERSONNEL_LEGACY_COST_ROWS.map((row, rowIndex) => (
+          {rows.map((row, rowIndex) => (
             <tr key={row.id} className="border-t border-border-faint">
               <th
                 scope="row"

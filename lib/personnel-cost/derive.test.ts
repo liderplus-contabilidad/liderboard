@@ -250,8 +250,8 @@ describe("Un ejercicio TIPEADO entra como un año más", () => {
   it("las dos secciones y el total salen de las cuatro líneas", () => {
     const year = readPersonnelYear(typedYear(), [0, 1]);
     const section = (id: string) => year.sections.find((entry) => entry.section.id === id);
-    expect(section("planta")?.total).toBe(2850);
-    expect(section("externos")?.total).toBe(2000);
+    expect(section("planta")?.total).toBe(2600);
+    expect(section("externos")?.total).toBe(2250);
     expect(year.total).toBe(4850);
   });
 
@@ -261,7 +261,7 @@ describe("Un ejercicio TIPEADO entra como un año más", () => {
     // 4,850 de 22,000 = 22.045 %
     expect(year.share).toBeCloseTo(22.045, 3);
     const planta = year.sections.find((entry) => entry.section.id === "planta");
-    expect(planta?.share).toBeCloseTo((2850 / 22000) * 100, 3);
+    expect(planta?.share).toBeCloseTo((2600 / 22000) * 100, 3);
   });
 
   it("las ventas no son un costo: no entran en ninguna sección ni en el total", () => {

@@ -909,7 +909,7 @@ describe("el crecimiento se lee contra la LÍNEA DE CERO, con su cifra encima", 
     expect(card.option?.series.filter((serie) => serie.markLine !== undefined)).toHaveLength(1);
   });
 
-  it("pasados TRES meses las cifras se van al cursor: la rejilla no gasta margen en alojarlas", () => {
+  it("con más de doce barras las cifras se van al cursor sin reservar margen", () => {
     // Las filas hacen que quepan a cualquier densidad, pero caber no es leerse: siete meses por
     // cinco años base son treinta y cinco importes, y quien tiene que recorrer esa cuadrícula para
     // encontrar uno va más lento que quien pasa el cursor por el mes.
@@ -924,6 +924,62 @@ describe("el crecimiento se lee contra la LÍNEA DE CERO, con su cifra encima", 
     expect(doce.option?.grid?.top).toBe(16);
     expect(doce.height).toBe(280);
     expect(tres.height).toBeGreaterThan(280);
+  });
+
+  it.each(["dolares", "porcentaje"] as const)(
+    "etiqueta doce barras y ajusta su tendencia en %s",
+    (unit) => {
+      const base = Array.from({ length: 12 }, () => 100);
+      const reference = base.map((value, month) => value + 10 * month - 40);
+      const card = buildGrowthCard(
+        input([yearInput(2024, base), yearInput(2026, reference)]),
+        unit,
+      );
+      const bars = card.option?.series.filter((serie) => serie.type === "bar") ?? [];
+      const trends = card.option?.series.filter((serie) => serie.type === "line") ?? [];
+
+      expect(bars).toHaveLength(1);
+      expect(bars[0].label?.show).toBe(true);
+      expect(trends).toHaveLength(1);
+      trends[0].data.forEach((value, month) => expect(value).toBeCloseTo(10 * month - 40));
+      expect(trends[0].lineStyle?.type).toBe("dashed");
+      expect(card.option?.legend?.show).toBe(true);
+    },
+  );
+
+  it("once barras llevan cifras pero no tendencia", () => {
+    const card = buildGrowthCard(
+      input([yearInput(2022, REVENUE_2022), yearInput(2024, REVENUE_2024)], {
+        months: ALL_MONTHS.slice(0, 11),
+      }),
+      "dolares",
+    );
+    expect(card.option?.series).toHaveLength(1);
+    expect(card.option?.series[0].label?.show).toBe(true);
+  });
+
+  it("cuenta las barras de todos los años: cuatro meses por tres bases son doce", () => {
+    const card = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2, 3] }), "dolares");
+    const bars = card.option?.series.filter((serie) => serie.type === "bar") ?? [];
+    expect(bars).toHaveLength(3);
+    expect(bars.every((serie) => serie.label?.show)).toBe(true);
+    expect(card.option?.series.filter((serie) => serie.type === "line")).toHaveLength(3);
+    const crowded = buildGrowthCard(input(loadedYears(), { months: [0, 1, 2, 3, 4] }), "dolares");
+    expect(crowded.option?.series.every((serie) => serie.type === "bar" && !serie.label)).toBe(
+      true,
+    );
+  });
+
+  it("los porcentajes sin base no dibujan barras ni etiquetas", () => {
+    const base = Array.from({ length: 12 }, (_, month) => (month === 0 ? 0 : 100));
+    const reference = Array.from({ length: 12 }, () => 200);
+    const card = buildGrowthCard(
+      input([yearInput(2024, base), yearInput(2026, reference)]),
+      "porcentaje",
+    );
+    expect(card.option?.series).toHaveLength(1);
+    expect(card.option?.series[0].label?.show).toBe(true);
+    expect(card.option?.series[0].data[0]).toBeNull();
   });
 
   it("el eje de AÑOS BASE escribe siempre: un mes, una barra por columna y banda entera", () => {

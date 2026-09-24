@@ -21,18 +21,18 @@ function typed(): PersonnelLegacySeries {
 }
 
 describe("Las cuatro líneas y sus dos secciones", () => {
-  it("tres suman planta y la cuarta es externos: eso es TODA la estructura que tiene", () => {
+  it("dos líneas suman planta y las otras dos externos", () => {
     expect(
       PERSONNEL_LEGACY_COST_ROWS.filter((row) => row.section === "planta").map((r) => r.id),
-    ).toEqual(["afiliado-personal", "afiliado-familia", "factura-familia"]);
+    ).toEqual(["afiliado-personal", "afiliado-familia"]);
     expect(
       PERSONNEL_LEGACY_COST_ROWS.filter((row) => row.section === "externos").map((r) => r.id),
-    ).toEqual(["externos"]);
+    ).toEqual(["factura-familia", "externos"]);
   });
 
   it("la sección suma lo que hay y sólo es null donde TODAS sus líneas lo son", () => {
     const planta = legacySectionSeries(typed(), "planta");
-    expect(planta[0]).toBe(1750);
+    expect(planta[0]).toBe(1500);
     // Febrero sólo tiene «afiliado personal»: la sección vale eso, no null.
     expect(planta[1]).toBe(1100);
     expect(planta[2]).toBeNull();

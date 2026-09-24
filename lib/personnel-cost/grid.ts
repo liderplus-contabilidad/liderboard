@@ -24,9 +24,10 @@
  */
 import { MONTHS_SHORT_ES } from "@/lib/date";
 import { PERSONNEL_SECTIONS, type PersonnelGroupId, type PersonnelSectionId } from "./accounts";
-import { PERSONNEL_LEGACY_COST_ROWS } from "./legacy";
+import { legacyRowsInGroups } from "./legacy";
 import {
   shareOf,
+  scopePersonnelCost,
   type PersonnelCostReading,
   type PersonnelGroupReading,
   type PersonnelYearReading,
@@ -118,6 +119,7 @@ export interface PersonnelGrid {
 export interface PersonnelGridOptions {
   /** The marked groups; empty is ALL of them, the house rule. */
   groups: readonly PersonnelGroupId[];
+  sections?: readonly PersonnelSectionId[];
   /** Whether a row that moved nothing anywhere is held back. */
   hideEmptyRows: boolean;
 }
@@ -258,6 +260,7 @@ export function buildPersonnelGrid(
   reading: PersonnelCostReading,
   options: PersonnelGridOptions,
 ): PersonnelGrid {
+  reading = scopePersonnelCost(reading, options.groups, options.sections);
   const years = reading.years;
   // ONE exercise reads its months; SEVERAL compare their totals. It is the same answer the four cards
   // give to the same question, and no control chooses between the two.
@@ -277,10 +280,9 @@ export function buildPersonnelGrid(
   const groups = (years.find((year) => year.groups.length > 0)?.groups ?? []).filter((group) =>
     inScope(group.group.id),
   );
-  // The four TYPED lines enter the table when any marked exercise carries them. They are not narrowed
-  // by «Grupo»: a legacy year has no groups, so a mark that means nothing for it cannot hide it.
+  // Historical rows follow their business classification for both filter axes.
   const legacyRows = years.some((year) => year.legacyRows.length > 0)
-    ? PERSONNEL_LEGACY_COST_ROWS
+    ? legacyRowsInGroups(options.groups, options.sections)
     : [];
 
   const rows: PersonnelGridRow[] = [];
@@ -399,7 +401,11 @@ export function buildPersonnelGrid(
         code: null,
         group: null,
         groupSpan: 0,
-        hint: section.hint,
+        hint: years.every((year) => year.groups.length === 0)
+          ? legacyIn(section.id)
+              .map((row) => row.label)
+              .join(" + ")
+          : section.hint,
         cells: cellsFor(
           key,
           years,

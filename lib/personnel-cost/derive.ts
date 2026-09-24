@@ -35,10 +35,13 @@ import {
   PERSONNEL_SECTIONS,
   type PersonnelConcept,
   type PersonnelGroup,
+  type PersonnelGroupId,
   type PersonnelSection,
+  type PersonnelSectionId,
 } from "./accounts";
 import {
   legacyCoverage,
+  legacyRowsInGroups,
   legacySectionSeries,
   PERSONNEL_LEGACY_COST_ROWS,
   type PersonnelLegacyRow,
@@ -363,6 +366,60 @@ export function readPersonnelCost(
         0,
       );
       return { section, total: sectionTotal, share: shareOf(sectionTotal, revenue) };
+    }),
+  };
+}
+
+/** Aplica el mismo alcance a filas, secciones y totales de ambos formatos. */
+export function scopePersonnelCost(
+  reading: PersonnelCostReading,
+  marked: readonly PersonnelGroupId[],
+  markedSections: readonly PersonnelSectionId[] = [],
+): PersonnelCostReading {
+  if (marked.length === 0 && markedSections.length === 0) return reading;
+  const legacyIds = new Set(legacyRowsInGroups(marked, markedSections).map((row) => row.id));
+  const years = reading.years.map((year) => {
+    const groups = year.groups.filter((entry) =>
+      markedSections.length > 0
+        ? markedSections.includes(entry.group.section)
+        : marked.includes(entry.group.id),
+    );
+    const legacyRows = year.legacyRows.filter((entry) => legacyIds.has(entry.row.id));
+    const sections = year.sections.flatMap(({ section }) => {
+      const parts = [
+        ...groups.filter((entry) => entry.group.section === section.id),
+        ...legacyRows.filter((entry) => entry.row.section === section.id),
+      ];
+      return parts.length === 0
+        ? []
+        : [
+            {
+              section,
+              ...amountsOf(addSeries(parts.map((entry) => entry.monthly)), year.revenue),
+            },
+          ];
+    });
+    return {
+      ...year,
+      groups,
+      legacyRows,
+      sections,
+      ...amountsOf(addSeries(sections.map((entry) => entry.monthly)), year.revenue),
+    };
+  });
+  const total = years.reduce((sum, year) => sum + year.total, 0);
+  return {
+    ...reading,
+    years,
+    total,
+    share: shareOf(total, reading.revenue),
+    sections: PERSONNEL_SECTIONS.flatMap((section) => {
+      const parts = years.flatMap((year) =>
+        year.sections.filter((entry) => entry.section.id === section.id),
+      );
+      if (parts.length === 0) return [];
+      const sectionTotal = parts.reduce((sum, entry) => sum + entry.total, 0);
+      return [{ section, total: sectionTotal, share: shareOf(sectionTotal, reading.revenue) }];
     }),
   };
 }

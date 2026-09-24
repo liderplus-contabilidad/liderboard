@@ -44,9 +44,8 @@ export const DEFAULT_GROWTH_UNIT: GrowthUnit = "dolares";
 
 export const GROWTH_CARD_ID = "crecimiento";
 
-/** Up to how many months on the axis the variation is written over the bar. Past it the figures are
- *  in the cursor and in the table — see `writesFigures`. */
-const MAX_LABELLED_MONTHS = 3;
+/** Count actual bars across all base years, excluding missing comparisons. */
+const MAX_LABELLED_BARS = 12;
 
 /** The reference against every base, in ascending order of base year. Shared with the header's
  *  tiles, which ask the same question against the immediately previous year only. */
@@ -148,22 +147,21 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
    * figures meet at the axis. What it drops is a label, never a bar, and the table twin carries Δ$ and
    * Δ% against every base year whichever unit the chart is in.
    */
-  /**
-   * **Up to three months the figures are WRITTEN; past that they live in the cursor.**
-   *
-   * The rows below do make a signed figure fit at any density —that is what they are for— but fitting
-   * is not the same as being read: seven months of five base years is thirty-five amounts, and a
-   * reader who has to walk that grid to find one is slower than a reader who hovers the month. What
-   * survives the crowd is the SHAPE —how far each bar reaches from the zero line— and the figures
-   * stay one hover away in the tooltip, which gives the whole month at once, and in the table twin,
-   * which gives Δ$ and Δ% against every base year whichever unit the chart is in.
-   *
-   * The base-year axis always writes them: there is a single month there, one bar per column and a
-   * whole band each — «Ventas por año»' same case, right above.
-   */
-  const writesFigures = byBase || axis.length <= MAX_LABELLED_MONTHS;
+  const barCount = growths.reduce(
+    (count, entry) =>
+      count +
+      axis.filter(
+        (month) => (inPercent ? entry.points[month].percent : entry.points[month].delta) !== null,
+      ).length,
+    0,
+  );
+  const writesFigures = barCount > 0 && barCount <= MAX_LABELLED_BARS;
   const fitBase = fitDirectLabel(byBase ? growths.length : axis.length);
-  const fit: LabelFit = { ...fitBase, cents: fitBase.cents && growths.length <= MAX_LABEL_ROWS };
+  const fit: LabelFit = {
+    ...fitBase,
+    fontSize: fitBase.fontSize + 1,
+    cents: fitBase.cents && growths.length <= MAX_LABEL_ROWS,
+  };
   const write = (value: number) =>
     (inPercent ? signedPercent(value) : signedMoney(value, fit.cents)) ?? "";
   /**
@@ -194,12 +192,28 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
   /** What the axis' own names step down by, so a figure hanging under a bar is never printed on
    *  them. It is the room `baseOption`'s `below` reserved. */
   const axisMargin = rowsBelow > 0 ? labelHeadroom(rowsBelow, fit, 8) : undefined;
+  const amountLabel = (row = 0): Pick<ChartSeries, "label" | "labelLayout"> => {
+    const direct = directLabel(fit, { row, unit: write });
+    return {
+      ...direct,
+      label: {
+        ...direct.label,
+        show: true,
+        color: "#0f172a",
+        fontWeight: 400,
+        backgroundColor: "#ffffff",
+        borderRadius: 3,
+        padding: [2, 4],
+      },
+    };
+  };
 
   const baseSeries: ChartSeries[] = [
     {
       id: "variacion",
       name: "Variación",
       type: "bar",
+      z: 3,
       // The colour still follows the BASE YEAR and never the sign, so a year keeps the hue it wears
       // in the comparativo's line and in «Ventas por año» — what changed is where its name is
       // written, not what it is.
@@ -209,7 +223,7 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
         itemStyle: { color: yearColor(entry.baseYear, baseYears) },
       })),
       // One bar per column, so ONE row of figures — the annual card's same shape right above.
-      ...directLabel(fit, { unit: write }),
+      ...(writesFigures ? amountLabel() : {}),
       // With the years on the axis each one owns its column, so the fit is asked for a single bar.
       barMaxWidth: fitBarWidth(growths.length),
       // No `barGap` here: one series per category has nothing to be spaced from.
@@ -221,6 +235,7 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
     id: `vs-${entry.baseYear}`,
     name: `vs ${entry.baseYear}`,
     type: "bar",
+    z: 3,
     data: axis.map((month) => {
       const point = entry.points[month];
       const value = inPercent ? point.percent : point.delta;
@@ -233,7 +248,7 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
     // it, so leaving it on one of the five is one reorder away from being silently dropped.
     barGap: GROUPED_BAR_GAP,
     // Its OWN row of figures — see the note above `writesFigures`.
-    ...(writesFigures ? directLabel(fit, { row: index, unit: write }) : {}),
+    ...(writesFigures ? amountLabel(index) : {}),
     // The ZERO LINE, drawn ONCE — on the first series, because a mark line per series would paint the
     // same rule three times over itself. It is what turns the axis into the divider between a gain and
     // a loss: without it, a bar hanging below the grid's first line is read as a small bar and not as
@@ -243,6 +258,39 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
 
   const sharedLabel = monthSpanLabel(shared);
   const note = growthNote(reference, growths);
+  const bars = byBase ? baseSeries : series;
+  // Fit each comparison separately; missing values do not participate in the regression.
+  const trends: ChartSeries[] =
+    barCount === MAX_LABELLED_BARS
+      ? bars.flatMap((bar) => {
+          const points = bar.data.flatMap((datum, x) => {
+            const value = typeof datum === "object" && datum !== null ? datum.value : datum;
+            return value === null ? [] : [{ x, y: value }];
+          });
+          if (points.length < 2) return [];
+          const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+          const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+          const slope =
+            points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0) /
+            points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+          return [
+            {
+              id: `tendencia-${bar.id}`,
+              name: `Tendencia · ${bar.name}`,
+              type: "line" as const,
+              data: bar.data.map((_, x) => meanY + slope * (x - meanX)),
+              symbol: "none",
+              lineStyle: {
+                type: "dashed" as const,
+                width: 1.5,
+                color: bar.itemStyle?.color ?? "#64748b",
+              },
+              itemStyle: { color: bar.itemStyle?.color ?? "#64748b" },
+              z: 2,
+            },
+          ];
+        })
+      : [];
 
   return {
     id: GROWTH_CARD_ID,
@@ -261,7 +309,7 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
             inPercent ? percentAxis() : currencyAxis(),
             // With the years on the axis there is one series, and its legend would name what the
             // axis names.
-            legendFor(!byBase && growths.length > 1),
+            legendFor((!byBase && growths.length > 1) || trends.length > 0),
             // The rows written ABOVE the plot: one per base year, or a single one when the years are
             // the axis. `outerBoundsContain` only reserves for the axis' own labels, so without this
             // the top row is cropped against the edge of the card. What hangs BELOW is reserved by
@@ -275,7 +323,7 @@ export function buildGrowthCard(input: RevenueCardsInput, unit: GrowthUnit): Cha
             inPercent ? percent : money,
             byBase ? MONTHS_FULL_ES[singleMonth] : undefined,
           ),
-          series: byBase ? baseSeries : series,
+          series: [...bars, ...trends],
         }
       : null,
     table: growthTable(growths, axis),

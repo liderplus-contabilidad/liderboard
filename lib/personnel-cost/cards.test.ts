@@ -95,9 +95,9 @@ describe("Planta vs Externos", () => {
     expect(total?.type).toBe("line");
     // La línea ES el techo de la pila: enero suma 55,989.00 + 48,214.12.
     expect(total?.data[0]).toBeCloseTo(104203.12, 2);
-    // Y es la única que escribe la cifra: las bandas no llevan rótulo.
+    // La línea muestra el total y cada banda muestra su propio monto.
     expect(total?.label).toBeDefined();
-    expect(bars.every((entry) => entry.label === undefined)).toBe(true);
+    expect(bars.every((entry) => entry.label?.show)).toBe(true);
   });
 
   it("la tabla gemela cierra en el total real de cada mes", () => {
@@ -124,17 +124,13 @@ describe("Planta vs Externos", () => {
     expect(sections.option?.series.map((entry) => entry.name)).toEqual(["Externos", "Total"]);
   });
 
-  it("un ejercicio tipeado no tiene grupos, así que la marca no le quita ninguna sección", () => {
+  it("un ejercicio tipeado también respeta la marca Afiliados", () => {
     const marked = buildPersonnelCards({
       reading: readPersonnelCost([legacyYear()], [0, 1]),
       groups: ["afiliados"],
       period: "Ene–Feb 2019",
     });
-    expect(marked.sections.option?.series.map((entry) => entry.name)).toEqual([
-      "Planta",
-      "Externos",
-      "Total",
-    ]);
+    expect(marked.sections.option?.series.map((entry) => entry.name)).toEqual(["Planta", "Total"]);
   });
 });
 
@@ -392,9 +388,9 @@ describe("La cifra sobre la columna", () => {
     dataIndex,
   });
 
-  /** Las series que ESCRIBEN una cifra, que nunca deberían ser más de una por tarjeta. */
+  /** La línea conserva la cifra total sobre la columna, además de las etiquetas de las bandas. */
   const writing = (option: ChartOption | null) =>
-    (option?.series ?? []).filter((entry) => entry.label?.show);
+    (option?.series ?? []).filter((entry) => entry.type === "line" && entry.label?.show);
 
   it("la pila escribe el TOTAL del mes, y lo escribe la línea del total y no una banda", () => {
     const { sections } = cards();
@@ -439,11 +435,14 @@ describe("La cifra sobre la columna", () => {
     expect(flat(groups.option).grid?.outerBoundsContain).toBe("axisLabel");
   });
 
-  it("el skyline no escribe ninguna: en perspectiva la cifra flota sobre nada", () => {
+  it("el skyline muestra los montos de cada barra en negrita", () => {
     const { groups } = cards([goldenYear()], [], SPAN, "skyline");
-    expect((groups.option as Chart3DOption).series.every((entry) => !("label" in entry))).toBe(
-      true,
-    );
+    expect(
+      (groups.option as Chart3DOption).series.every(
+        (entry) =>
+          entry.type === "bar3D" && entry.label?.show && entry.label.textStyle?.fontWeight === 700,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -521,7 +520,7 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
       "Externos",
       "Total",
     ]);
-    expect(sections.table.rows[0].values).toEqual(["$1,750.00", "$2,000.00", "$3,750.00"]);
+    expect(sections.table.rows[0].values).toEqual(["$1,500.00", "$2,250.00", "$3,750.00"]);
   });
 });
 
@@ -617,14 +616,14 @@ describe("«% vs ventas por nivel» se navega de fuera hacia dentro", () => {
     ]);
   });
 
-  it("un ejercicio tipeado no tiene ventas: no se dibuja y la nota lo dice", () => {
+  it("un ejercicio tipeado con ventas participa junto al moderno", () => {
     const { shares: card } = buildPersonnelCards({
       reading: readPersonnelCost([legacyYear(), goldenYear()], [0, 1]),
       groups: [],
       period: "Ene–Feb",
     });
-    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2026"]);
-    expect(card.note).toContain("tipeado");
+    expect(flat(card.option).series.map((entry) => entry.name)).toEqual(["2019", "2026"]);
+    expect(card.note ?? "").not.toContain("sin ventas");
   });
 });
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { SCREEN_SOLID_VIEW, type SolidView } from "@/lib/charts/solid-bars";
@@ -185,7 +187,11 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
     loadedMonthsByYear,
     sourceSystemId,
   } = usePygData();
-  const [rawFilters, setRawFilters] = useState<RevenueFilters>(emptyFilters);
+  const [rawFilters, setRawFilters] = useFilterState<RevenueFilters>(
+    "revenue.rawFilters",
+    activeClientId,
+    emptyFilters,
+  );
   const [growthUnit, setGrowthUnit] = useState<GrowthUnit>(DEFAULT_GROWTH_UNIT);
   const [comparisonShape, setComparisonShape] = useState<ComparisonShape>("plano");
   const [annualShape, setAnnualShape] = useState<AnnualShape>(DEFAULT_ANNUAL_SHAPE);
@@ -566,7 +572,7 @@ export function RevenueDataProvider({ children }: { children: ReactNode }) {
     (next: (current: RevenueFilters) => RevenueFilters) => {
       setRawFilters((current) => next(sanitizeFilters(current, universe)));
     },
-    [universe],
+    [universe, setRawFilters],
   );
 
   /**

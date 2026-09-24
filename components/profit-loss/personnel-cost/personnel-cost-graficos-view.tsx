@@ -185,20 +185,12 @@ export function PersonnelCostGraficosView() {
         <StatTile
           label="Planta"
           value={share(planta?.share)}
-          hint={
-            planta
-              ? `Afiliados + no afiliados · ${formatCurrency(planta.total, { cents: true })}`
-              : undefined
-          }
+          hint={planta ? formatCurrency(planta.total, { cents: true }) : undefined}
         />
         <StatTile
           label="Externos"
           value={share(externos?.share)}
-          hint={
-            externos
-              ? `Honorarios médicos · ${formatCurrency(externos.total, { cents: true })}`
-              : undefined
-          }
+          hint={externos ? formatCurrency(externos.total, { cents: true }) : undefined}
         />
       </div>
 
@@ -236,29 +228,25 @@ export function PersonnelCostGraficosView() {
                 // the filter bar. And a control that means nothing for the open data RENDERS NOTHING
                 // rather than sitting disabled: with no plot there is no second shape of it either, and
                 // the evolution's skyline needs something to put on its depth axis.
-                {...(card.option === null
-                  ? {}
-                  : solid === null
-                    ? cards.skylineAvailable
-                      ? {
-                          headerSlot: (
-                            <HeaderChoice
-                              value={evolutionView}
-                              options={EVOLUTION_VIEWS}
-                              onChange={setEvolutionView}
-                            />
-                          ),
-                        }
-                      : {}
-                    : {
-                        headerSlot: (
-                          <HeaderChoice
-                            value={solidViews?.[solid] ?? SCREEN_SOLID_VIEW}
-                            options={SOLID_VIEWS}
-                            onChange={(view) => setSolidView(solid, view)}
-                          />
-                        ),
-                      })}
+                headerSlot={
+                  card.option === null ? undefined : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      {solid !== null ? (
+                        <HeaderChoice
+                          value={solidViews?.[solid] ?? SCREEN_SOLID_VIEW}
+                          options={SOLID_VIEWS}
+                          onChange={(view) => setSolidView(solid, view)}
+                        />
+                      ) : cards.skylineAvailable ? (
+                        <HeaderChoice
+                          value={evolutionView}
+                          options={EVOLUTION_VIEWS}
+                          onChange={setEvolutionView}
+                        />
+                      ) : null}
+                    </div>
+                  )
+                }
               />
             </Fragment>
           );

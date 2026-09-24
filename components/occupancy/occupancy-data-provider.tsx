@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { CenterLogos, EntityLogo } from "@/lib/workspaces";
@@ -188,13 +190,25 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
     centerId?: string;
     year?: number;
   } | null>(null);
-  const [monthIndex, setMonthIndex] = useState(0);
+  const [monthIndex, setMonthIndex] = useFilterState("occupancy.monthIndex", activeHotelId, 0);
   // The month is kept while looking at the year, so coming back lands where you left.
-  const [gridScope, setGridScope] = useState<"month" | "year">("month");
-  const [gridFrequency, setRawGridFrequency] = useState<Frequency>("mensual");
+  const [gridScope, setGridScope] = useFilterState<"month" | "year">(
+    "occupancy.gridScope",
+    activeHotelId,
+    "month",
+  );
+  const [gridFrequency, setRawGridFrequency] = useFilterState<Frequency>(
+    "occupancy.gridFrequency",
+    activeHotelId,
+    "mensual",
+  );
   const [importError, setImportError] = useState<string | null>(null);
   const [importErrorDetails, setImportErrorDetails] = useState<string[]>([]);
-  const [rawFilters, setRawFilters] = useState<OccupancyFilters>(emptyFilters);
+  const [rawFilters, setRawFilters] = useFilterState<OccupancyFilters>(
+    "occupancy.rawFilters",
+    activeHotelId,
+    emptyFilters,
+  );
 
   const hotels = hotelRows ?? EMPTY_HOTELS;
   const datasets = stored ?? EMPTY_DATASETS;
@@ -265,10 +279,13 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
       : toOccupancyGrid(dataset, monthIndex);
   }, [dataset, monthIndex, gridScope, gridFrequency]);
 
-  const setGridFrequency = useCallback((frequency: Frequency) => {
-    setRawGridFrequency(frequency);
-    setGridScope("year");
-  }, []);
+  const setGridFrequency = useCallback(
+    (frequency: Frequency) => {
+      setRawGridFrequency(frequency);
+      setGridScope("year");
+    },
+    [setGridScope, setRawGridFrequency],
+  );
 
   // The annual grid aggregates days into periods: there is no cell to write back to.
   const canEdit = !isConsolidated && dataset !== undefined && gridScope === "month";
@@ -458,25 +475,28 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
   );
 
   /** Lands the whole selection and leaves the view on the newest thing it wrote. */
-  const commit = useCallback(async (hotelId: string, results: OccupancyParseResult[]) => {
-    // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping ones
-    // (two files landing the same center-year) would race on the same record.
-    for (const parsed of results) {
-      await occupancyDb.mergeParsedDataset(hotelId, parsed);
-    }
-    const newest = results.reduce<OccupancyParseResult | undefined>(
-      (best, parsed) => (!best || parsed.dataset.year >= best.dataset.year ? parsed : best),
-      undefined,
-    );
-    if (newest) {
-      setSelected({
-        hotelId,
-        centerId: newest.dataset.centerId,
-        year: newest.dataset.year,
-      });
-      setMonthIndex(newest.parsedMonths[0] ?? 0);
-    }
-  }, []);
+  const commit = useCallback(
+    async (hotelId: string, results: OccupancyParseResult[]) => {
+      // Sequential, not parallel: each merge runs a Dexie transaction, and two overlapping ones
+      // (two files landing the same center-year) would race on the same record.
+      for (const parsed of results) {
+        await occupancyDb.mergeParsedDataset(hotelId, parsed);
+      }
+      const newest = results.reduce<OccupancyParseResult | undefined>(
+        (best, parsed) => (!best || parsed.dataset.year >= best.dataset.year ? parsed : best),
+        undefined,
+      );
+      if (newest) {
+        setSelected({
+          hotelId,
+          centerId: newest.dataset.centerId,
+          year: newest.dataset.year,
+        });
+        setMonthIndex(newest.parsedMonths[0] ?? 0);
+      }
+    },
+    [setMonthIndex],
+  );
 
   const importParsed = useCallback(
     async (results: OccupancyParseResult[], hotelId?: string) => {
@@ -538,38 +558,38 @@ export function OccupancyDataProvider({ children }: { children: ReactNode }) {
         setMonthIndex(newest.parsedMonths[0] ?? 0);
       }
     },
-    [activeHotelId],
+    [activeHotelId, setMonthIndex],
   );
 
   const centerUniverse = useMemo(() => centers.map((center) => center.id), [centers]);
   const setMetric = useCallback(
     (metric: OccupancyMetricId) => setRawFilters((f) => withMetric(f, metric)),
-    [],
+    [setRawFilters],
   );
   const setChartScope = useCallback(
     (scope: Scope) => setRawFilters((f) => withScope(f, scope)),
-    [],
+    [setRawFilters],
   );
   const toggleCenterMark = useCallback(
     (centerId: string) => setRawFilters((f) => withCenterToggled(f, centerId, centerUniverse)),
-    [centerUniverse],
+    [centerUniverse, setRawFilters],
   );
-  const clearCenterMarks = useCallback(() => setRawFilters(withCentersCleared), []);
-  const clearAllMarks = useCallback(() => setRawFilters(clearMarks), []);
+  const clearCenterMarks = useCallback(() => setRawFilters(withCentersCleared), [setRawFilters]);
+  const clearAllMarks = useCallback(() => setRawFilters(clearMarks), [setRawFilters]);
   const setPeriodMode = useCallback(
     (mode: PeriodMode) => setRawFilters((f) => withPeriodMode(f, mode)),
-    [],
+    [setRawFilters],
   );
   const setRangeEdge = useCallback(
     (edge: "from" | "to", ref: DateRef) => setRawFilters((f) => withRangeEdge(f, edge, ref)),
-    [],
+    [setRawFilters],
   );
-  const clearRange = useCallback(() => setRawFilters(withRangeCleared), []);
+  const clearRange = useCallback(() => setRawFilters(withRangeCleared), [setRawFilters]);
   const togglePick = useCallback(
     (pick: PeriodPick) => setRawFilters((f) => withPickToggled(f, pick)),
-    [],
+    [setRawFilters],
   );
-  const clearPicks = useCallback(() => setRawFilters(withPicksCleared), []);
+  const clearPicks = useCallback(() => setRawFilters(withPicksCleared), [setRawFilters]);
 
   const dismissImportError = useCallback(() => {
     setImportError(null);

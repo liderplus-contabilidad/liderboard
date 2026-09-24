@@ -210,8 +210,9 @@ describe("Un ejercicio TIPEADO en la misma tabla", () => {
     expect(rows.map((row) => row.label)).toEqual([
       "Afiliado personal",
       "Afiliado familia",
-      "Factura familia",
       "Planta",
+      "Factura familia",
+      "Externos",
       "Externos",
       "Total costo de personal",
     ]);
@@ -238,7 +239,7 @@ describe("Un ejercicio TIPEADO en la misma tabla", () => {
     const planta = rows.find((row) => row.kind === "section" && row.label === "Planta");
     const total = (year: number) =>
       planta?.cells[columns.findIndex((c) => c.year === year && c.kind === "total")]?.value ?? null;
-    expect(total(2019)).toBe(1750 + 1100);
+    expect(total(2019)).toBe(1500 + 1100);
     expect(total(2026)).not.toBeNull();
   });
 

@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatCurrency } from "@/lib/format";
 import {
   PERSONNEL_LEGACY_COST_ROWS,
+  legacyRowsInGroups,
   type PersonnelLegacyAmounts,
   type PersonnelLegacyRowId,
 } from "@/lib/personnel-cost/legacy";
@@ -35,6 +36,7 @@ export function PersonnelCostCapture() {
     captureSeries,
     captureRevenue,
     datosMonths,
+    datosFilters,
     removeCaptureYear,
     typedMonthsIn,
     saveLegacy,
@@ -69,13 +71,13 @@ export function PersonnelCostCapture() {
   // inflate the very figure the percentage beside it divides.
   const total = useMemo(() => {
     let sum = 0;
-    for (const row of PERSONNEL_LEGACY_COST_ROWS) {
+    for (const row of legacyRowsInGroups(datosFilters.groups, datosFilters.sections)) {
       for (const month of datosMonths) {
         sum += captureSeries[row.id][month] ?? 0;
       }
     }
     return sum;
-  }, [captureSeries, datosMonths]);
+  }, [captureSeries, datosMonths, datosFilters.groups, datosFilters.sections]);
 
   const typed = typedMonthsIn(captureYear);
 
@@ -118,6 +120,8 @@ export function PersonnelCostCapture() {
         <PersonnelCostCaptureGrid
           series={captureSeries}
           months={datosMonths}
+          groups={datosFilters.groups}
+          sections={datosFilters.sections}
           revenue={captureRevenue}
           onCommit={commit}
           onPasteMonths={pasteMonths}
