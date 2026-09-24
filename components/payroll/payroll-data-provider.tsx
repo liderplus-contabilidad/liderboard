@@ -1,7 +1,9 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import type { CompanyProfile } from "@/lib/company-profile";
 import type { CostCenter } from "@/lib/cost-center";
 import type { EntityLogo } from "@/lib/workspaces";
@@ -119,7 +121,11 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     () => payrollDb.periodFinancials((stored ?? EMPTY_PERIODS).map((period) => period.id)),
     [stored],
   );
-  const [rawFilters, setRawFilters] = useState<PayrollFilters>(emptyFilters);
+  const [rawFilters, setRawFilters] = useFilterState<PayrollFilters>(
+    "payroll.rawFilters",
+    activeClientId,
+    emptyFilters,
+  );
 
   const clients = clientRows ?? EMPTY_CLIENTS;
   const periods = stored ?? EMPTY_PERIODS;
@@ -173,21 +179,24 @@ export function PayrollDataProvider({ children }: { children: ReactNode }) {
     await payrollDb.deleteClient(clientId);
   }, []);
 
-  const selectClient = useCallback(async (clientId: string) => {
-    await payrollDb.setActiveClient(clientId);
-    // Nothing of the previous cliente's selection carries over: it named períodos this one does
-    // not have.
-    setRawFilters(emptyFilters());
-  }, []);
+  const selectClient = useCallback(
+    async (clientId: string) => {
+      await payrollDb.setActiveClient(clientId);
+      // Nothing of the previous cliente's selection carries over: it named períodos this one does
+      // not have.
+      setRawFilters(emptyFilters());
+    },
+    [setRawFilters],
+  );
 
   const toggleYear = useCallback(
     (year: number) => setRawFilters((current) => withYearToggled(current, year, years)),
-    [years],
+    [years, setRawFilters],
   );
-  const clearYears = useCallback(() => setRawFilters(withYearsCleared), []);
+  const clearYears = useCallback(() => setRawFilters(withYearsCleared), [setRawFilters]);
   const setSearch = useCallback(
     (search: string) => setRawFilters((current) => withSearch(current, search)),
-    [],
+    [setRawFilters],
   );
 
   const importRoster = useCallback(

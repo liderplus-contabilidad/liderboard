@@ -2,15 +2,9 @@
  * **The SIMPLE shape a past exercise has**, and the whole reason this file exists: what the firm kept
  * before MicroPlus is four lines and twelve months, and there is no estado de resultados behind it.
  *
- * The module's own shape —twenty-one concepts under three groups under two sections— is derived from a
- * chart of accounts. A year that predates it has no chart of accounts to derive anything from: it is a
- * sheet somebody typed, and its four lines are exactly what was written there. Projecting them onto
- * the three groups would be INVENTING a detail the paper never carried, which is the one thing the
- * whole module is careful not to do — so a legacy row declares its SECTION and stops there.
- *
- * That is also why these are not `PersonnelConcept`s with a missing field: a concept is a rollup of an
- * account and carries the code it came from; these carry nothing, because nothing produced them but a
- * person typing. Two shapes, each honest about what it knows.
+ * Historical rows retain their own shape without account codes. Their business classification
+ * supports both filter axes: Planta contains the two Afiliado rows; Externos contains Factura
+ * familia and Externos. No afiliados and Honorarios both select those latter rows, without duplication.
  *
  * **The VENTAS of such a year are NOT stored here**, and that is the point of this note. «% vs ventas»
  * needs a denominator and a typed exercise has no estado de resultados to take it from — but the app
@@ -20,12 +14,9 @@
  * the chain —raíz 4 where there is one, Ingresos where there is not— and hands the result in through
  * `PersonnelCostYearInput.revenue`, exactly the field a loaded year fills.
  *
- * **What a legacy year gives up, stated plainly:** it has no groups, so «Grupo» has nothing to narrow
- * and the Evolución compares its SECTIONS instead. And a month nobody has written ventas for anywhere
- * divides by nothing, so its percentage reads `null` — never `0`, which would claim the firm invoiced
- * nothing when what happened is that nobody wrote it down.
+ * Historical charts retain the section breakdown. Missing revenue produces a null percentage.
  */
-import type { PersonnelSectionId } from "./accounts";
+import type { PersonnelGroupId, PersonnelSectionId } from "./accounts";
 import { MONTHS_IN_YEAR } from "./types";
 
 export type PersonnelLegacyRowId =
@@ -38,23 +29,42 @@ export interface PersonnelLegacyRow {
   id: PersonnelLegacyRowId;
   /** As the old sheet writes it. */
   label: string;
-  /** Which of the two sections it adds into — the ONE thing the old shape does say. */
+  /** Which section the historical row adds into. */
   section: PersonnelSectionId;
+  group: PersonnelGroupId;
 }
 
 /**
- * The four COST lines, in the order the sheet writes them. Three roll into «Planta» and one is
- * «Externos», which is the whole of the structure a legacy year has.
+ * The four COST lines in clipboard order: two in Planta and two in Externos.
  *
  * Their order is a contract with the clipboard: a four-row block copied out of the old workbook and
  * pasted on the first line has to land on these four and nothing else.
  */
 export const PERSONNEL_LEGACY_COST_ROWS: readonly PersonnelLegacyRow[] = [
-  { id: "afiliado-personal", label: "Afiliado personal", section: "planta" },
-  { id: "afiliado-familia", label: "Afiliado familia", section: "planta" },
-  { id: "factura-familia", label: "Factura familia", section: "planta" },
-  { id: "externos", label: "Externos", section: "externos" },
+  { id: "afiliado-personal", label: "Afiliado personal", section: "planta", group: "afiliados" },
+  { id: "afiliado-familia", label: "Afiliado familia", section: "planta", group: "afiliados" },
+  {
+    id: "factura-familia",
+    label: "Factura familia",
+    section: "externos",
+    group: "honorarios-medicos",
+  },
+  { id: "externos", label: "Externos", section: "externos", group: "honorarios-medicos" },
 ];
+
+/** La clasificación histórica permite filtrar sin inventar cuentas contables. */
+export function legacyRowsInGroups(
+  groups: readonly PersonnelGroupId[],
+  sections: readonly PersonnelSectionId[] = [],
+): readonly PersonnelLegacyRow[] {
+  return PERSONNEL_LEGACY_COST_ROWS.filter((row) =>
+    sections.length > 0
+      ? sections.includes(row.section)
+      : groups.length === 0 ||
+        groups.includes(row.group) ||
+        (row.group === "honorarios-medicos" && groups.includes("no-afiliados")),
+  );
+}
 
 /** One month of a legacy year: the four lines, `null` where nothing was written. */
 export type PersonnelLegacyAmounts = Readonly<Record<PersonnelLegacyRowId, number | null>>;

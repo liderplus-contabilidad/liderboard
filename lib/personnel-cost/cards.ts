@@ -51,6 +51,7 @@ import type {
   ChartTableRow,
   ChartTooltip,
 } from "@/lib/charts/types";
+import { is3DOption } from "@/lib/charts/types";
 import {
   fitDirectLabel,
   labelDistance,
@@ -73,7 +74,12 @@ import {
   type PersonnelGroupId,
   type PersonnelSectionId,
 } from "./accounts";
-import { shareOf, type PersonnelCostReading, type PersonnelYearReading } from "./derive";
+import {
+  shareOf,
+  scopePersonnelCost,
+  type PersonnelCostReading,
+  type PersonnelYearReading,
+} from "./derive";
 import { GUIDE_GROUPS, GUIDE_SECTIONS, GUIDE_SHARES } from "./guides";
 
 /**
@@ -121,6 +127,7 @@ export interface PersonnelCardsInput {
   reading: PersonnelCostReading;
   /** The marked groups; empty is all of them. */
   groups: readonly PersonnelGroupId[];
+  sections?: readonly PersonnelSectionId[];
   /** How the span is named, so every subtitle says the same thing. */
   period: string;
   /** «Evolución»'s shape. `apilada` when not given. */
@@ -521,7 +528,7 @@ function sentence(note: string | undefined, asSolid: boolean): string | undefine
 /**
  * A section's figures under the bar's «Grupo» marks: the section whole with no mark, and otherwise
  * the SUM of its marked groups — Planta narrowed to Afiliados is the Afiliados series, figure by
- * figure. A typed exercise has no groups, so a mark means nothing for it and the section stays whole,
+ * figure. Historical sections arrive scoped to their selected rows by `scopePersonnelCost`,
  * the same rule the evolution and the concepts already hold. `null` when the section has no marked
  * group at all: it is then not drawn, because a stack of zeros would claim the section cost nothing.
  */
@@ -757,7 +764,7 @@ function evolutionRows(input: PersonnelCardsInput): {
     return {
       months,
       depthLabel: "Sección",
-      rows: PERSONNEL_SECTIONS.map((section) => ({
+      rows: year.sections.map(({ section }) => ({
         id: section.id,
         name: section.label,
         color: colorForPersonnel(section.id),
@@ -1175,8 +1182,8 @@ interface SharesFigure {
  *
  * The share is always the entity's total over the span DIVIDED BY THE VENTAS OF THE SAME SPAN — a
  * section is the sum of its marked groups over the year's raíz 4, which is `narrowedSection` measured
- * by `shareOf`, so «Planta» here and «Planta» in the tile are the same number. A typed exercise has no
- * ventas and therefore no share: it is not a bar, and the note says so.
+ * by `shareOf`, so «Planta» here and «Planta» in the tile are the same number. Historical exercises
+ * use their resolved revenue too; only an absent denominator prevents drawing their percentage.
  */
 function sharesLevel(
   input: PersonnelCardsInput,
@@ -1188,7 +1195,7 @@ function sharesLevel(
 } {
   const marked = new Set(input.groups);
   const scope = groupsInScope(input.groups);
-  const years = input.reading.years.filter((year) => year.covered && year.groups.length > 0);
+  const years = input.reading.years.filter((year) => year.covered);
   const figures = new Map<string, Map<number, SharesFigure>>();
   const put = (id: string, year: number, figure: SharesFigure | null) => {
     if (figure === null) {
@@ -1200,13 +1207,39 @@ function sharesLevel(
   };
   const parent = new Map<number, SharesFigure>();
 
+  // Historical exercises have named rows instead of account groups. At a section's detail
+  // level, expose those rows alongside modern groups, keeping each year's own values.
+  const addHistoricalRows = (entries: SharesEntry[]) => {
+    for (const year of years) {
+      const rows = year.legacyRows.filter(
+        (entry) =>
+          entry.row.section === path.section &&
+          (path.group === null ||
+            entry.row.group === path.group ||
+            (path.group === "no-afiliados" && entry.row.group === "honorarios-medicos")),
+      );
+      if (rows.length === 0) continue;
+      const total = rows.reduce((sum, entry) => sum + entry.total, 0);
+      parent.set(year.year, { total, share: shareOf(total, year.revenue) });
+      for (const entry of rows) {
+        const id = `legacy:${entry.row.id}`;
+        if (!entries.some((item) => item.id === id)) {
+          entries.push({ id, label: entry.row.label, next: null });
+        }
+        put(id, year.year, { total: entry.total, share: entry.share });
+      }
+    }
+  };
+
   if (path.section === null) {
     const entries = PERSONNEL_SECTIONS.filter((section) =>
-      groupsOfSection(section.id).some((group) => scope.includes(group.id)),
+      years.some((year) => year.sections.some((entry) => entry.section.id === section.id)),
     ).map<SharesEntry>((section) => ({
       id: section.id,
       label: section.label,
-      next: sectionNext(section.id, scope),
+      next: years.some((year) => year.legacyRows.some((entry) => entry.row.section === section.id))
+        ? { section: section.id, group: null }
+        : sectionNext(section.id, scope),
     }));
     for (const year of years) {
       let total = 0;
@@ -1247,6 +1280,7 @@ function sharesLevel(
         }
       }
     }
+    addHistoricalRows(entries);
     return { entries, figures, parent: { label: section?.label ?? "", figures: parent } };
   }
 
@@ -1266,6 +1300,7 @@ function sharesLevel(
       put(row.concept.id, year.year, { total: row.total, share: row.share });
     }
   }
+  addHistoricalRows(entries);
   return { entries, figures, parent: { label: group?.label ?? "", figures: parent } };
 }
 
@@ -1300,12 +1335,20 @@ function buildSharesCard(input: PersonnelCardsInput): {
   entries: SharesEntry[];
   crumbs: SharesCrumb[];
 } {
-  const path = resolveSharesPath(input.sharesPath, input.groups);
+  let path = resolveSharesPath(input.sharesPath, input.groups);
+  const requestedSection = input.sharesPath?.section;
+  if (
+    requestedSection &&
+    path.section !== requestedSection &&
+    input.reading.years.some((year) =>
+      year.legacyRows.some((entry) => entry.row.section === requestedSection),
+    )
+  ) {
+    path = { section: requestedSection, group: null };
+  }
   const { entries, figures, parent } = sharesLevel(input, path);
-  const years = input.reading.years
-    .filter((year) => year.covered && year.groups.length > 0)
-    .map((year) => year.year);
-  const typed = input.reading.years.filter((year) => year.covered && year.legacyRows.length > 0);
+  const years = input.reading.years.filter((year) => year.covered).map((year) => year.year);
+  const withoutRevenue = input.reading.years.filter((year) => year.covered && year.revenue === 0);
   const crumbs = sharesCrumbs(path);
   const level = crumbs[crumbs.length - 1].label;
 
@@ -1393,12 +1436,14 @@ function buildSharesCard(input: PersonnelCardsInput): {
       const figure = byYear(year);
       return [figure ? moneyExact(figure.total) : null, cell(figure?.share ?? null, percent)];
     });
-  const rows: ChartTableRow[] = entries.map((entry, index) => ({
-    id: entry.id,
-    label: entry.label,
-    color: colorOf(entry, index),
-    values: valuesOf((year) => figureOf(entry.id, year)),
-  }));
+  const rows: ChartTableRow[] = entries
+    .filter((entry) => years.some((year) => figureOf(entry.id, year) !== null))
+    .map((entry, index) => ({
+      id: entry.id,
+      label: entry.label,
+      color: colorOf(entry, index),
+      values: valuesOf((year) => figureOf(entry.id, year)),
+    }));
   if (rows.length > 0) {
     rows.push({
       id: "parent",
@@ -1432,13 +1477,13 @@ function buildSharesCard(input: PersonnelCardsInput): {
   const asSolid = standing(input.solidViews?.shares, solid);
 
   const notes: string[] = [];
-  if (typed.length > 0) {
+  if (withoutRevenue.length > 0) {
     notes.push(
-      `${typed.map((year) => year.year).join(", ")} ${typed.length === 1 ? "es un ejercicio tipeado sin ventas y no se dibuja" : "son ejercicios tipeados sin ventas y no se dibujan"}.`,
+      `${withoutRevenue.map((year) => year.year).join(", ")}: sin ventas en el tramo; no se calcula el porcentaje.`,
     );
   }
   if (path.section !== null && drawn.length > 0 && drawn.every((entry) => entry.next === null)) {
-    notes.push("Es el último nivel: cada barra es una cuenta del comparativo.");
+    notes.push("Es el último nivel: cada barra es un concepto del comparativo.");
   }
 
   return {
@@ -1458,14 +1503,56 @@ function buildSharesCard(input: PersonnelCardsInput): {
 }
 
 export function buildPersonnelCards(input: PersonnelCardsInput): PersonnelCards {
+  input = { ...input, reading: scopePersonnelCost(input.reading, input.groups, input.sections) };
   const groups = buildGroupsCard(input);
   const shares = buildSharesCard(input);
+  const sections = buildSectionsCard(input);
+  const canShow = input.groups.length === 0 || (input.sections?.length ?? 0) > 0;
+  if (canShow) showAmounts(sections.option);
+  if (canShow) showAmounts(groups.card.option);
   return {
-    sections: buildSectionsCard(input),
+    sections,
     groups: groups.card,
     shares: shares.card,
     sharesEntries: shares.entries,
     sharesCrumbs: shares.crumbs,
     skylineAvailable: groups.skylineAvailable,
   };
+}
+
+/** Persistent amounts use labels so the normal hover tooltip remains available. */
+function showAmounts(option: ChartOption | Chart3DOption | null): void {
+  if (!option) return;
+  const blue = colorForPersonnel("planta");
+  const ink = (color: string | undefined) =>
+    color === blue || color === stageColor(blue) ? CHART_INK.onFill : CHART_INK.strong;
+  if (is3DOption(option)) {
+    for (const series of option.series) {
+      if (series.type !== "bar3D") continue;
+      series.label = {
+        textStyle: {
+          color: ink(series.itemStyle?.color),
+          fontWeight: 700,
+          fontSize: 11.5,
+          fontFamily: CHART_FONT,
+        },
+        show: true,
+        formatter: (param) => moneyExact(param.value[2]),
+      };
+    }
+    return;
+  }
+  for (const series of option.series) {
+    if (series.type !== "bar") continue;
+    series.label = {
+      show: true,
+      position: "inside",
+      color: ink(series.itemStyle?.color),
+      fontWeight: 700,
+      fontSize: 10,
+      formatter: (param) =>
+        param.value === null || param.value === undefined ? "" : moneyExact(Number(param.value)),
+    };
+    series.labelLayout = { hideOverlap: false };
+  }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { useFilterState } from "@/components/dashboard/filter-state";
 import { buildSeries } from "@/lib/profit-loss/analytics/series";
 import type {
   AnalyticsSource,
@@ -52,7 +53,8 @@ export function PygAnalyticsProvider({
   allEdits: CellEdit[];
   children: ReactNode;
 }) {
-  const { views, frequency, activeCenterId, dataset, filters, loadedMonths } = usePygData();
+  const { views, frequency, activeCenterId, dataset, filters, loadedMonths, activeClientId } =
+    usePygData();
 
   // Both modes declare their own coverage now (`WorkspaceMeta.loadedMonths`), so it always wins
   // outright over `buildAnalyticsSource`'s value-based inference — every view shares the SAME
@@ -91,7 +93,11 @@ export function PygAnalyticsProvider({
   // Sanitized on read rather than in an effect, like every other derived value here: a base the
   // resolved center no longer declares —another workspace,
   // another file— falls back to Ingresos instead of leaving the table blank until it is repicked.
-  const [wantedBaseCode, setVerticalBaseCode] = useState<string>(REVENUE_ROOT);
+  const [wantedBaseCode, setVerticalBaseCode] = useFilterState<string>(
+    "pyg.verticalBaseCode",
+    activeClientId,
+    REVENUE_ROOT,
+  );
   const activeSource = sources.find((source) => source.centerId === activeCenterId);
   const verticalBaseCode =
     activeSource && !activeSource.valuesByCode.has(wantedBaseCode) ? REVENUE_ROOT : wantedBaseCode;
@@ -108,7 +114,7 @@ export function PygAnalyticsProvider({
       setVerticalBaseCode,
       runQuery,
     }),
-    [sources, context, verticalBaseCode, colorOf, runQuery],
+    [sources, context, verticalBaseCode, colorOf, runQuery, setVerticalBaseCode],
   );
 
   return <PygAnalyticsContext.Provider value={value}>{children}</PygAnalyticsContext.Provider>;

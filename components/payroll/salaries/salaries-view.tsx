@@ -1,7 +1,9 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { ChartCard } from "@/components/ui/chart-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { costCenterHeading, letterheadLogos } from "@/lib/cost-center";
@@ -48,7 +50,11 @@ const EMPTY_LINES: Map<string, PayrollEmployeeLine[]> = new Map();
  */
 export function SalariesView() {
   const { activeClient, activeClientId, periods, ready } = usePayrollData();
-  const [rawFilters, setRawFilters] = useState<SalariesFilters>(emptyFilters);
+  const [rawFilters, setRawFilters] = useFilterState<SalariesFilters>(
+    "salaries.rawFilters",
+    activeClientId,
+    emptyFilters,
+  );
 
   // One single query for ALL the client's períodos, bounded by their ids — never an unbounded read,
   // which is what would mix the nómina of two companies.
@@ -77,21 +83,21 @@ export function SalariesView() {
 
   const toggleArea = useCallback(
     (area: string) => setRawFilters((current) => withAreaToggled(current, area, universe.areas)),
-    [universe.areas],
+    [universe.areas, setRawFilters],
   );
   const toggleYear = useCallback(
     (year: number) => setRawFilters((current) => withYearToggled(current, year, universe.years)),
-    [universe.years],
+    [universe.years, setRawFilters],
   );
   const toggleMonth = useCallback(
     (month: number) =>
       setRawFilters((current) => withMonthToggled(current, month, universe.months)),
-    [universe.months],
+    [universe.months, setRawFilters],
   );
-  const clearAreas = useCallback(() => setRawFilters(withAreasCleared), []);
-  const clearYears = useCallback(() => setRawFilters(withYearsCleared), []);
-  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
-  const clearAll = useCallback(() => setRawFilters(emptyFilters()), []);
+  const clearAreas = useCallback(() => setRawFilters(withAreasCleared), [setRawFilters]);
+  const clearYears = useCallback(() => setRawFilters(withYearsCleared), [setRawFilters]);
+  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), [setRawFilters]);
+  const clearAll = useCallback(() => setRawFilters(emptyFilters()), [setRawFilters]);
 
   // Before the first read from Dexie it is not known whether there are clients: waiting avoids the
   // empty state flickering over a space that actually already has one.

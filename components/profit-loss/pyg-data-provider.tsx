@@ -1,15 +1,9 @@
 "use client";
 
+import { useFilterState, useFilterStateWriter } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { deletePersonnelCostForClient } from "@/lib/personnel-cost/db";
 import { deleteRevenueForClient } from "@/lib/revenue/db";
 import { deleteSalesForClient } from "@/lib/sales/db";
@@ -399,14 +393,31 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
     () => (openClientId ? getWorkspaceMeta(openClientId) : Promise.resolve(undefined)),
     [openClientId],
   );
-  const [frequency, setFrequencyState] = useState<Frequency>("mensual");
+  const [frequency, setFrequencyState] = useFilterState<Frequency>(
+    "pyg.frequency",
+    activeClientId,
+    "mensual",
+  );
   // Whether the open preset view OWNS the account marks. It is remembered instead of deduced because
   // the one that knows is the catalogue, which lives in `charts/` and is not imported from here; it is
   // what decides whether unmarking a line NARROWS the breakdown or switches the whole view off.
-  const [presetOwnsCodes, setPresetOwnsCodes] = useState(false);
-  const [rawFilters, setRawFilters] = useState<PygFilters>(() => emptyFilters());
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const [hideZeroRows, setHideZeroRows] = useState(false);
+  const [presetOwnsCodes, setPresetOwnsCodes] = useFilterState(
+    "pyg.presetOwnsCodes",
+    activeClientId,
+    false,
+  );
+  const [rawFilters, setRawFilters] = useFilterState<PygFilters>(
+    "pyg.rawFilters",
+    activeClientId,
+    () => emptyFilters(),
+  );
+  const [collapsed, setCollapsed] = useFilterState<Set<string>>(
+    "pyg.collapsed",
+    activeClientId,
+    () => new Set(),
+  );
+  const setClientFilters = useFilterStateWriter<PygFilters>("pyg.rawFilters");
+  const [hideZeroRows, setHideZeroRows] = useFilterState("pyg.hideZeroRows", activeClientId, false);
 
   // The only cross-cutting read, and only while the consolidado is open.
   const contributions =
@@ -605,22 +616,10 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
   }, [activeView]);
   const allowed = useMemo(() => (base ? allowedFrequencies(base) : [...FREQUENCY_ORDER]), [base]);
 
-  // A NEW workspace (its set of dataset ids changed) resets to the base frequency; the filters
-  // themselves are reset by `commitWorkspace`, which is the only path that changes datasets.
-  const workspaceKey = datasets.map((d) => d.id).join("|");
-  useEffect(() => {
-    if (base) {
-      setFrequencyState(base);
-    }
-  }, [workspaceKey, base]);
-  useEffect(() => {
-    setCollapsed(new Set());
-  }, [workspaceKey]);
-
   // Switching to a coarser view (e.g. Sin-centro = anual) clamps the frequency into range.
   useEffect(() => {
     setFrequencyState((prev) => (allowed.includes(prev) ? prev : (base ?? prev)));
-  }, [resolvedActiveId, allowed, base]);
+  }, [resolvedActiveId, allowed, base, setFrequencyState]);
 
   // The deepest movement account across ALL files in the workspace (not just the resolved
   // view) — so the Nivel options are stable across center tabs and reflect the deepest Excel.
@@ -636,7 +635,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         setFrequencyState(next);
       }
     },
-    [allowed],
+    [allowed, setFrequencyState],
   );
 
   // Marking an account SWITCHES OFF the open preset view —they are two answers to «what do I draw»—
@@ -654,7 +653,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         ),
       );
     },
-    [filters, options, presetOwnsCodes],
+    [filters, options, presetOwnsCodes, setRawFilters],
   );
 
   const toggleCenter = useCallback(
@@ -667,28 +666,28 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         ),
       );
     },
-    [filters, views],
+    [filters, views, setRawFilters],
   );
 
   const toggleClient = useCallback(
     (clientId: string) => {
       setRawFilters(withClientToggled(filters, clientId, consolidatableIds));
     },
-    [filters, consolidatableIds],
+    [filters, consolidatableIds, setRawFilters],
   );
 
   const toggleYear = useCallback(
     (year: number) => {
       setRawFilters(withYearToggled({ ...filters, years: visibleYears }, year, loadedYears));
     },
-    [filters, visibleYears, loadedYears],
+    [filters, visibleYears, loadedYears, setRawFilters],
   );
 
   const togglePeriod = useCallback(
     (period: PeriodSlot) => {
       setRawFilters(withPeriodToggled(filters, period, periodSlots(frequency)));
     },
-    [filters, frequency],
+    [filters, frequency, setRawFilters],
   );
 
   // The preset view seeds the WHOLE «Centro de costo» list —the real centers and «Sin centro de
@@ -745,41 +744,72 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         ),
       );
     },
-    [filters, views, isConsolidated, loadedMonthsByYear, chartYear, frequency, setFrequency],
+    [
+      filters,
+      views,
+      isConsolidated,
+      loadedMonthsByYear,
+      chartYear,
+      frequency,
+      setFrequency,
+      setPresetOwnsCodes,
+      setRawFilters,
+    ],
   );
-  const clearPreset = useCallback(() => setRawFilters(withPresetCleared(filters)), [filters]);
+  const clearPreset = useCallback(
+    () => setRawFilters(withPresetCleared(filters)),
+    [filters, setRawFilters],
+  );
 
-  const clearCodes = useCallback(() => setRawFilters(withCodesCleared(filters)), [filters]);
-  const clearCenters = useCallback(() => setRawFilters(withCentersCleared(filters)), [filters]);
-  const clearClients = useCallback(() => setRawFilters(withClientsCleared(filters)), [filters]);
-  const clearYears = useCallback(() => setRawFilters(withYearsCleared(filters)), [filters]);
+  const clearCodes = useCallback(
+    () => setRawFilters(withCodesCleared(filters)),
+    [filters, setRawFilters],
+  );
+  const clearCenters = useCallback(
+    () => setRawFilters(withCentersCleared(filters)),
+    [filters, setRawFilters],
+  );
+  const clearClients = useCallback(
+    () => setRawFilters(withClientsCleared(filters)),
+    [filters, setRawFilters],
+  );
+  const clearYears = useCallback(
+    () => setRawFilters(withYearsCleared(filters)),
+    [filters, setRawFilters],
+  );
   const selectAllYears = useCallback(
     () => setRawFilters(withAllYears(filters, loadedYears)),
-    [filters, loadedYears],
+    [filters, loadedYears, setRawFilters],
   );
-  const clearPeriods = useCallback(() => setRawFilters(withPeriodsCleared(filters)), [filters]);
-  const clearFilters = useCallback(() => setRawFilters(clearAllFilters()), []);
+  const clearPeriods = useCallback(
+    () => setRawFilters(withPeriodsCleared(filters)),
+    [filters, setRawFilters],
+  );
+  const clearFilters = useCallback(() => setRawFilters(clearAllFilters()), [setRawFilters]);
 
-  const toggleCollapsed = useCallback((code: string) => {
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(code)) {
-        next.delete(code);
-      } else {
-        next.add(code);
-      }
-      return next;
-    });
-  }, []);
+  const toggleCollapsed = useCallback(
+    (code: string) => {
+      setCollapsed((current) => {
+        const next = new Set(current);
+        if (next.has(code)) {
+          next.delete(code);
+        } else {
+          next.add(code);
+        }
+        return next;
+      });
+    },
+    [setCollapsed],
+  );
 
   const setExpandLevel = useCallback(
     (level: number | "all") => {
       setCollapsed(level === "all" ? new Set() : collapsedForLevel(accounts ?? [], level));
     },
-    [accounts],
+    [accounts, setCollapsed],
   );
 
-  const toggleHideZeroRows = useCallback(() => setHideZeroRows((prev) => !prev), []);
+  const toggleHideZeroRows = useCallback(() => setHideZeroRows((prev) => !prev), [setHideZeroRows]);
 
   const commitWorkspace = useCallback(
     async (built: BuiltWorkspace) => {
@@ -799,7 +829,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         years: [...new Set(built.datasets.map((dataset) => dataset.year))].sort((a, b) => a - b),
       });
     },
-    [openClientId],
+    [openClientId, setRawFilters],
   );
 
   const commitMonthlyBatch = useCallback(
@@ -863,7 +893,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         conflicts,
       };
     },
-    [openClientId, datasets, metaRow, allEdits, workspaceIdentity],
+    [openClientId, datasets, metaRow, allEdits, workspaceIdentity, setRawFilters],
   );
 
   const replaceMonthlyWorkspace = useCallback(
@@ -884,7 +914,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       // Only THIS client is emptied. Its comments survive on the accounts the new file also
       // brings — see `replaceClientWorkspace`.
       await replaceClientWorkspace(clientId, result.datasets, meta);
-      setRawFilters({ ...emptyFilters(), years: batchYears });
+      setClientFilters(clientId, { ...emptyFilters(), years: batchYears });
       return {
         datasets: result.datasets,
         loadedMonthsByYear: result.loadedMonthsByYear,
@@ -892,7 +922,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
         warnings: result.warnings,
       };
     },
-    [openClientId],
+    [openClientId, setClientFilters],
   );
 
   /**
@@ -910,36 +940,41 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
 
   /** «Cargar en \<cliente\>» — opens the client that DOES match and loads there, merging onto
    * whatever it already holds. Nothing is replaced: the identities agree by construction. */
-  const commitBatchIntoClient = useCallback(async (clientId: string, slices: MonthSlice[]) => {
-    const [existing, meta] = await Promise.all([
-      clientDatasets(clientId),
-      getWorkspaceMeta(clientId),
-    ]);
-    const batchMode = slices[0]?.mode;
-    const relevant = existing.filter((d) =>
-      batchMode === "single" ? d.role === "single" : d.role === "center" || d.role === "sin-centro",
-    );
-    const result = applyBatch(relevant, meta?.loadedMonthsByYear ?? EMPTY_COVERAGE, slices);
-    const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
-    await applyMonthSlice(clientId, result.datasets, {
-      companyName: result.datasets[0]?.companyName || meta?.companyName || "",
-      warnings: result.warnings,
-      activeCenterId:
+  const commitBatchIntoClient = useCallback(
+    async (clientId: string, slices: MonthSlice[]) => {
+      const [existing, meta] = await Promise.all([
+        clientDatasets(clientId),
+        getWorkspaceMeta(clientId),
+      ]);
+      const batchMode = slices[0]?.mode;
+      const relevant = existing.filter((d) =>
         batchMode === "single"
-          ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
-          : (meta?.activeCenterId ?? CONSOLIDADO_ID),
-      loadedMonthsByYear: result.loadedMonthsByYear,
-      sourceSystemId: slices[0]?.system ?? meta?.sourceSystemId ?? LEGACY_SYSTEM,
-    });
-    await setActiveClient(clientId);
-    setRawFilters({ ...emptyFilters(), years: batchYears });
-    return {
-      datasets: result.datasets,
-      loadedMonthsByYear: result.loadedMonthsByYear,
-      years: batchYears,
-      warnings: result.warnings,
-    };
-  }, []);
+          ? d.role === "single"
+          : d.role === "center" || d.role === "sin-centro",
+      );
+      const result = applyBatch(relevant, meta?.loadedMonthsByYear ?? EMPTY_COVERAGE, slices);
+      const batchYears = [...new Set(slices.map((s) => s.year))].sort((a, b) => a - b);
+      await applyMonthSlice(clientId, result.datasets, {
+        companyName: result.datasets[0]?.companyName || meta?.companyName || "",
+        warnings: result.warnings,
+        activeCenterId:
+          batchMode === "single"
+            ? (result.datasets[0]?.id ?? CONSOLIDADO_ID)
+            : (meta?.activeCenterId ?? CONSOLIDADO_ID),
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        sourceSystemId: slices[0]?.system ?? meta?.sourceSystemId ?? LEGACY_SYSTEM,
+      });
+      await setActiveClient(clientId);
+      setClientFilters(clientId, { ...emptyFilters(), years: batchYears });
+      return {
+        datasets: result.datasets,
+        loadedMonthsByYear: result.loadedMonthsByYear,
+        years: batchYears,
+        warnings: result.warnings,
+      };
+    },
+    [setClientFilters],
+  );
 
   const removeYear = useCallback(
     async (year: number) => {
@@ -950,7 +985,7 @@ export function PygDataProvider({ children }: { children: ReactNode }) {
       setRawFilters((prev) => ({ ...prev, years: prev.years.filter((y) => y !== year) }));
       return deletedEdits;
     },
-    [openClientId],
+    [openClientId, setRawFilters],
   );
 
   const createClient = useCallback(

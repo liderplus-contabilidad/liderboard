@@ -1,7 +1,9 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { deriveCashMatrix, type CashMatrix } from "@/lib/cash-flow/cash-entries";
 import * as cashDb from "@/lib/cash-flow/db";
 import {
@@ -132,9 +134,19 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
     [activeClientId],
   );
 
-  const [asOf, setAsOf] = useState<string>(() => todayISO());
-  const [rawPayableFilters, setRawPayableFilters] = useState<PayableFilters>(emptyPayableFilters);
-  const [rawCheckFilters, setRawCheckFilters] = useState<CheckFilters>(emptyCheckFilters);
+  const [asOf, setAsOf] = useFilterState<string>("cash-flow.asOf", activeClientId, () =>
+    todayISO(),
+  );
+  const [rawPayableFilters, setRawPayableFilters] = useFilterState<PayableFilters>(
+    "cash-flow.rawPayableFilters",
+    activeClientId,
+    emptyPayableFilters,
+  );
+  const [rawCheckFilters, setRawCheckFilters] = useFilterState<CheckFilters>(
+    "cash-flow.rawCheckFilters",
+    activeClientId,
+    emptyCheckFilters,
+  );
 
   const clients = clientRows ?? EMPTY_CLIENTS;
   const centers = centerRows ?? EMPTY_CENTERS;
@@ -225,13 +237,16 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
     [],
   );
   const deleteClient = useCallback((clientId: string) => cashDb.deleteClient(clientId), []);
-  const selectClient = useCallback(async (clientId: string) => {
-    await cashDb.setActiveClient(clientId);
-    // Nothing of the previous empresa's selection carries over: it named centers and accounts this
-    // one does not have.
-    setRawPayableFilters(emptyPayableFilters());
-    setRawCheckFilters(emptyCheckFilters());
-  }, []);
+  const selectClient = useCallback(
+    async (clientId: string) => {
+      await cashDb.setActiveClient(clientId);
+      // Nothing of the previous empresa's selection carries over: it named centers and accounts this
+      // one does not have.
+      setRawPayableFilters(emptyPayableFilters());
+      setRawCheckFilters(emptyCheckFilters());
+    },
+    [setRawPayableFilters, setRawCheckFilters],
+  );
 
   const value = useMemo<CashFlowDataValue>(
     () => ({
@@ -297,6 +312,9 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       previous,
       derived,
       cashMatrix,
+      setAsOf,
+      setRawPayableFilters,
+      setRawCheckFilters,
     ],
   );
 

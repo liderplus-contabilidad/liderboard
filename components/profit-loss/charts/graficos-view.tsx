@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useCallback, useMemo, useState } from "react";
 import { BarChart3, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff, PieChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -69,34 +71,45 @@ const ANNEX_CARD: Record<
 };
 
 export function GraficosView() {
-  const { dataset, filters, frequency } = usePygData();
+  const { dataset, filters, frequency, activeClientId } = usePygData();
   const { context, runQuery } = usePygAnalytics();
   /**
    * The months of the axis in which the statement moved nothing —the ones the file never brought and
    * the ones it brought at zero, which on screen are the same empty column—. It is local state of this
    * screen and not a `PygFilters`: the five cards here read it and none of Datos or Análisis does, so
-   * it is not stored, it produces no chip and the printable report —which calls `buildGraficosCards`
+   * it is remembered for navigation, produces no chip and the printable report —which calls `buildGraficosCards`
    * on its own— still puts out the whole axis.
    */
-  const [hideEmptyPeriods, setHideEmptyPeriods] = useState(false);
+  const [hideEmptyPeriods, setHideEmptyPeriods] = useFilterState(
+    "pyg.hideEmptyPeriods",
+    activeClientId,
+    false,
+  );
   /**
    * The business lines switched off in their card's legend. It is local state for the same reason as
-   * the switch above: ONE card reads it and none of Datos or Análisis does, so it is not stored, it
+   * the switch above: ONE card reads it and none of Datos or Análisis does, so it
    * produces no chip and the printable report —which calls `buildGraficosCards` on its own— still puts
    * out all of them. A mark from a chart of accounts that is no longer open is ignored on read, so
    * switching client leaves nothing hanging.
    */
-  const [hiddenLines, setHiddenLines] = useState<readonly string[]>([]);
+  const [hiddenLines, setHiddenLines] = useFilterState<readonly string[]>(
+    "pyg.hiddenLines",
+    activeClientId,
+    [],
+  );
   const { periodName, tiles, cards, annex, annexResidualCodes, annexShapes, emptyPeriods, lines } =
     useMemo(
       () => buildGraficosCards(context, filters, { hideEmptyPeriods, hiddenLines }),
       [context, filters, hideEmptyPeriods, hiddenLines],
     );
-  const toggleLine = useCallback((id: string) => {
-    setHiddenLines((current) =>
-      current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
-    );
-  }, []);
+  const toggleLine = useCallback(
+    (id: string) => {
+      setHiddenLines((current) =>
+        current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id],
+      );
+    },
+    [setHiddenLines],
+  );
   // It only shows up in MONTHLY —a covered quarter aggregates three months and is not «a month at 0»—
   // and only if there is something to hide: a control that can do nothing teaches you not to read the
   // one next to it. `emptyPeriods` is counted over the unpruned axis, so the button does not vanish

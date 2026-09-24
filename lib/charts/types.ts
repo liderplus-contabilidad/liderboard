@@ -40,6 +40,10 @@ export interface ChartParam {
 
 export interface ChartLabel extends ChartTextStyle {
   show: boolean;
+  /** An opaque backing keeps values readable over other chart marks. */
+  backgroundColor?: string;
+  borderRadius?: number;
+  padding?: number | number[];
   /**
    * `"bottom"` is what a NEGATIVE bar needs. In a cartesian grid `"top"` is the top EDGE of the
    * datum's rect, and a falling bar's rect runs from zero downwards — so its top edge IS the zero
@@ -549,6 +553,7 @@ export interface Chart3DDatum {
 /** One series per entity, as in 2D: it is what gives the legend its names and the tooltip its. */
 export interface Chart3DSeries {
   type: "bar3D";
+  label?: Chart3DLabel;
   id?: string;
   name?: string;
   data: Chart3DDatum[];
@@ -579,7 +584,7 @@ export interface Chart3DSeries {
 }
 
 /**
- * A figure written ON a 3D bar — the hovered one, which is the only case the app uses.
+ * A figure written on a 3D bar, either persistently or on hover.
  *
  * It is not `ChartLabel`: `echarts-gl` nests every type property under `textStyle` and draws the
  * label in its own box, so the two shapes have almost nothing in common but the name. And it is not

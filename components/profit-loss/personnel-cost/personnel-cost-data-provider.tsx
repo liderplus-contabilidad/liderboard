@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { buildAnalyticsSource } from "@/lib/profit-loss/analytics/source";
@@ -38,7 +40,11 @@ import {
   type PersonnelLegacyAmounts,
   type PersonnelLegacySeries,
 } from "@/lib/personnel-cost/legacy";
-import { readPersonnelCost, type PersonnelCostReading } from "@/lib/personnel-cost/derive";
+import {
+  readPersonnelCost,
+  scopePersonnelCost,
+  type PersonnelCostReading,
+} from "@/lib/personnel-cost/derive";
 import type { PersonnelCostBackup } from "@/lib/personnel-cost/export";
 import type { ParsedPersonnelCostBackup } from "@/lib/personnel-cost/upload";
 import {
@@ -149,7 +155,7 @@ interface PersonnelCostDataValue {
    * the months it loaded, a typed year offers all twelve, because the month nobody has reached yet is
    * exactly the cell about to be filled. One `rawFilters`, two universes: a mark that means nothing
    * for the open year counts as none here and as itself in Gráficos, which is the house rule for an
-   * orphan mark. `datosGroupsAvailable` is false on a typed year — it has no groups to narrow.
+   * orphan mark. Historical years also support the personnel filter.
    */
   datosUniverse: PersonnelCostUniverse;
   datosFilters: PersonnelCostFilters;
@@ -166,9 +172,7 @@ interface PersonnelCostDataValue {
   setHideEmptyRows: (hide: boolean) => void;
   markCount: number;
   /**
-   * Whether anything on screen HAS groups. A span of typed exercises has none, and «Grupo» would then
-   * offer three marks that narrow nothing — a control that means nothing for the open data renders
-   * nothing rather than sitting disabled, which is the bar's rule everywhere else in the app.
+   * Whether there are years to filter, including historical exercises.
    */
   groupsAvailable: boolean;
   toggleYear: (year: number) => void;
@@ -254,8 +258,16 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     loadedMonthsByYear,
     sourceSystemId,
   } = usePygData();
-  const [rawFilters, setRawFilters] = useState<PersonnelCostFilters>(emptyFilters);
-  const [hideEmptyRows, setHideEmptyRows] = useState(false);
+  const [rawFilters, setRawFilters] = useFilterState<PersonnelCostFilters>(
+    "personnel-cost.rawFilters",
+    activeClientId,
+    emptyFilters,
+  );
+  const [hideEmptyRows, setHideEmptyRows] = useFilterState(
+    "personnel-cost.hideEmptyRows",
+    activeClientId,
+    false,
+  );
   const [evolutionView, setEvolutionView] = useState<EvolutionView>(DEFAULT_EVOLUTION_VIEW);
   const [solidViews, setSolidViews] = useState<PersonnelCardsInput["solidViews"]>({});
   const setSolidView = useCallback(
@@ -457,52 +469,62 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
 
   const reading = useMemo(() => {
     const marked = new Set(filters.years);
-    return readPersonnelCost(
-      inputs.filter((input) => marked.has(input.year)),
-      months,
+    return scopePersonnelCost(
+      readPersonnelCost(
+        inputs.filter((input) => marked.has(input.year)),
+        months,
+      ),
+      filters.groups,
+      filters.sections,
     );
-  }, [inputs, filters.years, months]);
+  }, [inputs, filters.years, filters.groups, filters.sections, months]);
 
   const cardsInput = useMemo<PersonnelCardsInput>(
     () => ({
       reading,
       groups: filters.groups,
+      sections: filters.sections,
       period: periodName,
       evolutionView,
       solidViews,
       sharesPath,
     }),
-    [reading, filters.groups, periodName, evolutionView, solidViews, sharesPath],
+    [reading, filters.groups, filters.sections, periodName, evolutionView, solidViews, sharesPath],
   );
   const cards = useMemo(() => buildPersonnelCards(cardsInput), [cardsInput]);
   const grid = useMemo(
-    () => buildPersonnelGrid(reading, { groups: filters.groups, hideEmptyRows }),
-    [reading, filters.groups, hideEmptyRows],
+    () =>
+      buildPersonnelGrid(reading, {
+        groups: filters.groups,
+        sections: filters.sections,
+        hideEmptyRows,
+      }),
+    [reading, filters.groups, filters.sections, hideEmptyRows],
   );
 
   const toggleYear = useCallback(
     (year: number) => setRawFilters((current) => withYearToggled(current, year, years)),
-    [years],
+    [years, setRawFilters],
   );
   const selectAllYears = useCallback(
     () => setRawFilters((current) => withAllYears(current, years)),
-    [years],
+    [years, setRawFilters],
   );
   const toggleMonth = useCallback(
     (monthIndex: number) =>
       setRawFilters((current) => withMonthToggled(current, monthIndex, universe.months)),
-    [universe.months],
+    [universe.months, setRawFilters],
   );
-  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), []);
+  const clearMonths = useCallback(() => setRawFilters(withMonthsCleared), [setRawFilters]);
   const toggleGroup = useCallback(
     (id: PersonnelGroupId) => setRawFilters((current) => withGroupToggled(current, id)),
-    [],
+    [setRawFilters],
   );
   const toggleSection = useCallback(
     (id: PersonnelSectionId) => setRawFilters((current) => withSectionToggled(current, id)),
-    [],
+    [setRawFilters],
   );
-  const clearGroups = useCallback(() => setRawFilters(withGroupsCleared), []);
+  const clearGroups = useCallback(() => setRawFilters(withGroupsCleared), [setRawFilters]);
 
   const saveFamily = useCallback(
     async (year: number, monthIndex: number, amount: number | null) => {
@@ -573,11 +595,15 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
   );
   const datosReading = useMemo(
     () =>
-      readPersonnelCost(
-        inputs.filter((input) => input.year === captureYear),
-        datosMonths,
+      scopePersonnelCost(
+        readPersonnelCost(
+          inputs.filter((input) => input.year === captureYear),
+          datosMonths,
+        ),
+        datosFilters.groups,
+        datosFilters.sections,
       ),
-    [inputs, captureYear, datosMonths],
+    [inputs, captureYear, datosMonths, datosFilters.groups, datosFilters.sections],
   );
   const datosPeriodName = useMemo(
     () =>
@@ -585,13 +611,18 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     [datosFilters, datosMonths, captureYear],
   );
   const datosGrid = useMemo(
-    () => buildPersonnelGrid(datosReading, { groups: datosFilters.groups, hideEmptyRows }),
-    [datosReading, datosFilters.groups, hideEmptyRows],
+    () =>
+      buildPersonnelGrid(datosReading, {
+        groups: datosFilters.groups,
+        sections: datosFilters.sections,
+        hideEmptyRows,
+      }),
+    [datosReading, datosFilters.groups, datosFilters.sections, hideEmptyRows],
   );
   const toggleDatosMonth = useCallback(
     (monthIndex: number) =>
       setRawFilters((current) => withMonthToggled(current, monthIndex, datosUniverse.months)),
-    [datosUniverse.months],
+    [datosUniverse.months, setRawFilters],
   );
 
   const captureSeries = useMemo(
@@ -732,12 +763,12 @@ export function PersonnelCostDataProvider({ children }: { children: ReactNode })
     datosReading,
     datosGrid,
     datosPeriodName,
-    datosGroupsAvailable: datosReading.years.some((year) => year.groups.length > 0),
+    datosGroupsAvailable: true,
     toggleDatosMonth,
     hideEmptyRows,
     setHideEmptyRows,
     markCount: activeMarkCount(filters),
-    groupsAvailable: reading.years.some((year) => year.groups.length > 0),
+    groupsAvailable: reading.years.length > 0,
     toggleYear,
     selectAllYears,
     toggleMonth,

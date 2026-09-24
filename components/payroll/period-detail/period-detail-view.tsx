@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useLiveQuery } from "dexie-react-hooks";
 import { BookText, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -62,7 +64,7 @@ export function PeriodDetailView({ periodId }: { periodId: string }) {
   const lines = useLiveQuery(() => listEmployees(periodId), [periodId]) ?? EMPTY_LINES;
 
   const [tab, setTab] = useState<DetailTab>("empleados");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useFilterState("payroll-period.search", periodId, "");
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
 

@@ -20,9 +20,10 @@
  *
  * **The SECTION is the other axis of the same narrowing, not a second one.** Planta IS Afiliados +
  * No afiliados and Externos IS Honorarios médicos, so a section mark is a shorthand for its groups:
- * `groups` stays the ONE list the engine reads, and `sections` records that the marks were set by
+ * For the modern chart, `groups` records the equivalent groups, and `sections` records the marks set by
  * section — which is what lets the bar lock the other column while one is in use, and the chips say
- * «Planta» instead of its two halves. `groupAxis` is the one answer to which column is in use.
+ * «Planta» instead of its two halves. Historical rows read `sections` directly because their group
+ * equivalences differ. `groupAxis` is the one answer to which column is in use.
  */
 import { monthMarkLabel, periodLabel, scopedPeriodLabel, yearMarkLabel } from "@/lib/period";
 import {

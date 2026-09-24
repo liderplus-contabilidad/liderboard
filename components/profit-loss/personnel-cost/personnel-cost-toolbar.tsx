@@ -212,7 +212,7 @@ export function PersonnelCostToolbar({
                   </div>
                   <DropdownNote>
                     Acota toda la pantalla: la tabla, los indicadores y las cuatro lecturas. Una
-                    sección es sus grupos, así que marcar en una columna bloquea la otra.
+                    columna filtra por grupo y la otra por sección; usa una a la vez.
                   </DropdownNote>
                 </DropdownPanel>
               </Dropdown>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useFilterState } from "@/components/dashboard/filter-state";
+
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TriangleAlert, Plus, Receipt, Upload } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
@@ -60,8 +62,16 @@ export function ChecksView() {
   const [openId, setOpenId] = useState<string | null | "new">(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const today = useReminderToday();
-  const [collectionFilter, setCollectionFilter] = useState<CollectionFilter>("all");
-  const [collectionOrder, setCollectionOrder] = useState<CollectionOrder>("issued");
+  const [collectionFilter, setCollectionFilter] = useFilterState<CollectionFilter>(
+    "checks.collectionFilter",
+    activeClientId,
+    "all",
+  );
+  const [collectionOrder, setCollectionOrder] = useFilterState<CollectionOrder>(
+    "checks.collectionOrder",
+    activeClientId,
+    "issued",
+  );
 
   const outstanding = useMemo(() => outstandingByAccount(checks, asOf), [checks, asOf]);
   const outstandingTotal = useMemo(
