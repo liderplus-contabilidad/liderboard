@@ -756,21 +756,35 @@ function evolutionRows(input: PersonnelCardsInput): {
   const year = years[0];
   const months = year?.months ?? [];
 
-  // A TYPED exercise has no groups, so what it compares is its two SECTIONS. It is not a third shape
-  // of the card: it is the same question —«qué parte de este mes es cada cosa»— answered at the only
-  // level that year knows, which is the level the old sheet wrote.
+  // Historical No afiliados and Honorarios select the same rows: draw one series with both
+  // names, or the selected group's name, so the total never counts those amounts twice.
   if (year && year.groups.length === 0 && year.legacyRows.length > 0) {
+    const byGroup = marked.size > 0 && (input.sections?.length ?? 0) === 0;
+    const nonAffiliated = byGroup && marked.has("no-afiliados");
+    const fees = byGroup && marked.has("honorarios-medicos");
+    const externalLabel =
+      byGroup && nonAffiliated !== fees
+        ? nonAffiliated
+          ? "No afiliados"
+          : "Honorarios médicos"
+        : "No afiliados / Honorarios";
     return {
       months,
-      depthLabel: "Sección",
-      rows: year.sections.map(({ section }) => ({
-        id: section.id,
-        name: section.label,
-        color: colorForPersonnel(section.id),
-        values: months.map(
-          (month) => year.sections.find((e) => e.section.id === section.id)?.monthly[month] ?? null,
-        ),
-      })),
+      depthLabel: "Grupo",
+      rows: year.sections.map(({ section, monthly }) => {
+        const id =
+          section.id === "planta"
+            ? "afiliados"
+            : nonAffiliated && !fees
+              ? "no-afiliados"
+              : "honorarios-medicos";
+        return {
+          id,
+          name: section.id === "planta" ? "Afiliados" : externalLabel,
+          color: colorForPersonnel(id),
+          values: months.map((month) => monthly[month] ?? null),
+        };
+      }),
     };
   }
 

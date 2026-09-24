@@ -503,11 +503,11 @@ describe("Las tarjetas ante un ejercicio TIPEADO", () => {
       evolutionView: "apilada",
     });
 
-  it("la evolución compara SECCIONES, que es el único nivel que ese año conoce", () => {
+  it("la evolución nombra los grupos históricos sin duplicar No afiliados y Honorarios", () => {
     const { groups } = typed();
     expect(flat(groups.option).series.map((entry) => entry.name)).toEqual([
-      "Planta",
-      "Externos",
+      "Afiliados",
+      "No afiliados / Honorarios",
       "Total",
     ]);
   });
