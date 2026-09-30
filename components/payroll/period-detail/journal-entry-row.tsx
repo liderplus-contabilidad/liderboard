@@ -35,7 +35,7 @@ function JournalEntryRowComponent({ line }: JournalEntryRowProps) {
   return (
     <GridRow>
       <Cell>
-        <span className="font-mono text-faint">{line.code ?? "—"}</span>
+        <span className="font-mono text-muted">{line.code ?? "—"}</span>
       </Cell>
       <Cell>
         <span className={cn("text-ink", isHaber ? "ml-6 font-normal" : "font-semibold")}>

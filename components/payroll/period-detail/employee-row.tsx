@@ -48,7 +48,7 @@ function EmployeeRowComponent({ line, computed }: EmployeeRowProps) {
           <Link href={href} className="font-semibold text-ink transition-colors hover:text-brand">
             {line.name}
           </Link>
-          <span className="text-[11.5px] text-faint">
+          <span className="text-[11.5px] text-muted">
             {line.role} · {line.area}
           </span>
         </span>

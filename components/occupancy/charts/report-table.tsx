@@ -22,7 +22,7 @@ export interface ReportTablesProps {
 }
 
 const HEAD_CELL =
-  "border-b border-border px-4 py-2 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint";
+  "border-b border-border px-4 py-2 text-table-header font-semibold uppercase tracking-[0.4px] text-muted";
 const CELL = "border-b border-border-faint px-4 py-[7px] font-mono text-[12.5px] tabular-nums";
 const FOOT_CELL =
   "border-t-2 border-brand/15 bg-surface-header px-4 py-2.5 font-mono text-[12.5px] font-semibold tabular-nums text-ink";
@@ -64,7 +64,7 @@ export function ReportTables({
               />
               {table.label}
             </span>
-            <span className="font-normal normal-case tracking-normal text-faintest">
+            <span className="font-normal normal-case tracking-normal text-muted">
               {axisLabel} · {period}
             </span>
           </p>
@@ -74,7 +74,7 @@ export function ReportTables({
         </div>
       ))}
 
-      <p className="border-t border-border bg-surface-header px-[18px] py-3 text-[11.5px] leading-relaxed text-faint">
+      <p className="border-t border-border bg-surface-header px-[18px] py-3 text-[11.5px] leading-relaxed text-muted">
         Tarifa Prom = ingresos ÷ habitaciones vendidas · RevPAR = ingresos ÷ habitaciones
         disponibles. El total es ratio de sumas, no el promedio de las filas; un periodo sin ventas
         queda vacío.

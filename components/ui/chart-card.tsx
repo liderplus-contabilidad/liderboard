@@ -377,7 +377,7 @@ function TableTwin({ table, maxHeight }: { table: ChartTable; maxHeight: number 
                   <span className="min-w-0">
                     <span className="block truncate">{row.label}</span>
                     {row.sublabel && (
-                      <span className="block truncate text-[11px] font-normal text-faint">
+                      <span className="block truncate text-[11px] font-normal text-muted">
                         {row.sublabel}
                       </span>
                     )}

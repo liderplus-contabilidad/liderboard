@@ -66,6 +66,8 @@
   --color-chip: #eef2f6;
   --color-chip-border: #dce3eb;
 
+  --text-table-header: 11.5px;
+
   --font-sans: var(--font-ibm-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }

@@ -140,8 +140,8 @@ export function DataGridSection() {
               return (
                 <GridRow key={employee.name}>
                   <Cell className="uppercase">{employee.name}</Cell>
-                  <Cell tone="muted" className="uppercase">
-                    {employee.cargo}
+                  <Cell>
+                    <span className="uppercase text-muted">{employee.cargo}</span>
                   </Cell>
                   {employee.months.map((month, monthIndex) => (
                     <EditableCell

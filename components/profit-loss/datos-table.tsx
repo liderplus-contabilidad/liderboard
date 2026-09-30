@@ -332,7 +332,7 @@ function SortableTh({
     <th
       onClick={onClick}
       className={cn(
-        "sticky top-0 z-[2] cursor-pointer select-none whitespace-nowrap border-b border-border bg-surface-header px-4 py-2.5 text-[11px] font-semibold transition-colors",
+        "sticky top-0 z-[2] cursor-pointer select-none whitespace-nowrap border-b border-border bg-surface-header px-4 py-2.5 text-table-header font-semibold transition-colors",
         active ? "text-brand" : "text-muted hover:text-ink",
         align === "left" ? "text-left uppercase tracking-[0.5px]" : "text-right",
         className,

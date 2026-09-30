@@ -154,7 +154,7 @@ const VerticalTableRow = memo(function VerticalTableRow({
           ) : (
             <span className="w-4 shrink-0" aria-hidden />
           )}
-          <span className="font-mono text-[11px] text-faint">{row.code}</span>
+          <span className="font-mono text-[11px] text-muted">{row.code}</span>
           <span className="truncate text-ink-soft">{row.label}</span>
         </span>
       </th>
@@ -193,7 +193,7 @@ function Th({
   return (
     <th
       className={cn(
-        "sticky top-0 z-[2] whitespace-nowrap border-b border-border bg-surface-header px-4 py-2.5 text-[11px] font-semibold text-muted",
+        "sticky top-0 z-[2] whitespace-nowrap border-b border-border bg-surface-header px-4 py-2.5 text-table-header font-semibold text-muted",
         align === "left" ? "text-left uppercase tracking-[0.5px]" : "text-right",
         className,
       )}

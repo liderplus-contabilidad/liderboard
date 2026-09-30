@@ -105,7 +105,7 @@ function DatosTableRowImpl({
             <span className="w-4 shrink-0" aria-hidden />
           )}
           {row.code && (
-            <span className="shrink-0 font-mono text-[10.5px] text-faint">{row.code}</span>
+            <span className="shrink-0 font-mono text-[10.5px] text-muted">{row.code}</span>
           )}
           <span className="overflow-hidden text-ellipsis">{row.name}</span>
         </div>

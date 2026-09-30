@@ -75,7 +75,7 @@ export function OccupancyGrid({
             <tr>
               <th
                 scope="col"
-                className="sticky left-0 top-0 z-[3] min-w-[210px] border-b border-r border-border bg-surface-header px-[14px] py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.4px] text-faint"
+                className="sticky left-0 top-0 z-[3] min-w-[210px] border-b border-r border-border bg-surface-header px-[14px] py-2.5 text-left text-table-header font-semibold uppercase tracking-[0.4px] text-muted"
               >
                 Concepto
               </th>
@@ -83,14 +83,14 @@ export function OccupancyGrid({
                 <th
                   key={label}
                   scope="col"
-                  className="sticky top-0 z-[2] min-w-[70px] border-b border-l border-border-faint bg-surface-header px-2 py-2.5 text-right text-[11px] font-semibold tabular-nums text-muted"
+                  className="sticky top-0 z-[2] min-w-[70px] border-b border-l border-border-faint bg-surface-header px-2 py-2.5 text-right text-table-header font-semibold tabular-nums text-muted"
                 >
                   {label}
                 </th>
               ))}
               <th
                 scope="col"
-                className="sticky right-0 top-0 z-[3] min-w-[112px] border-b border-l border-border bg-surface-header px-[14px] py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.4px] text-brand"
+                className="sticky right-0 top-0 z-[3] min-w-[112px] border-b border-l border-border bg-surface-header px-[14px] py-2.5 text-right text-table-header font-semibold uppercase tracking-[0.4px] text-brand"
               >
                 {grid.scope === "year" ? "Total año" : "Total / prom."}
               </th>

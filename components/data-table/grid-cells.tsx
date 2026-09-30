@@ -21,10 +21,11 @@ export function HeadCell({ children, align = "left", sticky, width, className }:
     <th
       style={{ minWidth: width }}
       className={cn(
-        "border-b border-border bg-surface-header px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-faint",
+        "border-b border-border bg-surface-header px-3.5 py-2.5 text-table-header font-semibold uppercase tracking-[0.4px]",
         align === "right" ? "text-right tabular-nums" : "text-left",
+        sticky === "right" ? "text-brand" : "text-muted",
         sticky === "left" && "sticky left-0 z-20 border-r border-border",
-        sticky === "right" && "sticky right-0 z-20 border-l border-border text-brand",
+        sticky === "right" && "sticky right-0 z-20 border-l border-border",
         className,
       )}
     >
@@ -106,7 +107,7 @@ export function Cell({
       className={cn(
         "border-b border-border-soft text-[12.5px]",
         control ? "px-1 py-1" : "px-3.5 py-2",
-        numeric || align === "right" ? "text-right tabular-nums" : "text-left",
+        numeric || align === "right" ? "text-right font-mono tabular-nums" : "text-left",
         strong
           ? cn("font-semibold", resolved === "negative" ? "text-negative" : "text-brand")
           : cn("font-normal", TONE_CLASS[resolved]),
