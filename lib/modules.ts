@@ -1,9 +1,11 @@
 import {
   BarChart3,
+  CalendarCheck,
   BedDouble,
   Coins,
   FileText,
   LayoutDashboard,
+  KeyRound,
   LineChart,
   Microscope,
   Receipt,
@@ -25,7 +27,9 @@ export type ModuleTabId =
   | "cxp"
   | "cheques"
   | "flujo"
-  | "cargas";
+  | "cargas"
+  | "companies"
+  | "agenda";
 
 export interface ModuleTab {
   id: ModuleTabId;
@@ -169,6 +173,20 @@ export const MODULES: DashboardModule[] = [
     title: "Cuentas por pagar",
     icon: Wallet,
     tabs: [TAB_RESUMEN, TAB_CXP, TAB_CHEQUES, TAB_FLUJO, TAB_CARGAS],
+  },
+  {
+    slug: "credentials",
+    label: "Empresas",
+    title: "Empresas y claves",
+    icon: KeyRound,
+    tabs: [{ id: "companies", label: "Empresas", icon: UsersRound }],
+  },
+  {
+    slug: "schedule",
+    label: "Cronograma",
+    title: "Cronograma",
+    icon: CalendarCheck,
+    tabs: [{ id: "agenda", label: "Tareas", icon: CalendarCheck }],
   },
 ];
 

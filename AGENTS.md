@@ -327,6 +327,37 @@ sobregiro · centro) in «Configurar».
   Resumen has none. `money` (`derive.ts`) is the module's amount,
   always with cents.
 
+**Empresas y claves** · `/credentials` (directorio · ficha con datos, credenciales y tareas) and **Cronograma** · `/schedule`
+(Tareas · Obligaciones) share `lib/operations/db.ts` and Dexie `liderboard-operations` v3.
+
+- Companies belong to this shared operational space, independent of financial module clients.
+- The company is the entry point for credentials; there is no separate global access tab or company
+  filter in the directory. «Ver cronograma» scopes tasks to that company and clears stale task
+  filters. A task opens the same company detail alongside the schedule, returning to the task on close.
+- Source values and manual corrections are separate; imports refresh originals and retain edits.
+  First-sheet CLAVES parsing locates labels and merged bands, preserves repeated accounts and every
+  populated cell. If a numbered company column exists, unnumbered legends remain only in the source.
+- Access payloads and source snapshots are encrypted at rest (`lib/credentials/vault.ts`); the
+  nonextractable key lives only in the mounted provider's session. Locked credentials are not read.
+  Password-bearing exports say so. Never log or commit workbook secrets.
+- Company data, additional fields and their tab/type configuration remain readable and editable
+  without unlocking credentials. Legacy encrypted company details migrate on the first successful
+  unlock; until then, retain their ciphertext and show a recovery prompt rather than replacing it.
+- SRI regime and tax flags belong in the company form (`company-tax.ts`). Additional fields support
+  text, select and checkbox types in any tab; changing their type preserves the existing value.
+- `OK` is a literal source mark, never automatic applicability or completion. Obligaciones shows the
+  original mark and editable label/notes, without applicability or interpretation configuration.
+  Existing metadata stays intact; completion belongs to each period's task.
+- Table edits commit on blur/Enter, Tab advances and Escape cancels. Failed saves keep the draft.
+  `lib/schedule/import.ts` is the adapter registry: another Excel format emits the same task contract.
+  No legal due-date rules are inferred.
+- Tareas has Agenda, Kanban and monthly Calendario over the same records. Workflow is pending / doing /
+  done (`taskStage` / `stagePatch`), with `done` as the completion field and optional `started` for
+  progress; overdue remains derived from the due date. A stage move changes no date or reference
+  period. Calendar scope uses due dates, plus undated tasks of the selected reference month.
+  Creation defaults to the selected reference period in Agenda/Kanban and the chosen date/month in
+  Calendario. `lib/schedule/calendar.ts` owns the Monday-first civil-date grid and month boundaries.
+
 ### Shared UI
 
 - **`components/ui/export-actions.tsx` is the app's ONE export control** — «Cargar Excel» ·

@@ -1,9 +1,24 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-export type BadgeVariant = "mono" | "soft" | "outline" | "warning" | "positive" | "negative";
+export type BadgeVariant =
+  | "mono"
+  | "soft"
+  | "outline"
+  | "warning"
+  | "positive"
+  | "negative"
+  | "count"
+  | "stage-pending"
+  | "stage-doing"
+  | "stage-done";
 
 const VARIANTS: Record<BadgeVariant, string> = {
+  "stage-pending": "h-7 gap-1 rounded-full bg-canvas px-2 text-[12px] font-semibold text-muted",
+  "stage-doing": "h-7 gap-1 rounded-full bg-brand-soft px-2 text-[12px] font-semibold text-brand",
+  "stage-done":
+    "h-7 gap-1 rounded-full bg-complete/10 px-2 text-[12px] font-semibold text-complete",
+  count: "shrink-0 justify-center rounded-full font-mono text-[11px] font-semibold tabular-nums",
   mono: "rounded-full border border-border bg-border-faint px-2 py-0.5 font-mono text-[10.5px] text-muted",
   soft: "rounded-full bg-brand-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.6px] text-brand",
   outline:

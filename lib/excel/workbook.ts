@@ -11,6 +11,7 @@
  * delegator over this module so its callers keep throwing `PygParseError`.
  */
 import * as XLSX from "xlsx";
+export { compactLabel, normalizeLabel } from "@/lib/text";
 
 export type Cell = string | number | null;
 
@@ -42,20 +43,4 @@ export function toNumber(cell: Cell): number {
   }
   const parsed = Number(cell ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-/** Strips accents and case so header/label comparisons ignore both ("Márzo" → "marzo"). */
-export function normalizeLabel(cell: Cell): string {
-  return String(cell ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
-/** `normalizeLabel` plus collapsing INNER runs of whitespace (including newlines, which `\s`
- * already matches), so `"NOMBRE  DE LA  CUENTA"` and a label wrapped onto two lines both still
- * match. Shared because more than one label-located format needs it. */
-export function compactLabel(cell: Cell): string {
-  return normalizeLabel(cell).replace(/\s+/g, " ");
 }

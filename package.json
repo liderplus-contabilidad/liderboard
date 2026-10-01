@@ -16,7 +16,10 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.23",
     "@tanstack/react-virtual": "^3.14.11",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.4.0",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "echarts": "^6.1.0",
@@ -26,6 +29,7 @@
     "next": "16.2.10",
     "pdf-lib": "^1.17.1",
     "react": "19.2.4",
+    "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

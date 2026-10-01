@@ -57,7 +57,7 @@ export function DashboardHeader() {
         {title}
       </h1>
 
-      {tabbed && <ModuleTabs mod={current} />}
+      {tabbed && current.tabs.length > 1 && <ModuleTabs mod={current} />}
 
       {/* Each module mounts its own selector over the same block: PyG lists its clients, Ocupaciones
           its hotels, Rol de Pagos its own. The three lists are different —each with its own

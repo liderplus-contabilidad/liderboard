@@ -42,9 +42,12 @@ export function ReportTable({
   fit,
   rowStyle,
   cellStyle,
+  wrapText = false,
 }: {
   table: ChartTable;
   fit: StatementFit;
+  /** Task registers carry prose that must wrap rather than clip on paper. */
+  wrapText?: boolean;
   /** Optional: how a report colours its rows (a heading, a total). Absent, every row is plain. */
   rowStyle?: (row: ChartTableRow) => ReportRowStyle | undefined;
   /** Optional: how a report colours a figure by what its column means. Absent, figures are ink. */
@@ -122,7 +125,9 @@ export function ReportTable({
                       />
                     )}
                     <span className="min-w-0">
-                      <span className="block truncate">{row.label}</span>
+                      <span className={wrapText ? "block break-words" : "block truncate"}>
+                        {row.label}
+                      </span>
                       {row.sublabel && (
                         <span className="block truncate font-mono text-[9px] font-normal text-faint">
                           {row.sublabel}
@@ -139,7 +144,10 @@ export function ReportTable({
                     <td
                       key={table.columns[index] ?? index}
                       className={cn(
-                        "overflow-hidden whitespace-nowrap border-b border-border-soft py-1.5 text-right font-mono tabular-nums",
+                        "border-b border-border-soft py-1.5 text-right font-mono tabular-nums",
+                        wrapText
+                          ? "whitespace-normal break-words"
+                          : "overflow-hidden whitespace-nowrap",
                         index > 0 && "border-l border-border-soft",
                         tone
                           ? tone.ink

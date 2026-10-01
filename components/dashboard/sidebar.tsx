@@ -3,7 +3,9 @@
 import { ChevronDown, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ScheduleDueBadge } from "@/components/operations/schedule-due-badge";
+import { useOperations } from "@/components/operations/operations-provider";
 import { cn } from "@/lib/cn";
 import { MODULES } from "@/lib/modules";
 
@@ -17,6 +19,7 @@ const COLLAPSED_BELOW_PX = 1536;
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const operations = useOperations();
   const [collapsed, setCollapsed] = useState(false);
   // Read once, after mount: the server cannot know the window, so the rail renders open and snaps
   // shut on a laptop in the first client frame — the same snap the toggle does, never a transition.
@@ -115,6 +118,20 @@ export function DashboardSidebar() {
                 icon={module.icon}
                 active={active}
                 collapsed={collapsed}
+                badge={
+                  module.slug === "schedule" ? (
+                    <ScheduleDueBadge collapsed={collapsed} />
+                  ) : undefined
+                }
+                onBadgeClick={
+                  module.slug === "schedule"
+                    ? () => {
+                        operations.setPeriod("*");
+                        operations.setScheduleView("agenda");
+                        operations.setStatus("attention");
+                      }
+                    : undefined
+                }
                 disclosure={
                   children.length > 0 && !collapsed
                     ? {
@@ -187,6 +204,8 @@ function NavItem({
   collapsed,
   nested = false,
   disclosure,
+  badge,
+  onBadgeClick,
 }: {
   href: string;
   label: string;
@@ -195,11 +214,17 @@ function NavItem({
   collapsed: boolean;
   nested?: boolean;
   disclosure?: NavDisclosure;
+  badge?: ReactNode;
+  onBadgeClick?: () => void;
 }) {
   return (
     <div className="relative">
       <Link
         href={href}
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest("[data-attention-badge]"))
+            onBadgeClick?.();
+        }}
         title={collapsed ? label : undefined}
         aria-current={active ? "page" : undefined}
         className={cn(
@@ -217,6 +242,7 @@ function NavItem({
         )}
         <Icon size={nested ? 16 : 18} strokeWidth={1.9} className="shrink-0" />
         <span className={cn("flex-1", collapsed && "sr-only")}>{label}</span>
+        {badge}
       </Link>
       {disclosure && (
         <button

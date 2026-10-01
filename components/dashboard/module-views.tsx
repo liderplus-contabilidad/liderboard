@@ -11,6 +11,7 @@ import { PygDriftNotice } from "@/components/profit-loss/pyg-drift-notice";
 import { PygExportActions } from "@/components/profit-loss/pyg-export-actions";
 import { PygToolbar } from "@/components/profit-loss/pyg-toolbar";
 import type { ModuleTabId } from "@/lib/modules";
+import { OperationsExportActions } from "@/components/operations/export-actions";
 
 /**
  * What each tabbed module mounts, by tab. Two readers: the HEADER takes `rightSlot` —the export
@@ -29,6 +30,15 @@ import type { ModuleTabId } from "@/lib/modules";
  * first, and none of them pull a chart or a parser.
  */
 const PanelFallback = () => <div className="px-7 py-5" aria-busy="true" />;
+
+const KeysView = dynamic(
+  () => import("@/components/operations/keys-view").then((mod) => mod.KeysView),
+  { ssr: false, loading: PanelFallback },
+);
+const ScheduleView = dynamic(
+  () => import("@/components/operations/schedule-view").then((mod) => mod.ScheduleView),
+  { ssr: false, loading: PanelFallback },
+);
 
 const DatosView = dynamic(
   () => import("@/components/profit-loss/datos-view").then((mod) => mod.DatosView),
@@ -80,6 +90,14 @@ export interface ModuleViews {
 }
 
 export const MODULE_VIEWS: Record<string, ModuleViews> = {
+  credentials: {
+    rightSlot: () => <OperationsExportActions mode="keys" />,
+    panel: () => <KeysView />,
+  },
+  schedule: {
+    rightSlot: () => <OperationsExportActions mode="schedule" />,
+    panel: () => <ScheduleView />,
+  },
   "profit-loss": {
     // «Exportar» is the same on the THREE tabs — the Excels export the workspace and the report covers
     // every tab —; «Cargar Excel» and the ⓘ mount only over Datos, which is where loading happens.

@@ -33,8 +33,8 @@ function ModulePanel({ mod }: { mod: DashboardModule }) {
 
       <div
         id={`${mod.slug}-panel`}
-        role="tabpanel"
-        aria-labelledby={`${mod.slug}-tab-${activeTab.id}`}
+        role={mod.tabs.length > 1 ? "tabpanel" : undefined}
+        aria-labelledby={mod.tabs.length > 1 ? `${mod.slug}-tab-${activeTab.id}` : undefined}
         className="flex-1 overflow-auto bg-canvas"
       >
         {panel}

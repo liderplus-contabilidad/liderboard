@@ -1,0 +1,15 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": ["output/design-proposals/keys-schedule.html"],
+        "createdAt": "2026-09-30T18:44:47.003Z",
+        "reason": "Codex: falso positivo verificado en capturas; el contenedor envuelve una tabla cuyas celdas tienen padding de 9px 10px y cabeceras de 12px 10px."
+      }
+    ]
+  }
+}

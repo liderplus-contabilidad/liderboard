@@ -10,6 +10,8 @@ const TAB_BLURB: Record<ModuleTab["id"], string> = {
   cheques: "el control de cheques",
   flujo: "el flujo de pagos",
   cargas: "las cargas cash",
+  companies: "los datos de las empresas",
+  agenda: "las tareas del período",
 };
 
 export function ComingSoon({ mod, tab }: { mod: DashboardModule; tab: ModuleTab }) {
