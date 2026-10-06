@@ -20,6 +20,8 @@ const ROW_PAINT: Record<FlowRowTone, { fill: string; font: string }> = {
 };
 /** Only the two marks of payment take a GROUND; the rest is told by its ink. */
 const CELL_PAINT: Record<FlowCellPaint, { font: string; fill?: string }> = {
+  "urgent-total": { font: WHITE, fill: "FF9F3038" },
+  "pending-total": { font: WHITE, fill: "FF526778" },
   urgent: { font: "FF1E293B", fill: "FFFBD5D5" },
   pending: { font: "FF1E293B", fill: "FFEAF0F6" },
   outstanding: { font: "FF1E293B" },
@@ -98,10 +100,13 @@ export function buildFlowWorkbook(
     });
     for (const row of section.table.rows) {
       const figureTone = section.figureRowTones?.[row.id];
-      const isTotal = section.rowTones?.[row.id] === "total";
       const paints = row.values.map((value, index) => {
-        if (isTotal) return null;
         const column = section.table.columns[index] ?? "";
+        if (section.rowTones?.[row.id] === "total")
+          return cellPaint(section, row.id, column, value);
+        if ((figureTone === "urgent" || figureTone === "pending") && column === "Total") {
+          return figureTone === "urgent" ? "urgent-total" : "pending-total";
+        }
         return cellPaint(
           figureTone
             ? { ...section, rowTones: undefined, columnTones: { [column]: figureTone } }

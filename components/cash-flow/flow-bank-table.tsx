@@ -184,12 +184,7 @@ export function FlowBankTable({
                 );
               }
               return (
-                <Cell
-                  key={row.account.id}
-                  numeric
-                  strong={concept.strong}
-                  value={concept.value(row)}
-                >
+                <Cell key={row.account.id} numeric value={concept.value(row)}>
                   {money(concept.value(row))}
                 </Cell>
               );
@@ -197,7 +192,18 @@ export function FlowBankTable({
             {showLoose && (
               <Cell numeric>{concept.loose === undefined ? "—" : money(concept.loose)}</Cell>
             )}
-            <Cell numeric strong sticky="right" value={concept.total} className={concept.ground}>
+            <Cell
+              numeric
+              sticky="right"
+              value={concept.total}
+              className={
+                concept.label === "Urgente"
+                  ? "!bg-urgent-total !text-white"
+                  : concept.label === "Pendiente"
+                    ? "!bg-pending-total !text-white"
+                    : concept.ground
+              }
+            >
               {money(concept.total)}
             </Cell>
           </tr>

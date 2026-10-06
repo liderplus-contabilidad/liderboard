@@ -127,6 +127,8 @@ function rowStyleOf(section: PdfFlowSection, row: ChartTableRow): ReportRowStyle
 }
 
 const CELL_STYLE: Record<FlowCellPaint, ReportCellStyle> = {
+  "urgent-total": { ink: "bg-urgent-total text-white" },
+  "pending-total": { ink: "bg-pending-total text-white" },
   urgent: { ink: "bg-urgent font-bold text-ink" },
   pending: { ink: "bg-surface-calc-strong font-bold text-ink" },
   outstanding: { ink: "text-ink-soft" },
@@ -142,7 +144,9 @@ function cellStyleOf(
 ): ReportCellStyle | undefined {
   const rowTone = section.figureRowTones?.[row.id];
   // Total bands keep white figures on the brand ground, including signed balances.
-  if (section.rowTones?.[row.id] === "total") return undefined;
+  if ((rowTone === "urgent" || rowTone === "pending") && column === "Total") {
+    return CELL_STYLE[rowTone === "urgent" ? "urgent-total" : "pending-total"];
+  }
   const paint = rowTone
     ? cellPaint(
         { ...section, rowTones: undefined, columnTones: { [column]: rowTone } },
@@ -151,6 +155,12 @@ function cellStyleOf(
         value,
       )
     : cellPaint(section, row.id, column, value);
+  if (
+    section.rowTones?.[row.id] === "total" &&
+    paint !== "urgent-total" &&
+    paint !== "pending-total"
+  )
+    return undefined;
   if (!paint) {
     return undefined;
   }

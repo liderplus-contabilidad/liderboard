@@ -286,8 +286,9 @@ describe("buildFlowReport", () => {
     expect(cellPaint(accounts, "prod", "Saldo final", "-$5,201.39")).toBe("negative");
     expect(cellPaint(accounts, "prod", "Saldo final", "$9,981.41")).toBe("positive");
     expect(cellPaint(accounts, "prod", "Saldo", "$6,677.34")).toBeNull();
-    // The total row is painted whole: its cells take no tone of their own.
-    expect(cellPaint(accounts, "total", "Urgente", "$720.00")).toBeNull();
+    // Priority totals remain distinct from the definitive total.
+    expect(cellPaint(accounts, "total", "Urgente", "$720.00")).toBe("urgent-total");
+    expect(cellPaint(accounts, "total", "Pendiente", "$0.00")).toBe("pending-total");
     // A supplier's heading keeps the marks' columns in their own paint, and nothing else.
     const payments = report.sections.find((section) => section.id === "payments")!;
     expect(cellPaint(payments, "g-nuna", "Urgente", "$0.00")).toBe("urgent");

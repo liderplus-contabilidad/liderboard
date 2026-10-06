@@ -742,10 +742,16 @@ function MarkedSection({
               <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
                 {money(total)}
               </Cell>
-              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+              <Cell
+                numeric
+                className="bg-urgent-total border-b-0 py-3 text-[14px] font-bold text-white"
+              >
                 {money(derived.totals.urgent)}
               </Cell>
-              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+              <Cell
+                numeric
+                className="bg-pending-total border-b-0 py-3 text-[14px] font-bold text-white"
+              >
                 {money(derived.totals.pending)}
               </Cell>
               <Cell className="border-b-0" />
@@ -817,6 +823,7 @@ function GroupRows({
             key={payable.id}
             line={line}
             showSupplier={!hasCarteraDocuments}
+            supplierGrouped={hasCarteraDocuments}
             startsGroup={!hasCarteraDocuments && (index === 0 || payable.source === "manual")}
             asOf={asOf}
             accountOptions={accountOptions}
@@ -834,6 +841,7 @@ function GroupRows({
 const MarkedRow = memo(function MarkedRow({
   line,
   showSupplier,
+  supplierGrouped,
   startsGroup,
   asOf,
   accountOptions,
@@ -843,6 +851,7 @@ const MarkedRow = memo(function MarkedRow({
 }: {
   line: FlowLine;
   showSupplier: boolean;
+  supplierGrouped: boolean;
   startsGroup: boolean;
   asOf: string;
   accountOptions: { value: string; label: string }[];
@@ -876,7 +885,12 @@ const MarkedRow = memo(function MarkedRow({
       {/* The sheet's «PAGOS PENDIENTES» cell: the number and what it is for. On one line where it
           fits; where it does not, the detail WRAPS under the number instead of being clipped — what
           a payment is for is read before paying it, on any screen. */}
-      <Cell className={isManual || showSupplier ? undefined : "pl-7"}>
+      <Cell
+        className={cn(
+          !isManual && !showSupplier && "pl-7",
+          supplierGrouped && "border-l-4 border-l-brand",
+        )}
+      >
         {showSupplier && !isManual && (
           <span className="block pb-1 font-semibold text-brand">{payable.supplier}</span>
         )}

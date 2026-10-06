@@ -44,7 +44,14 @@ export type FlowRowTone = "group" | "total";
  *  their WHOLE column, zeros included, so urgent and pending read as two columns even on a flow
  *  with nothing urgent; any other tone leaves a zero or an empty cell plain, and a signed figure is
  *  painted by its sign. */
-export type FlowCellPaint = "urgent" | "pending" | "outstanding" | "negative" | "positive";
+export type FlowCellPaint =
+  | "urgent"
+  | "pending"
+  | "outstanding"
+  | "negative"
+  | "positive"
+  | "urgent-total"
+  | "pending-total";
 
 /** The glyph a signed figure always carries: the colour never travels alone. */
 export const SIGN_GLYPH: Record<"negative" | "positive", string> = {
@@ -72,6 +79,9 @@ export function cellPaint(
   const rowTone = section.rowTones?.[rowId];
   // The TOTAL row is painted whole. A supplier's heading keeps the two marks' columns in their own
   // ground and ink, so the columns run unbroken and a heading's zero never reads in brand blue.
+  if (rowTone === "total" && (tone === "urgent" || tone === "pending")) {
+    return tone === "urgent" ? "urgent-total" : "pending-total";
+  }
   if (!tone || rowTone === "total") {
     return null;
   }

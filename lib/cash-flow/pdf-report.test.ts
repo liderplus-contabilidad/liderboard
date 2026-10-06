@@ -229,8 +229,8 @@ describe("Excel with PDF table layout", () => {
     expect(notes).toContain("Cupo revisado");
     expect(balance).toBe("$0.00");
     expect(urgentLabelFill).toMatchObject({ fgColor: { argb: "FFFBD5D5" } });
-    expect(new Set(rowFills.Urgente)).toEqual(new Set(["FFFBD5D5"]));
-    expect(new Set(rowFills.Pendiente)).toEqual(new Set(["FFEAF0F6"]));
+    expect(new Set(rowFills.Urgente)).toEqual(new Set(["FFFBD5D5", "FF9F3038"]));
+    expect(new Set(rowFills.Pendiente)).toEqual(new Set(["FFEAF0F6", "FF526778"]));
     expect(new Set(rowFills["Total bancos"])).toEqual(new Set(["FF1E3A5F"]));
     expect(new Set(rowFills["Saldo final"])).toEqual(new Set(["FF1E3A5F"]));
     expect(sheet.pageSetup.orientation).toBe("landscape");
