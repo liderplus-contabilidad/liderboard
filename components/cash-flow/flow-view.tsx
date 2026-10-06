@@ -50,6 +50,12 @@ import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
 import { FloatingActionMenu } from "@/components/ui/floating-action-menu";
 import { FlowCheckPicker } from "./flow-check-picker";
+import {
+  FlowNotesContext,
+  FlowFigureCell,
+  FlowFigureNote,
+  FlowFigureTile,
+} from "./flow-figure-note";
 import { FlowBankTable } from "./flow-bank-table";
 import { FlowCarteraPicker } from "./flow-cartera-picker";
 import { ManualPayablePanel } from "./manual-payable-panel";
@@ -155,115 +161,151 @@ export function FlowView() {
 
   return (
     <CashFlowEmptyState>
-      <div className="flex flex-col gap-4 px-7 py-5">
-        <OverdraftNotices />
-        <div className="flex gap-3">
-          <StatTile
-            label="Total bancos"
-            value={money(totals.bankTotal)}
-            hint={`Saldo ${money(totals.balance)} + sobregiro ${money(totals.overdraft)}`}
-          />
-          {hasIncomes && <StatTile label="Total ingresos" value={money(totals.incomes)} />}
-          {hasChecks && <StatTile label="Cheques no cobrados" value={money(totals.outstanding)} />}
-          <StatTile
-            label="Marcado para pago"
-            value={money(totals.urgent + totals.pending)}
-            hint={`Urgente ${money(totals.urgent)} · Pendiente ${money(totals.pending)}`}
-          />
-          <StatTile
-            label={totals.remaining < 0 ? "Saldo faltante" : "Saldo sobrante"}
-            value={money(Math.abs(totals.remaining))}
-            sign={totals.remaining < 0 ? "negativo" : "positivo"}
-          />
-        </div>
+      <FlowNotesContext.Provider value={{ notes, onNote: setNote }}>
+        <div className="flex flex-col gap-4 px-7 py-5">
+          <OverdraftNotices />
+          <div className="flex gap-3">
+            <FlowFigureTile
+              section="accounts"
+              row="total"
+              column="Total bancos"
+              label="Total bancos"
+              value={money(totals.bankTotal)}
+              hint={`Saldo ${money(totals.balance)} + sobregiro ${money(totals.overdraft)}`}
+            />
+            {hasIncomes && (
+              <FlowFigureTile
+                section="incomes"
+                row="total"
+                column="Monto"
+                label="Total ingresos"
+                value={money(totals.incomes)}
+              />
+            )}
+            {hasChecks && (
+              <FlowFigureTile
+                section="accounts"
+                row="total"
+                column="Cheques no cobrados"
+                label="Cheques no cobrados"
+                value={money(totals.outstanding)}
+              />
+            )}
+            <FlowFigureTile
+              section="payments"
+              row="total"
+              column="Saldo"
+              label="Marcado para pago"
+              value={money(totals.urgent + totals.pending)}
+              hint={`Urgente ${money(totals.urgent)} · Pendiente ${money(totals.pending)}`}
+            />
+            <FlowFigureTile
+              section="remaining"
+              row="all"
+              column="Saldo"
+              label={totals.remaining < 0 ? "Saldo faltante" : "Saldo sobrante"}
+              value={money(Math.abs(totals.remaining))}
+              sign={totals.remaining < 0 ? "negativo" : "positivo"}
+            />
+          </div>
 
-        {/* Incomes first: they are a capture and they ADD to the bank total the table below opens
+          {/* Incomes first: they are a capture and they ADD to the bank total the table below opens
             with, so what is typed is read before what it feeds. */}
-        <IncomesSection incomes={incomes} onChange={setIncomes} />
+          <IncomesSection incomes={incomes} onChange={setIncomes} />
 
-        <FlowSection>
-          <SectionHeading
-            icon={<Landmark size={15} />}
-            title={`Flujo de bancos · ${dateLabel}`}
-            hint={flow ? undefined : "Sin captura para esta fecha"}
-          >
-            {shapeable && (
-              <span className="flex items-center gap-2">
-                <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
-                <SegmentedControl
-                  value={shape}
-                  options={FLOW_SHAPES}
-                  onChange={setShape}
-                  ariaLabel="Ver como"
-                />
-              </span>
-            )}
-            {previous && (
-              <Button
-                variant="secondary"
-                size="toolbar"
-                icon={<Copy size={14} />}
-                onClick={copyPrevious}
-              >
-                Copiar del {formatDayMonthYear(previous.date)}
-              </Button>
-            )}
-          </SectionHeading>
-
-          {derived.accounts.length === 0 ? (
-            <EmptyState icon={<Waves size={22} />}>Ninguna cuenta del centro marcado.</EmptyState>
-          ) : matrix ? (
-            <PaymentMatrixTable matrix={matrix} />
-          ) : (
-            <FlowBankTable notes={notes} onNote={setNote} onBalance={setBalance} />
-          )}
-        </FlowSection>
-
-        {!asMatrix && (
-          <MarkedSection
-            notes={notes}
-            onNote={setNote}
-            onPickFromCartera={openPicker}
-            onPickFromChecks={openChecks}
-            onAddManual={openManual}
-          />
-        )}
-
-        {/* The sheet's «SALDO FALTANTE» row, right under the TOTAL it is read against: its three
-            figures — after everything marked, after only the urgent, after only the pending. */}
-        {derived.accounts.length > 0 && (
           <FlowSection>
-            <SectionHeading icon={<Scale size={15} />} title="Saldo faltante o sobrante" />
-            <div className="grid grid-cols-3 gap-3">
-              <Remaining label="Tras todo lo marcado" value={totals.remaining} />
-              <Remaining label="Pagando solo lo urgente" value={totals.remainingUrgentOnly} />
-              <Remaining label="Pagando solo lo pendiente" value={totals.remainingPendingOnly} />
-            </div>
-          </FlowSection>
-        )}
-
-        <SettledSection />
-
-        {hasCenters && derived.loans.length > 0 && (
-          <FlowSection>
-            <SectionHeading icon={<ArrowRightLeft size={15} />} title="Préstamos entre centros" />
-            <ul className="flex flex-wrap gap-2">
-              {derived.loans.map((loan) => (
-                <li
-                  key={`${loan.fromCenterId}-${loan.toCenterId}`}
-                  className="rounded-[9px] border border-border bg-surface-muted px-3 py-1.5 text-[12.5px] tabular-nums"
+            <SectionHeading
+              icon={<Landmark size={15} />}
+              title={`Flujo de bancos · ${dateLabel}`}
+              hint={flow ? undefined : "Sin captura para esta fecha"}
+            >
+              {shapeable && (
+                <span className="flex items-center gap-2">
+                  <span className="text-[11.5px] font-semibold text-faint">Ver como</span>
+                  <SegmentedControl
+                    value={shape}
+                    options={FLOW_SHAPES}
+                    onChange={setShape}
+                    ariaLabel="Ver como"
+                  />
+                </span>
+              )}
+              {previous && (
+                <Button
+                  variant="secondary"
+                  size="toolbar"
+                  icon={<Copy size={14} />}
+                  onClick={copyPrevious}
                 >
-                  <span className="font-semibold text-ink">
-                    {centerName(loan.fromCenterId, centers)} →{" "}
-                    {centerName(loan.toCenterId, centers)}
-                  </span>
-                  <span className="ml-2 text-brand">{money(loan.amount)}</span>
-                </li>
-              ))}
-            </ul>
+                  Copiar del {formatDayMonthYear(previous.date)}
+                </Button>
+              )}
+            </SectionHeading>
+
+            {derived.accounts.length === 0 ? (
+              <EmptyState icon={<Waves size={22} />}>Ninguna cuenta del centro marcado.</EmptyState>
+            ) : matrix ? (
+              <PaymentMatrixTable matrix={matrix} />
+            ) : (
+              <FlowBankTable notes={notes} onNote={setNote} onBalance={setBalance} />
+            )}
           </FlowSection>
-        )}
-      </div>
+
+          {!asMatrix && (
+            <MarkedSection
+              notes={notes}
+              onNote={setNote}
+              onPickFromCartera={openPicker}
+              onPickFromChecks={openChecks}
+              onAddManual={openManual}
+            />
+          )}
+
+          {/* The sheet's «SALDO FALTANTE» row, right under the TOTAL it is read against: its three
+            figures — after everything marked, after only the urgent, after only the pending. */}
+          {derived.accounts.length > 0 && (
+            <FlowSection>
+              <SectionHeading icon={<Scale size={15} />} title="Saldo faltante o sobrante" />
+              <div className="grid grid-cols-3 gap-3">
+                <Remaining label="Tras todo lo marcado" value={totals.remaining} />
+                <Remaining label="Pagando solo lo urgente" value={totals.remainingUrgentOnly} />
+                <Remaining label="Pagando solo lo pendiente" value={totals.remainingPendingOnly} />
+              </div>
+            </FlowSection>
+          )}
+
+          <SettledSection />
+
+          {hasCenters && derived.loans.length > 0 && (
+            <FlowSection>
+              <SectionHeading icon={<ArrowRightLeft size={15} />} title="Préstamos entre centros" />
+              <ul className="flex flex-wrap gap-2">
+                {derived.loans.map((loan) => (
+                  <li
+                    key={`${loan.fromCenterId}-${loan.toCenterId}`}
+                    className={cn(
+                      NOTE_HOST,
+                      "rounded-[9px] border border-border bg-surface-muted px-3 py-1.5 text-[12.5px] tabular-nums",
+                    )}
+                  >
+                    <span className="font-semibold text-ink">
+                      {centerName(loan.fromCenterId, centers)} →{" "}
+                      {centerName(loan.toCenterId, centers)}
+                    </span>
+                    <FlowFigureNote
+                      section="loans"
+                      row={`${loan.fromCenterId}-${loan.toCenterId}`}
+                      column="Monto"
+                      label="Préstamo entre centros"
+                    />
+                    <span className="ml-2 text-brand">{money(loan.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </FlowSection>
+          )}
+        </div>
+      </FlowNotesContext.Provider>
       <FlowCarteraPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
       {checksOpen && <FlowCheckPicker onClose={() => setChecksOpen(false)} />}
       {manualOpen && <ManualPayablePanel onClose={() => setManualOpen(false)} />}
@@ -305,7 +347,11 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
                 {column}
               </Cell>
               {rows.map((row) => (
-                <Cell
+                <FlowFigureCell
+                  section="matrix"
+                  row={row.id}
+                  column={column}
+                  label={`${column} de ${row.label}`}
                   key={row.id}
                   numeric
                   strong={total || row.id === "total"}
@@ -313,7 +359,7 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
                   className={ground}
                 >
                   {row.values[index] ?? "—"}
-                </Cell>
+                </FlowFigureCell>
               ))}
             </tr>
           );
@@ -375,9 +421,16 @@ function SettledSection() {
                   </span>
                 </Cell>
                 <Cell className="tabular-nums text-muted">{formatDayMonthYear(settledOn)}</Cell>
-                <Cell numeric className="text-positive">
+                <FlowFigureCell
+                  numeric
+                  section="settled"
+                  row={payable.id}
+                  column="Monto"
+                  label={`Pagado a ${payable.supplier}`}
+                  className="text-positive"
+                >
                   {money(payable.balance)}
-                </Cell>
+                </FlowFigureCell>
                 {hasManual && (
                   <Cell control>
                     {(payable.source === "manual" || payable.source === "check") &&
@@ -404,9 +457,17 @@ function SettledSection() {
               <Cell strong colSpan={2}>
                 Total pagado
               </Cell>
-              <Cell numeric strong className="text-positive">
+              <FlowFigureCell
+                numeric
+                strong
+                section="settled"
+                row="total"
+                column="Monto"
+                label="Total pagado"
+                className="text-positive"
+              >
                 {money(derived.settledTotal)}
-              </Cell>
+              </FlowFigureCell>
               {hasManual && <Cell />}
             </tr>
           </tbody>
@@ -455,15 +516,29 @@ function SectionHeading({
 /** One of the three «SALDO FALTANTE» readings: red with ▼ when short, green with ▲ when over. */
 function Remaining({ label, value }: { label: string; value: number }) {
   return (
-    <StatTile
-      label={
-        value < 0
-          ? `Saldo faltante · ${label.toLowerCase()}`
-          : `Saldo sobrante · ${label.toLowerCase()}`
-      }
-      value={money(Math.abs(value))}
-      sign={value < 0 ? "negativo" : "positivo"}
-    />
+    <div className={NOTE_HOST}>
+      <FlowFigureNote
+        section="remaining"
+        row={
+          label === "Tras todo lo marcado"
+            ? "all"
+            : label === "Pagando solo lo urgente"
+              ? "urgent"
+              : "pending"
+        }
+        column="Saldo"
+        label={label}
+      />
+      <StatTile
+        label={
+          value < 0
+            ? `Saldo faltante · ${label.toLowerCase()}`
+            : `Saldo sobrante · ${label.toLowerCase()}`
+        }
+        value={money(Math.abs(value))}
+        sign={value < 0 ? "negativo" : "positivo"}
+      />
+    </div>
   );
 }
 
@@ -499,7 +574,10 @@ function IncomesSection({
   return (
     <FlowSection>
       <SectionHeading icon={<TrendingUp size={15} />} title="Ingresos">
-        <span className="text-[13px] font-semibold tabular-nums text-brand">{money(total)}</span>
+        <span className={cn(NOTE_HOST, "text-[13px] font-semibold tabular-nums text-brand")}>
+          <FlowFigureNote section="incomes" row="total" column="Monto" label="Total ingresos" />
+          {money(total)}
+        </span>
         <Button
           variant="secondary"
           size="sm"
@@ -548,14 +626,22 @@ function IncomesSection({
                 }
                 className={cn(INCOME_FIELD, "font-sans")}
               />
-              <NumericInput
-                value={income.amount}
-                format="currency"
-                ariaLabel="Monto del ingreso"
-                placeholder="0.00"
-                onCommit={(value) => update(income.id, { amount: value ?? 0 })}
-                className={INCOME_FIELD}
-              />
+              <div className={NOTE_HOST}>
+                <FlowFigureNote
+                  section="incomes"
+                  row={income.id}
+                  column="Monto"
+                  label={`Ingreso ${income.concept || "sin etiqueta"}`}
+                />
+                <NumericInput
+                  value={income.amount}
+                  format="currency"
+                  ariaLabel="Monto del ingreso"
+                  placeholder="0.00"
+                  onCommit={(value) => update(income.id, { amount: value ?? 0 })}
+                  className={INCOME_FIELD}
+                />
+              </div>
               {choosesAccount && (
                 <Select
                   size="sm"
@@ -739,21 +825,36 @@ function MarkedSection({
               >
                 Total
               </Cell>
-              <Cell numeric className="border-b-0 py-3 text-[14px] font-bold text-white">
+              <FlowFigureCell
+                section="payments"
+                row="total"
+                column="Saldo"
+                label="Total saldo"
+                numeric
+                className="border-b-0 py-3 text-[14px] font-bold text-white"
+              >
                 {money(total)}
-              </Cell>
-              <Cell
+              </FlowFigureCell>
+              <FlowFigureCell
+                section="payments"
+                row="total"
+                column="Urgente"
+                label="Total urgente"
                 numeric
                 className="bg-urgent-total border-b-0 py-3 text-[14px] font-bold text-white"
               >
                 {money(derived.totals.urgent)}
-              </Cell>
-              <Cell
+              </FlowFigureCell>
+              <FlowFigureCell
+                section="payments"
+                row="total"
+                column="Pendiente"
+                label="Total pendiente"
                 numeric
                 className="bg-pending-total border-b-0 py-3 text-[14px] font-bold text-white"
               >
                 {money(derived.totals.pending)}
-              </Cell>
+              </FlowFigureCell>
               <Cell className="border-b-0" />
             </tr>
           </tbody>
@@ -803,16 +904,38 @@ function GroupRows({
               </span>
             )}
           </Cell>
-          <Cell numeric strong value={urgent + pending}>
+          <FlowFigureCell
+            section="payments"
+            row={`g-${group.key}`}
+            column="Saldo"
+            label={`Saldo de ${group.label}`}
+            numeric
+            strong
+            value={urgent + pending}
+          >
             {money(urgent + pending)}
-          </Cell>
+          </FlowFigureCell>
           {/* The two marks' columns run unbroken through the supplier's heading, as on paper. */}
-          <Cell numeric className={URGENT_TONE}>
+          <FlowFigureCell
+            section="payments"
+            row={`g-${group.key}`}
+            column="Urgente"
+            label={`Urgente de ${group.label}`}
+            numeric
+            className={URGENT_TONE}
+          >
             {urgent > 0 ? money(urgent) : ""}
-          </Cell>
-          <Cell numeric className={cn(PENDING_GROUND, "font-semibold text-ink")}>
+          </FlowFigureCell>
+          <FlowFigureCell
+            section="payments"
+            row={`g-${group.key}`}
+            column="Pendiente"
+            label={`Pendiente de ${group.label}`}
+            numeric
+            className={cn(PENDING_GROUND, "font-semibold text-ink")}
+          >
             {pending > 0 ? money(pending) : ""}
-          </Cell>
+          </FlowFigureCell>
           <Cell />
         </GridRow>
       )}
@@ -963,7 +1086,15 @@ const MarkedRow = memo(function MarkedRow({
           onChange={(payOn) => onPatch(payable.id, { payOn })}
         />
       </Cell>
-      <Cell numeric>{money(payable.balance)}</Cell>
+      <FlowFigureCell
+        numeric
+        section="payments"
+        row={payable.id}
+        column="Saldo"
+        label={`Saldo de ${payable.supplier}`}
+      >
+        {money(payable.balance)}
+      </FlowFigureCell>
       <Cell numeric control={urgentEditable} className={cn(URGENT_GROUND, NOTE_HOST)}>
         {note("urgent", "Urgente")}
         {urgentEditable ? (

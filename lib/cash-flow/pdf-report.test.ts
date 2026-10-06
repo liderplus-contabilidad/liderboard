@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { buildFlowWorkbook } from "./export/flow-workbook";
 import { buildExcelFlowReport } from "./export/flow-report";
-import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
+import { figureNoteKey, balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { deriveFlow } from "./flow";
 import { buildFlowReport } from "./report";
 import { buildPdfFlowReport, pdfFlowPages } from "./pdf-report";
@@ -364,5 +364,43 @@ describe("payment group boundaries", () => {
     const single = rows.find((row) => row.getCell(1).value === "Solo")!;
     expect(single.getCell(3).value).toBe("FAC 3");
     expect(single.getCell(5).value).toBe("$20.00");
+  });
+});
+
+describe("notes on calculated flow figures", () => {
+  it("keeps derived and total annotations in their cells after transposition and Excel serialization", async () => {
+    const source = input(accounts, [
+      { id: "income", concept: "Reserva", amount: 25, accountId: "a" },
+    ]);
+    const notes = {
+      [figureNoteKey("accounts", "a", "Total bancos")]: "Disponible revisado",
+      [figureNoteKey("accounts", "total", "Urgente")]: "Priorizar pagos",
+      [figureNoteKey("payments", "invoice", "Saldo")]: "Saldo confirmado",
+      [figureNoteKey("payments", "total", "Pendiente")]: "Pendientes revisados",
+      [figureNoteKey("incomes", "income", "Monto")]: "Reserva confirmada",
+      [figureNoteKey("remaining", "all", "Saldo")]: "Faltante revisado",
+    };
+    const report = buildExcelFlowReport({ ...source, notes });
+    const banks = report.sections.find((section) => section.id === "accounts")!;
+    const urgent = banks.table.rows.find((row) => row.label === "Urgente")!;
+    expect(banks.notes).toContainEqual({ rowId: urgent.id, column: 3, text: "Priorizar pagos" });
+    const workbook = buildFlowWorkbook(report);
+    const restored = new ExcelJS.Workbook();
+    await restored.xlsx.load(await workbook.xlsx.writeBuffer());
+    const exported: string[] = [];
+    restored.getWorksheet("FLUJO")!.eachRow((row) =>
+      row.eachCell((cell) => {
+        if (cell.note) exported.push(String(cell.note));
+      }),
+    );
+    for (const note of Object.values(notes)) expect(exported).toContain(note);
+    const changed = buildExcelFlowReport({
+      ...source,
+      notes,
+      derived: { ...source.derived, totals: { ...source.derived.totals, urgent: 99 } },
+    });
+    expect(changed.sections.find((section) => section.id === "accounts")!.notes).toEqual(
+      banks.notes,
+    );
   });
 });

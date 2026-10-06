@@ -7,7 +7,7 @@ import type { ChartTable } from "@/lib/charts/types";
 import { formatDayMonthYear, formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
-import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
+import { figureNoteKey, balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { documentLabel, hasPaymentSubtotal, money, payableDetail } from "./derive";
 import { accountLabel, centerName, type DerivedFlow, incomeLabel } from "./flow";
 import { derivePaymentMatrix, matrixTable } from "./matrix";
@@ -431,6 +431,16 @@ export function buildFlowReport(input: {
       ? [{ id: "loans" as const, title: "Préstamos entre centros", table: loansTable }]
       : []),
   ];
+
+  for (const section of sections) {
+    const added = section.table.rows.flatMap((row) =>
+      section.table.columns.flatMap((column, index) => {
+        const text = input.notes?.[figureNoteKey(section.id, row.id, column)];
+        return text ? [{ rowId: row.id, column: index + 1, text }] : [];
+      }),
+    );
+    if (added.length) section.notes = [...(section.notes ?? []), ...added];
+  }
 
   return {
     header: {

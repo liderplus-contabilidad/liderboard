@@ -4,11 +4,8 @@
  * asks these functions where to draw a note and the report asks them which note goes in which cell
  * of the Excel, so the two cannot disagree.
  *
- * Only a cell the flow CAPTURES takes a note: each account's saldo and sobregiro in «Flujo de
- * bancos», and the five working cells of a document in «Pagos marcados» (estado · cuenta · fecha de
- * pago · urgente · pendiente); a derived figure has nothing to annotate. A note whose cell no longer
- * exists (an account removed, a document unmarked or settled) stays in the map but nobody reads it:
- * pruned on read, never cleaned in an effect, and back if the cell comes back on the same date.
+ * Captured and derived amounts share the same dated flow note map. Keys identify the cell,
+ * never its current amount, so recalculating a total preserves its annotation.
  */
 
 export type PayableNoteField = "priority" | "account" | "payOn" | "urgent" | "pending";
@@ -44,4 +41,9 @@ export function applyNotes(
     }
   }
   return next;
+}
+
+/** Stable report coordinates, shared by screen and exported comments. */
+export function figureNoteKey(section: string, row: string, column: string): string {
+  return `figure:${JSON.stringify([section, row, column])}`;
 }

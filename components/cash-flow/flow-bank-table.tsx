@@ -9,6 +9,7 @@ import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { accountLabel, type DerivedFlow } from "@/lib/cash-flow/flow";
 import { cn } from "@/lib/cn";
+import { FlowFigureCell } from "./flow-figure-note";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 type BankRow = DerivedFlow["accounts"][number];
@@ -184,15 +185,38 @@ export function FlowBankTable({
                 );
               }
               return (
-                <Cell key={row.account.id} numeric value={concept.value(row)}>
+                <FlowFigureCell
+                  section="accounts"
+                  row={row.account.id}
+                  column={concept.label}
+                  label={`${concept.label} de ${name}`}
+                  key={row.account.id}
+                  numeric
+                  value={concept.value(row)}
+                >
                   {money(concept.value(row))}
-                </Cell>
+                </FlowFigureCell>
               );
             })}
-            {showLoose && (
-              <Cell numeric>{concept.loose === undefined ? "—" : money(concept.loose)}</Cell>
-            )}
-            <Cell
+            {showLoose &&
+              (concept.loose === undefined ? (
+                <Cell numeric>—</Cell>
+              ) : (
+                <FlowFigureCell
+                  numeric
+                  section="accounts"
+                  row="unassigned"
+                  column={concept.label}
+                  label={`${concept.label} sin cuenta`}
+                >
+                  {money(concept.loose)}
+                </FlowFigureCell>
+              ))}
+            <FlowFigureCell
+              section="accounts"
+              row="total"
+              column={concept.label}
+              label={`Total ${concept.label.toLowerCase()}`}
               numeric
               sticky="right"
               value={concept.total}
@@ -205,7 +229,7 @@ export function FlowBankTable({
               }
             >
               {money(concept.total)}
-            </Cell>
+            </FlowFigureCell>
           </tr>
         ))}
       </tbody>
