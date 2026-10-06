@@ -249,3 +249,8 @@ export function payableDetail(
     .filter(Boolean)
     .join(" · ");
 }
+
+/** A supplier subtotal is useful only for several documents; manual obligations stand alone. */
+export function hasPaymentSubtotal(payables: readonly Pick<FlowPayable, "source">[]): boolean {
+  return payables.length > 1 && payables.some((payable) => payable.source !== "manual");
+}

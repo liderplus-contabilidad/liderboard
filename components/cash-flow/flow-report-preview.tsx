@@ -117,7 +117,13 @@ function rowStyleOf(section: PdfFlowSection, row: ChartTableRow): ReportRowStyle
     return { className: "bg-surface-calc-strong", ink: "font-semibold text-ink-soft" };
   }
   const tone = section.rowTones?.[row.id];
-  return tone ? ROW_STYLE[tone] : undefined;
+  const separated = section.separatedRows?.includes(row.id);
+  if (!separated) return tone ? ROW_STYLE[tone] : undefined;
+  const style = tone ? ROW_STYLE[tone] : { className: "", ink: "font-medium text-ink-soft" };
+  return {
+    ...style,
+    className: `${style.className} [&>th]:border-t-2 [&>th]:border-t-brand/40 [&>td]:border-t-2 [&>td]:border-t-brand/40`,
+  };
 }
 
 const CELL_STYLE: Record<FlowCellPaint, ReportCellStyle> = {

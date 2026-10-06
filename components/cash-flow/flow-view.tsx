@@ -33,6 +33,7 @@ import * as cashDb from "@/lib/cash-flow/db";
 import {
   approvedFromTyped,
   documentLabel,
+  hasPaymentSubtotal,
   kindLabel,
   money,
   payableDetail,
@@ -783,7 +784,7 @@ function GroupRows({
   const urgent = sum("urgent");
   const pending = sum("pending");
   // Manual obligations stand on their own; only cartera documents need a supplier subtotal.
-  const hasCarteraDocuments = group.payables.some((payable) => payable.source !== "manual");
+  const hasCarteraDocuments = hasPaymentSubtotal(group.payables);
   return (
     <>
       {hasCarteraDocuments && (
@@ -809,12 +810,14 @@ function GroupRows({
           <Cell />
         </GridRow>
       )}
-      {group.payables.map((payable) => {
+      {group.payables.map((payable, index) => {
         const line = lineById.get(payable.id);
         return line ? (
           <MarkedRow
             key={payable.id}
             line={line}
+            showSupplier={!hasCarteraDocuments}
+            startsGroup={!hasCarteraDocuments && (index === 0 || payable.source === "manual")}
             asOf={asOf}
             accountOptions={accountOptions}
             notes={notes}
@@ -830,6 +833,8 @@ function GroupRows({
 /** One marked document, its cells writing the document's own fields as they lose focus. */
 const MarkedRow = memo(function MarkedRow({
   line,
+  showSupplier,
+  startsGroup,
   asOf,
   accountOptions,
   notes,
@@ -837,6 +842,8 @@ const MarkedRow = memo(function MarkedRow({
   onPatch,
 }: {
   line: FlowLine;
+  showSupplier: boolean;
+  startsGroup: boolean;
   asOf: string;
   accountOptions: { value: string; label: string }[];
   notes: Readonly<Record<string, string>>;
@@ -865,11 +872,14 @@ const MarkedRow = memo(function MarkedRow({
   const commitAmount = (typed: number | null) =>
     onPatch(payable.id, { approved: approvedFromTyped(typed, payable.balance) });
   return (
-    <tr className="h-[42px]">
+    <tr className={cn("h-[42px]", startsGroup && "[&>td]:border-t-2 [&>td]:border-t-brand/40")}>
       {/* The sheet's «PAGOS PENDIENTES» cell: the number and what it is for. On one line where it
           fits; where it does not, the detail WRAPS under the number instead of being clipped — what
           a payment is for is read before paying it, on any screen. */}
-      <Cell className={isManual ? undefined : "pl-7"}>
+      <Cell className={isManual || showSupplier ? undefined : "pl-7"}>
+        {showSupplier && !isManual && (
+          <span className="block pb-1 font-semibold text-brand">{payable.supplier}</span>
+        )}
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5">
           <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted">
             {isManual ? "Manual" : isCheck ? "Cheque" : "Cartera"}

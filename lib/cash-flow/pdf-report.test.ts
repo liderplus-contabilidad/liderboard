@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { buildFlowWorkbook } from "./export/flow-workbook";
+import { buildExcelFlowReport } from "./export/flow-report";
 import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
 import { deriveFlow } from "./flow";
 import { buildFlowReport } from "./report";
@@ -190,7 +191,7 @@ describe("Excel with PDF table layout", () => {
       const label = String(row.getCell(1).value ?? "");
       if (report.sections.some((section) => section.title === label)) sections.push(label);
       if (label === "Flujo de bancos")
-        bankHeader = sheet.getRow(row.number + 1).values as unknown[];
+        bankHeader = sheet.getRow(row.number + 2).values as unknown[];
       if (label === "Saldo" && row.getCell(2).note) saldoNote = row.getCell(2).note;
       if (label.startsWith("IESS —")) {
         expect(row.getCell(3).value).toBe("15/10/2026");
@@ -233,5 +234,135 @@ describe("Excel with PDF table layout", () => {
     expect(new Set(rowFills["Total bancos"])).toEqual(new Set(["FF1E3A5F"]));
     expect(new Set(rowFills["Saldo final"])).toEqual(new Set(["FF1E3A5F"]));
     expect(sheet.pageSetup.orientation).toBe("landscape");
+  });
+});
+
+describe("Excel payment fields and section spacing", () => {
+  it("separates date, invoice, detail and balance only in Excel and keeps comments on their fields", async () => {
+    const data = input();
+    const pdf = buildPdfFlowReport(data);
+    const excel = buildExcelFlowReport({
+      ...data,
+      notes: {
+        [payableNoteKey("manual", "urgent")]: "Aprobado",
+        [payableNoteKey("manual", "priority")]: "Revisado",
+      },
+    });
+    const payments = excel.sections.find((section) => section.id === "payments")!;
+    expect(payments.table.columns).toEqual([
+      "Fecha",
+      "Factura",
+      "Detalle",
+      "Saldo",
+      "Vence",
+      "Cuenta",
+      "Programado",
+      "Urgente",
+      "Pendiente",
+    ]);
+    expect(payments.table.rows.find((row) => row.id === "invoice")?.values.slice(0, 4)).toEqual([
+      "01/10/2026",
+      "FAC 1",
+      "Aporte",
+      "$20.00",
+    ]);
+    expect(payments.table.rows.find((row) => row.id === "manual")?.values.slice(0, 4)).toEqual([
+      "01/10/2026",
+      "",
+      "Aporte · IESS",
+      "$12.00",
+    ]);
+    expect(payments.table.rows.at(-1)?.values[3]).toBe("$32.00");
+    expect(pdf.sections.find((section) => section.id === "payments")!.table.columns).toEqual([
+      "Emisión",
+      "Vence",
+      "Cuenta",
+      "Programado",
+      "Saldo",
+      "Urgente",
+      "Pendiente",
+    ]);
+    const workbook = buildFlowWorkbook(excel);
+    const loaded = new ExcelJS.Workbook();
+    await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
+    const sheet = loaded.getWorksheet("FLUJO")!;
+    const title = sheet
+      .getRows(1, sheet.rowCount)!
+      .find((row) => row.getCell(1).value === "Pagos marcados por proveedor")!;
+    expect(title.getCell(1).isMerged).toBe(true);
+    expect(title.height).toBe(28);
+    expect(sheet.getRow(title.number - 1).actualCellCount).toBe(0);
+    expect(sheet.getRow(title.number + 1).actualCellCount).toBe(0);
+    expect(sheet.getRow(title.number + 2).values).toEqual([
+      undefined,
+      "Proveedor",
+      ...payments.table.columns,
+    ]);
+    const manualRow = sheet
+      .getRows(title.number + 3, sheet.rowCount - title.number - 2)!
+      .find((row) => row.getCell(1).value === "IESS")!;
+    expect(manualRow.getCell(2).value).toBe("01/10/2026");
+    expect(manualRow.getCell(4).value).toBe("Aporte · IESS");
+    expect(manualRow.getCell(5).value).toBe("$12.00");
+    expect(manualRow.getCell(9).note).toBe("Aprobado");
+    expect(manualRow.getCell(3).note).toBe("Revisado");
+  });
+});
+
+describe("payment group boundaries", () => {
+  it("shows subtotals only for several supplier documents and separates standalone obligations", async () => {
+    const data = input();
+    const invoice: Payable = {
+      ...manual,
+      id: "i1",
+      source: "contifico",
+      kind: undefined,
+      supplier: "Proveedor",
+      docType: "FAC",
+      docNumber: "1",
+      payFromAccountId: "a",
+      amount: 20,
+      balance: 20,
+    };
+    const derived = deriveFlow({
+      date: "2026-10-06",
+      flow: null,
+      accounts,
+      centers: [],
+      checks: [],
+      payables: [
+        manual,
+        invoice,
+        { ...invoice, id: "i2", docNumber: "2" },
+        { ...invoice, id: "single", supplier: "Solo", docNumber: "3" },
+      ],
+    });
+    const pdf = buildPdfFlowReport({ ...data, derived });
+    const payments = pdf.sections.find((section) => section.id === "payments")!;
+    expect(
+      payments.table.rows.filter((row) => row.id.startsWith("g-")).map((row) => row.id),
+    ).toEqual(["g-proveedor"]);
+    expect(payments.separatedRows).toEqual(
+      expect.arrayContaining(["g-proveedor", "single", "manual"]),
+    );
+    expect(payments.table.rows.find((row) => row.id === "single")?.label).toContain("Solo — FAC 3");
+    const excel = buildExcelFlowReport({ ...data, derived });
+    const workbook = buildFlowWorkbook(excel);
+    const loaded = new ExcelJS.Workbook();
+    await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
+    const ws = loaded.getWorksheet("FLUJO")!;
+    const paymentTitle = ws
+      .getRows(1, ws.rowCount)!
+      .find((row) => row.getCell(1).value === "Pagos marcados por proveedor")!;
+    const rows = ws.getRows(paymentTitle.number + 3, 6)!;
+    for (const supplier of ["Proveedor", "Solo", "IESS"]) {
+      const row = rows.find((row) => row.getCell(1).value === supplier)!;
+      expect(row).toBeDefined();
+      for (let column = 1; column <= 10; column++)
+        expect(row.getCell(column).border.top?.style).toBe("medium");
+    }
+    const single = rows.find((row) => row.getCell(1).value === "Solo")!;
+    expect(single.getCell(3).value).toBe("FAC 3");
+    expect(single.getCell(5).value).toBe("$20.00");
   });
 });

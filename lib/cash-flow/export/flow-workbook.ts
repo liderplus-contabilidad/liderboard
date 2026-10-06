@@ -1,6 +1,6 @@
 /**
  * «Excel de flujo»: the report's sections on ONE sheet, each headed by its title, with the same
- * figures and layout the paper prints, plus the
+ * figures the paper prints, with separate Excel document fields, plus the
  * flow's cell notes as Excel comments, which the paper does not print.
  */
 import ExcelJS from "exceljs";
@@ -50,9 +50,21 @@ export function buildFlowWorkbook(
     2,
     ...report.sections.map((section) => section.table.columns.length + 1),
   );
-  ws.getColumn(1).width = 60;
+  ws.getColumn(1).width = 40;
   for (let column = 2; column <= columnCount; column += 1) {
     ws.getColumn(column).width = 18;
+  }
+  // One sheet shares its widths: reserve room for the payment document and full detail.
+  const payments = report.sections.find((section) => section.id === "payments");
+  if (payments) {
+    for (const [label, width] of [
+      ["Factura", 30],
+      ["Detalle", 45],
+      ["Cuenta", 25],
+    ] as const) {
+      const index = payments.table.columns.indexOf(label);
+      if (index >= 0) ws.getColumn(index + 2).width = width;
+    }
   }
   writeLetterhead(wb, ws, {
     leftLogo: logo,
@@ -63,10 +75,27 @@ export function buildFlowWorkbook(
     ],
   });
   for (const section of report.sections) {
-    ws.addRow([]);
-    ws.addRow([section.title]).font = { bold: true, size: 12 };
-    const header = ws.addRow(["Concepto", ...section.table.columns]);
-    header.font = { bold: true };
+    const width = section.table.columns.length + 1;
+    ws.addRow([]).height = 12;
+    ws.addRow([]).height = 12;
+    const title = ws.addRow([section.title]);
+    ws.mergeCells(title.number, 1, title.number, width);
+    title.height = 28;
+    title.getCell(1).fill = solid(BRAND);
+    title.getCell(1).font = { bold: true, size: 13, color: { argb: WHITE } };
+    title.getCell(1).alignment = { vertical: "middle", indent: 1 };
+    ws.addRow([]).height = 8;
+    const header = ws.addRow([
+      section.id === "payments" ? "Proveedor" : "Concepto",
+      ...section.table.columns,
+    ]);
+    header.height = 24;
+    header.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: BRAND } };
+      cell.fill = solid(BRAND_SOFT);
+      cell.alignment = { vertical: "middle", wrapText: true };
+      cell.border = { bottom: { style: "thin", color: { argb: BRAND } } };
+    });
     for (const row of section.table.rows) {
       const figureTone = section.figureRowTones?.[row.id];
       const isTotal = section.rowTones?.[row.id] === "total";
@@ -86,6 +115,12 @@ export function buildFlowWorkbook(
       const written = ws.addRow([[row.label, row.sublabel].filter(Boolean).join("\n"), ...values]);
       written.getCell(1).alignment = { vertical: "top", wrapText: true };
       if (row.sublabel) written.height = 48;
+      const detailIndex = section.table.columns.indexOf("Detalle");
+      if (detailIndex >= 0) {
+        const detail = row.values[detailIndex] ?? "";
+        written.getCell(detailIndex + 2).alignment = { vertical: "top", wrapText: true };
+        written.height = Math.max(22, Math.ceil(detail.length / 40) * 16 + 6);
+      }
       if (row.emphasis) {
         written.font = { bold: true };
       }
@@ -118,6 +153,12 @@ export function buildFlowWorkbook(
           cell.fill = solid(fill);
         }
       });
+      if (section.separatedRows?.includes(row.id)) {
+        for (let column = 1; column <= values.length + 1; column++) {
+          const cell = written.getCell(column);
+          cell.border = { ...cell.border, top: { style: "medium", color: { argb: BRAND } } };
+        }
+      }
       // Values stay in regular weight, including totals; row labels retain their emphasis.
       values.forEach((_, index) => {
         const cell = written.getCell(index + 2);

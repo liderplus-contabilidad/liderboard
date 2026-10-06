@@ -8,7 +8,7 @@ import { formatDayMonthYear, formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
 import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
-import { documentLabel, money, payableDetail } from "./derive";
+import { documentLabel, hasPaymentSubtotal, money, payableDetail } from "./derive";
 import { accountLabel, centerName, type DerivedFlow, incomeLabel } from "./flow";
 import { derivePaymentMatrix, matrixTable } from "./matrix";
 import type { BankAccount, CashFlowCenter, FlowIncome } from "./types";
@@ -101,6 +101,8 @@ export interface FlowReportSection {
   columnTones?: Record<string, FlowCellTone>;
   /** Row id → tone; a row absent here is an ordinary line. */
   rowTones?: Record<string, FlowRowTone>;
+  /** Rows that begin a supplier or standalone obligation, separated across the whole table. */
+  separatedRows?: string[];
 }
 
 export interface FlowReport {
@@ -214,11 +216,14 @@ export function buildFlowReport(input: {
   };
 
   const paymentRows: ChartTable["rows"] = [];
+  const separatedRows: string[] = [];
   const lineOf = (id: string) => derived.lines.find((line) => line.payable.id === id);
   for (const group of derived.groups) {
     const urgent = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.urgent ?? 0), 0);
     const pending = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.pending ?? 0), 0);
-    if (group.payables.some((payable) => payable.source !== "manual")) {
+    const grouped = hasPaymentSubtotal(group.payables);
+    if (grouped) {
+      separatedRows.push(`g-${group.key}`);
       paymentRows.push({
         id: `g-${group.key}`,
         label: group.label,
@@ -226,12 +231,19 @@ export function buildFlowReport(input: {
         values: ["", "", "", "", money(urgent + pending), money(urgent), money(pending)],
       });
     }
-    for (const payable of group.payables) {
+    for (const [index, payable] of group.payables.entries()) {
+      if (!grouped && (index === 0 || payable.source === "manual")) separatedRows.push(payable.id);
       const line = lineOf(payable.id);
       const detail = payableDetail(payable, { center: false });
       paymentRows.push({
         id: payable.id,
-        label: [documentLabel(payable) || payable.supplier, detail].filter(Boolean).join(" — "),
+        label: [
+          !grouped && payable.source !== "manual" ? payable.supplier : null,
+          documentLabel(payable) || payable.supplier,
+          detail,
+        ]
+          .filter(Boolean)
+          .join(" — "),
         values: [
           formatDayMonthYear(payable.issuedOn) ?? "",
           formatDayMonthYear(payable.dueOn) ?? "",
@@ -370,10 +382,15 @@ export function buildFlowReport(input: {
       id: "payments",
       title: "Pagos marcados por proveedor",
       table: paymentsTable,
+      separatedRows,
       ...withNotes(paymentNotes),
       columnTones: { Urgente: "urgent", Pendiente: "pending" },
       rowTones: {
-        ...Object.fromEntries(derived.groups.map((group) => [`g-${group.key}`, "group" as const])),
+        ...Object.fromEntries(
+          derived.groups
+            .filter((group) => hasPaymentSubtotal(group.payables))
+            .map((group) => [`g-${group.key}`, "group" as const]),
+        ),
         ...TOTAL,
       },
     },

@@ -84,13 +84,19 @@ describe("buildFlowReport", () => {
     expect(accounts.rows[1]).toMatchObject({ id: "total", emphasis: true });
     const payments = report.sections[2].table;
     expect(payments.rows.map((row) => row.label)).toEqual([
-      "NUNA",
-      "FAC 1",
-      "PALLASCO PALOMO",
-      "FAC 1",
+      "NUNA — FAC 1",
+      "PALLASCO PALOMO — FAC 1",
       "Total",
     ]);
-    expect(payments.rows[4].values).toEqual(["", "", "", "", "$1,695.93", "$720.00", "$975.93"]);
+    expect(payments.rows.at(-1)?.values).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "$1,695.93",
+      "$720.00",
+      "$975.93",
+    ]);
   });
 
   it("totals the accounts column by column, incomes included", () => {
@@ -248,8 +254,8 @@ describe("buildFlowReport", () => {
     expect(comments).toEqual([
       ["PRODUBANCO", 2, "Cierre del lunes"],
       ["PRODUBANCO", 3, "Aprobado por el banco"],
-      ["FAC 1", 1, "Lo pidió gerencia"],
-      ["FAC 1", 7, "Aprobado"],
+      ["PALLASCO PALOMO — FAC 1", 1, "Lo pidió gerencia"],
+      ["PALLASCO PALOMO — FAC 1", 7, "Aprobado"],
     ]);
   });
 
@@ -265,8 +271,6 @@ describe("buildFlowReport", () => {
     expect(tones("remaining")?.columnTones).toEqual({ Saldo: "signed" });
     // Every supplier's heading is a group row; the documents under it are plain.
     expect(tones("payments")?.rowTones).toEqual({
-      "g-nuna": "group",
-      "g-pallasco palomo": "group",
       total: "total",
     });
     expect(tones("payments")?.columnTones).toEqual({ Urgente: "urgent", Pendiente: "pending" });

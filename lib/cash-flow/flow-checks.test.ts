@@ -177,7 +177,7 @@ describe("checks as supplier obligations in Flujo", () => {
     };
     const report = buildFlowReport(reportInput);
     const payments = report.sections.find((section) => section.id === "payments")!;
-    expect(payments.table.rows.some((row) => row.label.startsWith("CHQ 1001"))).toBe(true);
+    expect(payments.table.rows.some((row) => row.label.includes("CHQ 1001"))).toBe(true);
     expect(payments.table.rows.find((row) => row.id === "total")?.values.slice(-2)).toEqual([
       "$100.00",
       "$0.00",
@@ -192,7 +192,7 @@ describe("checks as supplier obligations in Flujo", () => {
     expect(
       sheet
         .getColumn(1)
-        .values.some((value) => typeof value === "string" && value.startsWith("CHQ 1001")),
+        .values.some((value) => typeof value === "string" && value.includes("CHQ 1001")),
     ).toBe(true);
   });
 });
