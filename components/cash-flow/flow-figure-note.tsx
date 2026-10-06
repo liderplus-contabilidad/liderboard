@@ -68,7 +68,7 @@ export function FlowFigureTile({
   column: string;
 }) {
   return (
-    <div className={cn(NOTE_HOST, "flex-1")}>
+    <div className={cn(NOTE_HOST, "min-w-0 flex flex-1")}>
       <FlowFigureNote
         section={section}
         row={row}
