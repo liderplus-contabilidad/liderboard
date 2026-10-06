@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, Trash2 } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
@@ -194,16 +194,6 @@ export function PayableDetailPanel({
               onClick={() => void cashDb.settlePayables([payable.id], asOf).then(onClose)}
             >
               Marcar pagado
-            </Button>
-          )}
-          {payable.source === "manual" && (
-            <Button
-              variant="danger"
-              size="sm"
-              icon={<Trash2 size={13} />}
-              onClick={() => void cashDb.deleteManualPayable(payable.id).then(onClose)}
-            >
-              Eliminar obligación
             </Button>
           )}
           {settled && payable.settledOn && (

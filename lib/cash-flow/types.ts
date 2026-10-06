@@ -86,12 +86,9 @@ export type BuiltinKind = "sri" | "iess" | "arriendo" | "sueldos" | "cuota" | "p
 export type PayPriority = "urgent" | "pending";
 
 /**
- * One thing owed: a document a cartera brought (Contífico or Dingoo) or an obligation typed by hand.
- * ONE table for both because the flow, the Excel and the report paint one list, and two tables would
- * have forced every reader to join two reads.
- *
- * The `id` of an imported document is stable across cuts (`identity.ts`), which is what lets a reload
- * keep the marks and the four working columns; a manual one carries a uuid.
+ * Shared reading contract for a cartera document and a manual obligation of Flujo. Imported
+ * documents live in `payables`; manual obligations live in `manualObligations`. Sharing this
+ * shape keeps the flow, its matrix and its reports on one definition of every amount.
  */
 export interface Payable {
   id: string;
@@ -137,6 +134,11 @@ export interface Payable {
   settledOn: string | null;
   /** The cut that brought or last updated it; the day it was typed for a manual one. */
   cutDate: string;
+}
+
+/** A hand-written obligation owned by Flujo, carried between dates until paid or removed. */
+export interface ManualObligation extends Payable {
+  source: "manual";
 }
 
 /** The four steps of a check's timeline, in order. `voided` is orthogonal (see `Check`). */

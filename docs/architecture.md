@@ -2004,13 +2004,22 @@ coincide necesariamente con cómo está partida en PyG. El rótulo de centro que
 lo que la pestaña se llama «Cartera» y no «Cuentas por pagar»: el título del módulo ya lo dice, y
 un header que nombra dos veces lo mismo se queda sin sitio en un portátil de 1366 px.
 
-**Una sola tabla `payables` con `source`.** Un documento de Contífico o de Dingoo y una obligación
+**Decisión inicial: una sola tabla `payables` con `source` (sustituida en v5).** Un documento de Contífico o de Dingoo y una obligación
 que ningún sistema exporta (SRI, IESS, arriendo, sueldos, cuotas, préstamos) son la MISMA fila con
 distinta `source`. Dos tablas habrían obligado al flujo, al Excel y al informe a unir dos lecturas
 para pintar una lista. El id de un documento se compone de lo que el archivo dice —empresa ·
 sistema · proveedor normalizado · tipo · número (`identity.ts`)— y por eso es ESTABLE entre
 cortes: recargar es un `put` que conserva la marca y las cuatro columnas de trabajo; una
 obligación manual lleva uuid.
+
+**Desde v5, las obligaciones pertenecen solo a Flujo.** El usuario pidió separar el trabajo manual
+de la Cartera cargada. `manualObligations` conserva el contrato de lectura `Payable`, con lo que
+`deriveFlow` combina ambas entradas sin duplicar fórmulas, y el resto de Cartera —totales, Excel,
+selectores y Cargas cash— lee solo `payables`. La migración mueve las filas manuales conservando
+id y campos, marcando urgentes las abiertas sin marca para que no queden inaccesibles. Continúan
+entre fechas hasta pagarlas o quitarlas, y se crean y editan desde Flujo. Un reemplazo de Cartera no
+puede borrarlas. Los libros antiguos se siguen leyendo: sus manuales se dirigen a Flujo, usando
+contenido e índice de ocurrencia para no duplicar al recargar y conservando equivalentes ya migrados.
 
 **Un corte reemplaza y conserva; lo ausente se liquida, nunca se borra** (`cut.ts`, `mergeCut`).
 Lo que viene se upserta copiando de la fila anterior su marca (`priority` · `payOn` ·
@@ -2071,7 +2080,7 @@ la nombran, saldo final y faltante, la fila de la empresa como suma, las líneas
 proveedor con las manuales bajo su clase, y los PRÉSTAMOS entre centros: un documento de HC pagado
 desde una cuenta de HA ES el préstamo, sin que nadie lo teclee —lo que `CARGAS CASH` hacía escribir
 en columnas HA-HC / HC-HA—. Nada se escribe; Resumen, el informe impreso y el Excel de flujo leen
-este mismo `DerivedFlow`. Los egresos fijos son obligaciones manuales en la cartera y no columnas,
+este mismo `DerivedFlow`. Los egresos fijos son obligaciones manuales propias de Flujo y no columnas,
 que es lo que permite que Nomik (una cuenta, sin centros) y Comisersa (cuatro cuentas, tres
 centros) sean la MISMA pantalla: lo que no aplica no se dibuja.
 
@@ -2132,8 +2141,8 @@ menos que el saldo es un parcial, el saldo mismo es el TODO y se guarda como `nu
 se habría vuelto un parcial silencioso el día que una recarga lo cambiara—, más que el saldo es el
 saldo. El flujo se alimenta desde ahí mismo: «Agregar de la cartera» (un `Modal` sobre los documentos
 abiertos sin prioridad, que los marca urgentes en una escritura: agregar a un flujo es «pagar en este
-flujo», y la hoja nace URGENTE y el contador cambia las pocas PENDIENTE) y «Agregar obligación» con
-`markAs`. Después del cambio, un flujo de siete documentos desde Flujo son ~20 interacciones en una
+flujo», y la hoja nace URGENTE y el contador cambia las pocas PENDIENTE) y «Agregar obligación»
+(ahora propia de Flujo desde v5, nacida urgente). Después del cambio, un flujo de siete documentos desde Flujo son ~20 interacciones en una
 sola pantalla —abrir el selector, marcar, confirmar y luego un select por fila—, medido con
 playwright sobre la cartera real de Contífico.
 

@@ -9,6 +9,7 @@ import {
   ListPlus,
   Plus,
   Scale,
+  RotateCcw,
   Trash2,
   TrendingUp,
   Waves,
@@ -445,7 +446,7 @@ export function FlowView() {
         )}
       </div>
       <FlowCarteraPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
-      {manualOpen && <ManualPayablePanel markAs="urgent" onClose={() => setManualOpen(false)} />}
+      {manualOpen && <ManualPayablePanel onClose={() => setManualOpen(false)} />}
     </CashFlowEmptyState>
   );
 }
@@ -598,10 +599,11 @@ function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
  * put where one looks for it.
  */
 function SettledSection() {
-  const { derived } = useCashFlowData();
+  const { derived, activeClientId } = useCashFlowData();
   if (derived.settled.length === 0) {
     return null;
   }
+  const hasManual = derived.settled.some(({ payable }) => payable.source === "manual");
   const window = derived.settledSince
     ? `desde el ${formatDayMonthYear(derived.settledSince)}`
     : "en la fecha de corte";
@@ -618,12 +620,14 @@ function SettledSection() {
             <col />
             <col style={{ width: 110 }} />
             <col style={{ width: 130 }} />
+            {hasManual && <col style={{ width: 44 }} />}
           </colgroup>
           <thead>
             <tr>
               <HeadCell>Proveedor · documento</HeadCell>
               <HeadCell>Pagado el</HeadCell>
               <HeadCell align="right">Monto</HeadCell>
+              {hasManual && <HeadCell />}
             </tr>
           </thead>
           <tbody>
@@ -641,6 +645,23 @@ function SettledSection() {
                 <Cell numeric className="text-positive">
                   {money(payable.balance)}
                 </Cell>
+                {hasManual && (
+                  <Cell control>
+                    {payable.source === "manual" && activeClientId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        iconOnly
+                        icon={<RotateCcw size={13} />}
+                        aria-label={`Reabrir obligación ${payable.supplier}`}
+                        title="Reabrir obligación"
+                        onClick={() =>
+                          void cashDb.reopenManualObligation(activeClientId, payable.id)
+                        }
+                      />
+                    )}
+                  </Cell>
+                )}
               </tr>
             ))}
             <tr className="bg-surface-sunken">
@@ -650,6 +671,7 @@ function SettledSection() {
               <Cell numeric strong className="text-positive">
                 {money(derived.settledTotal)}
               </Cell>
+              {hasManual && <Cell />}
             </tr>
           </tbody>
         </table>
@@ -835,7 +857,8 @@ function IncomesSection({
  * (`priority`, `payFromAccountId`, `approved`, `payOn`) through `db.ts` as it loses focus — a
  * drawer per cell is slower than the sheet it replaces — and the provider's live query re-derives
  * the flow, so the bank table above recomputes as the tiles do. It is a second SURFACE for the same
- * mark Cuentas por pagar writes, never a copy: the flow stores nothing of it.
+ * mark Cartera writes for imported documents. Manual obligations write their own table, owned
+ * by Flujo; both use the same amount rules.
  *
  * Of Urgente and Pendiente the EDITABLE cell is the one the priority makes editable; the other is
  * what `markedSplit` leaves. Both write `approved` through `approvedFromTyped` (the saldo itself is
@@ -852,7 +875,7 @@ function MarkedSection({
   onPickFromCartera: () => void;
   onAddManual: () => void;
 }) {
-  const { derived, accounts, centers, asOf } = useCashFlowData();
+  const { derived, accounts, centers, asOf, activeClientId } = useCashFlowData();
   const accountOptions = useMemo(
     () => [
       { value: NONE, label: "Sin cuenta" },
@@ -864,9 +887,21 @@ function MarkedSection({
     () => new Map(derived.lines.map((line) => [line.payable.id, line])),
     [derived.lines],
   );
-  const patch = useCallback((id: string, fields: cashDb.PayablePatch) => {
-    void cashDb.updatePayable(id, fields);
-  }, []);
+  const patch = useCallback(
+    (id: string, fields: cashDb.PayablePatch) => {
+      if (lineById.get(id)?.payable.source === "manual") {
+        if (!activeClientId) return;
+        if (fields.priority === null) {
+          void cashDb.deleteManualObligation(activeClientId, id);
+        } else {
+          void cashDb.updateManualObligation(activeClientId, id, fields);
+        }
+      } else {
+        void cashDb.updatePayable(id, fields);
+      }
+    },
+    [activeClientId, lineById],
+  );
   const total = derived.totals.urgent + derived.totals.pending;
   const adders = (
     <>
@@ -901,8 +936,8 @@ function MarkedSection({
           </span>
         </EmptyState>
       ) : (
-        <DataGrid minWidth={1260} className="table-fixed">
-          {/* The fixed columns take 970 px; the document keeps at least ~290 px, and below that the
+        <DataGrid minWidth={1292} className="table-fixed">
+          {/* The fixed columns take 1002 px; the document keeps at least ~290 px, and below that the
               grid scrolls sideways rather than squeezing the detail into a column of words. */}
           <colgroup>
             <col />
@@ -913,7 +948,7 @@ function MarkedSection({
             <col style={{ width: 112 }} />
             <col style={{ width: 124 }} />
             <col style={{ width: 124 }} />
-            <col style={{ width: 44 }} />
+            <col style={{ width: 76 }} />
           </colgroup>
           <thead>
             <tr>
@@ -992,29 +1027,33 @@ function GroupRows({
     group.payables.reduce((acc, payable) => acc + (lineById.get(payable.id)?.[key] ?? 0), 0);
   const urgent = sum("urgent");
   const pending = sum("pending");
+  // Manual obligations stand on their own; only cartera documents need a supplier subtotal.
+  const hasCarteraDocuments = group.payables.some((payable) => payable.source !== "manual");
   return (
     <>
-      <GridRow muted>
-        <Cell className="font-semibold text-ink" colSpan={5}>
-          {group.label}
-          {group.payables[0]?.kind && (
-            <span className="ml-2 text-[11px] font-normal text-faint">
-              {kindLabel(group.payables[0].kind)}
-            </span>
-          )}
-        </Cell>
-        <Cell numeric strong value={urgent + pending}>
-          {money(urgent + pending)}
-        </Cell>
-        {/* The two marks' columns run unbroken through the supplier's heading, as on paper. */}
-        <Cell numeric className={URGENT_TONE}>
-          {urgent > 0 ? money(urgent) : ""}
-        </Cell>
-        <Cell numeric className={cn(PENDING_GROUND, "font-semibold text-ink")}>
-          {pending > 0 ? money(pending) : ""}
-        </Cell>
-        <Cell />
-      </GridRow>
+      {hasCarteraDocuments && (
+        <GridRow muted>
+          <Cell className="font-semibold text-ink" colSpan={5}>
+            {group.label}
+            {group.payables[0]?.kind && (
+              <span className="ml-2 text-[11px] font-normal text-faint">
+                {kindLabel(group.payables[0].kind)}
+              </span>
+            )}
+          </Cell>
+          <Cell numeric strong value={urgent + pending}>
+            {money(urgent + pending)}
+          </Cell>
+          {/* The two marks' columns run unbroken through the supplier's heading, as on paper. */}
+          <Cell numeric className={URGENT_TONE}>
+            {urgent > 0 ? money(urgent) : ""}
+          </Cell>
+          <Cell numeric className={cn(PENDING_GROUND, "font-semibold text-ink")}>
+            {pending > 0 ? money(pending) : ""}
+          </Cell>
+          <Cell />
+        </GridRow>
+      )}
       {group.payables.map((payable) => {
         const line = lineById.get(payable.id);
         return line ? (
@@ -1050,7 +1089,10 @@ const MarkedRow = memo(function MarkedRow({
   onPatch: (id: string, fields: cashDb.PayablePatch) => void;
 }) {
   const { payable } = line;
-  const docLabel = documentLabel(payable) || payable.supplier;
+  const { activeClientId } = useCashFlowData();
+  const [editing, setEditing] = useState(false);
+  const isManual = payable.source === "manual";
+  const docLabel = isManual ? payable.supplier : documentLabel(payable) || payable.supplier;
   const detail = payableDetail(payable, { center: false });
   /** The note corner of one working cell of this document, of this date. */
   const note = (field: PayableNoteField, what: string) => {
@@ -1071,17 +1113,29 @@ const MarkedRow = memo(function MarkedRow({
       {/* The sheet's «PAGOS PENDIENTES» cell: the number and what it is for. On one line where it
           fits; where it does not, the detail WRAPS under the number instead of being clipped — what
           a payment is for is read before paying it, on any screen. */}
-      <Cell className="pl-7">
+      <Cell className={isManual ? undefined : "pl-7"}>
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5">
-          <span className="shrink-0 whitespace-nowrap font-mono text-[12px] text-ink">
-            {docLabel}
-          </span>
+          {isManual ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              aria-label={`Editar obligación ${payable.supplier}`}
+              className="shrink-0 text-left text-[12px] font-semibold text-ink hover:text-brand hover:underline"
+            >
+              {docLabel}
+            </button>
+          ) : (
+            <span className="shrink-0 whitespace-nowrap font-mono text-[12px] text-ink">
+              {docLabel}
+            </span>
+          )}
           {detail && (
             <span className="min-w-0 break-words text-[11.5px] leading-[1.35] text-muted">
               {detail}
             </span>
           )}
         </span>
+        {editing && <ManualPayablePanel obligation={payable} onClose={() => setEditing(false)} />}
       </Cell>
       <Cell
         className={cn(
@@ -1157,15 +1211,28 @@ const MarkedRow = memo(function MarkedRow({
         )}
       </Cell>
       <Cell control>
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          icon={<X size={13} />}
-          aria-label={`Quitar ${payable.supplier} del flujo`}
-          title="Quitar del flujo"
-          onClick={() => onPatch(payable.id, { priority: null })}
-        />
+        <div className="flex items-center justify-end">
+          {isManual && activeClientId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon={<CheckCircle2 size={13} />}
+              aria-label={`Marcar pagada obligación ${payable.supplier}`}
+              title="Marcar pagado"
+              onClick={() => void cashDb.settleManualObligation(activeClientId, payable.id, asOf)}
+            />
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            icon={<X size={13} />}
+            aria-label={`Quitar ${payable.supplier} del flujo`}
+            title="Quitar del flujo"
+            onClick={() => onPatch(payable.id, { priority: null })}
+          />
+        </div>
       </Cell>
     </tr>
   );

@@ -43,7 +43,7 @@ export function ClientConfigPanel({ onClose }: { onClose: () => void }) {
       width={480}
       onClose={onClose}
     >
-      <div className="flex flex-col gap-6 px-5 pb-6">
+      <div className="flex flex-col gap-6 pb-6">
         <CentersSection clientId={activeClientId} centers={centers} />
         <AccountsSection clientId={activeClientId} centers={centers} accounts={accounts} />
       </div>
@@ -53,18 +53,31 @@ export function ClientConfigPanel({ onClose }: { onClose: () => void }) {
 
 function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <h3 className="flex items-center gap-2 text-[13px] font-bold tracking-[-0.1px] text-ink">
-      <span className="text-faint">{icon}</span>
+    <h3 className="-mx-3 -mt-3 flex items-center gap-2 rounded-t-[13px] border-b border-border bg-canvas px-3 py-3 text-[13px] font-bold tracking-[-0.1px] text-ink">
+      <span className="flex size-8 items-center justify-center rounded-[9px] bg-brand-soft text-brand">
+        {icon}
+      </span>
       {title}
     </h3>
   );
 }
 
 function CentersSection({ clientId, centers }: { clientId: string; centers: CashFlowCenter[] }) {
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | undefined>();
 
+  const closeForm = useCallback(() => {
+    setCreating(false);
+    setDraft("");
+    setError(undefined);
+    setSaveError(undefined);
+  }, []);
+
   const add = useCallback(async () => {
+    if (saving) return;
     const name = draft.trim();
     if (!name) {
       setError("Escribe el nombre del centro.");
@@ -74,13 +87,23 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
       setError(`«${name}» ya existe.`);
       return;
     }
-    await cashDb.addCenter(clientId, name);
-    setDraft("");
-    setError(undefined);
-  }, [clientId, centers, draft]);
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await cashDb.addCenter(clientId, name);
+      closeForm();
+    } catch {
+      setSaveError("No se pudo guardar el centro. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }, [clientId, centers, draft, saving, closeForm]);
 
   return (
-    <section className="flex flex-col gap-3">
+    <section
+      aria-label="Centros"
+      className="flex flex-col gap-3 rounded-[13px] border border-border bg-surface p-3"
+    >
       <SectionHeading icon={<MapPin size={15} />} title="Centros" />
       {centers.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
@@ -111,28 +134,54 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
           ))}
         </ul>
       )}
-      <div className="flex items-end gap-2">
-        <TextField
-          label="Nuevo centro"
-          value={draft}
-          error={error}
-          placeholder="HA"
-          fieldClassName="flex-1"
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setError(undefined);
+      {creating ? (
+        <form
+          aria-label="Nuevo centro"
+          className="rounded-[13px] border border-border bg-canvas p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void add();
           }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void add();
-            }
-          }}
-        />
-        <Button variant="secondary" size="md" icon={<Plus size={14} />} onClick={() => void add()}>
-          Agregar
-        </Button>
-      </div>
+        >
+          <fieldset disabled={saving} className="flex flex-col gap-3">
+            <legend className="mb-3 text-[13px] font-semibold text-ink">Nuevo centro</legend>
+            <TextField
+              label="Nombre del centro"
+              value={draft}
+              error={error}
+              placeholder="HA"
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setError(undefined);
+              }}
+            />
+            {saveError && (
+              <p role="alert" className="text-[12px] text-negative">
+                {saveError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="md" onClick={closeForm}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="md">
+                {saving ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </fieldset>
+        </form>
+      ) : (
+        <div>
+          <Button
+            variant="secondary"
+            size="md"
+            icon={<Plus size={14} />}
+            onClick={() => setCreating(true)}
+          >
+            Agregar centro
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
@@ -167,6 +216,9 @@ function AccountsSection({
   centers: CashFlowCenter[];
   accounts: BankAccount[];
 }) {
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const [bank, setBank] = useState("");
   const [number, setNumber] = useState("");
   const [name, setName] = useState("");
@@ -199,25 +251,8 @@ function AccountsSection({
     ...centers.map((center) => ({ value: center.id, label: center.name })),
   ];
 
-  const add = useCallback(async () => {
-    if (!bank.trim()) {
-      setError("Escribe el banco.");
-      return;
-    }
-    const dateError = overdraftDatesError({ overdraftStartsOn, overdraftEndsOn });
-    if (dateError) {
-      setDateError(dateError);
-      return;
-    }
-    await cashDb.addAccount(clientId, {
-      bank,
-      number,
-      label: name,
-      overdraft: overdraft ?? 0,
-      overdraftStartsOn,
-      overdraftEndsOn,
-      centerId: centerId || null,
-    });
+  const closeForm = useCallback(() => {
+    setCreating(false);
     setBank("");
     setNumber("");
     setName("");
@@ -227,10 +262,56 @@ function AccountsSection({
     setDateError(undefined);
     setCenterId(NO_CENTER);
     setError(undefined);
-  }, [clientId, bank, number, name, overdraft, centerId, overdraftStartsOn, overdraftEndsOn]);
+    setSaveError(undefined);
+  }, []);
+
+  const add = useCallback(async () => {
+    if (saving) return;
+    if (!bank.trim()) {
+      setError("Escribe el banco.");
+      return;
+    }
+    const dateError = overdraftDatesError({ overdraftStartsOn, overdraftEndsOn });
+    if (dateError) {
+      setDateError(dateError);
+      return;
+    }
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await cashDb.addAccount(clientId, {
+        bank,
+        number,
+        label: name,
+        overdraft: overdraft ?? 0,
+        overdraftStartsOn,
+        overdraftEndsOn,
+        centerId: centerId || null,
+      });
+      closeForm();
+    } catch {
+      setSaveError("No se pudo guardar la cuenta. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    clientId,
+    bank,
+    number,
+    name,
+    overdraft,
+    centerId,
+    overdraftStartsOn,
+    overdraftEndsOn,
+    saving,
+    closeForm,
+  ]);
 
   return (
-    <section className="flex flex-col gap-3">
+    <section
+      aria-label="Cuentas bancarias"
+      className="flex flex-col gap-3 rounded-[13px] border border-border bg-surface p-3"
+    >
       <SectionHeading icon={<Landmark size={15} />} title="Cuentas bancarias" />
       {accounts.length > 0 && (
         <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
@@ -362,67 +443,103 @@ function AccountsSection({
           ))}
         </ul>
       )}
-      <div className="grid grid-cols-2 gap-2">
-        <TextField
-          label="Banco"
-          value={bank}
-          error={error}
-          placeholder="PRODUBANCO"
-          onChange={(event) => {
-            setBank(event.target.value);
-            setError(undefined);
+      {creating ? (
+        <form
+          aria-label="Nueva cuenta bancaria"
+          className="rounded-[13px] border border-border bg-canvas p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void add();
           }}
-        />
-        <TextField
-          label="Número"
-          value={number}
-          variant="mono"
-          placeholder="80010385"
-          onChange={(event) => setNumber(event.target.value)}
-        />
-        <TextField
-          label="Nombre"
-          value={name}
-          placeholder="Produbanco HA"
-          hint="Opcional"
-          onChange={(event) => setName(event.target.value)}
-        />
-        <FormField label="Sobregiro" hint={overdraft ? money(overdraft) : undefined}>
-          <FieldBox>
-            <NumericInput
-              value={overdraft}
-              format="currency"
-              align="left"
-              placeholder="$0.00"
-              ariaLabel="Sobregiro de la cuenta nueva"
-              onCommit={setOverdraft}
-            />
-          </FieldBox>
-        </FormField>
-        <OverdraftDateFields
-          startsOn={overdraftStartsOn}
-          endsOn={overdraftEndsOn}
-          error={dateError}
-          onChange={(patch) => {
-            if ("overdraftStartsOn" in patch) setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
-            if ("overdraftEndsOn" in patch) setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
-            setDateError(undefined);
-          }}
-        />
-        {centers.length > 0 && (
-          <Select
-            label="Centro"
-            value={centerId}
-            options={centerOptions}
-            onChange={(event) => setCenterId(event.target.value)}
-          />
-        )}
-      </div>
-      <div>
-        <Button variant="secondary" size="md" icon={<Plus size={14} />} onClick={() => void add()}>
-          Agregar cuenta
-        </Button>
-      </div>
+        >
+          <fieldset disabled={saving} className="flex flex-col gap-3">
+            <legend className="mb-3 text-[13px] font-semibold text-ink">
+              Nueva cuenta bancaria
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              <TextField
+                label="Banco"
+                value={bank}
+                error={error}
+                placeholder="PRODUBANCO"
+                onChange={(event) => {
+                  setBank(event.target.value);
+                  setError(undefined);
+                }}
+              />
+              <TextField
+                label="Número"
+                value={number}
+                variant="mono"
+                placeholder="80010385"
+                onChange={(event) => setNumber(event.target.value)}
+              />
+              <TextField
+                label="Nombre"
+                value={name}
+                placeholder="Produbanco HA"
+                hint="Opcional"
+                onChange={(event) => setName(event.target.value)}
+              />
+              <FormField label="Sobregiro" hint={overdraft ? money(overdraft) : undefined}>
+                <FieldBox>
+                  <NumericInput
+                    value={overdraft}
+                    format="currency"
+                    align="left"
+                    placeholder="$0.00"
+                    ariaLabel="Sobregiro de la cuenta nueva"
+                    onCommit={setOverdraft}
+                  />
+                </FieldBox>
+              </FormField>
+              <OverdraftDateFields
+                startsOn={overdraftStartsOn}
+                endsOn={overdraftEndsOn}
+                error={dateError}
+                onChange={(patch) => {
+                  if ("overdraftStartsOn" in patch)
+                    setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
+                  if ("overdraftEndsOn" in patch) setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
+                  setDateError(undefined);
+                }}
+              />
+              {centers.length > 0 && (
+                <Select
+                  label="Centro"
+                  value={centerId}
+                  options={centerOptions}
+                  onChange={(event) => setCenterId(event.target.value)}
+                />
+              )}
+            </div>
+            {saveError && (
+              <p role="alert" className="text-[12px] text-negative">
+                {saveError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="md" onClick={closeForm}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="md">
+                {saving ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
+          </fieldset>
+        </form>
+      ) : (
+        <div>
+          <Button
+            variant="secondary"
+            size="md"
+            icon={<Plus size={14} />}
+            onClick={() => setCreating(true)}
+          >
+            Agregar cuenta
+          </Button>
+        </div>
+      )}
       {formatting && (
         <CheckLayoutModal account={formatting} date={asOf} onClose={() => setFormatting(null)} />
       )}

@@ -8,7 +8,6 @@ import {
   ChevronsUpDown,
   Coins,
   FileText,
-  Plus,
   Upload,
   X,
 } from "lucide-react";
@@ -41,7 +40,6 @@ import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
-import { ManualPayablePanel } from "./manual-payable-panel";
 import { AgingBadge, ApprovalDots, CashBadge, PriorityBadge } from "./payable-badges";
 import { PayableDetailPanel } from "./payable-detail-panel";
 import { PayablesUploadModal } from "./payables-upload-modal";
@@ -71,7 +69,6 @@ export function PayablesView() {
   } = useCashFlowData();
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const [manualOpen, setManualOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -206,14 +203,6 @@ export function PayablesView() {
               {allCollapsed ? "Expandir todo" : "Colapsar todo"}
             </Button>
           )}
-          <Button
-            variant="secondary"
-            size="toolbar"
-            icon={<Plus size={14} />}
-            onClick={() => setManualOpen(true)}
-          >
-            Agregar obligación
-          </Button>
         </div>
 
         {selectedVisible.length > 0 && (
@@ -262,7 +251,6 @@ export function PayablesView() {
       </div>
 
       {open && <PayableDetailPanel payable={open} onClose={() => setOpenId(null)} />}
-      {manualOpen && <ManualPayablePanel onClose={() => setManualOpen(false)} />}
       <PayablesUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </CashFlowEmptyState>
   );

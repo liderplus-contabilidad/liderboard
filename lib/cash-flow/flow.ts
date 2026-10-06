@@ -2,7 +2,8 @@
  * The flow, DERIVED. A `PaymentFlow` stores only what was captured at a date — a balance per account
  * and the incomes — and everything the paper shows is computed here from that, from the
  * accounts (their overdraft), from the check register (`outstandingByAccount` at the date) and from
- * the documents' MARKS (`priority`, `payFromAccountId`, `markedAmount`). It is the third seam of the
+ * the documents' MARKS and the independent manual obligations (`priority`, `payFromAccountId`,
+ * `markedAmount`). It is the third seam of the
  * old workbooks — cheques → flujo, detalle → resumen, cartera → decisión — turned into one function
  * the screen, Resumen, the report and the Excel all read.
  *
@@ -34,6 +35,7 @@ import type {
   Check,
   FlowIncome,
   Payable,
+  ManualObligation,
   PaymentFlow,
   PayPriority,
 } from "./types";
@@ -135,6 +137,8 @@ export interface DeriveFlowInput {
   accounts: readonly BankAccount[];
   centers: readonly CashFlowCenter[];
   payables: readonly Payable[];
+  /** The independent manual list of Flujo; never a cartera reading. */
+  obligations?: readonly ManualObligation[];
   checks: readonly Check[];
   /** The previous flow's date: what was settled AFTER it counts as paid in this window. Without one,
    *  only the date's own settlements are listed. */
@@ -146,7 +150,11 @@ function round2(value: number): number {
 }
 
 export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
-  const { date, flow, accounts, centers, payables, checks } = input;
+  const { date, flow, accounts, centers, checks } = input;
+  const payables = [
+    ...input.payables,
+    ...(input.obligations ?? []).filter((row) => row.cutDate <= date),
+  ];
   const outstanding = outstandingByAccount(checks, date);
   const marked = payables.filter((payable) => payable.status === "open" && payable.priority);
   // With ONE account there is nothing to choose: what carries no account belongs to it.

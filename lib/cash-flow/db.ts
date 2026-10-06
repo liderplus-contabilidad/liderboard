@@ -17,9 +17,10 @@ import { mergeCut, type IncomingPayable } from "./cut";
 import { applyNotes } from "./cell-notes";
 import type { CheckLayout } from "./check-print/layout";
 import { todayISO } from "./dates";
+import { approvedFromTyped } from "./derive";
 import { overdraftDatesError } from "./overdraft";
 import { accountRef } from "./export/cartera-workbook";
-import { checkId, payableId } from "./identity";
+import { checkId, payableId, legacyObligationKey } from "./identity";
 import { cashColumnRole, type ParsedCashSheet } from "./upload/cash-entries";
 import type { StoredPayableRow } from "./upload/liderplus";
 import type {
@@ -32,6 +33,7 @@ import type {
   ParsedCheck,
   Payable,
   PayableKind,
+  ManualObligation,
   PaymentFlow,
   VoucherLetterhead,
 } from "./types";
@@ -74,19 +76,20 @@ const CASH_FLOW_STORES_V4 = {
   cashEntries: "id, clientId, [clientId+section]",
 } as const;
 
-class CashFlowDb extends Dexie {
+export class CashFlowDb extends Dexie {
   clients!: Table<CashFlowClient, string>;
   centers!: Table<CashFlowCenter, string>;
   accounts!: Table<BankAccount, string>;
   payables!: Table<Payable, string>;
+  manualObligations!: Table<ManualObligation, string>;
   checks!: Table<Check, string>;
   flows!: Table<PaymentFlow, string>;
   cashEntries!: Table<CashEntry, string>;
   meta!: Table<CutMeta, string>;
   active!: Table<ActiveClientRow, string>;
 
-  constructor() {
-    super("liderboard-cash-flow");
+  constructor(name = "liderboard-cash-flow") {
+    super(name);
     // v1 was an UNRELEASED prototype whose code was lost before this module was written: its rows
     // do not have this shape (a check without `voucher`, a `flows` table with another key) and
     // nothing in them is worth migrating. v2 drops every table it may have left in a browser and v3
@@ -107,6 +110,21 @@ class CashFlowDb extends Dexie {
             row.cash ??= false;
           }),
       );
+    this.version(5)
+      .stores({ ...CASH_FLOW_STORES_V4, manualObligations: "id, clientId, [clientId+status]" })
+      .upgrade(async (tx) => {
+        const rows = await tx
+          .table("payables")
+          .filter((row: Payable) => row.source === "manual")
+          .toArray();
+        await tx.table("manualObligations").bulkPut(
+          rows.map((row: ManualObligation) => ({
+            ...row,
+            priority: row.status === "open" ? (row.priority ?? "urgent") : row.priority,
+          })),
+        );
+        await tx.table("payables").bulkDelete(rows.map((row: Payable) => row.id));
+      });
   }
 }
 
@@ -149,7 +167,7 @@ export async function updateClientLetterhead(
 
 /**
  * Deletes an empresa and EVERYTHING that hangs off it — centers, accounts, cartera, checks, flows,
- * cash entries and cut metadata — in ONE transaction. No other empresa is touched. Deleting the open one hands
+ * manual obligations, cash entries and cut metadata — in ONE transaction. No other empresa is touched. Deleting the open one hands
  * the module to the first remaining BY NAME.
  */
 export async function deleteClient(clientId: string): Promise<void> {
@@ -160,6 +178,7 @@ export async function deleteClient(clientId: string): Promise<void> {
       db.centers,
       db.accounts,
       db.payables,
+      db.manualObligations,
       db.checks,
       db.flows,
       db.cashEntries,
@@ -171,6 +190,7 @@ export async function deleteClient(clientId: string): Promise<void> {
         db.centers.where("clientId").equals(clientId).delete(),
         db.accounts.where("clientId").equals(clientId).delete(),
         db.payables.where("clientId").equals(clientId).delete(),
+        db.manualObligations.where("clientId").equals(clientId).delete(),
         db.checks.where("clientId").equals(clientId).delete(),
         db.flows.where("clientId").equals(clientId).delete(),
         db.cashEntries.where("clientId").equals(clientId).delete(),
@@ -236,16 +256,18 @@ export interface CashFlowClientContents {
   payableCount: number;
   checkCount: number;
   flowCount: number;
+  obligationCount: number;
 }
 
 export async function describeClientContents(clientId: string): Promise<CashFlowClientContents> {
-  const [accountCount, payableCount, checkCount, flowCount] = await Promise.all([
+  const [accountCount, payableCount, checkCount, flowCount, obligationCount] = await Promise.all([
     db.accounts.where("clientId").equals(clientId).count(),
     db.payables.where("clientId").equals(clientId).count(),
     db.checks.where("clientId").equals(clientId).count(),
     db.flows.where("clientId").equals(clientId).count(),
+    db.manualObligations.where("clientId").equals(clientId).count(),
   ]);
-  return { accountCount, payableCount, checkCount, flowCount };
+  return { accountCount, payableCount, checkCount, flowCount, obligationCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -355,13 +377,24 @@ export async function updateAccount(
 
 /** Deletes an account; its checks and marked documents fall back to «sin cuenta», never deleted. */
 export async function deleteAccount(accountId: string): Promise<void> {
-  await db.transaction("rw", db.accounts, db.checks, db.payables, db.flows, async () => {
-    await db.checks.filter((check) => check.accountId === accountId).modify({ accountId: null });
-    await db.payables
-      .filter((payable) => payable.payFromAccountId === accountId)
-      .modify({ payFromAccountId: null });
-    await db.accounts.delete(accountId);
-  });
+  await db.transaction(
+    "rw",
+    db.accounts,
+    db.checks,
+    db.payables,
+    db.manualObligations,
+    db.flows,
+    async () => {
+      await db.checks.filter((check) => check.accountId === accountId).modify({ accountId: null });
+      await db.payables
+        .filter((payable) => payable.payFromAccountId === accountId)
+        .modify({ payFromAccountId: null });
+      await db.manualObligations
+        .filter((row) => row.payFromAccountId === accountId)
+        .modify({ payFromAccountId: null });
+      await db.accounts.delete(accountId);
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -416,13 +449,14 @@ export async function applyCut(
  * and settled, marks included — in ONE transaction. Not a cut: a cut merges what a SYSTEM exported
  * and settles the absent; this puts back what THIS module exported, as it was. The account each
  * row names is resolved by label against the empresa's accounts; one it does not have reads as
- * «sin cuenta». The cuts in force are left as they were.
+ * «sin cuenta». The cuts in force and manual obligations are left as they were. Legacy manual
+ * rows are routed to Flujo without duplicating existing equivalents.
  */
 export async function replaceCartera(
   clientId: string,
   rows: readonly StoredPayableRow[],
 ): Promise<number> {
-  return db.transaction("rw", db.payables, db.accounts, async () => {
+  return db.transaction("rw", db.payables, db.accounts, db.manualObligations, async () => {
     const accounts = await db.accounts.where("clientId").equals(clientId).toArray();
     const byRef = new Map(
       accounts.map((account) => [normalizeLabel(accountRef(account)), account.id]),
@@ -463,7 +497,30 @@ export async function replaceCartera(
       cutDate: row.cutDate || today,
     }));
     await db.payables.where("clientId").equals(clientId).delete();
-    await db.payables.bulkPut(payables);
+    await db.payables.bulkPut(payables.filter((row) => row.source !== "manual"));
+    const existing = new Map<string, ManualObligation[]>();
+    for (const row of await listManualObligations(clientId)) {
+      const key = legacyObligationKey(row);
+      const group = existing.get(key) ?? [];
+      group.push(row);
+      existing.set(key, group);
+    }
+    const occurrences = new Map<string, number>();
+    for (const row of payables.filter((row) => row.source === "manual")) {
+      // Preserve both repeated rows in a workbook and existing migrated/manual entries.
+      const key = legacyObligationKey(row);
+      const occurrence = occurrences.get(key) ?? 0;
+      occurrences.set(key, occurrence + 1);
+      const id = `legacy-manual::${clientId}::${key}::${occurrence}`;
+      if (!existing.get(key)?.[occurrence] && !(await db.manualObligations.get(id))) {
+        await db.manualObligations.add({
+          ...row,
+          id,
+          source: "manual",
+          priority: row.status === "open" ? (row.priority ?? "urgent") : row.priority,
+        });
+      }
+    }
     return payables.length;
   });
 }
@@ -472,7 +529,7 @@ export async function listCuts(clientId: string): Promise<CutMeta[]> {
   return db.meta.where("clientId").equals(clientId).toArray();
 }
 
-export interface ManualPayableInput {
+export interface ManualObligationInput {
   supplier: string;
   kind: PayableKind;
   amount: number;
@@ -481,12 +538,13 @@ export interface ManualPayableInput {
   description: string;
 }
 
-export async function addManualPayable(
+export async function addManualObligation(
   clientId: string,
-  input: ManualPayableInput,
-): Promise<Payable> {
-  const today = todayISO();
-  const payable: Payable = {
+  input: ManualObligationInput,
+  date = todayISO(),
+): Promise<ManualObligation> {
+  const today = date;
+  const payable: ManualObligation = {
     id: crypto.randomUUID(),
     clientId,
     source: "manual",
@@ -503,7 +561,7 @@ export async function addManualPayable(
     balance: input.amount,
     centerName: input.centerName,
     kind: input.kind,
-    priority: null,
+    priority: "urgent",
     cash: false,
     payOn: null,
     payFromAccountId: null,
@@ -515,7 +573,7 @@ export async function addManualPayable(
     settledOn: null,
     cutDate: today,
   };
-  await db.payables.add(payable);
+  await db.manualObligations.add(payable);
   return payable;
 }
 
@@ -561,12 +619,61 @@ export async function reopenPayable(payableId: string): Promise<void> {
   await db.payables.update(payableId, { status: "open", settledOn: null });
 }
 
-/** Only a MANUAL obligation can be deleted: an imported document is the file's, and the cut owns it. */
-export async function deleteManualPayable(payableId: string): Promise<void> {
-  const row = await db.payables.get(payableId);
-  if (row?.source === "manual") {
-    await db.payables.delete(payableId);
-  }
+/** Obligations are read separately so no cartera reader can accidentally include them. */
+export async function listManualObligations(clientId: string): Promise<ManualObligation[]> {
+  return db.manualObligations.where("clientId").equals(clientId).toArray();
+}
+
+export type ManualObligationPatch = PayablePatch & Partial<ManualObligationInput>;
+
+export async function updateManualObligation(
+  clientId: string,
+  id: string,
+  patch: ManualObligationPatch,
+): Promise<void> {
+  await db.transaction("rw", db.manualObligations, async () => {
+    const row = await db.manualObligations.get(id);
+    if (!row || row.clientId !== clientId)
+      throw new Error("La obligación no pertenece a esta empresa.");
+    if (patch.amount !== undefined && (!Number.isFinite(patch.amount) || patch.amount <= 0)) {
+      throw new Error("Escribe un monto mayor que cero.");
+    }
+    await db.manualObligations.update(id, {
+      ...patch,
+      ...(patch.supplier !== undefined ? { supplier: patch.supplier.trim() } : {}),
+      ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
+      ...(patch.amount !== undefined
+        ? {
+            balance: patch.amount,
+            approved: row.approved === null ? null : approvedFromTyped(row.approved, patch.amount),
+          }
+        : {}),
+    });
+  });
+}
+
+export async function settleManualObligation(
+  clientId: string,
+  id: string,
+  date: string,
+): Promise<void> {
+  await db.manualObligations.where({ id, clientId }).modify({
+    status: "settled",
+    settledOn: date,
+    priority: null,
+  });
+}
+
+export async function reopenManualObligation(clientId: string, id: string): Promise<void> {
+  await db.manualObligations.where({ id, clientId }).modify({
+    status: "open",
+    settledOn: null,
+    priority: "urgent",
+  });
+}
+
+export async function deleteManualObligation(clientId: string, id: string): Promise<void> {
+  await db.manualObligations.where({ id, clientId }).delete();
 }
 
 // ---------------------------------------------------------------------------

@@ -267,14 +267,17 @@ own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.
   The builder's input is the parser's output, so the round-trip test is a structural equality.
 
 **Cuentas por Pagar** · `/cash-flow` (Resumen · Cartera · Cheques · Flujo · Cargas cash) · `lib/cash-flow/` ·
-its own Dexie base `liderboard-cash-flow` v4 (v1–v2 retire a lost prototype, v4 adds `cashEntries`) partitioned by `clientId`; its own list of EMPRESAS (like
+its own Dexie base `liderboard-cash-flow` v5 (v1–v2 retire a lost prototype, v4 adds `cashEntries`, v5 separates `manualObligations`) partitioned by `clientId`; its own list of EMPRESAS (like
 Rol de Pagos), each declaring CENTERS (HA · HC · HK, optional) and BANK ACCOUNTS (banco · número ·
 sobregiro · centro) in «Configurar».
 
 - **The FECHA DE CORTE is one control of the bar, read by the four dated tabs** (Cargas cash is a live list) (`asOf` in the provider,
   today by default, chip «Al dd/mm/aaaa» otherwise). Nothing ages, sums or captures at any other date.
-- **ONE table for what is owed** (`payables`): a Contífico/Dingoo document and a manual obligation
-  (SRI, IESS, arriendo, sueldos…) are the same row with a different `source`. `identity.ts` composes
+- **Cartera owns imported documents** (`payables`); **Flujo owns manual obligations**
+  (`manualObligations`: SRI, IESS, arriendo, sueldos…). Both share the `Payable` reading contract
+  so `deriveFlow` remains the one definition of totals. Manual obligations are created, edited,
+  paid and removed only in Flujo and carry between dates until paid or removed. v5 migrates existing
+  manuals with their ids and fields; an open unmarked one becomes urgent. `identity.ts` composes
   a document's id from what the file says, so a reload upserts and KEEPS the mark and the four
   working columns; `cut.ts` (`mergeCut`) settles what the same `source` stopped bringing and never
   deletes — a flow of two weeks ago still reads it.
@@ -303,7 +306,11 @@ sobregiro · centro) in «Configurar».
   second surface for the same mark Cuentas por pagar writes, never a copy. `approvedFromTyped` is
   the one reading of a typed amount (`< saldo` partial · `= saldo` whole, stored `null` · `> saldo`
   clamped). The flow is fed from there too: «Agregar de la cartera» (`flow-cartera-picker.tsx`,
-  marks urgente) and «Agregar obligación» (`markAs`). Cuentas por pagar's bulk bar has «Pagar desde».
+  marks urgente) and «Agregar obligación» (born urgent in `manualObligations`). A manual row's name
+  opens its edit form; «Marcar pagado», «Reabrir» and «Quitar» operate only on that empresa's obligation.
+  Imported rows still write their document; replacing Cartera cannot erase manual obligations.
+  Old cartera Excels containing manuals route them to Flujo without duplicating on reload.
+  Cuentas por pagar's bulk bar has «Pagar desde».
 - **The matrix is the flow's other shape** (`matrix.ts`, COMISERSA's `FLUJO MATRIZ`): one row per
   account, one column per BENEFICIARIO with marked documents (by marked total desc), cell = Σ urgente
   - pendiente paid from that account. DERIVED, never stored, READ-ONLY (a cell can add several

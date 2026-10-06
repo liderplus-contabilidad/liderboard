@@ -42,9 +42,12 @@ export function ReportTable({
   fit,
   rowStyle,
   cellStyle,
+  wrapLabels = false,
 }: {
   table: ChartTable;
   fit: StatementFit;
+  /** Long document details must remain readable on paper. */
+  wrapLabels?: boolean;
   /** Optional: how a report colours its rows (a heading, a total). Absent, every row is plain. */
   rowStyle?: (row: ChartTableRow) => ReportRowStyle | undefined;
   /** Optional: how a report colours a figure by what its column means. Absent, figures are ink. */
@@ -122,9 +125,16 @@ export function ReportTable({
                       />
                     )}
                     <span className="min-w-0">
-                      <span className="block truncate">{row.label}</span>
+                      <span className={wrapLabels ? "block break-words" : "block truncate"}>
+                        {row.label}
+                      </span>
                       {row.sublabel && (
-                        <span className="block truncate font-mono text-[9px] font-normal text-faint">
+                        <span
+                          className={cn(
+                            "block font-mono text-[9px] font-normal text-faint",
+                            wrapLabels ? "break-words" : "truncate",
+                          )}
+                        >
                           {row.sublabel}
                         </span>
                       )}

@@ -11,7 +11,7 @@
  * book, so reloading the whole history upserts instead of duplicating twelve thousand rows.
  */
 import { normalizeLabel } from "@/lib/workspaces";
-import type { PayableSource } from "./types";
+import type { Payable, PayableSource } from "./types";
 
 export function payableId(
   clientId: string,
@@ -31,4 +31,22 @@ export function payableId(
 
 export function checkId(clientId: string, voucher: string): string {
   return `${clientId}::${voucher.trim()}`;
+}
+
+/** Old cartera workbooks omit ids; match their manual rows without changing a live obligation. */
+export function legacyObligationKey(
+  row: Pick<
+    Payable,
+    "supplier" | "kind" | "amount" | "description" | "issuedOn" | "dueOn" | "centerName"
+  >,
+): string {
+  return JSON.stringify([
+    row.supplier,
+    row.kind,
+    row.amount,
+    row.description,
+    row.issuedOn,
+    row.dueOn,
+    row.centerName,
+  ]);
 }

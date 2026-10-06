@@ -866,8 +866,8 @@ PyG. Cada empresa lo declara en **«Configurar»**.
 - **La fecha de corte es un control de la barra** («Corte», hoy por defecto, chip «Al dd/mm/aaaa»
   si es otra) y la leen las cuatro pestañas fechadas por igual: nada se envejece, suma ni captura a
   otra fecha. Cargas cash es una lista viva y no la lee.
-- **Cartera** es una sola tabla para lo que se debe: un documento de Contífico/Dingoo y una
-  obligación manual (SRI, IESS, arriendo, sueldos…) son la misma fila con distinta `source`. La
+- **Cartera** contiene los documentos cargados de Contífico/Dingoo. Las obligaciones manuales
+  se manejan exclusivamente en Flujo y quedan fuera de Cartera y de su Excel. La
   **antigüedad se deriva** a la fecha de corte (`aging.ts`); los tramos que trae el archivo se
   descartan. **Una carga es un corte**: lo que viene se actualiza conservando marcas y aprobaciones,
   lo que deja de venir se **liquida** (nunca se borra; «Ver liquidadas» lo muestra). El archivo
@@ -885,7 +885,11 @@ PyG. Cada empresa lo declara en **«Configurar»**.
   deriva el resto (`flow.ts`): disponible, no cobrados, urgente, pendiente, saldo final, faltante y
   los **préstamos entre centros** (un documento de un centro pagado desde la cuenta de otro). Es la
   hoja de trabajo: «Pagos marcados» se edita en línea (estado · cuenta · monto · fecha) y cada celda
-  escribe el documento, no una copia; «Agregar de la cartera» marca urgentes; «Ver como matriz» es
+  escribe el documento importado o la obligación manual correspondiente; «Agregar de la cartera»
+  marca urgentes. **«Agregar obligación»** crea SRI, IESS, arriendo, sueldos y otros conceptos solo
+  en Flujo; se editan pulsando su nombre y continúan en las siguientes fechas hasta pagarlas o
+  quitarlas. Se guardan aparte (`manualObligations`, Dexie v5), por lo que reemplazar Cartera no
+  las afecta; las existentes se migran conservando sus datos. «Ver como matriz» es
   el `FLUJO MATRIZ` (cuentas × beneficiarios), derivado y de solo lectura.
 - **Cargas cash** son las tres matrices del libro —MOVIMIENTO INICIAL y VARIOS escritas a mano, con
   un monto por centro y un préstamo opcional por fila; PROVEEDORES derivada de los documentos con la

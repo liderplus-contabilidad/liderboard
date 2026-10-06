@@ -9,49 +9,39 @@ import { Select } from "@/components/ui/select";
 import { SidePanel } from "@/components/ui/side-panel";
 import * as cashDb from "@/lib/cash-flow/db";
 import { BUILTIN_KINDS, customKinds, kindLabel, normalizeKind } from "@/lib/cash-flow/derive";
-import type { PayableKind, PayPriority } from "@/lib/cash-flow/types";
+import type { Payable, PayableKind } from "@/lib/cash-flow/types";
+import { resolveCenterId } from "@/lib/cash-flow/filters";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 const NO_CENTER = "";
 /** The option that opens the name field: never a class itself, so no typed name can collide. */
 const NEW_KIND = "\u0000new";
 
-/**
- * «Agregar obligación»: what no accounting system exports — SRI, IESS, the rent, the payroll, a
- * loan instalment — typed by hand into the SAME list as the imported documents, so the flow, the
- * Excel and the report paint one cartera. Born unmarked, like a document a cut just brought.
- *
- * «Clase» offers the built-ins, then the classes this empresa already typed (`customKinds`, read off
- * its payables so nothing has to be stored), then «Nueva clase…», which opens a name field. The
- * name goes through `normalizeKind`, so typing «Arriendo» lands on the built-in and not beside it.
- */
-/**
- * `markAs`: the priority the new obligation is born with. From Flujo it is «urgent» — an obligation
- * added from the flow IS in the flow, as a row typed in the sheet is — and from Cuentas por pagar
- * it is absent, so the obligation joins the cartera unmarked like any other document.
- */
+/** Manual obligations belong to Flujo and stay there until paid or removed. */
 export function ManualPayablePanel({
   onClose,
-  markAs,
+  obligation,
 }: {
   onClose: () => void;
-  markAs?: PayPriority;
+  obligation?: Payable;
 }) {
-  const { activeClientId, centers, payables } = useCashFlowData();
-  const [supplier, setSupplier] = useState("");
-  const [kind, setKind] = useState<PayableKind>("otros");
+  const { activeClientId, centers, obligations, asOf } = useCashFlowData();
+  const [supplier, setSupplier] = useState(obligation?.supplier ?? "");
+  const [kind, setKind] = useState<PayableKind>(obligation?.kind ?? "otros");
   const [newKind, setNewKind] = useState("");
-  const used = useMemo(() => customKinds(payables), [payables]);
-  const [amount, setAmount] = useState<number | null>(null);
-  const [dueOn, setDueOn] = useState<string | null>(null);
-  const [centerId, setCenterId] = useState(NO_CENTER);
-  const [description, setDescription] = useState("");
+  const used = useMemo(() => customKinds(obligations), [obligations]);
+  const [amount, setAmount] = useState<number | null>(obligation?.amount ?? null);
+  const [dueOn, setDueOn] = useState<string | null>(obligation?.dueOn ?? null);
+  const [centerId, setCenterId] = useState(
+    resolveCenterId(obligation?.centerName ?? null, centers) ?? NO_CENTER,
+  );
+  const [description, setDescription] = useState(obligation?.description ?? "");
   const [error, setError] = useState<string | undefined>();
   const [kindError, setKindError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
   const save = useCallback(async () => {
-    if (!activeClientId) {
+    if (!activeClientId || busy) {
       return;
     }
     if (!supplier.trim()) {
@@ -70,18 +60,22 @@ export function ManualPayablePanel({
     setBusy(true);
     try {
       const center = centers.find((candidate) => candidate.id === centerId);
-      const created = await cashDb.addManualPayable(activeClientId, {
+      const input = {
         supplier,
         kind: resolvedKind,
         amount,
         dueOn,
         centerName: center?.name ?? null,
         description,
-      });
-      if (markAs) {
-        await cashDb.updatePayable(created.id, { priority: markAs });
+      };
+      if (obligation) {
+        await cashDb.updateManualObligation(activeClientId, obligation.id, input);
+      } else {
+        await cashDb.addManualObligation(activeClientId, input, asOf);
       }
       onClose();
+    } catch {
+      setError("No se pudo guardar la obligación. Intenta de nuevo.");
     } finally {
       setBusy(false);
     }
@@ -95,12 +89,19 @@ export function ManualPayablePanel({
     centerId,
     centers,
     description,
-    markAs,
+    obligation,
+    asOf,
+    busy,
     onClose,
   ]);
 
   return (
-    <SidePanel eyebrow="Cuentas por pagar" title="Agregar obligación" width={440} onClose={onClose}>
+    <SidePanel
+      eyebrow="Flujo"
+      title={obligation ? "Editar obligación" : "Agregar obligación"}
+      width={440}
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-4 px-5 pb-6">
         <TextField
           label="Concepto o beneficiario"
@@ -177,7 +178,7 @@ export function ManualPayablePanel({
             Cancelar
           </Button>
           <Button size="sm" disabled={busy} onClick={() => void save()}>
-            Agregar
+            Guardar
           </Button>
         </div>
       </div>
