@@ -389,6 +389,9 @@ export async function deleteAccount(accountId: string): Promise<void> {
       await db.payables
         .filter((payable) => payable.payFromAccountId === accountId)
         .modify({ payFromAccountId: null });
+      await db.checks
+        .filter((row) => row.flowPayFromAccountId === accountId)
+        .modify({ flowPayFromAccountId: null });
       await db.manualObligations
         .filter((row) => row.payFromAccountId === accountId)
         .modify({ payFromAccountId: null });
@@ -746,6 +749,14 @@ export async function importChecks(
           ...row,
           note: kept?.note ?? "",
           expectedCashOn: kept?.expectedCashOn ?? row.expectedCashOn ?? null,
+          flowLinkedOn: kept?.flowLinkedOn ?? null,
+          flowPriority: kept?.flowPriority,
+          flowApproved:
+            kept?.flowApproved === undefined
+              ? undefined
+              : approvedFromTyped(kept.flowApproved, row.amount),
+          flowPayOn: kept?.flowPayOn,
+          flowPayFromAccountId: kept?.flowPayFromAccountId,
           ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
           ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
           ...(kept?.payments?.length ? { payments: kept.payments } : {}),
@@ -754,6 +765,55 @@ export async function importChecks(
     );
   });
   return { written: rows.length, unassigned };
+}
+
+/** Link existing checks in ONE write, bounded to the empresa. Removing a link keeps the check. */
+export async function setFlowCheckLinks(
+  clientId: string,
+  ids: readonly string[],
+  date: string | null,
+): Promise<void> {
+  const picked = new Set(ids);
+  await db.transaction("rw", db.checks, async () => {
+    await db.checks
+      .where("clientId")
+      .equals(clientId)
+      .filter((row) => picked.has(row.id))
+      .modify((row) => {
+        row.flowLinkedOn =
+          date === null
+            ? null
+            : row.flowLinkedOn && row.flowLinkedOn < date
+              ? row.flowLinkedOn
+              : date;
+      });
+  });
+}
+
+/** A check obligation writes its working fields to the register, never a payable copy. */
+export async function updateFlowCheck(
+  clientId: string,
+  id: string,
+  patch: PayablePatch,
+): Promise<void> {
+  await db.checks.where({ id, clientId }).modify((check) => {
+    if (patch.priority) check.flowPriority = patch.priority;
+    if ("approved" in patch)
+      check.flowApproved = approvedFromTyped(patch.approved ?? null, check.amount);
+    if ("payOn" in patch) check.flowPayOn = patch.payOn;
+    if ("payFromAccountId" in patch) check.flowPayFromAccountId = patch.payFromAccountId;
+  });
+}
+
+/** Paying a cheque obligation is its actual collection; re-opening returns it to delivered. */
+export async function settleFlowCheck(
+  clientId: string,
+  id: string,
+  date: string | null,
+): Promise<void> {
+  await db.checks
+    .where({ id, clientId })
+    .modify({ cashedOn: date, step: date ? "cashed" : "delivered" });
 }
 
 export type CheckInput = Omit<Check, "id" | "clientId">;

@@ -107,13 +107,13 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
           disabled: empty,
           disabledReason: "Declara una cuenta bancaria primero.",
           run: async () => {
-            const [{ buildFlowReport }, mod, shared, { downloadBlob }] = await Promise.all([
-              import("@/lib/cash-flow/report"),
+            const [{ buildPdfFlowReport }, mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/pdf-report"),
               import("@/lib/cash-flow/export/flow-workbook"),
               import("@/lib/cash-flow/export/shared"),
               import("@/lib/download"),
             ]);
-            const report = buildFlowReport({
+            const report = buildPdfFlowReport({
               clientName: companyName,
               ...(logo ? { logo } : {}),
               derived,

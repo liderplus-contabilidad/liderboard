@@ -6,7 +6,9 @@ import {
   Copy,
   Flag,
   Landmark,
-  ListPlus,
+  FileText,
+  PenLine,
+  Banknote,
   Plus,
   Scale,
   RotateCcw,
@@ -26,12 +28,7 @@ import { NumericInput } from "@/components/ui/numeric-input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
-import {
-  balanceNoteKey,
-  overdraftNoteKey,
-  payableNoteKey,
-  type PayableNoteField,
-} from "@/lib/cash-flow/cell-notes";
+import { payableNoteKey, type PayableNoteField } from "@/lib/cash-flow/cell-notes";
 import * as cashDb from "@/lib/cash-flow/db";
 import {
   approvedFromTyped,
@@ -42,14 +39,17 @@ import {
   type SupplierGroup,
 } from "@/lib/cash-flow/derive";
 import { accountLabel, centerName, copyFlowFrom, type FlowLine } from "@/lib/cash-flow/flow";
-import { derivePaymentMatrix, type PaymentMatrix } from "@/lib/cash-flow/matrix";
-import type { FlowIncome, PayPriority } from "@/lib/cash-flow/types";
+import { derivePaymentMatrix, matrixTable, type PaymentMatrix } from "@/lib/cash-flow/matrix";
+import type { FlowIncome, FlowPayable, PayPriority } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
+import { FloatingActionMenu } from "@/components/ui/floating-action-menu";
+import { FlowCheckPicker } from "./flow-check-picker";
+import { FlowBankTable } from "./flow-bank-table";
 import { FlowCarteraPicker } from "./flow-cartera-picker";
 import { ManualPayablePanel } from "./manual-payable-panel";
 
@@ -60,16 +60,10 @@ const NO_NOTES: Readonly<Record<string, string>> = Object.freeze({});
 /** The two marks of payment each own a GROUND, the printed flow's and its Excel's too: the whole
  *  column wears it, zeros included, so urgent and pending read as two columns at a glance even on
  *  a flow with nothing urgent. */
-const URGENT_GROUND = "bg-marked";
+const URGENT_GROUND = "bg-urgent";
 const PENDING_GROUND = "bg-surface-calc-strong";
 
-/** The urgent is ALWAYS bold, its zeros too — it is the column read first — in plain ink: the
- *  amber is its ground, never its figures. */
 const URGENT_TONE = cn(URGENT_GROUND, "font-bold text-ink");
-
-function pendingTone(amount: number): string {
-  return cn(PENDING_GROUND, amount > 0 && "font-semibold");
-}
 
 type NoteWriter = (key: string, text: string) => void;
 
@@ -96,6 +90,8 @@ export function FlowView() {
   // The shape is a control of ONE card, read by nothing else, so it lives here and is not kept.
   const [shape, setShape] = useState<FlowShape>("lista");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [checksOpen, setChecksOpen] = useState(false);
+  const openChecks = useCallback(() => setChecksOpen(true), []);
   const [manualOpen, setManualOpen] = useState(false);
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const openManual = useCallback(() => setManualOpen(true), []);
@@ -218,186 +214,7 @@ export function FlowView() {
           ) : matrix ? (
             <PaymentMatrixTable matrix={matrix} />
           ) : (
-            <DataGrid
-              minWidth={
-                (hasChecks ? 980 : 860) + (hasIncomes ? (incomeColumns.length + 1) * 130 : 0)
-              }
-            >
-              <thead>
-                <tr>
-                  <HeadCell width={220}>Cuenta</HeadCell>
-                  <HeadCell align="right" width={130}>
-                    Saldo
-                  </HeadCell>
-                  <HeadCell align="right" width={130}>
-                    Sobregiro
-                  </HeadCell>
-                  <HeadCell align="right">Total bancos</HeadCell>
-                  {/* One column per income label, then their sum: the banks first, what comes in
-                      after, and the saldo final adds the two. */}
-                  {incomeColumns.map((column) => (
-                    <HeadCell
-                      key={column.key}
-                      align="right"
-                      width={130}
-                      className="whitespace-normal leading-[1.2]"
-                    >
-                      {column.label}
-                    </HeadCell>
-                  ))}
-                  {hasIncomes && (
-                    <HeadCell align="right" width={130}>
-                      Total ingresos
-                    </HeadCell>
-                  )}
-                  {hasChecks && <HeadCell align="right">Cheques no cobr.</HeadCell>}
-                  <HeadCell align="right">Urgente</HeadCell>
-                  <HeadCell align="right">Pendiente</HeadCell>
-                  <HeadCell align="right" sticky="right">
-                    Saldo final
-                  </HeadCell>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.accounts.map((row) => (
-                  <tr key={row.account.id}>
-                    {/* One line, as the sheet's row: the account and, after the dot, its center. */}
-                    <Cell>
-                      <span className="block truncate font-semibold text-ink">
-                        {accountLabel(row.account, [])}
-                        {hasCenters && (
-                          <span className="font-normal text-faint">
-                            {" · "}
-                            {row.account.centerId
-                              ? centerName(row.account.centerId, centers)
-                              : "De la empresa"}
-                          </span>
-                        )}
-                      </span>
-                    </Cell>
-                    <Cell numeric control className={cn("bg-marked/40", NOTE_HOST)}>
-                      <CellNote
-                        note={notes[balanceNoteKey(row.account.id)]}
-                        label={`Saldo de ${accountLabel(row.account, centers)}`}
-                        onChange={(text) => setNote(balanceNoteKey(row.account.id), text)}
-                      />
-                      <NumericInput
-                        value={flow?.balances[row.account.id] ?? null}
-                        nullable
-                        format="currency"
-                        placeholder="0.00"
-                        ariaLabel={`Saldo de ${accountLabel(row.account, centers)}`}
-                        onCommit={(value) => setBalance(row.account.id, value)}
-                      />
-                    </Cell>
-                    {/* The overdraft is the ACCOUNT's (it does not change from one date to the next),
-                      but it is captured here, where the sheet writes it, and not only in Configurar. */}
-                    <Cell numeric control className={cn("bg-marked/40", NOTE_HOST)}>
-                      <CellNote
-                        note={notes[overdraftNoteKey(row.account.id)]}
-                        label={`Sobregiro de ${accountLabel(row.account, centers)}`}
-                        onChange={(text) => setNote(overdraftNoteKey(row.account.id), text)}
-                      />
-                      <NumericInput
-                        value={row.account.overdraft}
-                        format="currency"
-                        placeholder="0.00"
-                        ariaLabel={`Sobregiro de ${accountLabel(row.account, centers)}`}
-                        onCommit={(value) =>
-                          void cashDb.updateAccount(row.account.id, { overdraft: value ?? 0 })
-                        }
-                      />
-                    </Cell>
-                    <Cell numeric strong value={row.bankTotal}>
-                      {money(row.bankTotal)}
-                    </Cell>
-                    {incomeColumns.map((column) => (
-                      <Cell key={column.key} numeric>
-                        {money(column.byAccount[row.account.id] ?? 0)}
-                      </Cell>
-                    ))}
-                    {hasIncomes && (
-                      <Cell numeric strong>
-                        {money(row.incomes)}
-                      </Cell>
-                    )}
-                    {hasChecks && (
-                      <Cell numeric className="text-crosslink">
-                        {money(row.outstanding)}
-                      </Cell>
-                    )}
-                    <Cell numeric className={URGENT_TONE}>
-                      {money(row.urgent)}
-                    </Cell>
-                    <Cell numeric className={pendingTone(row.pending)}>
-                      {money(row.pending)}
-                    </Cell>
-                    <Cell numeric strong sticky="right" value={row.remaining}>
-                      {money(row.remaining)}
-                    </Cell>
-                  </tr>
-                ))}
-                {(derived.unassignedMarked.urgent > 0 ||
-                  derived.unassignedMarked.pending > 0 ||
-                  derived.unassignedIncomes > 0) && (
-                  <GridRow muted>
-                    <Cell className="text-[11.5px] text-faint" colSpan={4}>
-                      Sin cuenta asignada
-                    </Cell>
-                    {incomeColumns.map((column) => (
-                      <Cell key={column.key} numeric>
-                        {money(column.unassigned)}
-                      </Cell>
-                    ))}
-                    {hasIncomes && <Cell numeric>{money(derived.unassignedIncomes)}</Cell>}
-                    {hasChecks && <Cell />}
-                    <Cell numeric className={URGENT_TONE}>
-                      {money(derived.unassignedMarked.urgent)}
-                    </Cell>
-                    <Cell numeric className={pendingTone(derived.unassignedMarked.pending)}>
-                      {money(derived.unassignedMarked.pending)}
-                    </Cell>
-                    <Cell sticky="right" />
-                  </GridRow>
-                )}
-                <tr className="bg-surface-sunken">
-                  <Cell strong>Total</Cell>
-                  <Cell numeric strong value={totals.balance}>
-                    {money(totals.balance)}
-                  </Cell>
-                  <Cell numeric strong>
-                    {money(totals.overdraft)}
-                  </Cell>
-                  <Cell numeric strong>
-                    {money(totals.bankTotal)}
-                  </Cell>
-                  {incomeColumns.map((column) => (
-                    <Cell key={column.key} numeric strong>
-                      {money(column.total)}
-                    </Cell>
-                  ))}
-                  {hasIncomes && (
-                    <Cell numeric strong>
-                      {money(totals.incomes)}
-                    </Cell>
-                  )}
-                  {hasChecks && (
-                    <Cell numeric strong className="text-crosslink">
-                      {money(totals.outstanding)}
-                    </Cell>
-                  )}
-                  <Cell numeric className={URGENT_TONE}>
-                    {money(totals.urgent)}
-                  </Cell>
-                  <Cell numeric strong>
-                    {money(totals.pending)}
-                  </Cell>
-                  <Cell numeric strong sticky="right" value={totals.remaining}>
-                    {money(totals.remaining)}
-                  </Cell>
-                </tr>
-              </tbody>
-            </DataGrid>
+            <FlowBankTable notes={notes} onNote={setNote} onBalance={setBalance} />
           )}
         </FlowSection>
 
@@ -406,6 +223,7 @@ export function FlowView() {
             notes={notes}
             onNote={setNote}
             onPickFromCartera={openPicker}
+            onPickFromChecks={openChecks}
             onAddManual={openManual}
           />
         )}
@@ -446,145 +264,57 @@ export function FlowView() {
         )}
       </div>
       <FlowCarteraPicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
+      {checksOpen && <FlowCheckPicker onClose={() => setChecksOpen(false)} />}
       {manualOpen && <ManualPayablePanel onClose={() => setManualOpen(false)} />}
     </CashFlowEmptyState>
   );
 }
 
-/**
- * COMISERSA's `FLUJO MATRIZ` on screen: the bank figures, one column per beneficiario, what each
- * account pays and what it keeps. Read-only (`matrix.ts` says why); the first column and the last
- * stay in view while the beneficiarios scroll under them.
- */
+/** Account columns keep the bank figures and beneficiaries growing downwards. */
 function PaymentMatrixTable({ matrix }: { matrix: PaymentMatrix }) {
-  const hasIncomes = matrix.incomeColumns.length > 0;
-  const leading =
-    3 + (hasIncomes ? matrix.incomeColumns.length + 1 : 0) + (matrix.hasChecks ? 1 : 0);
+  const table = useMemo(() => matrixTable(matrix), [matrix]);
+  const rows = table.rows;
   return (
-    <DataGrid minWidth={480 + leading * 120 + matrix.beneficiaries.length * 130}>
+    <DataGrid minWidth={240 + rows.length * 130}>
       <thead>
         <tr>
-          <HeadCell sticky="left" width={220}>
-            Cuenta
+          <HeadCell sticky="left" width={240}>
+            Concepto · beneficiario
           </HeadCell>
-          <HeadCell align="right" width={120}>
-            Saldo
-          </HeadCell>
-          <HeadCell align="right" width={120}>
-            Sobregiro
-          </HeadCell>
-          <HeadCell align="right" width={120}>
-            Total bancos
-          </HeadCell>
-          {matrix.incomeColumns.map((column) => (
+          {rows.map((row) => (
             <HeadCell
-              key={column.key}
-              align="right"
-              width={120}
-              className="whitespace-normal leading-[1.2]"
-            >
-              {column.label}
-            </HeadCell>
-          ))}
-          {hasIncomes && (
-            <HeadCell align="right" width={120}>
-              Total ingresos
-            </HeadCell>
-          )}
-          {matrix.hasChecks && (
-            <HeadCell align="right" width={120}>
-              Cheques no cobr.
-            </HeadCell>
-          )}
-          {matrix.beneficiaries.map((column) => (
-            <HeadCell
-              key={column.key}
+              key={row.id}
               align="right"
               width={130}
-              className="whitespace-normal leading-[1.2]"
+              sticky={row.id === "total" ? "right" : undefined}
+              className="whitespace-normal"
             >
-              {column.label}
+              {row.label}
             </HeadCell>
           ))}
-          <HeadCell align="right" width={130}>
-            Total marcado
-          </HeadCell>
-          <HeadCell align="right" width={130} sticky="right">
-            Saldo final
-          </HeadCell>
         </tr>
       </thead>
       <tbody>
-        {matrix.rows.map((row) => {
-          const total = row.kind === "total";
-          const loose = row.kind === "unassigned";
-          const cells = (
-            <>
-              <Cell
-                sticky="left"
-                strong={total}
-                className={loose ? "text-[11.5px] text-faint" : "font-semibold text-ink"}
-              >
-                {row.label}
+        {table.columns.map((column, index) => {
+          const total = column.startsWith("Total") || column === "Saldo final";
+          const ground = total ? "bg-brand [&>td]:bg-brand [&>td]:text-white" : undefined;
+          return (
+            <tr key={column} className={ground}>
+              <Cell sticky="left" strong={total} className={cn("font-semibold", ground)}>
+                {column}
               </Cell>
-              <Cell numeric strong={total}>
-                {loose ? "" : money(row.bank.balance)}
-              </Cell>
-              <Cell numeric strong={total}>
-                {loose ? "" : money(row.bank.overdraft)}
-              </Cell>
-              <Cell numeric strong={total}>
-                {loose ? "" : money(row.bank.bankTotal)}
-              </Cell>
-              {matrix.incomeColumns.map((column) => (
-                <Cell key={column.key} numeric strong={total}>
-                  {money(row.bank.incomeCells[column.key] ?? 0)}
+              {rows.map((row) => (
+                <Cell
+                  key={row.id}
+                  numeric
+                  strong={total || row.id === "total"}
+                  sticky={row.id === "total" ? "right" : undefined}
+                  className={ground}
+                >
+                  {row.values[index] ?? "—"}
                 </Cell>
               ))}
-              {hasIncomes && (
-                <Cell numeric strong>
-                  {money(row.bank.incomes)}
-                </Cell>
-              )}
-              {matrix.hasChecks && (
-                <Cell numeric strong={total}>
-                  {loose ? "" : money(row.bank.outstanding)}
-                </Cell>
-              )}
-              {matrix.beneficiaries.map((column) => {
-                const value = row.cells[column.key] ?? 0;
-                return (
-                  <Cell
-                    key={column.key}
-                    numeric
-                    strong={total}
-                    className={value > 0 ? "text-warning" : "text-faint"}
-                  >
-                    {value > 0 ? money(value) : "—"}
-                  </Cell>
-                );
-              })}
-              <Cell numeric strong className="text-warning">
-                {money(row.marked)}
-              </Cell>
-              <Cell
-                numeric
-                strong
-                sticky="right"
-                {...(row.remaining !== null ? { value: row.remaining } : {})}
-              >
-                {row.remaining === null ? "" : money(row.remaining)}
-              </Cell>
-            </>
-          );
-          return total ? (
-            <tr key={row.id} className="bg-surface-muted">
-              {cells}
             </tr>
-          ) : (
-            <GridRow key={row.id} muted={loose}>
-              {cells}
-            </GridRow>
           );
         })}
       </tbody>
@@ -603,7 +333,9 @@ function SettledSection() {
   if (derived.settled.length === 0) {
     return null;
   }
-  const hasManual = derived.settled.some(({ payable }) => payable.source === "manual");
+  const hasManual = derived.settled.some(
+    ({ payable }) => payable.source === "manual" || payable.source === "check",
+  );
   const window = derived.settledSince
     ? `desde el ${formatDayMonthYear(derived.settledSince)}`
     : "en la fecha de corte";
@@ -647,19 +379,22 @@ function SettledSection() {
                 </Cell>
                 {hasManual && (
                   <Cell control>
-                    {payable.source === "manual" && activeClientId && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        iconOnly
-                        icon={<RotateCcw size={13} />}
-                        aria-label={`Reabrir obligación ${payable.supplier}`}
-                        title="Reabrir obligación"
-                        onClick={() =>
-                          void cashDb.reopenManualObligation(activeClientId, payable.id)
-                        }
-                      />
-                    )}
+                    {(payable.source === "manual" || payable.source === "check") &&
+                      activeClientId && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconOnly
+                          icon={<RotateCcw size={13} />}
+                          aria-label={`Reabrir obligación ${payable.supplier}`}
+                          title="Reabrir obligación"
+                          onClick={() =>
+                            payable.source === "check"
+                              ? void cashDb.settleFlowCheck(activeClientId, payable.checkId, null)
+                              : void cashDb.reopenManualObligation(activeClientId, payable.id)
+                          }
+                        />
+                      )}
                   </Cell>
                 )}
               </tr>
@@ -868,11 +603,13 @@ function MarkedSection({
   notes,
   onNote,
   onPickFromCartera,
+  onPickFromChecks,
   onAddManual,
 }: {
   notes: Readonly<Record<string, string>>;
   onNote: NoteWriter;
   onPickFromCartera: () => void;
+  onPickFromChecks: () => void;
   onAddManual: () => void;
 }) {
   const { derived, accounts, centers, asOf, activeClientId } = useCashFlowData();
@@ -889,7 +626,15 @@ function MarkedSection({
   );
   const patch = useCallback(
     (id: string, fields: cashDb.PayablePatch) => {
-      if (lineById.get(id)?.payable.source === "manual") {
+      const payable = lineById.get(id)?.payable;
+      if (payable?.source === "check") {
+        if (!activeClientId) return;
+        if (fields.priority === null) {
+          void cashDb.setFlowCheckLinks(activeClientId, [payable.checkId], null);
+        } else {
+          void cashDb.updateFlowCheck(activeClientId, payable.checkId, fields);
+        }
+      } else if (payable?.source === "manual") {
         if (!activeClientId) return;
         if (fields.priority === null) {
           void cashDb.deleteManualObligation(activeClientId, id);
@@ -903,20 +648,31 @@ function MarkedSection({
     [activeClientId, lineById],
   );
   const total = derived.totals.urgent + derived.totals.pending;
-  const adders = (
-    <>
-      <Button
-        variant="secondary"
-        size="sm"
-        icon={<ListPlus size={13} />}
-        onClick={onPickFromCartera}
-      >
-        Agregar de la cartera
-      </Button>
-      <Button variant="secondary" size="sm" icon={<Plus size={13} />} onClick={onAddManual}>
-        Agregar obligación
-      </Button>
-    </>
+  const sources = useMemo(
+    () => [
+      {
+        id: "cartera",
+        label: "Cartera",
+        description: "Documentos por pagar",
+        icon: <FileText size={21} />,
+        run: onPickFromCartera,
+      },
+      {
+        id: "checks",
+        label: "Cheques",
+        description: "Cheques registrados",
+        icon: <Banknote size={21} />,
+        run: onPickFromChecks,
+      },
+      {
+        id: "manual",
+        label: "Manual",
+        description: "Concepto y monto",
+        icon: <PenLine size={21} />,
+        run: onAddManual,
+      },
+    ],
+    [onPickFromCartera, onPickFromChecks, onAddManual],
   );
 
   return (
@@ -924,15 +680,14 @@ function MarkedSection({
       <SectionHeading
         icon={<Flag size={15} />}
         title="Pagos marcados"
-        hint={pluralize(derived.lines.length, "documento")}
+        hint={pluralize(derived.lines.length, "pago")}
       >
-        {adders}
+        <FloatingActionMenu label="Agregar pago" actions={sources} />
       </SectionHeading>
       {derived.groups.length === 0 ? (
         <EmptyState icon={<Flag size={22} />}>
           <span className="flex flex-col items-center gap-3 text-center">
-            <span>Sin pagos marcados.</span>
-            <span className="flex items-center gap-2">{adders}</span>
+            <span>Sin pagos agregados. Usa «Agregar pago» para comenzar.</span>
           </span>
         </EmptyState>
       ) : (
@@ -1015,7 +770,7 @@ function GroupRows({
   onNote,
   onPatch,
 }: {
-  group: SupplierGroup;
+  group: SupplierGroup<FlowPayable>;
   asOf: string;
   accountOptions: { value: string; label: string }[];
   lineById: Map<string, FlowLine>;
@@ -1032,8 +787,8 @@ function GroupRows({
   return (
     <>
       {hasCarteraDocuments && (
-        <GridRow muted>
-          <Cell className="font-semibold text-ink" colSpan={5}>
+        <GridRow className="bg-surface [&>td]:border-t-2 [&>td]:border-t-brand/30 [&>td]:py-3">
+          <Cell className="border-l-4 border-l-brand font-bold text-brand" colSpan={5}>
             {group.label}
             {group.payables[0]?.kind && (
               <span className="ml-2 text-[11px] font-normal text-faint">
@@ -1092,6 +847,7 @@ const MarkedRow = memo(function MarkedRow({
   const { activeClientId } = useCashFlowData();
   const [editing, setEditing] = useState(false);
   const isManual = payable.source === "manual";
+  const isCheck = payable.source === "check";
   const docLabel = isManual ? payable.supplier : documentLabel(payable) || payable.supplier;
   const detail = payableDetail(payable, { center: false });
   /** The note corner of one working cell of this document, of this date. */
@@ -1115,6 +871,9 @@ const MarkedRow = memo(function MarkedRow({
           a payment is for is read before paying it, on any screen. */}
       <Cell className={isManual ? undefined : "pl-7"}>
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5">
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted">
+            {isManual ? "Manual" : isCheck ? "Cheque" : "Cartera"}
+          </span>
           {isManual ? (
             <button
               type="button"
@@ -1135,7 +894,9 @@ const MarkedRow = memo(function MarkedRow({
             </span>
           )}
         </span>
-        {editing && <ManualPayablePanel obligation={payable} onClose={() => setEditing(false)} />}
+        {editing && payable.source === "manual" && (
+          <ManualPayablePanel obligation={payable} onClose={() => setEditing(false)} />
+        )}
       </Cell>
       <Cell
         className={cn(
@@ -1212,15 +973,23 @@ const MarkedRow = memo(function MarkedRow({
       </Cell>
       <Cell control>
         <div className="flex items-center justify-end">
-          {isManual && activeClientId && (
+          {(isManual || isCheck) && activeClientId && (
             <Button
               variant="ghost"
               size="sm"
               iconOnly
               icon={<CheckCircle2 size={13} />}
-              aria-label={`Marcar pagada obligación ${payable.supplier}`}
-              title="Marcar pagado"
-              onClick={() => void cashDb.settleManualObligation(activeClientId, payable.id, asOf)}
+              aria-label={
+                isCheck
+                  ? `Marcar cobrado cheque de ${payable.supplier}`
+                  : `Marcar pagada obligación ${payable.supplier}`
+              }
+              title={isCheck ? "Marcar cobrado" : "Marcar pagado"}
+              onClick={() =>
+                payable.source === "check"
+                  ? void cashDb.settleFlowCheck(activeClientId, payable.checkId, asOf)
+                  : void cashDb.settleManualObligation(activeClientId, payable.id, asOf)
+              }
             />
           )}
           <Button

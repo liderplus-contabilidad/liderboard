@@ -237,6 +237,11 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
     () => applyFilters(obligations, flowFilters, centers, asOf) as ManualObligation[],
     [obligations, flowFilters, centers, asOf],
   );
+  const flowChecks = useMemo(() => {
+    if (payableFilters.centerIds.length === 0) return checks;
+    const ids = new Set(scopedAccounts.map((account) => account.id));
+    return checks.filter((check) => check.accountId !== null && ids.has(check.accountId));
+  }, [checks, scopedAccounts, payableFilters.centerIds]);
   const derived = useMemo(
     () =>
       deriveFlow({
@@ -246,10 +251,10 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
         centers,
         payables: flowPayables,
         obligations: flowObligations,
-        checks,
+        checks: flowChecks,
         since: previous?.date ?? null,
       }),
-    [asOf, flow, scopedAccounts, centers, flowPayables, flowObligations, checks, previous],
+    [asOf, flow, scopedAccounts, centers, flowPayables, flowObligations, flowChecks, previous],
   );
   const cashMatrix = useMemo(
     () => deriveCashMatrix(cashEntries, centers, scopedPayables),

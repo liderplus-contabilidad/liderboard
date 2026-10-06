@@ -218,12 +218,14 @@ export function buildFlowReport(input: {
   for (const group of derived.groups) {
     const urgent = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.urgent ?? 0), 0);
     const pending = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.pending ?? 0), 0);
-    paymentRows.push({
-      id: `g-${group.key}`,
-      label: group.label,
-      emphasis: true,
-      values: ["", "", "", "", money(urgent + pending), money(urgent), money(pending)],
-    });
+    if (group.payables.some((payable) => payable.source !== "manual")) {
+      paymentRows.push({
+        id: `g-${group.key}`,
+        label: group.label,
+        emphasis: true,
+        values: ["", "", "", "", money(urgent + pending), money(urgent), money(pending)],
+      });
+    }
     for (const payable of group.payables) {
       const line = lineOf(payable.id);
       const detail = payableDetail(payable, { center: false });

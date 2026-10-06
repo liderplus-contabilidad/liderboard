@@ -43,11 +43,14 @@ export function ReportTable({
   rowStyle,
   cellStyle,
   wrapLabels = false,
+  regularAmounts = false,
 }: {
   table: ChartTable;
   fit: StatementFit;
   /** Long document details must remain readable on paper. */
   wrapLabels?: boolean;
+  /** Keep financial figures in regular weight when the report requests it. */
+  regularAmounts?: boolean;
   /** Optional: how a report colours its rows (a heading, a total). Absent, every row is plain. */
   rowStyle?: (row: ChartTableRow) => ReportRowStyle | undefined;
   /** Optional: how a report colours a figure by what its column means. Absent, figures are ink. */
@@ -159,7 +162,11 @@ export function ReportTable({
                               ? "font-bold text-ink"
                               : "font-semibold text-ink-soft",
                       )}
-                      style={{ paddingLeft: padX, paddingRight: padX }}
+                      style={{
+                        paddingLeft: padX,
+                        paddingRight: padX,
+                        fontWeight: regularAmounts ? 400 : undefined,
+                      }}
                     >
                       {/* The DASH of a cell with nothing to say travels ALREADY WRITTEN in the
                       `ChartTable`; a `null` here can only come from a row shorter than its

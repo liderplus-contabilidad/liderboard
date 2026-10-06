@@ -14,7 +14,6 @@ import {
   type FlowCellPaint,
   type FlowRowTone,
   flowReportSubtitle,
-  SIGN_GLYPH,
 } from "@/lib/cash-flow/report";
 import { buildPdfFlowReport, pdfFlowPages, type PdfFlowSection } from "@/lib/cash-flow/pdf-report";
 import { useCashFlowData } from "./cash-flow-data-provider";
@@ -82,6 +81,7 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
                 table={section.table}
                 fit={fit}
                 wrapLabels
+                regularAmounts
                 rowStyle={(row) => rowStyleOf(section, row)}
                 cellStyle={(row, column, value) => cellStyleOf(section, row, column, value)}
               />
@@ -102,13 +102,7 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
   );
 }
 
-/**
- * The screen's colours on paper, by what each row and column MEANS (`report.ts` says it): the total
- * on the brand ground as the screen closes its tables, each supplier's heading in the brand tint,
- * the two marks of payment on a GROUND of their own — the urgent amber, the pending a quiet
- * blue-grey — with their figures in plain ink, so the paper tells them apart at a glance; the checks in their ink, and a saldo by
- * its sign, always with its ▲/▼, never the colour alone.
- */
+/** The PDF keeps the row bands and signed ink, with regular figures and no sign glyphs. */
 const ROW_STYLE: Record<FlowRowTone, ReportRowStyle> = {
   total: { className: "bg-brand", ink: "font-bold text-white" },
   group: { className: "bg-brand-soft", ink: "font-bold text-brand" },
@@ -117,7 +111,7 @@ const ROW_STYLE: Record<FlowRowTone, ReportRowStyle> = {
 function rowStyleOf(section: PdfFlowSection, row: ChartTableRow): ReportRowStyle | undefined {
   const figureTone = section.figureRowTones?.[row.id];
   if (figureTone === "urgent") {
-    return { className: "bg-marked", ink: "font-bold text-ink" };
+    return { className: "bg-urgent", ink: "font-bold text-ink" };
   }
   if (figureTone === "pending") {
     return { className: "bg-surface-calc-strong", ink: "font-semibold text-ink-soft" };
@@ -127,11 +121,11 @@ function rowStyleOf(section: PdfFlowSection, row: ChartTableRow): ReportRowStyle
 }
 
 const CELL_STYLE: Record<FlowCellPaint, ReportCellStyle> = {
-  urgent: { ink: "bg-marked font-bold text-ink" },
+  urgent: { ink: "bg-urgent font-bold text-ink" },
   pending: { ink: "bg-surface-calc-strong font-bold text-ink" },
-  outstanding: { ink: "font-semibold text-crosslink" },
-  negative: { ink: "font-bold text-negative", glyph: SIGN_GLYPH.negative },
-  positive: { ink: "font-bold text-positive", glyph: SIGN_GLYPH.positive },
+  outstanding: { ink: "text-ink-soft" },
+  negative: { ink: "text-negative" },
+  positive: { ink: "text-positive" },
 };
 
 function cellStyleOf(
@@ -141,6 +135,8 @@ function cellStyleOf(
   value: string | null,
 ): ReportCellStyle | undefined {
   const rowTone = section.figureRowTones?.[row.id];
+  // Total bands keep white figures on the brand ground, including signed balances.
+  if (section.rowTones?.[row.id] === "total") return undefined;
   const paint = rowTone
     ? cellPaint(
         { ...section, rowTones: undefined, columnTones: { [column]: rowTone } },

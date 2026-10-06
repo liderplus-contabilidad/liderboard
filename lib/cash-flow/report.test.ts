@@ -308,9 +308,9 @@ describe("buildFlowReport", () => {
         total = argbOf(row.getCell(1).fill);
       }
     });
-    expect(urgent).toBe("FFFEF3C7");
+    expect(urgent).toBe("FFFBD5D5");
     expect(total).toBe("FF1E3A5F");
-    expect(finalBalance).toBe("▲ $9,981.41");
+    expect(finalBalance).toBe("$9,981.41");
   });
 
   it("writes no comment without notes", () => {

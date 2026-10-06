@@ -141,6 +141,14 @@ export interface ManualObligation extends Payable {
   source: "manual";
 }
 
+/** A check projected as its supplier's obligation in Flujo; never stored as a cartera row. */
+export interface CheckObligation extends Omit<Payable, "source"> {
+  source: "check";
+  checkId: string;
+}
+
+export type FlowPayable = Payable | CheckObligation;
+
 /** The four steps of a check's timeline, in order. `voided` is orthogonal (see `Check`). */
 export type CheckStep = "made" | "signed" | "delivered" | "cashed";
 
@@ -169,6 +177,12 @@ export interface Check {
   cashedOn: string | null;
   /** Planned collection date, independent of the actual cashing date and issue date. */
   expectedCashOn?: string | null;
+  /** Linked to the flow working list from this cut date; a reference, never another expense. */
+  flowLinkedOn?: string | null;
+  flowPriority?: PayPriority;
+  flowApproved?: number | null;
+  flowPayOn?: string | null;
+  flowPayFromAccountId?: string | null;
   place: string;
   note: string;
   /** The beneficiary's cédula / RUC and address, for the comprobante. Optional: empty prints nothing. */

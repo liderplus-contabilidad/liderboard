@@ -28,6 +28,7 @@
 import { normalizeLabel } from "@/lib/workspaces";
 import { outstandingByAccount } from "./checks";
 import { groupBySupplier, markedSplit, type SupplierGroup } from "./derive";
+import { checkObligationsAt } from "./flow-checks";
 import { resolveCenterId } from "./filters";
 import type {
   BankAccount,
@@ -35,6 +36,7 @@ import type {
   Check,
   FlowIncome,
   Payable,
+  FlowPayable,
   ManualObligation,
   PaymentFlow,
   PayPriority,
@@ -94,7 +96,7 @@ export interface CenterLoan {
 }
 
 export interface FlowLine {
-  payable: Payable;
+  payable: FlowPayable;
   /** Urgent + pending — what the document adds to the flow. */
   amount: number;
   urgent: number;
@@ -104,7 +106,7 @@ export interface FlowLine {
 
 /** A document settled inside the flow's window: read, never summed. */
 export interface SettledLine {
-  payable: Payable;
+  payable: FlowPayable;
   settledOn: string;
 }
 
@@ -120,7 +122,7 @@ export interface DerivedFlow {
   unassignedMarked: { urgent: number; pending: number };
   /** Every marked open document, grouped by supplier for the paper. */
   lines: FlowLine[];
-  groups: SupplierGroup[];
+  groups: SupplierGroup<FlowPayable>[];
   loans: CenterLoan[];
   /** What was paid since the previous flow (exclusive) up to the date — the sheet's memory of
    *  what left between two `FJ` sheets. Outside every sum: the captured balance already reflects it. */
@@ -151,11 +153,19 @@ function round2(value: number): number {
 
 export function deriveFlow(input: DeriveFlowInput): DerivedFlow {
   const { date, flow, accounts, centers, checks } = input;
-  const payables = [
+  const checkObligations = checkObligationsAt(checks, date, accounts, centers);
+  const payables: FlowPayable[] = [
     ...input.payables,
     ...(input.obligations ?? []).filter((row) => row.cutDate <= date),
+    ...checkObligations,
   ];
-  const outstanding = outstandingByAccount(checks, date);
+  // A linked cheque contributes through its supplier's obligation, so it must leave the other
+  // deduction. Removing the link restores that cheque to the ordinary outstanding reading.
+  const linkedIds = new Set(checkObligations.map((row) => row.checkId));
+  const outstanding = outstandingByAccount(
+    checks.filter((check) => !linkedIds.has(check.id)),
+    date,
+  );
   const marked = payables.filter((payable) => payable.status === "open" && payable.priority);
   // With ONE account there is nothing to choose: what carries no account belongs to it.
   const onlyAccount = accounts.length === 1 ? accounts[0].id : null;

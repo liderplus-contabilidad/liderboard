@@ -39,6 +39,21 @@ export function isOutstandingAt(check: Check, asOf: string): boolean {
   return check.cashedOn === null || check.cashedOn > asOf;
 }
 
+/** Pending checks that can be linked, optionally narrowed to the visible centers' accounts. */
+export function availableFlowChecks(
+  checks: readonly Check[],
+  asOf: string,
+  accountIds?: readonly string[],
+): Check[] {
+  const known = accountIds ? new Set(accountIds) : null;
+  return checks.filter(
+    (check) =>
+      isOutstandingAt(check, asOf) &&
+      (!check.flowLinkedOn || check.flowLinkedOn > asOf) &&
+      (!known || (check.accountId !== null && known.has(check.accountId))),
+  );
+}
+
 /** The outstanding checks of ONE account at `asOf`. */
 export function outstandingChecks(
   checks: readonly Check[],

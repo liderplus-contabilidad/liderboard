@@ -1,21 +1,13 @@
 /**
  * «Excel de flujo»: the report's sections on ONE sheet, each headed by its title, with the same
- * figures the paper prints — `report.ts` is the one builder, so the two cannot disagree — plus the
+ * figures and layout the paper prints, plus the
  * flow's cell notes as Excel comments, which the paper does not print.
  */
 import ExcelJS from "exceljs";
 import { writeLetterhead } from "@/lib/excel-logo";
 import type { EntityLogo } from "@/lib/logos";
-import {
-  cellPaint,
-  hasFigure,
-  type FlowCellPaint,
-  type FlowRowTone,
-  type FlowReport,
-  SIGN_GLYPH,
-} from "../report";
-
-const COLUMNS = 9;
+import type { PdfFlowSection } from "../pdf-report";
+import { cellPaint, type FlowCellPaint, type FlowRowTone, type FlowReport } from "../report";
 
 /** The colours the PDF wears, for a sheet that cannot read a CSS variable: each ARGB mirrors its
  *  `@theme` token (brand-soft is its 8 % over white, flattened). */
@@ -28,9 +20,9 @@ const ROW_PAINT: Record<FlowRowTone, { fill: string; font: string }> = {
 };
 /** Only the two marks of payment take a GROUND; the rest is told by its ink. */
 const CELL_PAINT: Record<FlowCellPaint, { font: string; fill?: string }> = {
-  urgent: { font: "FF1E293B", fill: "FFFEF3C7" },
+  urgent: { font: "FF1E293B", fill: "FFFBD5D5" },
   pending: { font: "FF1E293B", fill: "FFEAF0F6" },
-  outstanding: { font: "FFA21CAF" },
+  outstanding: { font: "FF1E293B" },
   negative: { font: "FFDC2626" },
   positive: { font: "FF16A34A" },
 };
@@ -39,17 +31,32 @@ function solid(argb: string): ExcelJS.Fill {
   return { type: "pattern", pattern: "solid", fgColor: { argb } };
 }
 
-export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJS.Workbook {
+export function buildFlowWorkbook(
+  report: { header: FlowReport["header"]; sections: PdfFlowSection[] },
+  logo?: EntityLogo,
+): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook();
   wb.creator = "LiderPlus";
-  const ws = wb.addWorksheet("FLUJO");
-  ws.getColumn(1).width = 40;
-  for (let column = 2; column <= COLUMNS; column += 1) {
+  const ws = wb.addWorksheet("FLUJO", {
+    pageSetup: {
+      orientation: "landscape",
+      paperSize: 9,
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+    },
+  });
+  const columnCount = Math.max(
+    2,
+    ...report.sections.map((section) => section.table.columns.length + 1),
+  );
+  ws.getColumn(1).width = 60;
+  for (let column = 2; column <= columnCount; column += 1) {
     ws.getColumn(column).width = 18;
   }
   writeLetterhead(wb, ws, {
     leftLogo: logo,
-    columns: COLUMNS,
+    columns: columnCount,
     lines: [
       { text: report.header.clientName, font: { bold: true, size: 14 } },
       { text: `FLUJO DE PAGOS AL ${report.header.dateLabel}`, font: { bold: true } },
@@ -58,20 +65,27 @@ export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJ
   for (const section of report.sections) {
     ws.addRow([]);
     ws.addRow([section.title]).font = { bold: true, size: 12 };
-    const header = ws.addRow(["", ...section.table.columns]);
+    const header = ws.addRow(["Concepto", ...section.table.columns]);
     header.font = { bold: true };
     for (const row of section.table.rows) {
-      const paints = row.values.map((value, index) =>
-        cellPaint(section, row.id, section.table.columns[index] ?? "", value),
-      );
-      // A signed figure carries its glyph here as on paper: the colour never travels alone.
-      const values = row.values.map((value, index) => {
-        const paint = paints[index];
-        return paint === "negative" || paint === "positive"
-          ? `${SIGN_GLYPH[paint]} ${value}`
-          : (value ?? "");
+      const figureTone = section.figureRowTones?.[row.id];
+      const isTotal = section.rowTones?.[row.id] === "total";
+      const paints = row.values.map((value, index) => {
+        if (isTotal) return null;
+        const column = section.table.columns[index] ?? "";
+        return cellPaint(
+          figureTone
+            ? { ...section, rowTones: undefined, columnTones: { [column]: figureTone } }
+            : section,
+          row.id,
+          column,
+          value,
+        );
       });
-      const written = ws.addRow([row.label, ...values]);
+      const values = row.values.map((value) => value ?? "");
+      const written = ws.addRow([[row.label, row.sublabel].filter(Boolean).join("\n"), ...values]);
+      written.getCell(1).alignment = { vertical: "top", wrapText: true };
+      if (row.sublabel) written.height = 48;
       if (row.emphasis) {
         written.font = { bold: true };
       }
@@ -84,25 +98,37 @@ export function buildFlowWorkbook(report: FlowReport, logo?: EntityLogo): ExcelJ
           cell.font = { bold: true, color: { argb: font } };
         }
       }
+      if (figureTone === "urgent" || figureTone === "pending") {
+        const { fill, font } = CELL_PAINT[figureTone];
+        written.eachCell((cell) => {
+          if (fill) cell.fill = solid(fill);
+          cell.font = { color: { argb: font } };
+        });
+      }
       paints.forEach((paint, index) => {
         if (!paint) return;
         const cell = written.getCell(index + 2);
         const { font, fill } = CELL_PAINT[paint];
-        // A mark of payment grounds its whole column. The urgent is ALWAYS bold, its zeros too; the
-        // pending only where it says something.
+        // Transposed figure rows keep their semantic ink and ground.
         cell.font = {
-          bold: paint === "urgent" || hasFigure(row.values[index] ?? null),
+          bold: false,
           color: { argb: font },
         };
         if (fill) {
           cell.fill = solid(fill);
         }
       });
+      // Values stay in regular weight, including totals; row labels retain their emphasis.
+      values.forEach((_, index) => {
+        const cell = written.getCell(index + 2);
+        cell.font = { ...cell.font, bold: false };
+      });
       // The screen's cell notes, as the comments the book's sheets carried: `column` counts from
       // the label (0), and ExcelJS counts from 1.
       for (const note of section.notes ?? []) {
         if (note.rowId === row.id) {
-          written.getCell(note.column + 1).note = note.text;
+          const cell = written.getCell(note.column + 1);
+          cell.note = typeof cell.note === "string" ? `${cell.note}\n${note.text}` : note.text;
         }
       }
     }
