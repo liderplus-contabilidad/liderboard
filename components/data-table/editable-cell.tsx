@@ -28,8 +28,8 @@ export function EditableCell({
         placeholder={placeholder}
         aria-label={ariaLabel}
         className={cn(
-          "w-full border border-transparent bg-transparent px-2.5 py-2 font-sans text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:bg-surface",
-          align === "right" ? "text-right tabular-nums" : "text-left",
+          "w-full border border-transparent bg-transparent px-2.5 py-2 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand focus:bg-surface",
+          align === "right" ? "text-right font-mono tabular-nums" : "text-left font-sans",
         )}
       />
     </td>

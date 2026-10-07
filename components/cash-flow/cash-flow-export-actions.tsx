@@ -65,7 +65,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
         {
           id: "control-cheques",
           title: "Control de cheques",
-          description: "Las catorce columnas del libro, con lo que pasa los filtros",
+          description: "",
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
           disabled: visibleChecks.length === 0,
@@ -107,13 +107,13 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
           disabled: empty,
           disabledReason: "Declara una cuenta bancaria primero.",
           run: async () => {
-            const [{ buildFlowReport }, mod, shared, { downloadBlob }] = await Promise.all([
-              import("@/lib/cash-flow/report"),
+            const [{ buildExcelFlowReport }, mod, shared, { downloadBlob }] = await Promise.all([
+              import("@/lib/cash-flow/export/flow-report"),
               import("@/lib/cash-flow/export/flow-workbook"),
               import("@/lib/cash-flow/export/shared"),
               import("@/lib/download"),
             ]);
-            const report = buildFlowReport({
+            const report = buildExcelFlowReport({
               clientName: companyName,
               ...(logo ? { logo } : {}),
               derived,

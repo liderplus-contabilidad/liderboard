@@ -9,22 +9,19 @@ import {
 } from "@/components/ui/report-table";
 import type { ChartTableRow } from "@/lib/charts/types";
 import {
-  buildFlowReport,
   cellPaint,
   hasFigure,
   type FlowCellPaint,
-  type FlowReportSection,
   type FlowRowTone,
   flowReportSubtitle,
-  SIGN_GLYPH,
 } from "@/lib/cash-flow/report";
-import { statementFit } from "@/lib/report/page-fit";
+import { buildPdfFlowReport, pdfFlowPages, type PdfFlowSection } from "@/lib/cash-flow/pdf-report";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
 /**
  * The printed flow, over the app's report shell: the letterhead, the date, and one table per
- * section of `buildFlowReport` — the same tables the Excel writes. On paper there are no controls:
- * the whole derived flow is printed, whatever the screen was showing.
+ * section of `buildPdfFlowReport`, with accounts across the top. The Excel keeps its original
+ * layout; both read the same derived figures. On paper the whole flow is printed.
  */
 export function FlowReportPreview({ onClose }: { onClose: () => void }) {
   const { activeClient, derived, flow, accounts, centers, checks } = useCashFlowData();
@@ -33,7 +30,7 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
 
   const report = useMemo(
     () =>
-      buildFlowReport({
+      buildPdfFlowReport({
         clientName: activeClient?.name ?? "",
         ...(activeClient?.logo ? { logo: activeClient.logo } : {}),
         derived,
@@ -46,89 +43,124 @@ export function FlowReportPreview({ onClose }: { onClose: () => void }) {
     [activeClient, derived, flow, accounts, centers, checks.length, generatedAt],
   );
 
-  const widest = Math.max(1, ...report.sections.map((section) => section.table.columns.length));
-  const fit = statementFit(widest);
+  const pages = useMemo(() => pdfFlowPages(report.sections), [report.sections]);
 
   return (
     <ReportLayer
       fileName={`Flujo-${report.header.clientName}-${report.header.dateLabel}`}
       onClose={onClose}
     >
-      <ReportSheet landscape={fit.orientation === "landscape"}>
-        <header className="print-section flex flex-col gap-5 border-b border-border pb-6">
-          <ReportBand
-            {...(report.header.logo ? { leftLogo: report.header.logo } : {})}
-            logoHeight={56}
-            className="text-center"
-          >
-            <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-              Flujo de pagos
-            </p>
-            <h1 className="mt-2 text-[24px] font-semibold leading-tight text-ink">
-              {report.header.clientName}
-            </h1>
-          </ReportBand>
-          <dl className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[12.5px]">
-            <Field label="Fecha de corte" value={report.header.dateLabel} />
-            <Field label="Alcance" value={flowReportSubtitle(report.header)} />
-            <Field label="Generado el" value={report.header.generatedAt} />
-          </dl>
-        </header>
-        {report.sections.map((section) => (
-          <section key={section.id} className="print-section flex flex-col gap-3">
-            <h2 className="text-[14px] font-semibold text-ink">{section.title}</h2>
-            <ReportTable
-              table={section.table}
-              fit={fit}
-              rowStyle={(row) => rowStyleOf(section, row)}
-              cellStyle={(row, column, value) => cellStyleOf(section, row, column, value)}
-            />
-          </section>
-        ))}
-        <footer className="mt-4 grid grid-cols-3 gap-8 pt-10 text-center text-[11.5px] text-muted">
-          {["Primera revisión", "Revisión final", "Gerencia"].map((role) => (
-            <div key={role} className="border-t border-border pt-2">
-              {role}
-            </div>
-          ))}
-        </footer>
-      </ReportSheet>
+      {pages.map(({ section, fit, panel, panels }, index) => (
+        <div key={`${section.id}-${panel}`} className={index > 0 ? "print-page-break" : undefined}>
+          <ReportSheet landscape>
+            <header className="print-section flex flex-col gap-5 border-b border-border pb-6">
+              <ReportBand
+                {...(report.header.logo ? { leftLogo: report.header.logo } : {})}
+                logoHeight={56}
+                className="text-center"
+              >
+                <p className="text-[11.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+                  Flujo de pagos
+                </p>
+                <h1 className="mt-2 text-[24px] font-semibold leading-tight text-ink">
+                  {report.header.clientName}
+                </h1>
+              </ReportBand>
+              <dl className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[12.5px]">
+                <Field label="Fecha de corte" value={report.header.dateLabel} />
+                <Field label="Alcance" value={flowReportSubtitle(report.header)} />
+                <Field label="Generado el" value={report.header.generatedAt} />
+              </dl>
+            </header>
+            <section className="print-section flex flex-col gap-3">
+              <h2 className="text-[14px] font-semibold text-ink">
+                {section.title}
+                {panels > 1 ? ` · ${panel}/${panels}` : ""}
+              </h2>
+              <ReportTable
+                table={section.table}
+                fit={fit}
+                wrapLabels
+                regularAmounts
+                rowStyle={(row) => rowStyleOf(section, row)}
+                cellStyle={(row, column, value) => cellStyleOf(section, row, column, value)}
+              />
+            </section>
+            {index === pages.length - 1 && (
+              <footer className="mt-4 grid grid-cols-3 gap-8 pt-10 text-center text-[11.5px] text-muted">
+                {["Primera revisión", "Revisión final", "Gerencia"].map((role) => (
+                  <div key={role} className="border-t border-border pt-2">
+                    {role}
+                  </div>
+                ))}
+              </footer>
+            )}
+          </ReportSheet>
+        </div>
+      ))}
     </ReportLayer>
   );
 }
 
-/**
- * The screen's colours on paper, by what each row and column MEANS (`report.ts` says it): the total
- * on the brand ground as the screen closes its tables, each supplier's heading in the brand tint,
- * the two marks of payment on a GROUND of their own — the urgent amber, the pending a quiet
- * blue-grey — with their figures in plain ink, so the paper tells them apart at a glance; the checks in their ink, and a saldo by
- * its sign, always with its ▲/▼, never the colour alone.
- */
+/** The PDF keeps the row bands and signed ink, with regular figures and no sign glyphs. */
 const ROW_STYLE: Record<FlowRowTone, ReportRowStyle> = {
   total: { className: "bg-brand", ink: "font-bold text-white" },
   group: { className: "bg-brand-soft", ink: "font-bold text-brand" },
 };
 
-function rowStyleOf(section: FlowReportSection, row: ChartTableRow): ReportRowStyle | undefined {
+function rowStyleOf(section: PdfFlowSection, row: ChartTableRow): ReportRowStyle | undefined {
+  const figureTone = section.figureRowTones?.[row.id];
+  if (figureTone === "urgent") {
+    return { className: "bg-urgent", ink: "font-bold text-ink" };
+  }
+  if (figureTone === "pending") {
+    return { className: "bg-surface-calc-strong", ink: "font-semibold text-ink-soft" };
+  }
   const tone = section.rowTones?.[row.id];
-  return tone ? ROW_STYLE[tone] : undefined;
+  const separated = section.separatedRows?.includes(row.id);
+  if (!separated) return tone ? ROW_STYLE[tone] : undefined;
+  const style = tone ? ROW_STYLE[tone] : { className: "", ink: "font-medium text-ink-soft" };
+  return {
+    ...style,
+    className: `${style.className} [&>th]:border-t-2 [&>th]:border-t-brand/40 [&>td]:border-t-2 [&>td]:border-t-brand/40`,
+  };
 }
 
 const CELL_STYLE: Record<FlowCellPaint, ReportCellStyle> = {
-  urgent: { ink: "bg-marked font-bold text-ink" },
+  "urgent-total": { ink: "bg-urgent-total text-white" },
+  "pending-total": { ink: "bg-pending-total text-white" },
+  urgent: { ink: "bg-urgent font-bold text-ink" },
   pending: { ink: "bg-surface-calc-strong font-bold text-ink" },
-  outstanding: { ink: "font-semibold text-crosslink" },
-  negative: { ink: "font-bold text-negative", glyph: SIGN_GLYPH.negative },
-  positive: { ink: "font-bold text-positive", glyph: SIGN_GLYPH.positive },
+  outstanding: { ink: "text-ink-soft" },
+  negative: { ink: "text-negative" },
+  positive: { ink: "text-positive" },
 };
 
 function cellStyleOf(
-  section: FlowReportSection,
+  section: PdfFlowSection,
   row: ChartTableRow,
   column: string,
   value: string | null,
 ): ReportCellStyle | undefined {
-  const paint = cellPaint(section, row.id, column, value);
+  const rowTone = section.figureRowTones?.[row.id];
+  // Total bands keep white figures on the brand ground, including signed balances.
+  if ((rowTone === "urgent" || rowTone === "pending") && column === "Total") {
+    return CELL_STYLE[rowTone === "urgent" ? "urgent-total" : "pending-total"];
+  }
+  const paint = rowTone
+    ? cellPaint(
+        { ...section, rowTones: undefined, columnTones: { [column]: rowTone } },
+        row.id,
+        column,
+        value,
+      )
+    : cellPaint(section, row.id, column, value);
+  if (
+    section.rowTones?.[row.id] === "total" &&
+    paint !== "urgent-total" &&
+    paint !== "pending-total"
+  )
+    return undefined;
   if (!paint) {
     return undefined;
   }

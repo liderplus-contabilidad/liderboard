@@ -30,7 +30,6 @@ import {
   UNASSIGNED,
   withAccountToggled,
   withAllYears,
-  withCheckSearch,
   withStepToggled,
   withYearToggled,
   withYearsCleared,
@@ -392,13 +391,6 @@ export function CashFlowToolbar({ tab }: { tab: ModuleTabId }) {
                 </DropdownPanel>
               </Dropdown>
             )}
-            <SearchInput
-              size="sm"
-              value={checkFilters.search}
-              placeholder="Beneficiario, cheque o egreso"
-              onChange={(value) => setCheckFilters((f) => withCheckSearch(f, value))}
-              className="ml-auto w-[260px]"
-            />
           </>
         )}
       </Toolbar>

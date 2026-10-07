@@ -56,8 +56,10 @@ export interface StatementFit {
 export function statementFit(
   columnCount: number,
   widestFigureChars: number = WIDEST_FIGURE_CHARS,
+  orientation?: "landscape",
 ): StatementFit {
-  const sheets = [PORTRAIT_WIDTH, LANDSCAPE_WIDTH] as const;
+  const sheets =
+    orientation === "landscape" ? [LANDSCAPE_WIDTH] : [PORTRAIT_WIDTH, LANDSCAPE_WIDTH];
 
   for (const sheetWidth of sheets) {
     for (const fontSize of FONT_STEPS) {

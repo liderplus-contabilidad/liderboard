@@ -29,6 +29,7 @@ import type {
   CashFlowCenter,
   Check,
   Payable,
+  ManualObligation,
   PaymentFlow,
 } from "@/lib/cash-flow/types";
 import type { EntityLogo } from "@/lib/workspaces";
@@ -37,6 +38,7 @@ const EMPTY_CLIENTS: cashDb.CashFlowClientSummary[] = [];
 const EMPTY_CENTERS: CashFlowCenter[] = [];
 const EMPTY_ACCOUNTS: BankAccount[] = [];
 const EMPTY_PAYABLES: Payable[] = [];
+const EMPTY_OBLIGATIONS: ManualObligation[] = [];
 const EMPTY_CHECKS: Check[] = [];
 const EMPTY_FLOWS: PaymentFlow[] = [];
 const EMPTY_CASH_ENTRIES: CashEntry[] = [];
@@ -56,6 +58,7 @@ interface CashFlowDataValue {
   centers: CashFlowCenter[];
   accounts: BankAccount[];
   payables: Payable[];
+  obligations: ManualObligation[];
   checks: Check[];
   flows: PaymentFlow[];
   cuts: cashDb.CutMeta[];
@@ -116,6 +119,13 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
     () => (activeClientId ? cashDb.listPayables(activeClientId) : Promise.resolve(EMPTY_PAYABLES)),
     [activeClientId],
   );
+  const obligationRows = useLiveQuery(
+    () =>
+      activeClientId
+        ? cashDb.listManualObligations(activeClientId)
+        : Promise.resolve(EMPTY_OBLIGATIONS),
+    [activeClientId],
+  );
   const checkRows = useLiveQuery(
     () => (activeClientId ? cashDb.listChecks(activeClientId) : Promise.resolve(EMPTY_CHECKS)),
     [activeClientId],
@@ -152,6 +162,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
   const centers = centerRows ?? EMPTY_CENTERS;
   const accounts = accountRows ?? EMPTY_ACCOUNTS;
   const payables = payableRows ?? EMPTY_PAYABLES;
+  const obligations = obligationRows ?? EMPTY_OBLIGATIONS;
   const checks = checkRows ?? EMPTY_CHECKS;
   const flows = flowRows ?? EMPTY_FLOWS;
   const cuts = cutRows ?? EMPTY_CUTS;
@@ -209,6 +220,28 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       ? accounts
       : accounts.filter((account) => account.centerId && marked.has(account.centerId));
   }, [accounts, payableFilters.centerIds]);
+  // Include settled rows for the flow's paid section; cartera's display switch does not narrow it.
+  const flowFilters = useMemo(
+    () => ({
+      ...emptyPayableFilters(),
+      centerIds: payableFilters.centerIds,
+      showSettled: true,
+    }),
+    [payableFilters.centerIds],
+  );
+  const flowPayables = useMemo(
+    () => applyFilters(payables, flowFilters, centers, asOf),
+    [payables, flowFilters, centers, asOf],
+  );
+  const flowObligations = useMemo(
+    () => applyFilters(obligations, flowFilters, centers, asOf) as ManualObligation[],
+    [obligations, flowFilters, centers, asOf],
+  );
+  const flowChecks = useMemo(() => {
+    if (payableFilters.centerIds.length === 0) return checks;
+    const ids = new Set(scopedAccounts.map((account) => account.id));
+    return checks.filter((check) => check.accountId !== null && ids.has(check.accountId));
+  }, [checks, scopedAccounts, payableFilters.centerIds]);
   const derived = useMemo(
     () =>
       deriveFlow({
@@ -216,11 +249,12 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
         flow,
         accounts: scopedAccounts,
         centers,
-        payables: scopedPayables,
-        checks,
+        payables: flowPayables,
+        obligations: flowObligations,
+        checks: flowChecks,
         since: previous?.date ?? null,
       }),
-    [asOf, flow, scopedAccounts, centers, scopedPayables, checks, previous],
+    [asOf, flow, scopedAccounts, centers, flowPayables, flowObligations, flowChecks, previous],
   );
   const cashMatrix = useMemo(
     () => deriveCashMatrix(cashEntries, centers, scopedPayables),
@@ -261,6 +295,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       centers,
       accounts,
       payables,
+      obligations,
       checks,
       flows,
       cuts,
@@ -295,6 +330,7 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
       centers,
       accounts,
       payables,
+      obligations,
       checks,
       flows,
       cuts,

@@ -3,12 +3,14 @@ import * as XLSX from "xlsx";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addAccount,
-  addManualPayable,
+  addManualObligation,
   applyCut,
   createClient,
   db,
   listAccounts,
   listPayables,
+  listManualObligations,
+  updateManualObligation,
   replaceCartera,
   updatePayables,
 } from "../db";
@@ -58,7 +60,7 @@ beforeEach(async () => {
   });
   await updatePayables([docs[1].id], { priority: "pending", notified: true });
   await updatePayables([docs[2].id], { priority: "urgent", cash: true });
-  const manual = await addManualPayable(clientId, {
+  const manual = await addManualObligation(clientId, {
     supplier: "Arriendo mes de marzo FC 00017 Laszlo",
     kind: "arriendo",
     amount: 2000,
@@ -66,7 +68,7 @@ beforeEach(async () => {
     centerName: null,
     description: "Laszlo",
   });
-  await updatePayables([manual.id], { priority: "pending", payOn: "2026-08-31" });
+  await updateManualObligation(clientId, manual.id, { priority: "pending", payOn: "2026-08-31" });
   // A settled one travels too: the sheet is the cartera AS IT IS, archive included.
   const cut = parseContifico(CONTIFICO_GRID);
   cut.payables = cut.payables.slice(1);
@@ -77,7 +79,8 @@ describe("cartera para recargar · ida y vuelta", () => {
   it("comes back through «Cargar cartera» exactly as it left, marks and archive included", async () => {
     const before = await shape(clientId);
     expect(before.some((row) => row.status === "settled")).toBe(true);
-    expect(before.some((row) => row.source === "manual")).toBe(true);
+    expect(before.some((row) => row.source === "manual")).toBe(false);
+    const obligations = await listManualObligations(clientId);
 
     const accounts = await listAccounts(clientId);
     const buffer = await buildCarteraWorkbook(
@@ -108,6 +111,7 @@ describe("cartera para recargar · ida y vuelta", () => {
     // And reloaded over itself it replaces without duplicating.
     expect(await replaceCartera(clientId, read.rows)).toBe(before.length);
     expect(await shape(clientId)).toEqual(before);
+    expect(await listManualObligations(clientId)).toEqual(obligations);
   });
 
   it("is a sheet headed by the contract's columns, with a mark line above", () => {

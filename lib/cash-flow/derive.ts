@@ -5,7 +5,7 @@
  */
 import { formatCurrency } from "@/lib/format";
 import { agingOf, AGING_BUCKETS, type AgingBucket, type AgingSide } from "./aging";
-import type { BuiltinKind, Payable, PayableKind } from "./types";
+import type { BuiltinKind, Payable, FlowPayable, PayableKind } from "./types";
 
 /** The module's amount, ALWAYS with cents: a cartera holds documents of $0.09, and a flow is checked
  *  to the centavo against the bank. The axes of Resumen are the one place that drops them. */
@@ -142,12 +142,12 @@ export function payableTotals(payables: readonly Payable[], asOf: string): Payab
   return totals;
 }
 
-export interface SupplierGroup {
+export interface SupplierGroup<T extends FlowPayable = Payable> {
   /** The supplier's name, or the class label for a manual obligation with a class. */
   key: string;
   label: string;
   taxId: string | null;
-  payables: Payable[];
+  payables: T[];
   /** Open balance of the group. */
   balance: number;
 }
@@ -157,8 +157,8 @@ export interface SupplierGroup {
  * and the `PROVEEDOR` sheets list them), each holding its documents oldest due first. Manual
  * obligations group by supplier the same way — the class is a column, not a group.
  */
-export function groupBySupplier(payables: readonly Payable[]): SupplierGroup[] {
-  const groups = new Map<string, SupplierGroup>();
+export function groupBySupplier<T extends FlowPayable>(payables: readonly T[]): SupplierGroup<T>[] {
+  const groups = new Map<string, SupplierGroup<T>>();
   for (const payable of payables) {
     const key = payable.supplier.trim().toLowerCase();
     let group = groups.get(key);
@@ -248,4 +248,9 @@ export function payableDetail(
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** A supplier subtotal is useful only for several documents; manual obligations stand alone. */
+export function hasPaymentSubtotal(payables: readonly Pick<FlowPayable, "source">[]): boolean {
+  return payables.length > 1 && payables.some((payable) => payable.source !== "manual");
 }

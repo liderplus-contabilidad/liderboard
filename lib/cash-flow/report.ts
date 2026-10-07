@@ -7,8 +7,8 @@ import type { ChartTable } from "@/lib/charts/types";
 import { formatDayMonthYear, formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/logos";
 import { pluralize } from "@/lib/format";
-import { balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
-import { documentLabel, money, payableDetail } from "./derive";
+import { figureNoteKey, balanceNoteKey, overdraftNoteKey, payableNoteKey } from "./cell-notes";
+import { documentLabel, hasPaymentSubtotal, money, payableDetail } from "./derive";
 import { accountLabel, centerName, type DerivedFlow, incomeLabel } from "./flow";
 import { derivePaymentMatrix, matrixTable } from "./matrix";
 import type { BankAccount, CashFlowCenter, FlowIncome } from "./types";
@@ -44,7 +44,14 @@ export type FlowRowTone = "group" | "total";
  *  their WHOLE column, zeros included, so urgent and pending read as two columns even on a flow
  *  with nothing urgent; any other tone leaves a zero or an empty cell plain, and a signed figure is
  *  painted by its sign. */
-export type FlowCellPaint = "urgent" | "pending" | "outstanding" | "negative" | "positive";
+export type FlowCellPaint =
+  | "urgent"
+  | "pending"
+  | "outstanding"
+  | "negative"
+  | "positive"
+  | "urgent-total"
+  | "pending-total";
 
 /** The glyph a signed figure always carries: the colour never travels alone. */
 export const SIGN_GLYPH: Record<"negative" | "positive", string> = {
@@ -72,6 +79,9 @@ export function cellPaint(
   const rowTone = section.rowTones?.[rowId];
   // The TOTAL row is painted whole. A supplier's heading keeps the two marks' columns in their own
   // ground and ink, so the columns run unbroken and a heading's zero never reads in brand blue.
+  if (rowTone === "total" && (tone === "urgent" || tone === "pending")) {
+    return tone === "urgent" ? "urgent-total" : "pending-total";
+  }
   if (!tone || rowTone === "total") {
     return null;
   }
@@ -101,6 +111,8 @@ export interface FlowReportSection {
   columnTones?: Record<string, FlowCellTone>;
   /** Row id → tone; a row absent here is an ordinary line. */
   rowTones?: Record<string, FlowRowTone>;
+  /** Rows that begin a supplier or standalone obligation, separated across the whole table. */
+  separatedRows?: string[];
 }
 
 export interface FlowReport {
@@ -214,22 +226,34 @@ export function buildFlowReport(input: {
   };
 
   const paymentRows: ChartTable["rows"] = [];
+  const separatedRows: string[] = [];
   const lineOf = (id: string) => derived.lines.find((line) => line.payable.id === id);
   for (const group of derived.groups) {
     const urgent = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.urgent ?? 0), 0);
     const pending = group.payables.reduce((acc, p) => acc + (lineOf(p.id)?.pending ?? 0), 0);
-    paymentRows.push({
-      id: `g-${group.key}`,
-      label: group.label,
-      emphasis: true,
-      values: ["", "", "", "", money(urgent + pending), money(urgent), money(pending)],
-    });
-    for (const payable of group.payables) {
+    const grouped = hasPaymentSubtotal(group.payables);
+    if (grouped) {
+      separatedRows.push(`g-${group.key}`);
+      paymentRows.push({
+        id: `g-${group.key}`,
+        label: group.label,
+        emphasis: true,
+        values: ["", "", "", "", money(urgent + pending), money(urgent), money(pending)],
+      });
+    }
+    for (const [index, payable] of group.payables.entries()) {
+      if (!grouped && (index === 0 || payable.source === "manual")) separatedRows.push(payable.id);
       const line = lineOf(payable.id);
       const detail = payableDetail(payable, { center: false });
       paymentRows.push({
         id: payable.id,
-        label: [documentLabel(payable) || payable.supplier, detail].filter(Boolean).join(" — "),
+        label: [
+          !grouped && payable.source !== "manual" ? payable.supplier : null,
+          documentLabel(payable) || payable.supplier,
+          detail,
+        ]
+          .filter(Boolean)
+          .join(" — "),
         values: [
           formatDayMonthYear(payable.issuedOn) ?? "",
           formatDayMonthYear(payable.dueOn) ?? "",
@@ -368,10 +392,15 @@ export function buildFlowReport(input: {
       id: "payments",
       title: "Pagos marcados por proveedor",
       table: paymentsTable,
+      separatedRows,
       ...withNotes(paymentNotes),
       columnTones: { Urgente: "urgent", Pendiente: "pending" },
       rowTones: {
-        ...Object.fromEntries(derived.groups.map((group) => [`g-${group.key}`, "group" as const])),
+        ...Object.fromEntries(
+          derived.groups
+            .filter((group) => hasPaymentSubtotal(group.payables))
+            .map((group) => [`g-${group.key}`, "group" as const]),
+        ),
         ...TOTAL,
       },
     },
@@ -402,6 +431,16 @@ export function buildFlowReport(input: {
       ? [{ id: "loans" as const, title: "Préstamos entre centros", table: loansTable }]
       : []),
   ];
+
+  for (const section of sections) {
+    const added = section.table.rows.flatMap((row) =>
+      section.table.columns.flatMap((column, index) => {
+        const text = input.notes?.[figureNoteKey(section.id, row.id, column)];
+        return text ? [{ rowId: row.id, column: index + 1, text }] : [];
+      }),
+    );
+    if (added.length) section.notes = [...(section.notes ?? []), ...added];
+  }
 
   return {
     header: {

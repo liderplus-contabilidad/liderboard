@@ -97,3 +97,18 @@ describe("collection quick filters and ordering", () => {
     ).toEqual(["new", "old"]);
   });
 });
+
+describe("compact collection labels", () => {
+  it.each([
+    [null, "Sin programar"],
+    ["2026-09-21", "Atrasado 2 días"],
+    ["2026-09-22", "Atrasado 1 día"],
+    ["2026-09-23", "Hoy"],
+    ["2026-09-24", "En 1 día"],
+    ["2026-09-27", "En 4 días"],
+  ])("shortens %s without changing the reminder dates", (expectedCashOn, compactLabel) => {
+    expect(pendingCollections([{ ...check, expectedCashOn }], "2026-09-23")[0]).toMatchObject({
+      compactLabel,
+    });
+  });
+});

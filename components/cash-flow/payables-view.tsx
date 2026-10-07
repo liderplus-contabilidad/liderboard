@@ -8,15 +8,24 @@ import {
   ChevronsUpDown,
   Coins,
   FileText,
-  Plus,
   Upload,
   X,
 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { GridRow } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
+import { ColumnPreferencesButton } from "@/components/ui/column-preferences";
+import { useFilterState } from "@/components/dashboard/filter-state";
+import {
+  CARTERA_COLUMNS,
+  DEFAULT_CARTERA_COLUMNS,
+  sanitizeCarteraColumns,
+  visibleCarteraColumns,
+  type CarteraColumn,
+  type CarteraColumnId,
+} from "@/lib/cash-flow/cartera-columns";
 import { DateField } from "@/components/ui/date-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -41,7 +50,6 @@ import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { OverdraftNotices } from "./overdraft-notices";
 import { CashFlowEmptyState } from "./cash-flow-empty-state";
-import { ManualPayablePanel } from "./manual-payable-panel";
 import { AgingBadge, ApprovalDots, CashBadge, PriorityBadge } from "./payable-badges";
 import { PayableDetailPanel } from "./payable-detail-panel";
 import { PayablesUploadModal } from "./payables-upload-modal";
@@ -71,9 +79,16 @@ export function PayablesView() {
   } = useCashFlowData();
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const [manualOpen, setManualOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+
+  const [savedColumns, setColumns] = useFilterState(
+    "cash-flow:cartera-columns",
+    null,
+    DEFAULT_CARTERA_COLUMNS,
+  );
+  const preferences = useMemo(() => sanitizeCarteraColumns(savedColumns), [savedColumns]);
+  const columns = useMemo(() => visibleCarteraColumns(preferences), [preferences]);
 
   const groups = useMemo(() => groupBySupplier(visiblePayables), [visiblePayables]);
   const allCollapsed = groups.length > 0 && groups.every((group) => collapsed.has(group.key));
@@ -194,6 +209,15 @@ export function PayablesView() {
               {cutLabel || "Ninguna cartera cargada"}
             </p>
           </div>
+          <ColumnPreferencesButton
+            preferences={preferences}
+            onChange={setColumns}
+            columns={CARTERA_COLUMNS}
+            defaults={DEFAULT_CARTERA_COLUMNS}
+            label="cartera"
+            requiredColumnId="document"
+            requiredHint="Proveedor · documento permanece visible."
+          />
           {groups.length > 1 && (
             <Button
               variant="secondary"
@@ -206,14 +230,6 @@ export function PayablesView() {
               {allCollapsed ? "Expandir todo" : "Colapsar todo"}
             </Button>
           )}
-          <Button
-            variant="secondary"
-            size="toolbar"
-            icon={<Plus size={14} />}
-            onClick={() => setManualOpen(true)}
-          >
-            Agregar obligación
-          </Button>
         </div>
 
         {selectedVisible.length > 0 && (
@@ -245,6 +261,7 @@ export function PayablesView() {
           </EmptyState>
         ) : (
           <VirtualPayablesGrid
+            columns={columns}
             items={items}
             asOf={asOf}
             hasCenters={centers.length > 0}
@@ -262,7 +279,6 @@ export function PayablesView() {
       </div>
 
       {open && <PayableDetailPanel payable={open} onClose={() => setOpenId(null)} />}
-      {manualOpen && <ManualPayablePanel onClose={() => setManualOpen(false)} />}
       <PayablesUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </CashFlowEmptyState>
   );
@@ -422,12 +438,14 @@ type GridItem =
   | { kind: "total"; key: "total" };
 
 const GroupRow = memo(function GroupRow({
+  columns,
   group,
   collapsed,
   checked,
   onSelectGroup,
   onToggleGroup,
 }: {
+  columns: readonly CarteraColumn[];
   group: SupplierGroup;
   collapsed: boolean;
   /** Every document of the supplier is selected. */
@@ -452,27 +470,91 @@ const GroupRow = memo(function GroupRow({
           onChange={() => onSelectGroup(group)}
         />
       </Cell>
-      <Cell colSpan={2}>
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand">
-          <Caret size={14} className="text-brand" />
-          {group.label}
-          {group.taxId && (
-            <span className="font-mono text-[11px] font-normal text-muted">{group.taxId}</span>
-          )}
-        </span>
-      </Cell>
-      <Cell colSpan={4}>
-        <span className="text-[11.5px] font-semibold text-muted">
-          {pluralize(group.payables.length, "documento")}
-        </span>
-      </Cell>
-      <Cell numeric strong value={group.balance}>
-        {money(group.balance)}
-      </Cell>
-      <Cell colSpan={2} />
+      <CarteraSummaryCells
+        columns={columns}
+        balance={group.balance}
+        count={group.payables.length}
+        label={
+          <span className="inline-flex items-center gap-1.5 text-[13px] font-bold text-brand">
+            <Caret size={14} className="shrink-0 text-brand" />
+            {group.label}
+            {group.taxId && (
+              <span className="font-mono text-[11px] font-normal text-muted">{group.taxId}</span>
+            )}
+          </span>
+        }
+      />
     </GridRow>
   );
 });
+
+/** Merge only empty summary cells; the balance stays under its own reordered column. */
+function CarteraSummaryCells({
+  columns,
+  label,
+  balance,
+  count,
+  total = false,
+}: {
+  columns: readonly CarteraColumn[];
+  label: ReactNode;
+  balance: number;
+  count?: number;
+  total?: boolean;
+}) {
+  const showCountColumn = count !== undefined && columns.some((column) => column.id === "issuedOn");
+  const populated = (id: CarteraColumnId) =>
+    id === "document" || id === "balance" || (id === "issuedOn" && showCountColumn);
+  const cells: ReactNode[] = [];
+  for (let index = 0; index < columns.length;) {
+    const column = columns[index];
+    if (column.id === "balance") {
+      cells.push(
+        <Cell
+          key={column.id}
+          numeric
+          strong={!total}
+          value={balance}
+          className={total ? "border-b-0 text-[14px] font-bold text-white" : undefined}
+        >
+          {money(balance)}
+        </Cell>,
+      );
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (end < columns.length && !populated(columns[end].id)) end += 1;
+    cells.push(
+      <Cell
+        key={column.id}
+        colSpan={end - index}
+        className={
+          total
+            ? "border-b-0 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
+            : undefined
+        }
+      >
+        {column.id === "document" ? (
+          <>
+            {label}
+            {count !== undefined && !showCountColumn && (
+              <span className="ml-3 text-[11.5px] font-semibold text-muted">
+                {pluralize(count, "documento")}
+              </span>
+            )}
+          </>
+        ) : column.id === "issuedOn" && showCountColumn ? (
+          <span className="text-[11.5px] font-semibold text-muted">
+            {pluralize(count!, "documento")}
+          </span>
+        ) : null}
+      </Cell>,
+    );
+    index = end;
+  }
+  return cells;
+}
 
 function SpacerRow({ height }: { height: number }) {
   return (
@@ -490,6 +572,7 @@ function SpacerRow({ height }: { height: number }) {
  * native scroll, and the card's own border around it.
  */
 function VirtualPayablesGrid({
+  columns,
   items,
   asOf,
   hasCenters,
@@ -503,6 +586,7 @@ function VirtualPayablesGrid({
   onToggle,
   onOpen,
 }: {
+  columns: readonly CarteraColumn[];
   items: GridItem[];
   asOf: string;
   hasCenters: boolean;
@@ -537,7 +621,7 @@ function VirtualPayablesGrid({
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
         <table
           className="w-full table-fixed border-separate border-spacing-0"
-          style={{ minWidth: 1290 }}
+          style={{ minWidth: columns.reduce((width, column) => width + column.width, 40) }}
         >
           {/* Widths declared, not measured: with an automatic layout the document column took
                 the slack of the whole card and pushed the figures out of sight. The document column
@@ -545,15 +629,12 @@ function VirtualPayablesGrid({
                 state pill is never the part that gets clipped. */}
           <colgroup>
             <col style={{ width: 40 }} />
-            <col style={{ width: 460 }} />
-            <col />
-            <col style={{ width: 92 }} />
-            <col style={{ width: 92 }} />
-            <col style={{ width: 108 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 118 }} />
-            <col style={{ width: 96 }} />
-            <col style={{ width: 98 }} />
+            {columns.map((column) => (
+              <col
+                key={column.id}
+                style={column.id === "detail" ? undefined : { width: column.width }}
+              />
+            ))}
           </colgroup>
           <thead>
             <tr>
@@ -565,21 +646,15 @@ function VirtualPayablesGrid({
                   onChange={onSelectAll}
                 />
               </HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Proveedor · documento</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Detalle</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Emisión</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Vence</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]" align="right">
-                Valor doc.
-              </HeadCell>
-              <HeadCell className="sticky top-0 z-[2]" align="right">
-                Abonos
-              </HeadCell>
-              <HeadCell className="sticky top-0 z-[2]" align="right">
-                Saldo
-              </HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Programado</HeadCell>
-              <HeadCell className="sticky top-0 z-[2]">Aprobación</HeadCell>
+              {columns.map((column) => (
+                <HeadCell
+                  key={column.id}
+                  className="sticky top-0 z-[2]"
+                  align={column.numeric ? "right" : "left"}
+                >
+                  {column.label}
+                </HeadCell>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -589,6 +664,7 @@ function VirtualPayablesGrid({
               if (row.kind === "group") {
                 return (
                   <GroupRow
+                    columns={columns}
                     key={row.key}
                     group={row.group}
                     collapsed={row.collapsed}
@@ -601,6 +677,7 @@ function VirtualPayablesGrid({
               if (row.kind === "payable") {
                 return (
                   <PayableRow
+                    columns={columns}
                     key={row.key}
                     payable={row.payable}
                     asOf={asOf}
@@ -616,16 +693,7 @@ function VirtualPayablesGrid({
               return (
                 <tr key="total" className="h-[41px] bg-brand text-white">
                   <Cell className="border-b-0" />
-                  <Cell
-                    colSpan={6}
-                    className="border-b-0 text-[13px] font-bold uppercase tracking-[0.4px] text-white"
-                  >
-                    {totalLabel}
-                  </Cell>
-                  <Cell numeric className="border-b-0 text-[14px] font-bold text-white">
-                    {money(total)}
-                  </Cell>
-                  <Cell colSpan={2} className="border-b-0" />
+                  <CarteraSummaryCells columns={columns} label={totalLabel} balance={total} total />
                 </tr>
               );
             })}
@@ -638,6 +706,7 @@ function VirtualPayablesGrid({
 }
 
 const PayableRow = memo(function PayableRow({
+  columns,
   payable,
   asOf,
   hasCenters,
@@ -645,6 +714,7 @@ const PayableRow = memo(function PayableRow({
   onToggle,
   onOpen,
 }: {
+  columns: readonly CarteraColumn[];
   payable: Payable;
   asOf: string;
   hasCenters: boolean;
@@ -657,17 +727,8 @@ const PayableRow = memo(function PayableRow({
   // The detail line: the description, the class of a manual obligation and the center — never the
   // source: which system a document came from is in the header's cut line.
   const sub = payableDetail(payable, { center: hasCenters || payable.source !== "manual" });
-  return (
-    <GridRow onClick={() => onOpen(payable.id)} className={cn("h-[38px]", settled && "opacity-60")}>
-      {/* Selecting must not open: the checkbox cell swallows its click. */}
-      <Cell onClick={(event) => event.stopPropagation()}>
-        <Checkbox
-          size={16}
-          checked={checked}
-          ariaLabel={`Seleccionar ${payable.supplier}`}
-          onChange={() => onToggle(payable.id)}
-        />
-      </Cell>
+  const cells: Record<CarteraColumnId, ReactNode> = {
+    document: (
       <Cell>
         {/* The row's accessible way in: a real button on its title, so the detail opens from the
             keyboard; the whole row opens it on click, the checkbox beside it selects without opening. */}
@@ -687,38 +748,70 @@ const PayableRow = memo(function PayableRow({
           {payable.cash && <CashBadge />}
         </span>
       </Cell>
+    ),
+    detail: (
       <Cell className="text-[12px] text-muted">
         <span className="block truncate" title={sub || undefined}>
           {sub}
         </span>
       </Cell>
+    ),
+    issuedOn: (
       <Cell>
         <span className="tabular-nums text-ink-soft">
           {formatDayMonthYear(payable.issuedOn) ?? "—"}
         </span>
       </Cell>
+    ),
+    dueOn: (
       <Cell>
         <span className="tabular-nums text-ink-soft">
           {formatDayMonthYear(payable.dueOn) ?? "—"}
         </span>
       </Cell>
+    ),
+    amount: (
       <Cell numeric>
         <span className="text-muted">{money(payable.amount)}</span>
       </Cell>
+    ),
+    payments: (
       <Cell numeric>
         <span className="text-muted">{money(payable.payments)}</span>
       </Cell>
+    ),
+    balance: (
       <Cell numeric strong value={payable.balance}>
         {money(payable.balance)}
       </Cell>
+    ),
+    payOn: (
       <Cell>
         <span className="tabular-nums text-ink-soft">
           {formatDayMonthYear(payable.payOn) ?? "—"}
         </span>
       </Cell>
+    ),
+    approval: (
       <Cell>
         <ApprovalDots payable={payable} />
       </Cell>
+    ),
+  };
+  return (
+    <GridRow onClick={() => onOpen(payable.id)} className={cn("h-[38px]", settled && "opacity-60")}>
+      {/* Selecting must not open: the checkbox cell swallows its click. */}
+      <Cell onClick={(event) => event.stopPropagation()}>
+        <Checkbox
+          size={16}
+          checked={checked}
+          ariaLabel={`Seleccionar ${payable.supplier}`}
+          onChange={() => onToggle(payable.id)}
+        />
+      </Cell>
+      {columns.map((column) => (
+        <Fragment key={column.id}>{cells[column.id]}</Fragment>
+      ))}
     </GridRow>
   );
 });

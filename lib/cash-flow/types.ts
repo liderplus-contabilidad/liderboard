@@ -86,12 +86,9 @@ export type BuiltinKind = "sri" | "iess" | "arriendo" | "sueldos" | "cuota" | "p
 export type PayPriority = "urgent" | "pending";
 
 /**
- * One thing owed: a document a cartera brought (Contífico or Dingoo) or an obligation typed by hand.
- * ONE table for both because the flow, the Excel and the report paint one list, and two tables would
- * have forced every reader to join two reads.
- *
- * The `id` of an imported document is stable across cuts (`identity.ts`), which is what lets a reload
- * keep the marks and the four working columns; a manual one carries a uuid.
+ * Shared reading contract for a cartera document and a manual obligation of Flujo. Imported
+ * documents live in `payables`; manual obligations live in `manualObligations`. Sharing this
+ * shape keeps the flow, its matrix and its reports on one definition of every amount.
  */
 export interface Payable {
   id: string;
@@ -139,6 +136,19 @@ export interface Payable {
   cutDate: string;
 }
 
+/** A hand-written obligation owned by Flujo, carried between dates until paid or removed. */
+export interface ManualObligation extends Payable {
+  source: "manual";
+}
+
+/** A check projected as its supplier's obligation in Flujo; never stored as a cartera row. */
+export interface CheckObligation extends Omit<Payable, "source"> {
+  source: "check";
+  checkId: string;
+}
+
+export type FlowPayable = Payable | CheckObligation;
+
 /** The four steps of a check's timeline, in order. `voided` is orthogonal (see `Check`). */
 export type CheckStep = "made" | "signed" | "delivered" | "cashed";
 
@@ -167,6 +177,12 @@ export interface Check {
   cashedOn: string | null;
   /** Planned collection date, independent of the actual cashing date and issue date. */
   expectedCashOn?: string | null;
+  /** Linked to the flow working list from this cut date; a reference, never another expense. */
+  flowLinkedOn?: string | null;
+  flowPriority?: PayPriority;
+  flowApproved?: number | null;
+  flowPayOn?: string | null;
+  flowPayFromAccountId?: string | null;
   place: string;
   note: string;
   /** The beneficiary's cédula / RUC and address, for the comprobante. Optional: empty prints nothing. */

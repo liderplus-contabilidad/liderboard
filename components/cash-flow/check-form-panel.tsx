@@ -1,27 +1,28 @@
 "use client";
 
 import { Ban, FileText, Printer, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
-import { SidePanel } from "@/components/ui/side-panel";
+import { CashFlowSidePanel } from "./cash-flow-side-panel";
 import { CHECK_STEP_LABELS, CHECK_STEPS, nextVoucher, stepIndex } from "@/lib/cash-flow/checks";
 import {
   createCheckPdf,
   downloadVoucher,
   type PdfPreview,
 } from "@/lib/cash-flow/check-print/download";
-import { knownPayeeDetails } from "@/lib/cash-flow/check-print/payee";
+import { knownPayeeDetails, knownPayeeNames } from "@/lib/cash-flow/check-print/payee";
 import { buildVoucherDocument, type VoucherDocument } from "@/lib/cash-flow/check-print/voucher";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
-import type { Check, CheckPayment, CheckStep, Payable } from "@/lib/cash-flow/types";
+import type { BankAccount, Check, CheckPayment, CheckStep, Payable } from "@/lib/cash-flow/types";
 import { cn } from "@/lib/cn";
 
 import { CheckPdfPreview } from "./check-pdf-preview";
 import { AccountPicker } from "./account-picker";
+import { BeneficiaryPicker } from "./beneficiary-picker";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CheckPaymentsSection } from "./check-payments-section";
 import { VoucherFormModal } from "./voucher-form-modal";
@@ -80,8 +81,9 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
   );
 
   const setAccount = useCallback(
-    (accountId: string | null) => {
-      const account = accounts.find((candidate) => candidate.id === accountId);
+    (accountId: string | null, createdAccount?: BankAccount) => {
+      // Creation returns before the provider’s live account list has refreshed.
+      const account = createdAccount ?? accounts.find((candidate) => candidate.id === accountId);
       commit({ accountId: account?.id ?? null, ...(account ? { bank: account.bank } : {}) });
     },
     [accounts, commit],
@@ -238,16 +240,16 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
     [commit, activeClient, draft.voucher, draft.payee, draft.payeeTaxId, draft.payeeAddress],
   );
 
+  const beneficiaryNames = useMemo(() => knownPayeeNames(checks, payables), [checks, payables]);
   const reached = stepIndex(draft.step);
 
   return (
-    <SidePanel
+    <CashFlowSidePanel
       eyebrow={check ? `Egreso ${check.voucher}` : "Control de cheques"}
       title={check ? `${check.payee || "Cheque"} · ${money(check.amount)}` : "Nuevo cheque"}
-      width={460}
       onClose={onClose}
     >
-      <div className="flex flex-col gap-5 px-5 pb-6">
+      <div className="flex flex-col gap-6 px-1 pb-6">
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
             Línea de tiempo
@@ -294,9 +296,17 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
           )}
         </section>
 
-        <section className="grid grid-cols-2 gap-3">
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3">
+          <h3 className="col-span-2 text-[13px] font-semibold text-ink">Datos del cheque</h3>
           <TextField
-            label="N° egreso"
+            label="N.º de egreso *"
+            required
+            placeholder="Ej. 125"
+            hint={
+              check
+                ? "Identifica el registro y no se puede cambiar."
+                : "Un número único para este egreso."
+            }
             value={draft.voucher}
             variant="mono"
             error={error}
@@ -307,38 +317,20 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             }}
           />
           <AccountPicker
+            label="Cuenta"
             value={draft.accountId}
             emptyLabel={draft.bank ? `${draft.bank} · sin cuenta` : "Sin cuenta"}
             onChange={setAccount}
             creationClassName="col-span-2"
           />
-          <TextField
-            label="Beneficiario"
+          <BeneficiaryPicker
             value={draft.payee}
-            fieldClassName="col-span-2"
-            onChange={(event) => setDraft((current) => ({ ...current, payee: event.target.value }))}
-            onBlur={() => {
-              // A beneficiary seen before brings their id and address to the fields still empty.
-              const patch = { payee: draft.payee, ...knownFor(draft.payee, draft) };
-              if (check) {
-                commit(patch);
-              } else {
-                setDraft((current) => ({ ...current, ...patch }));
-              }
-            }}
+            names={beneficiaryNames}
+            onChange={(payee) => commit({ payee, ...knownFor(payee, draft) })}
           />
           <TextField
-            label="Identificación"
-            value={draft.payeeTaxId ?? ""}
-            variant="mono"
-            placeholder="RUC o cédula"
-            onChange={(event) =>
-              setDraft((current) => ({ ...current, payeeTaxId: event.target.value }))
-            }
-            onBlur={() => check && commit({ payeeTaxId: draft.payeeTaxId ?? "" })}
-          />
-          <TextField
-            label="N° cheque"
+            label="N.º de cheque"
+            placeholder="Ej. 000125"
             value={draft.number}
             variant="mono"
             onChange={(event) =>
@@ -346,7 +338,7 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             }
             onBlur={() => check && commit({ number: draft.number })}
           />
-          <FormField label="Valor">
+          <FormField label="Valor" hint="Necesario para imprimir el cheque.">
             <FieldBox>
               <NumericInput
                 value={draft.amount}
@@ -358,6 +350,10 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
               />
             </FieldBox>
           </FormField>
+        </section>
+
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border-soft pt-4">
+          <h3 className="col-span-2 text-[13px] font-semibold text-ink">Fechas y seguimiento</h3>
           <FormField label="Fecha de emisión">
             <DateField
               value={draft.issuedOn}
@@ -367,8 +363,8 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             />
           </FormField>
           <FormField
-            label="Fecha prevista de cobro"
-            hint="Activa el aviso para preparar fondos en el banco"
+            label="Cobro previsto"
+            hint="Programa el aviso para preparar fondos. No marca el cheque como cobrado."
           >
             <DateField
               value={draft.expectedCashOn ?? null}
@@ -378,25 +374,38 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
             />
           </FormField>
           <TextField
-            label="Lugar"
+            label="Ubicación del cheque"
             value={draft.place}
-            placeholder="ARCHIVO"
+            placeholder="Ej. Archivo o en poder del proveedor"
             onChange={(event) => setDraft((current) => ({ ...current, place: event.target.value }))}
             onBlur={() => check && commit({ place: draft.place })}
           />
           <TextField
-            label="Notas"
+            label="Notas internas"
             value={draft.note}
-            placeholder="Observación interna"
+            placeholder="Ej. Entregar cuando el proveedor confirme"
             fieldClassName="col-span-2"
             onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))}
             onBlur={() => check && commit({ note: draft.note })}
           />
+        </section>
+
+        <section className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border-soft pt-4">
+          <h3 className="col-span-2 text-[13px] font-semibold text-ink">Datos del beneficiario</h3>
           <TextField
-            label="Dirección del beneficiario"
+            label="Identificación"
+            value={draft.payeeTaxId ?? ""}
+            variant="mono"
+            placeholder="RUC o cédula"
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, payeeTaxId: event.target.value }))
+            }
+            onBlur={() => check && commit({ payeeTaxId: draft.payeeTaxId ?? "" })}
+          />
+          <TextField
+            label="Dirección"
             value={draft.payeeAddress ?? ""}
-            placeholder="Para el comprobante de egreso"
-            fieldClassName="col-span-2"
+            placeholder="Ej. Av. principal 123, Quito"
             onChange={(event) =>
               setDraft((current) => ({ ...current, payeeAddress: event.target.value }))
             }
@@ -492,6 +501,6 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
           )}
         </div>
       </div>
-    </SidePanel>
+    </CashFlowSidePanel>
   );
 }

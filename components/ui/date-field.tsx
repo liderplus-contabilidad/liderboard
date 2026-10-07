@@ -8,7 +8,7 @@ import { todayISO } from "@/lib/calendar";
 import { cn } from "@/lib/cn";
 import { formatDayMonthYear } from "@/lib/date";
 
-type DateFieldVariant = "field" | "cell" | "dark";
+type DateFieldVariant = "field" | "cell" | "dark" | "icon" | "inline";
 
 /**
  * A date the reader picks on the app's own `Calendar`, wherever a form or a table asked for one:
@@ -29,6 +29,7 @@ export function DateField({
   disabled = false,
   variant = "field",
   ariaLabel,
+  ariaDescribedBy,
   className,
 }: {
   value: string | null;
@@ -38,6 +39,7 @@ export function DateField({
   disabled?: boolean;
   variant?: DateFieldVariant;
   ariaLabel: string;
+  ariaDescribedBy?: string;
   className?: string;
 }) {
   return (
@@ -48,6 +50,7 @@ export function DateField({
         disabled={disabled}
         variant={variant}
         ariaLabel={ariaLabel}
+        ariaDescribedBy={ariaDescribedBy}
       />
       <DropdownPanel>
         <DatePanel value={value} nullable={nullable} onChange={onChange} />
@@ -57,6 +60,9 @@ export function DateField({
 }
 
 const TRIGGERS: Record<DateFieldVariant, string> = {
+  inline:
+    "h-7 rounded-lg border border-transparent bg-transparent px-1 text-[12px] text-muted hover:bg-surface focus-visible:border-brand",
+  icon: "h-7 w-7 justify-center rounded-lg border border-transparent bg-transparent p-0 text-muted hover:border-border hover:bg-surface focus-visible:border-brand",
   field:
     "w-full rounded-lg border border-border bg-surface px-[9px] py-2 text-[13px] text-ink focus-visible:border-brand",
   cell: "w-full rounded-lg border border-border bg-surface px-[9px] py-1.5 text-[13px] text-ink focus-visible:border-brand",
@@ -69,12 +75,14 @@ function DateTrigger({
   disabled,
   variant,
   ariaLabel,
+  ariaDescribedBy,
 }: {
   value: string | null;
   placeholder: string;
   disabled: boolean;
   variant: DateFieldVariant;
   ariaLabel: string;
+  ariaDescribedBy?: string;
 }) {
   const { open, setOpen, triggerRef } = useDropdown();
   const label = formatDayMonthYear(value);
@@ -86,6 +94,7 @@ function DateTrigger({
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-label={ariaLabel}
+      aria-describedby={ariaDescribedBy}
       disabled={disabled}
       onClick={() => setOpen(!open)}
       className={cn(
@@ -100,7 +109,10 @@ function DateTrigger({
         className={cn("shrink-0", variant === "dark" ? "text-white/70" : "text-faint")}
       />
       <span
-        className={cn("flex-1", !label && (variant === "dark" ? "text-white/60" : "text-faint"))}
+        className={cn(
+          variant === "icon" ? "sr-only" : "flex-1",
+          !label && (variant === "dark" ? "text-white/60" : "text-faint"),
+        )}
       >
         {label ?? placeholder}
       </span>

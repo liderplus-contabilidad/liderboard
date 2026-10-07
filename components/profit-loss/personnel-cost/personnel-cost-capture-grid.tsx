@@ -176,21 +176,21 @@ export const PersonnelCostCaptureGrid = memo(function PersonnelCostCaptureGrid({
       <table className="w-full border-collapse text-[12px]">
         <thead>
           <tr className="bg-surface-header">
-            <th className="sticky left-0 z-10 bg-surface-header px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+            <th className="sticky left-0 z-10 bg-surface-header px-3 py-2 text-left text-table-header font-semibold uppercase tracking-[0.4px] text-muted">
               Concepto
             </th>
             {months.map((month) => (
               <th
                 key={month}
-                className="px-2 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.5px] text-faint"
+                className="px-2 py-2 text-right text-table-header font-semibold uppercase tracking-[0.4px] text-muted"
               >
                 {MONTHS_SHORT_ES[month]}
               </th>
             ))}
-            <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+            <th className="px-3 py-2 text-right text-table-header font-semibold uppercase tracking-[0.4px] text-muted">
               Total
             </th>
-            <th className="whitespace-nowrap px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
+            <th className="whitespace-nowrap px-3 py-2 text-right text-table-header font-semibold uppercase tracking-[0.4px] text-muted">
               % vs ventas
             </th>
           </tr>

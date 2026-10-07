@@ -84,13 +84,19 @@ describe("buildFlowReport", () => {
     expect(accounts.rows[1]).toMatchObject({ id: "total", emphasis: true });
     const payments = report.sections[2].table;
     expect(payments.rows.map((row) => row.label)).toEqual([
-      "NUNA",
-      "FAC 1",
-      "PALLASCO PALOMO",
-      "FAC 1",
+      "NUNA — FAC 1",
+      "PALLASCO PALOMO — FAC 1",
       "Total",
     ]);
-    expect(payments.rows[4].values).toEqual(["", "", "", "", "$1,695.93", "$720.00", "$975.93"]);
+    expect(payments.rows.at(-1)?.values).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "$1,695.93",
+      "$720.00",
+      "$975.93",
+    ]);
   });
 
   it("totals the accounts column by column, incomes included", () => {
@@ -248,8 +254,8 @@ describe("buildFlowReport", () => {
     expect(comments).toEqual([
       ["PRODUBANCO", 2, "Cierre del lunes"],
       ["PRODUBANCO", 3, "Aprobado por el banco"],
-      ["FAC 1", 1, "Lo pidió gerencia"],
-      ["FAC 1", 7, "Aprobado"],
+      ["PALLASCO PALOMO — FAC 1", 1, "Lo pidió gerencia"],
+      ["PALLASCO PALOMO — FAC 1", 7, "Aprobado"],
     ]);
   });
 
@@ -265,8 +271,6 @@ describe("buildFlowReport", () => {
     expect(tones("remaining")?.columnTones).toEqual({ Saldo: "signed" });
     // Every supplier's heading is a group row; the documents under it are plain.
     expect(tones("payments")?.rowTones).toEqual({
-      "g-nuna": "group",
-      "g-pallasco palomo": "group",
       total: "total",
     });
     expect(tones("payments")?.columnTones).toEqual({ Urgente: "urgent", Pendiente: "pending" });
@@ -282,8 +286,9 @@ describe("buildFlowReport", () => {
     expect(cellPaint(accounts, "prod", "Saldo final", "-$5,201.39")).toBe("negative");
     expect(cellPaint(accounts, "prod", "Saldo final", "$9,981.41")).toBe("positive");
     expect(cellPaint(accounts, "prod", "Saldo", "$6,677.34")).toBeNull();
-    // The total row is painted whole: its cells take no tone of their own.
-    expect(cellPaint(accounts, "total", "Urgente", "$720.00")).toBeNull();
+    // Priority totals remain distinct from the definitive total.
+    expect(cellPaint(accounts, "total", "Urgente", "$720.00")).toBe("urgent-total");
+    expect(cellPaint(accounts, "total", "Pendiente", "$0.00")).toBe("pending-total");
     // A supplier's heading keeps the marks' columns in their own paint, and nothing else.
     const payments = report.sections.find((section) => section.id === "payments")!;
     expect(cellPaint(payments, "g-nuna", "Urgente", "$0.00")).toBe("urgent");
@@ -308,9 +313,9 @@ describe("buildFlowReport", () => {
         total = argbOf(row.getCell(1).fill);
       }
     });
-    expect(urgent).toBe("FFFEF3C7");
+    expect(urgent).toBe("FFFBD5D5");
     expect(total).toBe("FF1E3A5F");
-    expect(finalBalance).toBe("▲ $9,981.41");
+    expect(finalBalance).toBe("$9,981.41");
   });
 
   it("writes no comment without notes", () => {

@@ -213,7 +213,11 @@ function DeleteCashFlowClientDialog({
           <ul className="divide-y divide-border-soft">
             <DiscardedRow icon={<Landmark size={15} />} label="Las cuentas y el flujo">
               {contents
-                ? [line(contents.accountCount, "cuenta"), line(contents.flowCount, "flujo")]
+                ? [
+                    line(contents.accountCount, "cuenta"),
+                    line(contents.flowCount, "flujo"),
+                    line(contents.obligationCount, "obligación"),
+                  ]
                     .filter(Boolean)
                     .join(", ") || "sin cuentas ni flujos"
                 : "…"}

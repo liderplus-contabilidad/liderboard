@@ -4,7 +4,7 @@ import {
   addAccount,
   addCashEntry,
   addCenter,
-  addManualPayable,
+  addManualObligation,
   applyCut,
   assignBankToAccount,
   createAccountsForBanks,
@@ -25,8 +25,10 @@ import {
   listCuts,
   listFlows,
   listPayables,
+  listManualObligations,
+  updateManualObligation,
+  settleManualObligation,
   saveFlow,
-  settlePayables,
   updateAccount,
   updateCashEntry,
   updateCheck,
@@ -71,6 +73,7 @@ describe("empresas", () => {
       payableCount: 4,
       checkCount: 0,
       flowCount: 1,
+      obligationCount: 0,
     });
     await deleteClient(other);
     expect(await db.centers.count()).toBe(0);
@@ -119,7 +122,7 @@ describe("applyCut", () => {
   });
 
   it("does not settle a manual obligation, and «pagado» archives with the mark cleared", async () => {
-    const manual = await addManualPayable(clientId, {
+    const manual = await addManualObligation(clientId, {
       supplier: "Arriendo marzo",
       kind: "arriendo",
       amount: 2000,
@@ -127,11 +130,15 @@ describe("applyCut", () => {
       centerName: null,
       description: "",
     });
-    await updatePayables([manual.id], { priority: "pending" });
+    await updateManualObligation(clientId, manual.id, { priority: "pending" });
     await applyCut(clientId, parseContifico(CONTIFICO_GRID), "2026-09-15");
-    expect((await listPayables(clientId)).find((row) => row.id === manual.id)?.status).toBe("open");
-    await settlePayables([manual.id], "2026-09-16");
-    expect((await listPayables(clientId)).find((row) => row.id === manual.id)).toMatchObject({
+    expect(
+      (await listManualObligations(clientId)).find((row) => row.id === manual.id)?.status,
+    ).toBe("open");
+    await settleManualObligation(clientId, manual.id, "2026-09-16");
+    expect(
+      (await listManualObligations(clientId)).find((row) => row.id === manual.id),
+    ).toMatchObject({
       status: "settled",
       settledOn: "2026-09-16",
       priority: null,

@@ -117,7 +117,7 @@ export function PersonnelCostGrid({ grid, onCapture, onPasteCapture }: Personnel
                 // AFTER the toolbar in the DOM — at the same level this cell painted OVER the open
                 // year list and swallowed a whole option. It is the ceiling `grid-cells.tsx` already
                 // holds for a sticky head cell.
-                className="sticky z-20 border-b border-r border-border bg-surface-header px-3.5 py-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.6px] text-faintest"
+                className="sticky z-20 border-b border-r border-border bg-surface-header px-3.5 py-2 text-left text-table-header font-semibold uppercase tracking-[0.4px] text-muted"
               >
                 Ejercicio
               </th>
@@ -150,8 +150,8 @@ export function PersonnelCostGrid({ grid, onCapture, onPasteCapture }: Personnel
               <th
                 key={column.key}
                 className={cn(
-                  "border-b border-border bg-surface-header px-3.5 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.4px] tabular-nums",
-                  column.kind === "share" ? "bg-surface-calc text-brand" : "text-faint",
+                  "border-b border-border bg-surface-header px-3.5 py-2.5 text-right text-table-header font-semibold uppercase tracking-[0.4px] tabular-nums",
+                  column.kind === "share" ? "bg-surface-calc text-brand" : "text-muted",
                   column.startsBlock && "border-l border-border",
                 )}
               >
@@ -187,7 +187,7 @@ function HeadCell({
     <th
       style={{ minWidth: width, width, left: sticky ? offset : undefined }}
       className={cn(
-        "border-b border-border bg-surface-header px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.4px] text-faint",
+        "border-b border-border bg-surface-header px-3.5 py-2.5 text-left text-table-header font-semibold uppercase tracking-[0.4px] text-muted",
         sticky && "sticky z-20",
         bordered && "border-r border-border",
       )}
@@ -232,7 +232,7 @@ const GridRow = memo(function GridRow({
           scope="rowgroup"
           rowSpan={row.groupSpan}
           style={{ left: 0 }}
-          className="sticky z-10 border-b border-r border-border bg-surface-header px-3.5 pt-3 align-top text-left text-[10.5px] font-semibold uppercase leading-tight tracking-[0.6px] text-faint"
+          className="sticky z-10 border-b border-r border-border bg-surface-header px-3.5 pt-3 align-top text-left text-[10.5px] font-semibold uppercase leading-tight tracking-[0.6px] text-muted"
         >
           {groupLabel}
         </th>
@@ -252,7 +252,7 @@ const GridRow = memo(function GridRow({
       >
         <span className="flex flex-wrap items-baseline gap-x-2">
           <span className={cn(row.missing && "text-muted")}>{row.label}</span>
-          {row.hint && <span className="text-[11px] font-normal text-faint">{row.hint}</span>}
+          {row.hint && <span className="text-[11px] font-normal text-muted">{row.hint}</span>}
           {/* A row whose account is not in the plan is NOT a row of zeros, and saying so is the only
               way the reader can tell «no existe» from «no movió». */}
           {row.missing && (
@@ -262,7 +262,7 @@ const GridRow = memo(function GridRow({
           )}
         </span>
         {row.kind === "concept" && (
-          <span className="mt-0.5 block font-mono text-[11px] font-normal text-faint">
+          <span className="mt-0.5 block font-mono text-[11px] font-normal text-muted">
             {row.code ?? "Sin cuenta"}
           </span>
         )}
