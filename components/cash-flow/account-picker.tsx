@@ -1,159 +1,111 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { useCallback, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/form-field";
-import { Select } from "@/components/ui/select";
+import { ArrowUpRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { SearchableCreatableSelect } from "@/components/ui/creatable-select";
 import * as cashDb from "@/lib/cash-flow/db";
+import type { BankAccount } from "@/lib/cash-flow/types";
 import { accountLabel } from "@/lib/cash-flow/flow";
-import { cn } from "@/lib/cn";
+import { normalizeLabel } from "@/lib/workspaces";
 import { useCashFlowData } from "./cash-flow-data-provider";
+import { ClientConfigPanel } from "./client-config-panel";
 
-const NONE = "";
-const NEW = "__new__";
+interface AccountPickerProps {
+  value: string | null;
+  onChange: (accountId: string | null, createdAccount?: BankAccount) => void;
+  label?: string;
+  emptyLabel?: string;
+  disabled?: boolean;
+  allowNone?: boolean;
+  /** Table headers already name the field, so cells only render the compact control. */
+  variant?: "field" | "cell";
+  /** Retained for callers that previously positioned the expanded creation form. */
+  creationClassName?: string;
+}
 
-/**
- * The account select every form of this module shares, with «Nueva cuenta…» as its last option:
- * picking it unfolds a three-field row —banco · número · nombre— and «Crear» writes the account and
- * selects it, so registering a check never sends the user to «Configurar» first. The bank is what
- * a check's label is resolved against, so it is the one required field; the number and the name are
- * `Configurar`'s to complete.
- *
- * It renders a FRAGMENT: the select where the form puts it, and the creation box as a SIBLING the
- * form places with `creationClassName` — in a two-column form that is `col-span-2`, so three fields
- * and two buttons get the whole width instead of the select's half.
- */
+/** Choose or create an account in one menu. Only the bank is required at creation;
+ * its number, label and other configuration can be completed in Configurar. */
 export function AccountPicker({
+  label = "Cuenta",
+  variant = "field",
+  ...props
+}: AccountPickerProps) {
+  const { activeClientId } = useCashFlowData();
+  const [configuring, setConfiguring] = useState(false);
+  return (
+    <div>
+      {variant === "field" && (
+        <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
+          <span className="font-semibold text-faint">{label}</span>
+          {activeClientId && (
+            <button
+              type="button"
+              onClick={() => setConfiguring(true)}
+              className="inline-flex items-center gap-1 rounded text-brand underline-offset-2 hover:underline focus-visible:outline-brand"
+            >
+              Configurar cuentas
+              <ArrowUpRight size={12} aria-hidden className="shrink-0" />
+            </button>
+          )}
+        </div>
+      )}
+      <AccountCombobox {...props} label={label} variant={variant} />
+      {configuring && <ClientConfigPanel onClose={() => setConfiguring(false)} />}
+    </div>
+  );
+}
+
+function AccountCombobox({
   value,
   onChange,
   label = "Cuenta",
   emptyLabel = "Sin cuenta",
-  disabled,
+  disabled = false,
   allowNone = true,
-  creationClassName,
-}: {
-  value: string | null;
-  onChange: (accountId: string | null) => void;
-  label?: string;
-  /** What the empty option says — a check without an account says so with its bank label. */
-  emptyLabel?: string;
-  disabled?: boolean;
-  allowNone?: boolean;
-  /** Where the creation box lands in the parent's grid (`col-span-2` in a two-column form). */
-  creationClassName?: string;
-}) {
+  variant,
+}: AccountPickerProps) {
   const { activeClientId, accounts, centers } = useCashFlowData();
-  const [creating, setCreating] = useState(false);
-  const [bank, setBank] = useState("");
-  const [number, setNumber] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | undefined>();
-
-  const create = useCallback(async () => {
-    if (!activeClientId) {
-      return;
-    }
-    if (!bank.trim()) {
-      setError("Escribe el banco: es lo que reconoce cada cheque.");
-      return;
-    }
-    const account = await cashDb.addAccount(activeClientId, {
-      bank,
-      number,
-      label: name,
-      overdraft: 0,
-      centerId: null,
-    });
-    onChange(account.id);
-    setCreating(false);
-    setBank("");
-    setNumber("");
-    setName("");
-    setError(undefined);
-  }, [activeClientId, bank, number, name, onChange]);
-
+  const options = useMemo(
+    () =>
+      accounts.map((account) => ({
+        value: account.id,
+        label: accountLabel(account, centers),
+        search: [accountLabel(account, centers), account.bank, account.number].join(" "),
+      })),
+    [accounts, centers],
+  );
   return (
-    <>
-      <Select
-        label={label}
-        value={creating ? NEW : (value ?? NONE)}
-        disabled={disabled}
-        options={[
-          ...(allowNone ? [{ value: NONE, label: emptyLabel }] : []),
-          ...accounts.map((account) => ({
-            value: account.id,
-            label: accountLabel(account, centers),
-          })),
-          { value: NEW, label: "Nueva cuenta…" },
-        ]}
-        onChange={(event) => {
-          if (event.target.value === NEW) {
-            setCreating(true);
-          } else {
-            setCreating(false);
-            onChange(event.target.value || null);
-          }
-        }}
-      />
-      {creating && (
-        <div
-          className={cn(
-            "flex flex-col gap-2 rounded-[9px] border border-border bg-surface-muted p-3",
-            creationClassName,
-          )}
-        >
-          <TextField
-            label="Banco"
-            value={bank}
-            error={error}
-            placeholder="PRODUBANCO"
-            onChange={(event) => {
-              setBank(event.target.value);
-              setError(undefined);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void create();
-              }
-            }}
-          />
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
-            <TextField
-              label="Número"
-              value={number}
-              variant="mono"
-              placeholder="Opcional"
-              onChange={(event) => setNumber(event.target.value)}
-            />
-            <TextField
-              label="Nombre"
-              value={name}
-              placeholder="Produbanco HA"
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="whitespace-nowrap"
-              onClick={() => setCreating(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              icon={<Plus size={13} />}
-              className="whitespace-nowrap"
-              onClick={() => void create()}
-            >
-              Crear cuenta
-            </Button>
-          </div>
-        </div>
-      )}
-    </>
+    <SearchableCreatableSelect
+      value={value}
+      options={options}
+      onChange={onChange}
+      onCreate={async (bank) => {
+        if (!activeClientId) return;
+        const account = await cashDb.addAccount(activeClientId, {
+          bank,
+          number: "",
+          label: "",
+          overdraft: 0,
+          centerId: null,
+        });
+        onChange(account.id, account);
+      }}
+      ariaLabel={label}
+      placeholder={emptyLabel}
+      searchLabel="Buscar cuenta o escribir un banco"
+      searchPlaceholder="Buscar cuenta o escribir un banco…"
+      createLabel={(query) => {
+        const another = accounts.some(
+          (account) => normalizeLabel(account.bank) === normalizeLabel(query),
+        );
+        return `${another ? "Crear otra cuenta" : "Crear cuenta"} de «${query}»`;
+      }}
+      clearLabel={allowNone ? emptyLabel : undefined}
+      allowCreate={!!activeClientId}
+      allowCreateMatching
+      creationError="No se pudo crear la cuenta. Intenta de nuevo."
+      disabled={disabled}
+      variant={variant}
+    />
   );
 }

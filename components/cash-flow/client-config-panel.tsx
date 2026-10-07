@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Landmark, MapPin, Plus, Printer, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { OverdraftDateFields } from "./overdraft-date-fields";
 import { overdraftDatesError } from "@/lib/cash-flow/overdraft";
@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/button";
 import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
-import { SidePanel } from "@/components/ui/side-panel";
+import { CashFlowSidePanel } from "./cash-flow-side-panel";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { sameCenterName } from "@/lib/cash-flow/flow";
-import { cn } from "@/lib/cn";
+import { normalizeLabel } from "@/lib/workspaces";
 import type { BankAccount, CashFlowCenter } from "@/lib/cash-flow/types";
 
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { CheckLayoutModal } from "./check-layout-modal";
+import { AccountDetailSheet } from "./account-detail-sheet";
 
 const NO_CENTER = "";
 
@@ -37,32 +38,24 @@ export function ClientConfigPanel({ onClose }: { onClose: () => void }) {
     return null;
   }
   return (
-    <SidePanel
+    <CashFlowSidePanel
       eyebrow="Configurar"
       title={activeClient?.name ?? "Empresa"}
-      width={480}
       onClose={onClose}
     >
       <div className="flex flex-col gap-6 pb-6">
         <CentersSection clientId={activeClientId} centers={centers} />
         <AccountsSection clientId={activeClientId} centers={centers} accounts={accounts} />
       </div>
-    </SidePanel>
-  );
-}
-
-function SectionHeading({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <h3 className="-mx-3 -mt-3 flex items-center gap-2 rounded-t-[13px] border-b border-border bg-canvas px-3 py-3 text-[13px] font-bold tracking-[-0.1px] text-ink">
-      <span className="flex size-8 items-center justify-center rounded-[9px] bg-brand-soft text-brand">
-        {icon}
-      </span>
-      {title}
-    </h3>
+    </CashFlowSidePanel>
   );
 }
 
 function CentersSection({ clientId, centers }: { clientId: string; centers: CashFlowCenter[] }) {
+  const [query, setQuery] = useState("");
+  const visibleCenters = centers.filter((center) =>
+    normalizeLabel(center.name).includes(normalizeLabel(query)),
+  );
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
@@ -100,44 +93,34 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
   }, [clientId, centers, draft, saving, closeForm]);
 
   return (
-    <section
-      aria-label="Centros"
-      className="flex flex-col gap-3 rounded-[13px] border border-border bg-surface p-3"
-    >
-      <SectionHeading icon={<MapPin size={15} />} title="Centros" />
-      {centers.length > 0 && (
-        <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
-          {centers.map((center) => (
-            <li key={center.id} className="flex items-center gap-2 px-3 py-1.5">
-              <input
-                defaultValue={center.name}
-                aria-label={`Nombre del centro ${center.name}`}
-                onBlur={(event) => {
-                  const name = event.target.value.trim();
-                  if (name && name !== center.name) {
-                    void cashDb.renameCenter(center.id, name);
-                  } else {
-                    event.target.value = center.name;
-                  }
-                }}
-                className="min-w-0 flex-1 bg-transparent py-1 text-[13px] text-ink outline-none"
-              />
-              <Button
-                variant="danger"
-                size="sm"
-                iconOnly
-                icon={<Trash2 size={14} />}
-                aria-label={`Eliminar centro ${center.name}`}
-                onClick={() => void cashDb.deleteCenter(center.id)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      {creating ? (
+    <section aria-label="Centros" className="flex flex-col gap-4 border-b border-border-soft pb-6">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-ink">Centros</h3>
+        {!creating && (
+          <Button
+            variant="primary"
+            size="toolbar"
+            icon={<Plus size={14} />}
+            onClick={() => setCreating(true)}
+          >
+            Crear centro
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5 rounded-[9px] bg-surface-muted px-3 py-2.5 focus-within:outline focus-within:outline-1 focus-within:outline-brand">
+        <Search size={16} aria-hidden className="shrink-0 text-muted" />
+        <input
+          aria-label="Buscar centros"
+          placeholder="Buscar centro por nombre…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted"
+        />
+      </div>
+      {creating && (
         <form
           aria-label="Nuevo centro"
-          className="rounded-[13px] border border-border bg-canvas p-4"
+          className="border-b border-border-soft pb-4"
           onSubmit={(event) => {
             event.preventDefault();
             void add();
@@ -146,10 +129,11 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
           <fieldset disabled={saving} className="flex flex-col gap-3">
             <legend className="mb-3 text-[13px] font-semibold text-ink">Nuevo centro</legend>
             <TextField
-              label="Nombre del centro"
+              label={<span className="sr-only">Nombre del centro</span>}
+              required
               value={draft}
               error={error}
-              placeholder="HA"
+              placeholder="Ej. Hotel, Restaurante o HA"
               onChange={(event) => {
                 setDraft(event.target.value);
                 setError(undefined);
@@ -165,22 +149,61 @@ function CentersSection({ clientId, centers }: { clientId: string; centers: Cash
                 Cancelar
               </Button>
               <Button type="submit" size="md">
-                {saving ? "Guardando…" : "Guardar"}
+                {saving ? "Creando…" : "Crear centro"}
               </Button>
             </div>
           </fieldset>
         </form>
-      ) : (
-        <div>
-          <Button
-            variant="secondary"
-            size="md"
-            icon={<Plus size={14} />}
-            onClick={() => setCreating(true)}
-          >
-            Agregar centro
-          </Button>
-        </div>
+      )}
+      <ul className="divide-y divide-border-soft">
+        {visibleCenters.map((center) => (
+          <li key={center.id} className="flex items-center gap-2 py-3">
+            <input
+              defaultValue={center.name}
+              aria-label={`Nombre del centro ${center.name}`}
+              onBlur={(event) => {
+                const name = event.target.value.trim();
+                if (name && name !== center.name) void cashDb.renameCenter(center.id, name);
+                else event.target.value = center.name;
+              }}
+              className="min-w-0 flex-1 rounded-[9px] border border-transparent bg-transparent px-1 py-2 text-[13px] font-medium text-ink outline-none hover:bg-canvas focus:border-brand focus:bg-surface"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              iconOnly
+              icon={<Pencil size={14} />}
+              aria-label={`Editar centro ${center.name}`}
+              title="Editar nombre"
+              onClick={(event) => {
+                const input = event.currentTarget.parentElement?.querySelector("input");
+                input?.focus();
+                input?.select();
+              }}
+            />
+            <Button
+              variant="danger"
+              size="sm"
+              iconOnly
+              icon={<Trash2 size={14} />}
+              aria-label={`Eliminar centro ${center.name}`}
+              onClick={() => void cashDb.deleteCenter(center.id)}
+            />
+          </li>
+        ))}
+      </ul>
+      {visibleCenters.length === 0 && !creating && (
+        <p className="py-3 text-[13px] text-muted">
+          {centers.length
+            ? "No hay centros que coincidan con la búsqueda."
+            : "Crea el primer centro de esta empresa."}
+        </p>
+      )}
+      {visibleCenters.length > 0 && (
+        <p className="inline-flex items-center gap-1.5 text-[11.5px] text-muted">
+          <Save size={13} aria-hidden />
+          Los cambios de nombre se guardan al salir del campo.
+        </p>
       )}
     </section>
   );
@@ -231,21 +254,19 @@ function AccountsSection({
   const [error, setError] = useState<string | undefined>();
   const { asOf } = useCashFlowData();
   const [formatting, setFormatting] = useState<BankAccount | null>(null);
-  // The accounts OPEN to edit. All start folded: an empresa can hold several, and the list must
-  // read as a list of accounts before it reads as a stack of forms.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const toggle = useCallback(
-    (id: string) =>
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (!next.delete(id)) {
-          next.add(id);
-        }
-        return next;
-      }),
+    (id: string) => setExpandedId((current) => (current === id ? null : id)),
     [],
   );
+  const visibleAccounts = accounts.filter((account) =>
+    normalizeLabel([accountTitle(account), account.bank, account.number].join(" ")).includes(
+      normalizeLabel(query),
+    ),
+  );
 
+  const detailAccount = accounts.find((account) => account.id === expandedId);
   const centerOptions = [
     { value: NO_CENTER, label: "De la empresa" },
     ...centers.map((center) => ({ value: center.id, label: center.name })),
@@ -308,97 +329,207 @@ function AccountsSection({
   ]);
 
   return (
-    <section
-      aria-label="Cuentas bancarias"
-      className="flex flex-col gap-3 rounded-[13px] border border-border bg-surface p-3"
-    >
-      <SectionHeading icon={<Landmark size={15} />} title="Cuentas bancarias" />
-      {accounts.length > 0 && (
-        <ul className="divide-y divide-border-soft rounded-[9px] border border-border">
-          {accounts.map((account) => (
-            <li key={account.id} className="flex flex-col gap-2.5 px-3.5 py-2.5">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-expanded={expanded.has(account.id)}
-                  onClick={() => toggle(account.id)}
-                  className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-canvas"
-                >
-                  <ChevronRight
-                    size={15}
-                    className={cn(
-                      "shrink-0 text-faint transition-transform",
-                      expanded.has(account.id) && "rotate-90",
-                    )}
+    <section aria-label="Cuentas bancarias" className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-ink">Cuentas bancarias</h3>
+        {!creating && (
+          <Button
+            variant="primary"
+            size="toolbar"
+            icon={<Plus size={14} />}
+            onClick={() => {
+              setCreating(true);
+              setExpandedId(null);
+            }}
+          >
+            Crear cuenta
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5 rounded-[9px] bg-surface-muted px-3 py-2.5 focus-within:outline focus-within:outline-1 focus-within:outline-brand">
+        <Search size={16} aria-hidden className="shrink-0 text-muted" />
+        <input
+          aria-label="Buscar cuentas bancarias"
+          placeholder="Buscar por nombre, banco o número…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="w-full border-0 bg-transparent text-[13px] text-ink outline-none placeholder:text-muted"
+        />
+      </div>
+      {creating && (
+        <form
+          aria-label="Nueva cuenta bancaria"
+          className="rounded-[13px] border border-border bg-surface p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void add();
+          }}
+        >
+          <fieldset disabled={saving} className="flex flex-col gap-4">
+            <legend className="mb-3 text-[13px] font-semibold text-ink">
+              Nueva cuenta bancaria
+            </legend>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <TextField
+                label="Banco *"
+                required
+                value={bank}
+                error={error}
+                placeholder="Ej. Produbanco"
+                onChange={(event) => {
+                  setBank(event.target.value);
+                  setError(undefined);
+                }}
+              />
+              <TextField
+                label="Número de cuenta"
+                value={number}
+                variant="mono"
+                placeholder="Ej. 80010385"
+                onChange={(event) => setNumber(event.target.value)}
+              />
+              <TextField
+                label="Nombre de la cuenta"
+                value={name}
+                placeholder="Ej. Produbanco HA"
+                onChange={(event) => setName(event.target.value)}
+              />
+              {centers.length > 0 && (
+                <Select
+                  label="Centro"
+                  value={centerId}
+                  options={centerOptions}
+                  onChange={(event) => setCenterId(event.target.value)}
+                />
+              )}
+              <h4 className="col-span-2 mt-2 border-t border-border-soft pt-4 text-[13px] font-semibold text-ink">
+                Sobregiro y vigencia
+              </h4>
+              <FormField label="Límite de sobregiro">
+                <FieldBox>
+                  <NumericInput
+                    value={overdraft}
+                    format="currency"
+                    align="left"
+                    placeholder="$0.00"
+                    ariaLabel="Sobregiro de la cuenta nueva"
+                    onCommit={setOverdraft}
                   />
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-semibold text-ink">
-                      {accountTitle(account)}
-                    </span>
-                    {!expanded.has(account.id) && (
-                      <span className="block truncate text-[11.5px] tabular-nums text-faint">
-                        {accountSummary(account, centers)}
-                      </span>
-                    )}
-                  </span>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<Printer size={13} />}
-                  onClick={() => setFormatting(account)}
-                >
-                  Formato de cheque
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  iconOnly
-                  icon={<Trash2 size={14} />}
-                  aria-label={`Eliminar cuenta ${account.bank} ${account.number}`}
-                  onClick={() => void cashDb.deleteAccount(account.id)}
+                </FieldBox>
+              </FormField>
+              <div className="col-span-2 grid grid-cols-2 gap-4">
+                <OverdraftDateFields
+                  startsOn={overdraftStartsOn}
+                  endsOn={overdraftEndsOn}
+                  error={dateError}
+                  onChange={(patch) => {
+                    if ("overdraftStartsOn" in patch)
+                      setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
+                    if ("overdraftEndsOn" in patch)
+                      setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
+                    setDateError(undefined);
+                  }}
                 />
               </div>
-              {expanded.has(account.id) && (
-                <div className="grid grid-cols-2 gap-2">
+            </div>
+            {saveError && (
+              <p role="alert" className="text-[12px] text-negative">
+                {saveError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="md" onClick={closeForm}>
+                Cancelar
+              </Button>
+              <Button type="submit" size="md">
+                {saving ? "Creando…" : "Crear cuenta"}
+              </Button>
+            </div>
+          </fieldset>
+        </form>
+      )}
+      <ul>
+        {visibleAccounts.map((account) => (
+          <li key={account.id} className="border-b border-border-soft py-4 last:border-b-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-[13px] font-semibold text-ink">{accountTitle(account)}</h4>
+                <p className="mt-0.5 text-[12px] tabular-nums leading-relaxed text-muted">
+                  {accountSummary(account, centers)}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Eye size={14} />}
+                iconOnly
+                aria-label={`Ver detalle de ${accountTitle(account)}`}
+                title="Ver detalle"
+                onClick={() => toggle(account.id)}
+                className="shrink-0 text-brand"
+              />
+            </div>
+            {expandedId === account.id && (
+              <AccountDetailSheet
+                title={accountTitle(account)}
+                summary={accountSummary(account, centers)}
+                onClose={() => setExpandedId(null)}
+              >
+                <div
+                  id={`account-detail-${account.id}`}
+                  className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 [&_label]:text-muted"
+                >
+                  <h5 className="col-span-2 text-[13px] font-semibold text-ink">
+                    Datos de la cuenta
+                  </h5>
                   <TextField
-                    label="Banco"
+                    label="Banco *"
+                    required
                     defaultValue={account.bank}
-                    placeholder="PRODUBANCO"
-                    hint="Como lo escribe el registro de cheques"
+                    placeholder="Ej. Produbanco"
+                    hint="Debe coincidir con el banco del registro de cheques."
                     onBlur={(event) => {
-                      const value = event.target.value.trim();
-                      if (!value) {
-                        // The bank is what a check's label resolves by: it cannot be left empty.
-                        event.target.value = account.bank;
-                      } else if (value !== account.bank) {
-                        void cashDb.updateAccount(account.id, { bank: value });
-                      }
+                      const bank = event.target.value.trim();
+                      if (!bank) event.target.value = account.bank;
+                      else if (bank !== account.bank)
+                        void cashDb.updateAccount(account.id, { bank });
                     }}
                   />
                   <TextField
-                    label="Número"
+                    label="Número de cuenta"
                     variant="mono"
                     defaultValue={account.number}
-                    placeholder="80010385"
+                    placeholder="Ej. 80010385"
                     onBlur={(event) => {
-                      if (event.target.value.trim() !== account.number) {
+                      if (event.target.value.trim() !== account.number)
                         void cashDb.updateAccount(account.id, { number: event.target.value });
-                      }
                     }}
                   />
                   <TextField
-                    label="Nombre"
-                    hint="Opcional"
+                    label="Nombre de la cuenta"
                     defaultValue={account.label ?? ""}
-                    placeholder="Produbanco HA"
+                    placeholder="Ej. Produbanco HA"
                     onBlur={(event) => {
-                      if (event.target.value.trim() !== (account.label ?? "")) {
+                      if (event.target.value.trim() !== (account.label ?? ""))
                         void cashDb.updateAccount(account.id, { label: event.target.value });
-                      }
                     }}
                   />
-                  <FormField label="Sobregiro">
+                  {centers.length > 0 && (
+                    <Select
+                      label="Centro"
+                      value={account.centerId ?? NO_CENTER}
+                      options={centerOptions}
+                      onChange={(event) =>
+                        void cashDb.updateAccount(account.id, {
+                          centerId: event.target.value || null,
+                        })
+                      }
+                    />
+                  )}
+                  <h4 className="col-span-2 mt-2 border-t border-border-soft pt-4 text-[13px] font-semibold text-ink">
+                    Sobregiro y vigencia
+                  </h4>
+                  <FormField label="Límite de sobregiro">
                     <FieldBox>
                       <NumericInput
                         value={account.overdraft}
@@ -411,134 +542,57 @@ function AccountsSection({
                       />
                     </FieldBox>
                   </FormField>
-                  <OverdraftDateFields
-                    startsOn={account.overdraftStartsOn ?? null}
-                    endsOn={account.overdraftEndsOn ?? null}
-                    error={accountError?.id === account.id ? accountError.message : undefined}
-                    onChange={(patch) => {
-                      void cashDb.updateAccount(account.id, patch).then(
-                        () => setAccountError(null),
-                        (error: Error) =>
-                          setAccountError({ id: account.id, message: error.message }),
-                      );
-                    }}
-                  />
-                  {centers.length > 0 && (
-                    <div className="col-span-2">
-                      <Select
-                        label="Centro"
-                        value={account.centerId ?? NO_CENTER}
-                        options={centerOptions}
-                        onChange={(event) =>
-                          void cashDb.updateAccount(account.id, {
-                            centerId: event.target.value || null,
-                          })
-                        }
-                      />
-                    </div>
-                  )}
+                  <div className="col-span-2 grid grid-cols-2 gap-4">
+                    <OverdraftDateFields
+                      startsOn={account.overdraftStartsOn ?? null}
+                      endsOn={account.overdraftEndsOn ?? null}
+                      error={accountError?.id === account.id ? accountError.message : undefined}
+                      onChange={(patch) => {
+                        void cashDb.updateAccount(account.id, patch).then(
+                          () => setAccountError(null),
+                          (error: Error) =>
+                            setAccountError({ id: account.id, message: error.message }),
+                        );
+                      }}
+                    />
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between gap-3 text-[11.5px] text-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Save size={13} aria-hidden />
+                      Guardado automático al salir del campo
+                    </span>
+                    <span>* Obligatorio</span>
+                  </div>
+                  <div className="col-span-2 flex items-center justify-between border-t border-border-soft pt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<Printer size={13} />}
+                      onClick={() => setFormatting(account)}
+                    >
+                      Formato de cheque
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      icon={<Trash2 size={14} />}
+                      onClick={() => void cashDb.deleteAccount(account.id)}
+                    >
+                      Eliminar cuenta
+                    </Button>
+                  </div>
                 </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {creating ? (
-        <form
-          aria-label="Nueva cuenta bancaria"
-          className="rounded-[13px] border border-border bg-canvas p-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void add();
-          }}
-        >
-          <fieldset disabled={saving} className="flex flex-col gap-3">
-            <legend className="mb-3 text-[13px] font-semibold text-ink">
-              Nueva cuenta bancaria
-            </legend>
-            <div className="grid grid-cols-2 gap-2">
-              <TextField
-                label="Banco"
-                value={bank}
-                error={error}
-                placeholder="PRODUBANCO"
-                onChange={(event) => {
-                  setBank(event.target.value);
-                  setError(undefined);
-                }}
-              />
-              <TextField
-                label="Número"
-                value={number}
-                variant="mono"
-                placeholder="80010385"
-                onChange={(event) => setNumber(event.target.value)}
-              />
-              <TextField
-                label="Nombre"
-                value={name}
-                placeholder="Produbanco HA"
-                hint="Opcional"
-                onChange={(event) => setName(event.target.value)}
-              />
-              <FormField label="Sobregiro" hint={overdraft ? money(overdraft) : undefined}>
-                <FieldBox>
-                  <NumericInput
-                    value={overdraft}
-                    format="currency"
-                    align="left"
-                    placeholder="$0.00"
-                    ariaLabel="Sobregiro de la cuenta nueva"
-                    onCommit={setOverdraft}
-                  />
-                </FieldBox>
-              </FormField>
-              <OverdraftDateFields
-                startsOn={overdraftStartsOn}
-                endsOn={overdraftEndsOn}
-                error={dateError}
-                onChange={(patch) => {
-                  if ("overdraftStartsOn" in patch)
-                    setOverdraftStartsOn(patch.overdraftStartsOn ?? null);
-                  if ("overdraftEndsOn" in patch) setOverdraftEndsOn(patch.overdraftEndsOn ?? null);
-                  setDateError(undefined);
-                }}
-              />
-              {centers.length > 0 && (
-                <Select
-                  label="Centro"
-                  value={centerId}
-                  options={centerOptions}
-                  onChange={(event) => setCenterId(event.target.value)}
-                />
-              )}
-            </div>
-            {saveError && (
-              <p role="alert" className="text-[12px] text-negative">
-                {saveError}
-              </p>
+              </AccountDetailSheet>
             )}
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" size="md" onClick={closeForm}>
-                Cancelar
-              </Button>
-              <Button type="submit" size="md">
-                {saving ? "Guardando…" : "Guardar"}
-              </Button>
-            </div>
-          </fieldset>
-        </form>
-      ) : (
-        <div>
-          <Button
-            variant="secondary"
-            size="md"
-            icon={<Plus size={14} />}
-            onClick={() => setCreating(true)}
-          >
-            Agregar cuenta
-          </Button>
-        </div>
+          </li>
+        ))}
+      </ul>
+      {!detailAccount && visibleAccounts.length === 0 && !creating && (
+        <p className="py-6 text-[13px] text-muted">
+          {accounts.length
+            ? "No hay cuentas que coincidan con la búsqueda."
+            : "Agrega la primera cuenta bancaria de esta empresa."}
+        </p>
       )}
       {formatting && (
         <CheckLayoutModal account={formatting} date={asOf} onClose={() => setFormatting(null)} />

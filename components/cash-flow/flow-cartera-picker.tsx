@@ -151,7 +151,7 @@ export function CarteraPicker({
   };
 
   return (
-    <Modal open={open} title={title} width={640} onClose={close}>
+    <Modal open={open} title={title} width={720} onClose={close}>
       <div className="flex flex-col gap-3">
         <SearchInput
           size="sm"
@@ -164,13 +164,13 @@ export function CarteraPicker({
         ) : groups.length === 0 ? (
           <EmptyState icon={<FileText size={22} />}>Ningún documento coincide.</EmptyState>
         ) : (
-          <ul className="max-h-[52vh] divide-y divide-border-soft overflow-y-auto rounded-[9px] border border-border">
+          <ul className="max-h-[52vh] divide-y divide-border-soft overflow-y-auto">
             {groups.map((group) => {
               const ids = group.payables.map((payable) => payable.id);
               const allOn = ids.every((id) => picked.has(id));
               return (
                 <li key={group.key}>
-                  <label className="flex cursor-pointer items-center gap-2.5 bg-surface-muted px-3 py-2">
+                  <label className="flex cursor-pointer items-center gap-2.5 bg-surface-muted py-2">
                     <Checkbox
                       checked={allOn}
                       onChange={() => toggleGroup(ids)}
@@ -186,12 +186,12 @@ export function CarteraPicker({
                       {money(group.balance)}
                     </span>
                   </label>
-                  <ul>
+                  <ul className="divide-y divide-border-soft">
                     {group.payables.map((payable) => {
                       const overdue = payable.dueOn !== null && payable.dueOn < asOf;
                       return (
                         <li key={payable.id}>
-                          <label className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 pl-9 hover:bg-canvas">
+                          <label className="flex cursor-pointer items-center gap-2.5 py-1.5 pl-6 hover:bg-canvas">
                             <Checkbox
                               checked={picked.has(payable.id)}
                               onChange={() => toggle(payable.id)}

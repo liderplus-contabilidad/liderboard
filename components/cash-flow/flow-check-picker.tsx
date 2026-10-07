@@ -68,10 +68,6 @@ export function FlowCheckPicker({ onClose }: { onClose: () => void }) {
   return (
     <Modal open title="Agregar desde Cheques" width={720} onClose={onClose}>
       <div className="flex flex-col gap-3">
-        <p className="text-[12px] leading-relaxed text-muted">
-          Selecciona cheques pendientes para agregarlos como obligaciones de su proveedor. Se
-          cargarán como urgentes, con su monto y cuenta. Cada cheque se descontará una sola vez.
-        </p>
         <SearchInput
           size="sm"
           value={query}
@@ -85,12 +81,12 @@ export function FlowCheckPicker({ onClose }: { onClose: () => void }) {
               : "Ningún cheque coincide con la búsqueda."}
           </EmptyState>
         ) : (
-          <ul className="max-h-[52vh] divide-y divide-border-soft overflow-y-auto rounded-[9px] border border-border">
+          <ul className="max-h-[52vh] divide-y divide-border-soft overflow-y-auto">
             {visible.map((check) => {
               const account = accounts.find((row) => row.id === check.accountId);
               return (
                 <li key={check.id}>
-                  <label className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-canvas">
+                  <label className="flex cursor-pointer items-center gap-3 py-3 hover:bg-canvas">
                     <Checkbox
                       checked={picked.has(check.id)}
                       onChange={() => toggle(check.id)}

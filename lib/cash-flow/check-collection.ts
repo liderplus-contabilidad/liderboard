@@ -15,13 +15,21 @@ export function pendingCollections(checks: readonly Check[], today: string) {
             : days === 0
               ? "Cobro previsto hoy"
               : `Cobro en ${days} ${days === 1 ? "día" : "días"}`;
+      const compactLabel =
+        days === null
+          ? "Sin programar"
+          : days < 0
+            ? `Atrasado ${-days} ${days === -1 ? "día" : "días"}`
+            : days === 0
+              ? "Hoy"
+              : `En ${days} ${days === 1 ? "día" : "días"}`;
       const variant =
         days !== null && days < 0
           ? ("negative" as const)
           : days === null || days <= 7
             ? ("warning" as const)
             : ("outline" as const);
-      return { check, days, label, variant };
+      return { check, days, label, compactLabel, variant };
     })
     .sort(
       (a, b) =>

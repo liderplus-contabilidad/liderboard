@@ -65,7 +65,7 @@ export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
         {
           id: "control-cheques",
           title: "Control de cheques",
-          description: "Las catorce columnas del libro, con lo que pasa los filtros",
+          description: "",
           icon: FileSpreadsheet,
           iconClassName: "text-brand",
           disabled: visibleChecks.length === 0,

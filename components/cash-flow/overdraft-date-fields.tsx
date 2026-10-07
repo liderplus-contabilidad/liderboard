@@ -17,7 +17,7 @@ export function OverdraftDateFields({
 }) {
   return (
     <>
-      <FormField label="Inicio del sobregiro" hint="Opcional">
+      <FormField label="Inicio del sobregiro">
         <DateField
           value={startsOn}
           nullable
@@ -25,7 +25,7 @@ export function OverdraftDateFields({
           onChange={(value) => onChange({ overdraftStartsOn: value })}
         />
       </FormField>
-      <FormField label="Fin del sobregiro" hint="Opcional · aviso de vencimiento" error={error}>
+      <FormField label="Fin del sobregiro" hint="Activa el aviso de vencimiento" error={error}>
         <DateField
           value={endsOn}
           nullable

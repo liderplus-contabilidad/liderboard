@@ -13,6 +13,8 @@ export interface SidePanelProps {
   width?: number;
   onClose: () => void;
   children: ReactNode;
+  /** Optional actions that remain visible while the panel body scrolls. */
+  footer?: ReactNode;
 }
 
 /**
@@ -32,6 +34,7 @@ export function SidePanel({
   width = 420,
   onClose,
   children,
+  footer,
 }: SidePanelProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -75,7 +78,8 @@ export function SidePanel({
       style={{ width }}
       className={cn(
         "fixed inset-y-0 left-auto right-0 m-0 h-auto max-h-none max-w-none p-0",
-        "flex flex-col overflow-y-auto border-l border-border bg-surface text-ink outline-none",
+        "flex flex-col border-l border-border bg-surface text-ink outline-none",
+        footer ? "overflow-hidden" : "overflow-y-auto",
         "shadow-[-18px_0_50px_rgba(15,23,42,0.16)] backdrop:bg-ink/35",
       )}
     >
@@ -96,7 +100,14 @@ export function SidePanel({
         </button>
       </header>
 
-      <div className="flex-1 px-[18px] py-4">{children}</div>
+      <div className={cn("flex-1 px-[18px] py-4", footer ? "min-h-0 overflow-y-auto" : undefined)}>
+        {children}
+      </div>
+      {footer && (
+        <footer className="shrink-0 border-t border-border bg-surface px-[18px] py-4">
+          {footer}
+        </footer>
+      )}
     </dialog>
   );
 }

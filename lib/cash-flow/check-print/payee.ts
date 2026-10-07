@@ -39,3 +39,19 @@ export function knownPayeeDetails(
 
   return { ...(taxId ? { taxId } : {}), ...(address ? { address } : {}) };
 }
+
+/** The active empresa's reusable names, read from its records rather than stored twice. */
+export function knownPayeeNames(
+  checks: readonly Pick<Check, "payee">[],
+  payables: readonly Pick<Payable, "supplier">[],
+): string[] {
+  const names = new Map<string, string>();
+  for (const name of [...checks.map((check) => check.payee), ...payables.map((p) => p.supplier)]) {
+    const label = name.trim();
+    const key = normalizeLabel(label);
+    if (key && !names.has(key)) {
+      names.set(key, label);
+    }
+  }
+  return [...names.values()].sort((a, b) => a.localeCompare(b, "es"));
+}
