@@ -139,10 +139,11 @@ function ComboboxCollection({ ...props }: Styled<ComboboxPrimitive.Collection.Pr
 }
 
 function ComboboxEmpty({ className, ...props }: Styled<ComboboxPrimitive.Empty.Props>) {
+  // Base UI keeps this live region mounted; an empty message must not reserve vertical space.
   return (
     <ComboboxPrimitive.Empty
       data-slot="combobox-empty"
-      className={cn("py-3 text-center text-[12.5px] text-muted", className)}
+      className={cn("py-3 text-center text-[12.5px] text-muted empty:py-0", className)}
       {...props}
     />
   );
