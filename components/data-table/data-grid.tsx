@@ -6,12 +6,19 @@ interface DataGridProps {
   /** Force a horizontal scroll threshold (px). Columns below it stay pinned. */
   minWidth?: number;
   className?: string;
+  /** Constrain the scroll viewport without changing the table's layout. */
+  containerClassName?: string;
 }
 
 /** Scroll container + `<table>` shell. Compose `<thead>`/`<tbody>` (or `GridRow`) inside. */
-export function DataGrid({ children, minWidth, className }: DataGridProps) {
+export function DataGrid({ children, minWidth, className, containerClassName }: DataGridProps) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+    <div
+      className={cn(
+        "overflow-x-auto rounded-xl border border-border bg-surface",
+        containerClassName,
+      )}
+    >
       <table className={cn("w-full border-collapse", className)} style={{ minWidth }}>
         {children}
       </table>

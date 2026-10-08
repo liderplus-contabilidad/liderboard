@@ -17,6 +17,7 @@ export function FormField({
   label,
   error,
   hint,
+  messageId,
   className,
   children,
 }: {
@@ -25,6 +26,8 @@ export function FormField({
   error?: string;
   /** A permanent clarification of the field, for what the label cannot say. */
   hint?: ReactNode;
+  /** Links a control's aria-describedby to its error or persistent hint. */
+  messageId?: string;
   className?: string;
   children: ReactNode;
 }) {
@@ -33,9 +36,15 @@ export function FormField({
       {label}
       <span className="mt-1.5 block font-normal">{children}</span>
       {error ? (
-        <span className="mt-1 block text-[11px] font-normal text-negative">{error}</span>
+        <span id={messageId} className="mt-1 block text-[11px] font-normal text-negative">
+          {error}
+        </span>
       ) : (
-        hint && <span className="mt-1 block text-[11px] font-normal text-faint">{hint}</span>
+        hint && (
+          <span id={messageId} className="mt-1 block text-[11px] font-normal text-faint">
+            {hint}
+          </span>
+        )
       )}
     </label>
   );
@@ -53,8 +62,10 @@ export function FieldBox({
   return (
     <span
       className={cn(
-        "flex w-full items-center rounded-lg border bg-surface px-[9px] py-2 text-[13px] transition-colors focus-within:border-brand",
-        invalid ? "border-negative" : "border-border",
+        "flex w-full items-center rounded-lg border bg-surface px-[9px] py-2 text-[13px] transition-colors",
+        invalid
+          ? "border-negative focus-within:border-negative"
+          : "border-border focus-within:border-brand",
       )}
     >
       {children}
@@ -66,6 +77,7 @@ interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "si
   label: ReactNode;
   error?: string;
   hint?: ReactNode;
+  messageId?: string;
   /** `mono` for what is checked character by character against the accountant's sheet: a cédula, a
    *  sector code. */
   variant?: "sans" | "mono";
@@ -76,18 +88,27 @@ export function TextField({
   label,
   error,
   hint,
+  messageId,
   variant = "sans",
   fieldClassName,
   className,
   ...props
 }: TextFieldProps) {
   return (
-    <FormField label={label} error={error} hint={hint} className={fieldClassName}>
+    <FormField
+      label={label}
+      error={error}
+      hint={hint}
+      messageId={messageId}
+      className={fieldClassName}
+    >
       <input
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? messageId : undefined}
         className={cn(
-          "w-full rounded-lg border bg-surface px-[9px] py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand",
+          "w-full rounded-lg border bg-surface px-[9px] py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint",
           variant === "mono" ? "font-mono tabular-nums" : "font-sans",
-          error ? "border-negative" : "border-border",
+          error ? "border-negative focus:border-negative" : "border-border focus:border-brand",
           className,
         )}
         {...props}

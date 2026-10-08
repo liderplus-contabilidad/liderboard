@@ -25,6 +25,12 @@
   --color-positive: #16a34a;
   --color-negative: #dc2626;
   --color-warning: #d97706;
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 15%, var(--color-surface));
+  /* Completed actions, distinct from the sign of a financial value. */
+  --color-success: #15803d;
+  --color-success-soft: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
+  /* Excel file identity, independent of a financial value's sign. */
+  --color-excel: #217346;
   /* Payment priority, independent of the sign of its amount. */
   --color-urgent: #fbd5d5;
   --color-urgent-total: #9f3038;

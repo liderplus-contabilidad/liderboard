@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}
       suppressHydrationWarning
     >
-      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">{children}</body>
+      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

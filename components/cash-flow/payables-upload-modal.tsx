@@ -1,15 +1,17 @@
 "use client";
 
-import { ArrowRight, Check, FileSpreadsheet, Loader2, MapPin, Upload } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Cell, HeadCell } from "@/components/data-table/grid-cells";
 import { DataGrid } from "@/components/data-table/data-grid";
 import { Button } from "@/components/ui/button";
 import { DateField } from "@/components/ui/date-field";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ExcelUploadCard } from "@/components/ui/excel-upload-card";
 import { FormField } from "@/components/ui/form-field";
 import { Modal } from "@/components/ui/modal";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { toast } from "@/components/ui/toaster";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { isISODate } from "@/lib/cash-flow/dates";
@@ -57,19 +59,20 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
   const [failure, setFailure] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState<cashDb.CutSummary | null>(null);
 
   const reset = useCallback(() => {
     setStaged(null);
     setFailure(null);
-    setDone(null);
   }, []);
 
   const stagedRows = useMemo(
     () => (staged ? (staged.kind === "liderplus" ? staged.rows : staged.cartera.payables) : []),
     [staged],
   );
-  const detected = useMemo(() => detectCenters(stagedRows, centers), [stagedRows, centers]);
+  const newCenters = useMemo(
+    () => detectCenters(stagedRows, centers).filter((center) => !center.known),
+    [stagedRows, centers],
+  );
 
   const readFile = useCallback(
     async (file: File) => {
@@ -132,6 +135,11 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     [readFile],
   );
 
+  const close = useCallback(() => {
+    reset();
+    onClose();
+  }, [reset, onClose]);
+
   const confirm = useCallback(async () => {
     if (!staged || !activeClientId) {
       return;
@@ -144,21 +152,23 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
       if (picked.size > 0) {
         await cashDb.createCentersForLabels(activeClientId, [...picked]);
       }
-      if (staged.kind === "liderplus") {
-        const written = await cashDb.replaceCartera(activeClientId, staged.rows);
-        setDone({ written, settled: 0 });
-      } else {
-        setDone(await cashDb.applyCut(activeClientId, staged.cartera, cutDate));
-      }
+      const summary =
+        staged.kind === "liderplus"
+          ? { written: await cashDb.replaceCartera(activeClientId, staged.rows), settled: 0 }
+          : await cashDb.applyCut(activeClientId, staged.cartera, cutDate);
+      close();
+      toast.success("Cartera incorporada al flujo", {
+        description:
+          pluralize(summary.written, "documento incorporado", "documentos incorporados") +
+          (summary.settled > 0
+            ? ` · ${pluralize(summary.settled, "documento liquidado", "documentos liquidados")} por no venir en este corte.`
+            : "."),
+        duration: summary.settled > 0 ? 8000 : undefined,
+      });
     } finally {
       setSaving(false);
     }
-  }, [staged, activeClientId, cutDate, picked]);
-
-  const close = useCallback(() => {
-    reset();
-    onClose();
-  }, [reset, onClose]);
+  }, [staged, activeClientId, cutDate, picked, close]);
 
   const previewRows = stagedRows;
   const total = previewRows
@@ -168,8 +178,8 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     staged?.kind === "liderplus" ? staged.rows.filter((row) => row.status === "settled").length : 0;
 
   return (
-    <Modal open={open} title="Cargar cartera por pagar" width={720} onClose={close}>
-      <div className="flex flex-col gap-4 px-5 pb-5">
+    <Modal open={open} title="Cargar cartera por pagar" width={860} onClose={close}>
+      <div className="flex flex-col gap-6">
         <input
           ref={inputRef}
           type="file"
@@ -178,23 +188,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
           className="hidden"
         />
 
-        {done ? (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <span className="flex size-11 items-center justify-center rounded-full bg-positive/10 text-positive">
-              <Check size={22} />
-            </span>
-            <p className="text-[15px] font-bold text-ink">Cartera incorporada al flujo</p>
-            <p className="max-w-[440px] text-[12.5px] text-muted">
-              {pluralize(done.written, "documento")} escritos
-              {done.settled > 0 &&
-                ` · ${pluralize(done.settled, "documento")} liquidados por no venir en este corte`}
-              .
-            </p>
-            <Button size="sm" onClick={close}>
-              Ir a Cuentas por pagar
-            </Button>
-          </div>
-        ) : !staged ? (
+        {!staged ? (
           <>
             <button
               type="button"
@@ -216,50 +210,58 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
           </>
         ) : (
           <>
-            <div className="flex items-start gap-3 rounded-[9px] border border-border bg-surface-muted px-4 py-3">
-              <FileSpreadsheet size={18} className="mt-0.5 shrink-0 text-brand" />
-              <div className="min-w-0 flex-1 text-[12.5px]">
-                <div className="truncate font-semibold text-ink">{staged.fileName}</div>
-                <div className="text-muted">
-                  {staged.kind === "liderplus" ? (
-                    <>
-                      {LIDERPLUS_LABEL} · {pluralize(staged.rows.length, "documento")}
-                      {settledCount > 0 && ` (${settledCount} liquidados)`} · {money(total)}{" "}
-                      abiertos
-                    </>
-                  ) : (
-                    <>
-                      {staged.strategy.label}
-                      {staged.cartera.companyName && ` · ${staged.cartera.companyName}`}
-                      {" · "}
-                      {pluralize(staged.cartera.payables.length, "documento")} · {money(total)}
-                      {staged.cartera.skipped > 0 &&
-                        ` · ${pluralize(staged.cartera.skipped, "fila")} de subtotal ignoradas`}
-                    </>
-                  )}
-                </div>
-              </div>
-              {staged.kind === "system" && (
-                <FormField label="Fecha de corte" className="w-[150px]">
-                  <DateField
-                    value={cutDate}
-                    ariaLabel="Fecha de corte de la cartera"
-                    onChange={(date) => date && setCutDate(date)}
-                  />
-                </FormField>
-              )}
-            </div>
+            <ExcelUploadCard
+              fileName={staged.fileName}
+              notice={
+                staged.kind === "system" && staged.cartera.skipped > 0
+                  ? pluralize(
+                      staged.cartera.skipped,
+                      "fila de subtotal omitida",
+                      "filas de subtotal omitidas",
+                    )
+                  : undefined
+              }
+              actionSlot={
+                staged.kind === "system" && (
+                  <FormField label="Fecha de corte" className="w-[150px] shrink-0 text-ink-soft">
+                    <DateField
+                      value={cutDate}
+                      ariaLabel="Fecha de corte de la cartera"
+                      onChange={(date) => date && setCutDate(date)}
+                    />
+                  </FormField>
+                )
+              }
+            >
+              <span className="w-full">
+                {staged.kind === "liderplus" ? LIDERPLUS_LABEL : staged.strategy.label}
+                {staged.kind === "system" &&
+                  staged.cartera.companyName &&
+                  ` · ${staged.cartera.companyName}`}
+              </span>
+              <span>
+                <span className="tabular-nums">
+                  {pluralize(previewRows.length, "documento")}
+                  {settledCount > 0 && ` (${settledCount} liquidados)`}
+                </span>
+                {" · "}
+                <span className="font-mono tabular-nums">{money(total)}</span>
+                {staged.kind === "liderplus" && " abiertos"}
+              </span>
+            </ExcelUploadCard>
 
             <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-faint">
-                Vista previa · primeras {Math.min(PREVIEW_ROWS, previewRows.length)} filas
-              </p>
-              <DataGrid>
-                <thead>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-[13px] font-semibold text-ink">Vista previa</h3>
+                <span className="text-[11.5px] text-muted tabular-nums">
+                  Primeras {Math.min(PREVIEW_ROWS, previewRows.length)} filas
+                </span>
+              </div>
+              <DataGrid minWidth={800} containerClassName="max-h-[240px]">
+                <thead className="sticky top-0 z-10">
                   <tr>
                     <HeadCell>Proveedor</HeadCell>
                     <HeadCell>Documento</HeadCell>
-                    <HeadCell>Emisión</HeadCell>
                     <HeadCell>Vence</HeadCell>
                     <HeadCell align="right">Valor</HeadCell>
                     <HeadCell align="right">Pagos</HeadCell>
@@ -269,12 +271,9 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
                 <tbody>
                   {previewRows.slice(0, PREVIEW_ROWS).map((row, index) => (
                     <tr key={index}>
-                      <Cell className="max-w-[220px] truncate">{row.supplier}</Cell>
-                      <Cell className="font-mono text-[11.5px]">{`${row.docType} ${row.docNumber}`}</Cell>
-                      <Cell className="tabular-nums text-muted">
-                        {formatDayMonthYear(row.issuedOn) ?? "—"}
-                      </Cell>
-                      <Cell className="tabular-nums text-muted">
+                      <Cell className="max-w-[180px] truncate">{row.supplier}</Cell>
+                      <Cell className="font-mono text-[11.5px] whitespace-nowrap">{`${row.docType} ${row.docNumber}`}</Cell>
+                      <Cell className="text-muted tabular-nums whitespace-nowrap">
                         {formatDayMonthYear(row.dueOn) ?? "—"}
                       </Cell>
                       <Cell numeric>{money(row.amount)}</Cell>
@@ -288,72 +287,65 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </DataGrid>
             </div>
 
-            {detected.length > 0 && (
-              <div className="rounded-[9px] border border-border">
-                <div className="flex items-center gap-2 border-b border-border bg-surface-muted px-3.5 py-2 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-                  <MapPin size={13} />
-                  Centros de costo que trae el archivo · marca los que son centros de la empresa
-                </div>
-                <ul className="divide-y divide-border-soft">
-                  {detected.map((entry) => (
-                    <li
-                      key={entry.name}
-                      className="flex items-center gap-3 px-3.5 py-2 text-[12.5px]"
-                    >
-                      {entry.known ? (
-                        <Check size={16} className="text-positive" />
-                      ) : (
+            {newCenters.length > 0 && (
+              <section>
+                <h3 className="text-[13px] font-semibold text-ink">Centros de costo nuevos</h3>
+                <ul className="mt-3 max-h-[200px] overflow-y-auto divide-y divide-border-soft">
+                  {newCenters.map((entry) => (
+                    <li key={entry.name}>
+                      <label className="flex cursor-pointer items-center gap-3 py-3 text-[12.5px] transition-colors hover:bg-canvas focus-within:bg-canvas">
                         <Checkbox
-                          size={16}
+                          size={18}
                           checked={picked.has(entry.name)}
                           ariaLabel={`Crear centro ${entry.name}`}
                           onChange={() => togglePicked(entry.name)}
                         />
-                      )}
-                      <span className="flex-1 font-semibold text-ink">{entry.name}</span>
-                      <span className="text-faint">{pluralize(entry.count, "documento")}</span>
-                      <span className="w-[150px] text-right text-[11.5px] text-faint">
-                        {entry.known
-                          ? "ya es un centro"
-                          : picked.has(entry.name)
-                            ? "se creará el centro"
-                            : "queda sin centro"}
-                      </span>
+                        <span className="min-w-0 flex-1 font-semibold break-words text-ink">
+                          {entry.name}
+                        </span>
+                        <span className="shrink-0 text-muted tabular-nums">
+                          {pluralize(entry.count, "documento")}
+                        </span>
+                        <span className="w-[120px] shrink-0 text-right text-[11.5px] text-muted">
+                          {picked.has(entry.name) ? "Se creará el centro" : "Sin asignar"}
+                        </span>
+                      </label>
                     </li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            <div className="sticky bottom-0 z-20 flex flex-col gap-3 border-t border-border-soft bg-surface pt-4">
+              {staged.kind === "liderplus" ? (
+                <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
+                  Es la cartera que exportó este módulo: al confirmar{" "}
+                  <strong className="font-semibold">se reemplaza toda la cartera actual</strong> por
+                  la del archivo, con sus marcas y observaciones.
+                </p>
+              ) : (
+                <p className="text-[12.5px] leading-relaxed text-muted">
+                  Los documentos que ya existen conservan sus marcas; los que este corte no trae se
+                  liquidan a la fecha de corte.
+                </p>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <Button variant="ghost" size="md" disabled={saving} onClick={reset}>
+                  Elegir otro archivo
+                </Button>
+                <Button
+                  size="md"
+                  disabled={saving || (staged.kind === "system" && !isISODate(cutDate))}
+                  onClick={() => void confirm()}
+                >
+                  {saving
+                    ? "Aplicando…"
+                    : staged.kind === "liderplus"
+                      ? "Reemplazar la cartera"
+                      : "Confirmar e incorporar"}
+                </Button>
               </div>
-            )}
-
-            {staged.kind === "liderplus" ? (
-              <p className="rounded-[10px] border border-warning/40 bg-warning/5 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink">
-                Es la cartera que exportó este módulo: al confirmar{" "}
-                <strong className="font-semibold">se reemplaza toda la cartera actual</strong> por
-                la del archivo, con sus marcas y observaciones.
-              </p>
-            ) : (
-              <p className="rounded-[10px] border border-border bg-surface-muted px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-soft">
-                Los documentos que ya existen conservan sus marcas; los que este corte no trae se
-                liquidan a la fecha de corte.
-              </p>
-            )}
-
-            <div className="flex items-center justify-between gap-2">
-              <Button variant="secondary" size="sm" disabled={saving} onClick={reset}>
-                Elegir otro archivo
-              </Button>
-              <Button
-                size="sm"
-                disabled={saving || (staged.kind === "system" && !isISODate(cutDate))}
-                trailingIcon={<ArrowRight size={14} />}
-                onClick={() => void confirm()}
-              >
-                {saving
-                  ? "Aplicando…"
-                  : staged.kind === "liderplus"
-                    ? "Reemplazar la cartera"
-                    : "Confirmar e incorporar"}
-              </Button>
             </div>
           </>
         )}

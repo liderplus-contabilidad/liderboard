@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CreatableSelect } from "@/components/ui/creatable-select";
-import { DateField } from "@/components/ui/date-field";
+import { DateInput } from "@/components/ui/date-input";
 import { FieldBox, FormField, TextField } from "@/components/ui/form-field";
 import { NumericInput } from "@/components/ui/numeric-input";
 import { Select } from "@/components/ui/select";
@@ -13,6 +13,12 @@ import * as cashDb from "@/lib/cash-flow/db";
 import { BUILTIN_KINDS, customKinds, kindLabel, normalizeKind } from "@/lib/cash-flow/derive";
 import type { Payable, PayableKind } from "@/lib/cash-flow/types";
 import { resolveCenterId } from "@/lib/cash-flow/filters";
+import { formatDayMonthYear } from "@/lib/date";
+import { parseDateInput } from "@/lib/date-input";
+import {
+  validateManualObligationForm,
+  type ManualObligationFormErrors,
+} from "@/lib/cash-flow/manual-obligation-form";
 import { useCashFlowData } from "./cash-flow-data-provider";
 import { ClientConfigPanel } from "./client-config-panel";
 
@@ -34,13 +40,15 @@ export function ManualPayablePanel({
     [obligations, kind],
   );
   const [amount, setAmount] = useState<number | null>(obligation?.amount ?? null);
-  const [dueOn, setDueOn] = useState<string | null>(obligation?.dueOn ?? null);
+  const [dueOn, setDueOn] = useState(formatDayMonthYear(obligation?.dueOn ?? null) ?? "");
   const [centerId, setCenterId] = useState(
     resolveCenterId(obligation?.centerName ?? null, centers) ?? NO_CENTER,
   );
   const [description, setDescription] = useState(obligation?.description ?? "");
-  const [error, setError] = useState<string | undefined>();
-  const [kindError, setKindError] = useState<string | undefined>();
+  const [errors, setErrors] = useState<ManualObligationFormErrors>({});
+  const [saveError, setSaveError] = useState<string>();
+  const formRef = useRef<HTMLDivElement>(null);
+  const messageId = useId();
   const [busy, setBusy] = useState(false);
   const [configuring, setConfiguring] = useState(false);
 
@@ -48,19 +56,22 @@ export function ManualPayablePanel({
     if (!activeClientId || busy) {
       return;
     }
-    if (!supplier.trim()) {
-      setError("Escribe el concepto o el beneficiario.");
+    const validation = validateManualObligationForm({ supplier, kind, amount, dueOn });
+    setErrors(validation);
+    setSaveError(undefined);
+    if (Object.keys(validation).length) {
+      const selector = validation.supplier
+        ? '[aria-label="Concepto o beneficiario"]'
+        : validation.kind
+          ? '[data-slot="combobox-trigger"]'
+          : validation.amount
+            ? '[aria-label="Monto (obligatorio)"]'
+            : '[aria-label="Vencimiento"]';
+      formRef.current?.querySelector<HTMLElement>(selector)?.focus();
       return;
     }
     const resolvedKind = normalizeKind(kind);
-    if (!resolvedKind) {
-      setKindError("Escribe el nombre de la clase nueva.");
-      return;
-    }
-    if (!amount || amount <= 0) {
-      setError("Escribe un monto mayor que cero.");
-      return;
-    }
+    if (!resolvedKind || amount === null) return;
     setBusy(true);
     try {
       const center = centers.find((candidate) => candidate.id === centerId);
@@ -68,7 +79,7 @@ export function ManualPayablePanel({
         supplier,
         kind: resolvedKind,
         amount,
-        dueOn,
+        dueOn: parseDateInput(dueOn),
         centerName: center?.name ?? null,
         description,
       };
@@ -79,7 +90,7 @@ export function ManualPayablePanel({
       }
       onClose();
     } catch {
-      setError("No se pudo guardar la obligación. Intenta de nuevo.");
+      setSaveError("No se pudo guardar la obligación. Intenta de nuevo.");
     } finally {
       setBusy(false);
     }
@@ -106,20 +117,22 @@ export function ManualPayablePanel({
         width={720}
         onClose={onClose}
       >
-        <div className="flex flex-col gap-4">
+        <div ref={formRef} className="flex flex-col gap-4">
           <TextField
             label="Concepto o beneficiario *"
             aria-required
+            aria-label="Concepto o beneficiario"
             value={supplier}
-            error={error}
+            error={errors.supplier}
+            messageId={`${messageId}-supplier`}
             placeholder="Arriendo mes de marzo FC 00017"
             onChange={(event) => {
               setSupplier(event.target.value);
-              setError(undefined);
+              setErrors((current) => ({ ...current, supplier: undefined }));
             }}
           />
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Clase *" error={kindError}>
+            <FormField label="Clase *" error={errors.kind}>
               <CreatableSelect
                 value={kindLabel(kind)}
                 options={kindOptions}
@@ -132,13 +145,13 @@ export function ManualPayablePanel({
                   const resolvedKind = normalizeKind(value);
                   if (resolvedKind) {
                     setKind(resolvedKind);
-                    setKindError(undefined);
+                    setErrors((current) => ({ ...current, kind: undefined }));
                   }
                 }}
               />
             </FormField>
-            <FormField label="Monto *">
-              <FieldBox>
+            <FormField label="Monto *" error={errors.amount} messageId={`${messageId}-amount`}>
+              <FieldBox invalid={!!errors.amount}>
                 <NumericInput
                   value={amount}
                   nullable
@@ -146,12 +159,39 @@ export function ManualPayablePanel({
                   align="left"
                   placeholder="$0.00"
                   ariaLabel="Monto (obligatorio)"
-                  onCommit={setAmount}
+                  ariaInvalid={!!errors.amount}
+                  ariaDescribedBy={errors.amount ? `${messageId}-amount` : undefined}
+                  onCommit={(value) => {
+                    setAmount(value);
+                    setErrors((current) => ({ ...current, amount: undefined }));
+                  }}
                 />
               </FieldBox>
             </FormField>
-            <FormField label="Vencimiento">
-              <DateField value={dueOn} nullable ariaLabel="Vencimiento" onChange={setDueOn} />
+            <FormField label="Vencimiento" error={errors.dueOn} messageId={`${messageId}-dueOn`}>
+              <DateInput
+                value={dueOn}
+                ariaLabel="Vencimiento"
+                ariaDescribedBy={`${messageId}-dueOn`}
+                invalid={!!errors.dueOn}
+                onChange={(value) => {
+                  setDueOn(value);
+                  const validation =
+                    value.length === 10
+                      ? validateManualObligationForm({ supplier, kind, amount, dueOn: value })
+                      : {};
+                  setErrors((current) => ({ ...current, dueOn: validation.dueOn }));
+                }}
+                onBlur={() => {
+                  const validation = validateManualObligationForm({
+                    supplier,
+                    kind,
+                    amount,
+                    dueOn,
+                  });
+                  setErrors((current) => ({ ...current, dueOn: validation.dueOn }));
+                }}
+              />
             </FormField>
             {activeClientId && (
               <div>
@@ -187,6 +227,11 @@ export function ManualPayablePanel({
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
+          {saveError && (
+            <p role="alert" className="text-[12px] text-negative">
+              {saveError}
+            </p>
+          )}
           <div className="flex items-center justify-end gap-2 border-t border-border-soft pt-4">
             <Button variant="secondary" size="sm" disabled={busy} onClick={onClose}>
               Cancelar

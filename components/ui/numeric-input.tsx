@@ -24,6 +24,8 @@ interface NumericInputProps {
   nullable?: boolean;
   disabled?: boolean;
   ariaLabel: string;
+  ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
   placeholder?: string;
   align?: "left" | "right";
   className?: string;
@@ -49,6 +51,8 @@ export function NumericInput({
   nullable = false,
   disabled = false,
   ariaLabel,
+  ariaInvalid,
+  ariaDescribedBy,
   placeholder = "–",
   align = "right",
   className,
@@ -103,6 +107,8 @@ export function NumericInput({
       value={draft ?? seed}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-invalid={ariaInvalid || undefined}
+      aria-describedby={ariaDescribedBy}
       placeholder={placeholder}
       onChange={(event) => setDraft(event.target.value)}
       onFocus={(event) => event.target.select()}

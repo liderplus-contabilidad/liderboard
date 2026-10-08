@@ -1,15 +1,18 @@
 "use client";
 
-import { Check, FileSpreadsheet, Landmark, Loader2, Upload } from "lucide-react";
+import { Check, Loader2, Upload } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ExcelUploadCard } from "@/components/ui/excel-upload-card";
 import { Modal } from "@/components/ui/modal";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { toast } from "@/components/ui/toaster";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
 import { detectBanks } from "@/lib/cash-flow/upload/bank-labels";
 import type { ParsedChecksLog } from "@/lib/cash-flow/upload/checks-log";
+import { cn } from "@/lib/cn";
 import { pluralize } from "@/lib/format";
 import { useCashFlowData } from "./cash-flow-data-provider";
 
@@ -34,12 +37,10 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
   const [failure, setFailure] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState<cashDb.ChecksImportSummary | null>(null);
 
   const reset = useCallback(() => {
     setStaged(null);
     setFailure(null);
-    setDone(null);
   }, []);
 
   const detected = useMemo(
@@ -95,6 +96,11 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
     [readFile],
   );
 
+  const close = useCallback(() => {
+    reset();
+    onClose();
+  }, [reset, onClose]);
+
   const confirm = useCallback(async () => {
     if (!staged || !activeClientId) {
       return;
@@ -104,11 +110,20 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
       if (picked.size > 0) {
         await cashDb.createAccountsForBanks(activeClientId, [...picked]);
       }
-      setDone(await cashDb.importChecks(activeClientId, staged.log.checks));
+      const summary = await cashDb.importChecks(activeClientId, staged.log.checks);
+      close();
+      const description =
+        pluralize(summary.written, "cheque incorporado", "cheques incorporados") +
+        (summary.unassigned > 0 ? ` · ${summary.unassigned} sin cuenta reconocida.` : ".");
+      if (summary.unassigned > 0) {
+        toast.warning("Control de cheques incorporado", { description, duration: 8000 });
+      } else {
+        toast.success("Control de cheques incorporado", { description });
+      }
     } finally {
       setSaving(false);
     }
-  }, [staged, activeClientId, picked]);
+  }, [staged, activeClientId, picked, close]);
 
   const togglePicked = useCallback((bank: string) => {
     setPicked((current) => {
@@ -122,18 +137,13 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
     });
   }, []);
 
-  const close = useCallback(() => {
-    reset();
-    onClose();
-  }, [reset, onClose]);
-
   const total = staged
     ? staged.log.checks.filter((c) => !c.voided).reduce((acc, c) => acc + c.amount, 0)
     : 0;
 
   return (
     <Modal open={open} title="Cargar control de cheques" width={560} onClose={close}>
-      <div className="flex flex-col gap-4 px-5 pb-5">
+      <div className="flex flex-col gap-6">
         <input
           ref={inputRef}
           type="file"
@@ -141,21 +151,7 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
           onChange={onPick}
           className="hidden"
         />
-        {done ? (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <span className="flex size-11 items-center justify-center rounded-full bg-positive/10 text-positive">
-              <Check size={22} />
-            </span>
-            <p className="text-[15px] font-bold text-ink">Histórico incorporado</p>
-            <p className="max-w-[420px] text-[12.5px] text-muted">
-              {pluralize(done.written, "cheque")} escritos
-              {done.unassigned > 0 && ` · ${done.unassigned} sin cuenta reconocida`}.
-            </p>
-            <Button size="sm" onClick={close}>
-              Listo
-            </Button>
-          </div>
-        ) : !staged ? (
+        {!staged ? (
           <>
             <button
               type="button"
@@ -177,56 +173,77 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
           </>
         ) : (
           <>
-            <div className="flex items-start gap-3 rounded-[9px] border border-border bg-surface-muted px-4 py-3">
-              <FileSpreadsheet size={18} className="mt-0.5 shrink-0 text-brand" />
-              <div className="min-w-0 flex-1 text-[12.5px]">
-                <div className="truncate font-semibold text-ink">{staged.fileName}</div>
-                <div className="text-muted">
-                  {pluralize(staged.log.checks.length, "cheque")} · {money(total)} girados
-                  {staged.log.skipped > 0 &&
-                    ` · ${pluralize(staged.log.skipped, "fila")} vacías ignoradas`}
-                </div>
-              </div>
-            </div>
-            <div className="rounded-[9px] border border-border">
-              <div className="flex items-center gap-2 border-b border-border bg-surface-muted px-3.5 py-2 text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
-                <Landmark size={13} />
-                Bancos que nombra el libro · marca los que son cuentas de la empresa
-              </div>
-              <ul className="divide-y divide-border-soft">
-                {detected.map((entry) => (
-                  <li
-                    key={entry.bank}
-                    className="flex items-center gap-3 px-3.5 py-2 text-[12.5px]"
-                  >
-                    {entry.known ? (
-                      <Check size={16} className="text-positive" />
-                    ) : (
-                      <Checkbox
-                        size={16}
-                        checked={picked.has(entry.bank)}
-                        ariaLabel={`Crear cuenta ${entry.bank}`}
-                        onChange={() => togglePicked(entry.bank)}
-                      />
-                    )}
-                    <span className="flex-1 font-semibold text-ink">{entry.bank}</span>
-                    <span className="text-faint">{pluralize(entry.count, "cheque")}</span>
-                    <span className="w-[150px] text-right text-[11.5px] text-faint">
-                      {entry.known
-                        ? "ya es una cuenta"
-                        : entry.suggested
-                          ? "se creará la cuenta"
-                          : "no parece un banco"}
-                    </span>
-                  </li>
-                ))}
+            <ExcelUploadCard
+              fileName={staged.fileName}
+              notice={
+                staged.log.skipped > 0
+                  ? pluralize(staged.log.skipped, "fila vacía omitida", "filas vacías omitidas")
+                  : undefined
+              }
+            >
+              <span>
+                <span className="tabular-nums">
+                  {pluralize(staged.log.checks.length, "cheque")}
+                </span>
+                {" · "}
+                <span className="font-mono tabular-nums">{money(total)}</span> girados
+              </span>
+            </ExcelUploadCard>
+            <section>
+              <h3 className="text-[13px] font-semibold text-ink">Cuentas bancarias</h3>
+              <ul className="mt-3 max-h-[240px] overflow-y-auto divide-y divide-border-soft">
+                {detected.map((entry) => {
+                  const Row = entry.known ? "div" : "label";
+                  return (
+                    <li key={entry.bank}>
+                      <Row
+                        className={cn(
+                          "flex items-center gap-3 py-3 text-[12.5px]",
+                          !entry.known &&
+                            "cursor-pointer transition-colors hover:bg-canvas focus-within:bg-canvas",
+                        )}
+                      >
+                        {entry.known ? (
+                          <Check size={18} className="shrink-0 text-brand" aria-hidden="true" />
+                        ) : (
+                          <Checkbox
+                            size={18}
+                            checked={picked.has(entry.bank)}
+                            ariaLabel={`Crear cuenta ${entry.bank}`}
+                            onChange={() => togglePicked(entry.bank)}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold break-words text-ink">
+                            {entry.bank}
+                          </span>
+                          {!entry.known && !entry.suggested && (
+                            <span className="block text-[11.5px] text-muted">
+                              No parece un banco
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-muted tabular-nums">
+                          {pluralize(entry.count, "cheque")}
+                        </span>
+                        <span className="w-[112px] shrink-0 text-right text-[11.5px] text-muted">
+                          {entry.known
+                            ? "Cuenta existente"
+                            : picked.has(entry.bank)
+                              ? "Se creará la cuenta"
+                              : "Sin asignar"}
+                        </span>
+                      </Row>
+                    </li>
+                  );
+                })}
               </ul>
-            </div>
-            <div className="flex items-center justify-between gap-2">
-              <Button variant="secondary" size="sm" disabled={saving} onClick={reset}>
+            </section>
+            <div className="flex items-center justify-between gap-3 border-t border-border-soft pt-4">
+              <Button variant="ghost" size="md" disabled={saving} onClick={reset}>
                 Elegir otro archivo
               </Button>
-              <Button size="sm" disabled={saving} onClick={() => void confirm()}>
+              <Button size="md" disabled={saving} onClick={() => void confirm()}>
                 {saving ? "Escribiendo…" : "Confirmar e incorporar"}
               </Button>
             </div>

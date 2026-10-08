@@ -90,13 +90,16 @@ export function Modal({
       }}
       style={fill ? undefined : { maxWidth: width }}
       className={cn(
-        "m-auto border-none bg-transparent p-0 backdrop:bg-ink/40",
+        // Popups portal into this native dialog to stay in the top layer. The browser's default
+        // overflow:auto scrolls the whole form when their search input receives focus.
+        "m-auto max-h-none overflow-visible border-none bg-transparent p-0 backdrop:bg-ink/40",
         fill ? "h-[92vh] w-[94vw]" : "w-full",
       )}
     >
       <div
         className={cn(
           "rounded-[13px] border border-border bg-surface shadow-[0_24px_60px_rgba(15,23,42,0.24)]",
+          !fill && "max-h-[calc(100vh-32px)] overflow-y-auto",
           fill && "flex h-full flex-col",
         )}
       >

@@ -38,7 +38,7 @@ function ComboboxInput({ className, ...props }: Styled<ComboboxPrimitive.Input.P
     <ComboboxPrimitive.Input
       data-slot="combobox-input"
       className={cn(
-        "h-[38px] w-full rounded-[9px] border border-border bg-surface px-2.5 text-[13px] text-ink outline-none placeholder:text-muted focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/20 disabled:opacity-50",
+        "h-[38px] w-full shrink-0 rounded-[9px] border border-border bg-surface px-2.5 text-[13px] text-ink outline-none placeholder:text-muted focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/20 disabled:opacity-50",
         className,
       )}
       {...props}
@@ -73,7 +73,7 @@ function ComboboxContent({
           data-slot="combobox-content"
           data-chips={!!anchor}
           className={cn(
-            "group/combobox-content w-(--anchor-width) min-w-[320px] max-w-(--available-width) overflow-hidden rounded-[13px] border border-border bg-surface p-2 text-ink shadow-[0_14px_36px_rgba(15,23,42,0.16)]",
+            "group/combobox-content flex max-h-(--available-height) w-(--anchor-width) min-w-[320px] max-w-(--available-width) flex-col overflow-hidden rounded-[13px] border border-border bg-surface p-2 text-ink shadow-[0_14px_36px_rgba(15,23,42,0.16)]",
             className,
           )}
           {...props}
@@ -88,7 +88,7 @@ function ComboboxList({ className, ...props }: Styled<ComboboxPrimitive.List.Pro
     <ComboboxPrimitive.List
       data-slot="combobox-list"
       className={cn(
-        "max-h-[240px] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
+        "min-h-0 max-h-[240px] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
         className,
       )}
       {...props}
