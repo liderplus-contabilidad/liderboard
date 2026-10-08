@@ -79,8 +79,9 @@ is also why the sidebar's collapse state needs no store.
 **Module registry is the single source of truth.** `lib/modules.ts` (`MODULES`, `DEFAULT_MODULE`,
 `findModuleBySlug`, `findSubmoduleBySlug`) drives both the sidebar nav and the header title.
 **To add a module:** one entry + `app/(dashboard)/<slug>/page.tsx`. Nesting is ONE
-level (`children`), rendered indented and visible by default — the sidebar stores what is COLLAPSED,
-so a new module with children is born visible. A module with no real page gets NO entry.
+level (`children`), rendered indented and closed by default — the sidebar stores explicitly OPENED
+groups, also respected by the narrow rail. The active subpage's group opens automatically so the
+current destination stays visible. A module with no real page gets NO entry.
 
 ### The shape every module repeats
 

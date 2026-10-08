@@ -1,11 +1,13 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { MODULES } from "@/lib/modules";
+import { Button } from "@/components/ui/button";
+import { useBackups } from "./backup-provider";
 
 /**
  * Under this width the sidebar starts COLLAPSED. It is Tailwind's `2xl`: on the office laptops
@@ -14,9 +16,11 @@ import { MODULES } from "@/lib/modules";
  * of two columns. The user's own toggle wins after that: this only decides how the app OPENS.
  */
 const COLLAPSED_BELOW_PX = 1536;
+const SIDEBAR_ICON_STROKE = 1.5;
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { open: openBackups } = useBackups();
   const [collapsed, setCollapsed] = useState(false);
   // Read once, after mount: the server cannot know the window, so the rail renders open and snaps
   // shut on a laptop in the first client frame — the same snap the toggle does, never a transition.
@@ -25,13 +29,11 @@ export function DashboardSidebar() {
       setCollapsed(true);
     }
   }, []);
-  // What is stored is what is COLLAPSED and not what is expanded: a new module with children is born
-  // visible without having to be seeded into this state, which is the rule that makes subitems
-  // discoverable.
-  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
+  // Only explicitly opened groups are stored: every module starts folded, including new ones.
+  const [expandedModules, setExpandedModules] = useState<ReadonlySet<string>>(() => new Set());
 
   const toggleFold = useCallback((slug: string) => {
-    setFolded((current) => {
+    setExpandedModules((current) => {
       const next = new Set(current);
       if (!next.delete(slug)) {
         next.add(slug);
@@ -75,7 +77,11 @@ export function DashboardSidebar() {
             !collapsed && "ml-auto",
           )}
         >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          {collapsed ? (
+            <ChevronRight size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
+          ) : (
+            <ChevronLeft size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
+          )}
         </button>
       </div>
 
@@ -101,11 +107,9 @@ export function DashboardSidebar() {
           const insideChild = childHrefs.some(
             (childHref) => pathname === childHref || pathname.startsWith(`${childHref}/`),
           );
-          // Two cases ignore what is collapsed, and for the same reason: a hidden child with no
-          // control in sight is an unreachable destination. Collapsed, the bar has nowhere to put
-          // the chevron, and collapsing the parent of the OPEN page would erase it from the menu
-          // right when you are on it.
-          const expanded = collapsed || insideChild || !folded.has(module.slug);
+          // Keep the current destination visible, even on a direct load of a subpage. The narrow
+          // rail respects the same groups; expanding the menu exposes their disclosure controls.
+          const expanded = insideChild || expandedModules.has(module.slug);
 
           return (
             <div key={module.slug} className="contents">
@@ -128,8 +132,6 @@ export function DashboardSidebar() {
                     : undefined
                 }
               />
-              {/* The children render by default, not only inside their parent: a subitem that shows
-                  up only once you enter it cannot be discovered. Collapsing them is the user's. */}
               {expanded &&
                 children.map((child, index) => {
                   const childHref = childHrefs[index];
@@ -150,13 +152,25 @@ export function DashboardSidebar() {
         })}
       </nav>
 
-      {!collapsed && (
-        <div className="mt-auto p-4">
-          <div className="text-center text-[10.5px] text-faintest">
+      <div className={cn("mt-auto border-t border-border-soft py-3", collapsed ? "px-3" : "px-4")}>
+        <Button
+          variant="ghost"
+          size="toolbar"
+          icon={<Settings size={18} strokeWidth={SIDEBAR_ICON_STROKE} />}
+          aria-label="Respaldos"
+          title={collapsed ? "Respaldos" : undefined}
+          onClick={(event) => openBackups(event.currentTarget)}
+          className={cn("w-full", !collapsed && "justify-start")}
+          iconOnly={collapsed}
+        >
+          Respaldos
+        </Button>
+        {!collapsed && (
+          <div className="pt-3 text-center text-[10.5px] text-faintest">
             © {new Date().getFullYear()} LiderPlus · v0.1
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </aside>
   );
 }
@@ -213,9 +227,9 @@ function NavItem({
         )}
       >
         {active && !nested && (
-          <span className="absolute inset-y-2 left-0 w-[3px] rounded-[3px] bg-brand" />
+          <span className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-brand" />
         )}
-        <Icon size={nested ? 16 : 18} strokeWidth={1.9} className="shrink-0" />
+        <Icon size={nested ? 16 : 18} strokeWidth={SIDEBAR_ICON_STROKE} className="shrink-0" />
         <span className={cn("flex-1", collapsed && "sr-only")}>{label}</span>
       </Link>
       {disclosure && (
@@ -237,7 +251,7 @@ function NavItem({
         >
           <ChevronDown
             size={14}
-            strokeWidth={2}
+            strokeWidth={SIDEBAR_ICON_STROKE}
             className={cn(
               "transition-transform duration-150",
               !disclosure.expanded && "-rotate-90",

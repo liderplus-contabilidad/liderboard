@@ -149,13 +149,14 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
     }
     setSaving(true);
     try {
-      if (picked.size > 0) {
-        await cashDb.createCentersForLabels(activeClientId, [...picked]);
-      }
-      const summary =
-        staged.kind === "liderplus"
+      const summary = await cashDb.runCashFlowWrite(async () => {
+        if (picked.size > 0) {
+          await cashDb.createCentersForLabels(activeClientId, [...picked]);
+        }
+        return staged.kind === "liderplus"
           ? { written: await cashDb.replaceCartera(activeClientId, staged.rows), settled: 0 }
           : await cashDb.applyCut(activeClientId, staged.cartera, cutDate);
+      });
       close();
       toast.success("Cartera incorporada al flujo", {
         description:
@@ -165,6 +166,8 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
             : "."),
         duration: summary.settled > 0 ? 8000 : undefined,
       });
+    } catch {
+      setFailure("No se pudo cargar la cartera. Intenta nuevamente.");
     } finally {
       setSaving(false);
     }
@@ -188,6 +191,7 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
           className="hidden"
         />
 
+        {failure && <NoticeBanner>{failure}</NoticeBanner>}
         {!staged ? (
           <>
             <button
@@ -206,7 +210,6 @@ export function PayablesUploadModal({ open, onClose }: { open: boolean; onClose:
               </span>
               <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
-            {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
         ) : (
           <>

@@ -1,4 +1,5 @@
-type FilterStorage = Pick<Storage, "getItem" | "setItem">;
+type FilterStorage = Pick<Storage, "getItem" | "setItem"> &
+  Partial<Pick<Storage, "length" | "key" | "removeItem">>;
 const PREFIX = "liderboard:filters:v1:";
 
 function serialize(value: unknown): string {
@@ -39,12 +40,42 @@ export function createFilterState(storage?: () => FilterStorage | undefined) {
   const values = new Map<string, unknown>();
   const restored = new Set<string>();
   const listeners = new Set<() => void>();
+  const resetNamespaces = new Set<string>();
+  const resetNames = new Set<string>();
+  const initialValues = new Map<string, unknown>();
+  const preferenceName = (key: string): string | undefined => {
+    try {
+      const [name] = JSON.parse(key);
+      return typeof name === "string" ? name : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const inNamespace = (key: string, namespace: string) => {
+    try {
+      const [name] = JSON.parse(key);
+      return typeof name === "string" && name.startsWith(namespace + ".");
+    } catch {
+      return false;
+    }
+  };
+  const hasName = (key: string, names: ReadonlySet<string>) => {
+    try {
+      const [name] = JSON.parse(key);
+      return names.has(name);
+    } catch {
+      return false;
+    }
+  };
   return {
     read<T>(key: string, fallback: T): T {
       if (!values.has(key) && !restored.has(key)) {
         restored.add(key);
         try {
-          const saved = storage?.()?.getItem(PREFIX + key);
+          const wasReset =
+            hasName(key, resetNames) ||
+            [...resetNamespaces].some((namespace) => inNamespace(key, namespace));
+          const saved = wasReset ? undefined : storage?.()?.getItem(PREFIX + key);
           if (saved !== null && saved !== undefined) {
             const value = deserialize(saved);
             if (compatible(value, fallback)) values.set(key, value);
@@ -53,7 +84,13 @@ export function createFilterState(storage?: () => FilterStorage | undefined) {
           // Unavailable storage or invalid JSON must not stop filtering.
         }
       }
-      return values.has(key) ? (values.get(key) as T) : fallback;
+      if (values.has(key)) return values.get(key) as T;
+      const name = preferenceName(key);
+      if (name && initialValues.has(name)) {
+        const initial = initialValues.get(name);
+        if (compatible(initial, fallback)) return initial as T;
+      }
+      return fallback;
     },
     write<T>(key: string, value: T) {
       if (values.has(key) && Object.is(values.get(key), value)) return;
@@ -70,6 +107,56 @@ export function createFilterState(storage?: () => FilterStorage | undefined) {
       return () => {
         listeners.delete(listener);
       };
+    },
+    /** Clear every client scope, retaining an in-memory reset even if storage is blocked. */
+    resetNamespace(
+      namespace: string,
+      legacyNames: readonly string[] = [],
+      freshInitialValues: Readonly<Record<string, unknown>> = {},
+    ): boolean {
+      resetNamespaces.add(namespace);
+      for (const name of legacyNames) resetNames.add(name);
+      const names = new Set(legacyNames);
+      const matches = (key: string) => inNamespace(key, namespace) || hasName(key, names);
+      // A still-mounted consumer may hold yesterday's initial date. Refresh it for every scope,
+      // without persisting a preference or unmounting an unrelated module's page.
+      const matchingName = (name: string) => name.startsWith(namespace + ".") || names.has(name);
+      for (const name of initialValues.keys()) {
+        if (matchingName(name)) initialValues.delete(name);
+      }
+      for (const [name, value] of Object.entries(freshInitialValues)) {
+        if (matchingName(name)) initialValues.set(name, value);
+      }
+      for (const key of new Set([...values.keys(), ...restored])) {
+        if (matches(key)) {
+          values.delete(key);
+          restored.delete(key);
+        }
+      }
+      let persisted = true;
+      try {
+        const target = storage?.();
+        if (target) {
+          if (!target.key || !target.removeItem || target.length === undefined) {
+            persisted = false;
+          } else {
+            const keys = Array.from({ length: target.length }, (_, index) => target.key!(index));
+            for (const key of keys) {
+              if (key?.startsWith(PREFIX) && matches(key.slice(PREFIX.length))) {
+                try {
+                  target.removeItem(key);
+                } catch {
+                  persisted = false;
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        persisted = false;
+      }
+      listeners.forEach((listener) => listener());
+      return persisted;
     },
   };
 }

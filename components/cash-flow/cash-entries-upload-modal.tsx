@@ -93,10 +93,16 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
     }
     setSaving(true);
     try {
-      if (picked.size > 0) {
-        await cashDb.createCentersForLabels(activeClientId, [...picked]);
-      }
-      setDone(await cashDb.replaceCashSections(activeClientId, staged.sheet));
+      setDone(
+        await cashDb.runCashFlowWrite(async () => {
+          if (picked.size > 0) {
+            await cashDb.createCentersForLabels(activeClientId, [...picked]);
+          }
+          return cashDb.replaceCashSections(activeClientId, staged.sheet);
+        }),
+      );
+    } catch {
+      setFailure("No se pudo cargar Cargas cash. Intenta nuevamente.");
     } finally {
       setSaving(false);
     }
@@ -128,6 +134,7 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
           onChange={onPick}
           className="hidden"
         />
+        {failure && <NoticeBanner>{failure}</NoticeBanner>}
         {done ? (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <span className="flex size-11 items-center justify-center rounded-full bg-positive/10 text-positive">
@@ -163,7 +170,6 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
               </span>
               <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
-            {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
         ) : (
           <>

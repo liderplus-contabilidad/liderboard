@@ -217,25 +217,27 @@ export function CheckFormPanel({ check, onClose }: { check: Check | null; onClos
    */
   const downloadVoucherFrom = useCallback(
     async (voucher: VoucherDocument) => {
-      await downloadVoucher(voucher, draft.voucher, draft.payee);
-      if (activeClient) {
-        const stored = activeClient.letterhead ?? { name: activeClient.name, lines: [] };
-        const typed = { name: voucher.company, lines: [...voucher.companyLines] };
-        if (typed.name !== stored.name || typed.lines.join("\n") !== stored.lines.join("\n")) {
-          await cashDb.updateClientLetterhead(activeClient.id, typed);
+      await cashDb.runCashFlowWrite(async () => {
+        await downloadVoucher(voucher, draft.voucher, draft.payee);
+        if (activeClient) {
+          const stored = activeClient.letterhead ?? { name: activeClient.name, lines: [] };
+          const typed = { name: voucher.company, lines: [...voucher.companyLines] };
+          if (typed.name !== stored.name || typed.lines.join("\n") !== stored.lines.join("\n")) {
+            await cashDb.updateClientLetterhead(activeClient.id, typed);
+          }
         }
-      }
-      const [, taxId, address] = voucher.party;
-      const patch: Partial<cashDb.CheckInput> = {};
-      if (taxId && taxId.value.trim() !== (draft.payeeTaxId ?? "").trim()) {
-        patch.payeeTaxId = taxId.value;
-      }
-      if (address && address.value.trim() !== (draft.payeeAddress ?? "").trim().toUpperCase()) {
-        patch.payeeAddress = address.value;
-      }
-      if (Object.keys(patch).length > 0) {
-        commit(patch);
-      }
+        const [, taxId, address] = voucher.party;
+        const patch: Partial<cashDb.CheckInput> = {};
+        if (taxId && taxId.value.trim() !== (draft.payeeTaxId ?? "").trim()) {
+          patch.payeeTaxId = taxId.value;
+        }
+        if (address && address.value.trim() !== (draft.payeeAddress ?? "").trim().toUpperCase()) {
+          patch.payeeAddress = address.value;
+        }
+        if (Object.keys(patch).length > 0) {
+          commit(patch);
+        }
+      });
     },
     [commit, activeClient, draft.voucher, draft.payee, draft.payeeTaxId, draft.payeeAddress],
   );

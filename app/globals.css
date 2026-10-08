@@ -31,6 +31,8 @@
   --color-success-soft: color-mix(in srgb, var(--color-success) 15%, var(--color-surface));
   /* Excel file identity, independent of a financial value's sign. */
   --color-excel: #217346;
+  /* JSON file identity, independent of warnings about the restore operation. */
+  --color-json: #a16207;
   /* Payment priority, independent of the sign of its amount. */
   --color-urgent: #fbd5d5;
   --color-urgent-total: #9f3038;

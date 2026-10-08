@@ -107,10 +107,12 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
     }
     setSaving(true);
     try {
-      if (picked.size > 0) {
-        await cashDb.createAccountsForBanks(activeClientId, [...picked]);
-      }
-      const summary = await cashDb.importChecks(activeClientId, staged.log.checks);
+      const summary = await cashDb.runCashFlowWrite(async () => {
+        if (picked.size > 0) {
+          await cashDb.createAccountsForBanks(activeClientId, [...picked]);
+        }
+        return cashDb.importChecks(activeClientId, staged.log.checks);
+      });
       close();
       const description =
         pluralize(summary.written, "cheque incorporado", "cheques incorporados") +
@@ -120,6 +122,8 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
       } else {
         toast.success("Control de cheques incorporado", { description });
       }
+    } catch {
+      setFailure("No se pudo cargar el control de cheques. Intenta nuevamente.");
     } finally {
       setSaving(false);
     }
@@ -151,6 +155,7 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
           onChange={onPick}
           className="hidden"
         />
+        {failure && <NoticeBanner>{failure}</NoticeBanner>}
         {!staged ? (
           <>
             <button
@@ -169,7 +174,6 @@ export function ChecksUploadModal({ open, onClose }: { open: boolean; onClose: (
               </span>
               <span className="text-[11.5px] text-faint">.xlsx o .xls</span>
             </button>
-            {failure && <NoticeBanner>{failure}</NoticeBanner>}
           </>
         ) : (
           <>

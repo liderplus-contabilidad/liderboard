@@ -14,6 +14,19 @@ import { createFilterState } from "@/lib/filter-state";
 
 const FilterStateContext = createContext<ReturnType<typeof createFilterState> | null>(null);
 
+export function useFilterNamespaceReset() {
+  const store = useContext(FilterStateContext);
+  if (!store) throw new Error("useFilterNamespaceReset must be used within FilterStateProvider");
+  return useCallback(
+    (
+      namespace: string,
+      legacyNames?: readonly string[],
+      initialValues?: Readonly<Record<string, unknown>>,
+    ) => store.resetNamespace(namespace, legacyNames, initialValues),
+    [store],
+  );
+}
+
 /** Imports can target a client other than the one currently rendered. */
 export function useFilterStateWriter<T>(name: string) {
   const store = useContext(FilterStateContext);

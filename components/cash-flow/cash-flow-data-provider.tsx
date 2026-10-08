@@ -273,11 +273,13 @@ export function CashFlowDataProvider({ children }: { children: ReactNode }) {
   const deleteClient = useCallback((clientId: string) => cashDb.deleteClient(clientId), []);
   const selectClient = useCallback(
     async (clientId: string) => {
-      await cashDb.setActiveClient(clientId);
-      // Nothing of the previous empresa's selection carries over: it named centers and accounts this
-      // one does not have.
-      setRawPayableFilters(emptyPayableFilters());
-      setRawCheckFilters(emptyCheckFilters());
+      await cashDb.runCashFlowWrite(async () => {
+        await cashDb.setActiveClient(clientId);
+        // Nothing of the previous empresa's selection carries over: it named centers and accounts this
+        // one does not have.
+        setRawPayableFilters(emptyPayableFilters());
+        setRawCheckFilters(emptyCheckFilters());
+      });
     },
     [setRawPayableFilters, setRawCheckFilters],
   );

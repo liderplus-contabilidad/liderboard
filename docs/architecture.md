@@ -32,12 +32,11 @@ from it — there is no duplicated module list. **To add a module:** add an entr
 `MODULES` and create the matching `app/(dashboard)/<slug>/page.tsx`. Route slugs are
 English; the Spanish name goes in `label`/`title`. A module may declare `children`
 (`DashboardSubmodule`) — pages that hang off it at `/<padre>/<hijo>`, rendered indented under it
-and **visibles por defecto**, porque un subitem que solo aparece al entrar en su padre no se puede
-descubrir. Plegarlos es del usuario, con un chevron en el padre: el sidebar guarda lo PLEGADO (no lo
-desplegado), así que un módulo nuevo con hijos nace visible sin sembrar nada. Dos casos ignoran ese
-pliegue por el mismo motivo —un hijo escondido sin control a la vista es inalcanzable—: la barra
-colapsada, donde no hay dónde poner el chevron, y el padre de la página ABIERTA, que se borraría del
-menú justo cuando estás en ella. The nesting is ONE level: this nav is a list, not a tree, and a second level has
+and **cerrados por defecto**, para que la navegación inicial muestre primero los módulos. El sidebar
+guarda los grupos ABIERTOS explícitamente; el chevron junto al padre permite descubrir sus subpáginas.
+La barra colapsada respeta esos mismos grupos: expandir el menú vuelve a mostrar los chevrons.
+El padre de la subpágina ABIERTA se despliega automáticamente, incluso al entrar por URL, para que
+el destino actual siga visible. The nesting is ONE level: this nav is a list, not a tree, and a second level has
 nowhere to render in the 72 px collapsed rail (where a child keeps its icon and `title` and drops
 the indent). The header's `<h1>` names the child ONLY when the second segment matches a declared
 one (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that check its

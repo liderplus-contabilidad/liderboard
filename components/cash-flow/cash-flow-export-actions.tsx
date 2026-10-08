@@ -14,7 +14,7 @@ import { PayablesUploadModal } from "./payables-upload-modal";
  * Flujo de caja's `ExportActions` wrapper, per tab: «Cargar Excel» where something is loaded (a
  * cartera in CxP, the register in Cheques, the `CARGAS CASH` sheet in Cargas cash) and «Exportar ▾» with that tab's outputs — the `REPORTE
  * CXP`, the fourteen-column control, the flow's report and Excel, the «Cargas cash» sheet. Resumen
- * mounts nothing (see `module-views.tsx`).
+ * has no output (see `module-views.tsx`). Module backups live in configuration.
  */
 export function CashFlowExportActions({ tab }: { tab: ModuleTabId }) {
   const {

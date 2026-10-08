@@ -114,8 +114,7 @@ export const MODULE_VIEWS: Record<string, ModuleViews> = {
     },
   },
   "cash-flow": {
-    // «Cargar Excel» only where something is loaded (a cartera, the check register); «Exportar»
-    // wherever the tab has an output. Resumen has neither: it is a reading.
+    // Resumen has no output; module backups belong to configuration.
     rightSlot: (tab) => (tab === "resumen" ? null : <CashFlowExportActions tab={tab} />),
     // ONE bar for the five tabs: the cut date and the center are common, and each tab adds its own
     // marks (see `CashFlowToolbar`).

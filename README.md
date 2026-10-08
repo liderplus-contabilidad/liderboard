@@ -897,7 +897,33 @@ PyG. Cada empresa lo declara en **«Configurar»**.
   y se exporta con la misma forma.
 - **Salidas** por el control único del app, una por pestaña: Excel «Cartera» (vuelve a entrar como
   salió, marcas incluidas, y **reemplaza** la cartera), «Control de cheques», «Reporte de flujo»
-  (imprimible) · «Excel de flujo», «Cargas cash». Resumen no exporta.
+  (imprimible) · «Excel de flujo», «Cargas cash».
+- **Sidebar → Respaldos** (engranaje al pie del menú) abre el administrador global, disponible
+  desde cualquier módulo, incluso sin empresas. Cuentas por Pagar permite descargar y restaurar;
+  los demás módulos aparecen como «Próximamente».
+  **Descargar** guarda directamente un checkpoint JSON de **todas las empresas** del módulo y sus
+  diez tablas, incluidos logos, configuraciones, documentos liquidados, obligaciones, cheques con
+  sus snapshots de pagos, notas, cargas cash y capturas de flujo de todas las fechas. El momento
+  «Creado el» corresponde a la captura actual, independientemente de la fecha de corte de pantalla.
+  Para recuperar en otra PC, guarda el archivo y abre allí **Respaldos → Cuentas por Pagar → Restaurar**.
+  Primero se elige y valida el archivo; la confirmación muestra fecha y empresas, con los conteos
+  en «Contenido del respaldo». Puedes cancelar, cambiar de archivo
+  o descargar el estado actual antes de pulsar **«Restaurar y reemplazar»**. Esa confirmación
+  **sustituye todas las empresas y datos de Cuentas por Pagar de ese navegador**, sin fusionarlos.
+  Un error de escritura revierte el reemplazo entero; las bases de otros módulos no participan.
+  **Cierra otras pestañas del navegador con Cuentas por Pagar abierto antes de restaurar**: un
+  editor de ese módulo podría escribir después del reemplazo. Puedes seguir trabajando en PyG
+  u otros módulos, cuyas bases no se reemplazan. El archivo no sincroniza PCs ni reconstruye una
+  fecha pasada para la cual no guardaste un checkpoint.
+  Los filtros, la fecha de pantalla y los borradores sin guardar no viajan: tras restaurar se abre
+  la empresa activa del archivo, con hoy y los filtros iniciales de Cuentas por Pagar; las
+  preferencias de otros módulos se conservan. Las capturas históricas siguen disponibles al elegir
+  su fecha de corte. Si hay un problema de vista después del commit, se informa que los datos sí
+  se restauraron, sin presentarlo como rollback.
+  El formato inicial es `liderboard-backup`, `formatVersion: 1`, módulo `cash-flow`,
+  `dataVersion: 1`, esquema de origen `databaseVersion: 5`; archivos Excel, otros módulos,
+  versiones y campos desconocidos se rechazan antes de escribir. El nombre es
+  `liderboard-cash-flow-<fecha-hora-UTC>.backup.json` y una base vacía también es un respaldo válido.
 - **Datos de demostración**: `pnpm gen:testdata` escribe bajo `.context/generated/cuentas-por-pagar/`
   una cartera de Contífico en dos cortes, un control de cheques y una hoja de Cargas cash de un
   hotel inventado (ver el README generado).

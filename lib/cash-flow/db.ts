@@ -12,6 +12,12 @@
  * one of the empresa's accounts and a document's identity is composed.
  */
 import Dexie, { type Table } from "dexie";
+import { validateBackup, type BackupEnvelope } from "@/lib/backup";
+import {
+  CASH_FLOW_BACKUP_TABLE_NAMES,
+  cashFlowBackupAdapter,
+  type CashFlowBackupTables,
+} from "./backup";
 import { normalizeLabel, sortByName, type EntityLogo } from "@/lib/workspaces";
 import { mergeCut, type IncomingPayable } from "./cut";
 import { applyNotes } from "./cell-notes";
@@ -76,6 +82,22 @@ const CASH_FLOW_STORES_V4 = {
   cashEntries: "id, clientId, [clientId+section]",
 } as const;
 
+interface CashFlowWrites {
+  restoring: boolean;
+  jobs: Set<Promise<unknown>>;
+  transactions: Set<Promise<void>>;
+  allowed: WeakSet<IDBTransaction>;
+}
+const writeStates = new WeakMap<CashFlowDb, CashFlowWrites>();
+function writesFor(database: CashFlowDb): CashFlowWrites {
+  return writeStates.get(database)!;
+}
+function restorationInProgress(): Error {
+  return new Error(
+    "Se está restaurando el respaldo. Espera a que termine para editar o cargar datos.",
+  );
+}
+
 export class CashFlowDb extends Dexie {
   clients!: Table<CashFlowClient, string>;
   centers!: Table<CashFlowCenter, string>;
@@ -90,6 +112,52 @@ export class CashFlowDb extends Dexie {
 
   constructor(name = "liderboard-cash-flow") {
     super(name);
+    const writes: CashFlowWrites = {
+      restoring: false,
+      jobs: new Set(),
+      transactions: new Set(),
+      allowed: new WeakSet(),
+    };
+    writeStates.set(this, writes);
+    // Guard the connection too: a delayed cell write cannot bypass the public job barrier.
+    // Transactions already started may finish; only the replacing transaction is admitted next.
+    this.use({
+      stack: "dbcore",
+      name: "CashFlowRestoreBarrier",
+      create: (core) => ({
+        ...core,
+        transaction: (stores, mode, options) => {
+          const transaction = core.transaction(stores, mode, options) as IDBTransaction;
+          if (mode === "readwrite") {
+            if (!writes.restoring) writes.allowed.add(transaction);
+            let done!: () => void;
+            const pending = new Promise<void>((resolve) => {
+              done = resolve;
+            });
+            writes.transactions.add(pending);
+            const finish = () => {
+              writes.transactions.delete(pending);
+              done();
+            };
+            transaction.addEventListener("complete", finish, { once: true });
+            transaction.addEventListener("abort", finish, { once: true });
+          }
+          return transaction;
+        },
+        table: (name) => {
+          const table = core.table(name);
+          return {
+            ...table,
+            mutate: (request) => {
+              if (writes.restoring && !writes.allowed.has(request.trans as IDBTransaction)) {
+                return Promise.reject(restorationInProgress());
+              }
+              return table.mutate(request);
+            },
+          };
+        },
+      }),
+    });
     // v1 was an UNRELEASED prototype whose code was lost before this module was written: its rows
     // do not have this shape (a check without `voucher`, a `flows` table with another key) and
     // nothing in them is worth migrating. v2 drops every table it may have left in a browser and v3
@@ -130,6 +198,77 @@ export class CashFlowDb extends Dexie {
 
 export const db = new CashFlowDb();
 
+/** Tracks a whole editing/import job, including async preparation between its database writes. */
+export async function runCashFlowWrite<T>(
+  operation: () => Promise<T>,
+  database: CashFlowDb = db,
+): Promise<T> {
+  const writes = writesFor(database);
+  if (writes.restoring) throw restorationInProgress();
+  const pending = operation();
+  writes.jobs.add(pending);
+  try {
+    return await pending;
+  } finally {
+    writes.jobs.delete(pending);
+  }
+}
+
+/** A checkpoint of every empresa and date, at one coherent IndexedDB read boundary. */
+export async function captureCashFlowBackup(
+  database: CashFlowDb = db,
+): Promise<BackupEnvelope<CashFlowBackupTables>> {
+  return database.transaction("r", database.tables, async () => {
+    const createdAt = new Date().toISOString();
+    const entries = await Promise.all(
+      CASH_FLOW_BACKUP_TABLE_NAMES.map(async (name) => [
+        name,
+        await database.table(name).toArray(),
+      ]),
+    );
+    return {
+      format: "liderboard-backup",
+      formatVersion: 1,
+      module: cashFlowBackupAdapter.module,
+      dataVersion: cashFlowBackupAdapter.dataVersion,
+      databaseVersion: cashFlowBackupAdapter.databaseVersion,
+      createdAt,
+      tables: Object.fromEntries(entries) as unknown as CashFlowBackupTables,
+    };
+  });
+}
+
+/** All ten tables replace together. Failure leaves the previous checkpoint intact. */
+export async function restoreCashFlowBackup(
+  envelope: BackupEnvelope<CashFlowBackupTables>,
+  database: CashFlowDb = db,
+  beforeReplace?: () => void,
+): Promise<void> {
+  const writes = writesFor(database);
+  if (writes.restoring) throw restorationInProgress();
+  // Validate before cloning so JSON cannot erase unsupported values; then own the validated copy
+  // while waiting for editors/import jobs to finish, rather than trusting a mutable preview.
+  validateBackup(envelope, cashFlowBackupAdapter);
+  const prepared = validateBackup(JSON.parse(JSON.stringify(envelope)), cashFlowBackupAdapter);
+  writes.restoring = true;
+  try {
+    beforeReplace?.();
+    await Promise.allSettled([...writes.jobs]);
+    await Promise.all([...writes.transactions]);
+    await database.transaction("rw", database.tables, async () => {
+      const transaction = Dexie.currentTransaction?.idbtrans;
+      if (!transaction) throw new Error("No se pudo iniciar la restauración del respaldo.");
+      writes.allowed.add(transaction);
+      for (const name of CASH_FLOW_BACKUP_TABLE_NAMES) await database.table(name).clear();
+      for (const name of CASH_FLOW_BACKUP_TABLE_NAMES) {
+        await database.table(name).bulkPut(prepared.tables[name]);
+      }
+    });
+  } finally {
+    writes.restoring = false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Empresas
 // ---------------------------------------------------------------------------
@@ -140,12 +279,14 @@ export async function listClients(): Promise<CashFlowClient[]> {
 
 /** Creates an EMPTY empresa and opens it. Validation and duplicate checking are `useEntityNaming`'s. */
 export async function createClient(name: string, logo?: EntityLogo): Promise<CashFlowClient> {
-  const client: CashFlowClient = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
-  await db.transaction("rw", db.clients, db.active, async () => {
-    await db.clients.add(client);
-    await db.active.put({ key: ACTIVE_KEY, clientId: client.id });
+  return runCashFlowWrite(async () => {
+    const client: CashFlowClient = { id: crypto.randomUUID(), name, ...(logo ? { logo } : {}) };
+    await db.transaction("rw", db.clients, db.active, async () => {
+      await db.clients.add(client);
+      await db.active.put({ key: ACTIVE_KEY, clientId: client.id });
+    });
+    return client;
   });
-  return client;
 }
 
 /** Changes the LABEL — name and logo — and nothing else. */
@@ -154,7 +295,9 @@ export async function updateClient(
   name: string,
   logo: EntityLogo | null,
 ): Promise<void> {
-  await db.clients.update(clientId, { name, logo: logo ?? undefined });
+  return runCashFlowWrite(async () => {
+    await db.clients.update(clientId, { name, logo: logo ?? undefined });
+  });
 }
 
 /** Keeps the comprobante's letterhead as typed in its window. `null` removes it. */
@@ -162,7 +305,9 @@ export async function updateClientLetterhead(
   clientId: string,
   letterhead: VoucherLetterhead | null,
 ): Promise<void> {
-  await db.clients.update(clientId, { letterhead: letterhead ?? undefined });
+  return runCashFlowWrite(async () => {
+    await db.clients.update(clientId, { letterhead: letterhead ?? undefined });
+  });
 }
 
 /**
@@ -171,44 +316,48 @@ export async function updateClientLetterhead(
  * the module to the first remaining BY NAME.
  */
 export async function deleteClient(clientId: string): Promise<void> {
-  await db.transaction(
-    "rw",
-    [
-      db.clients,
-      db.centers,
-      db.accounts,
-      db.payables,
-      db.manualObligations,
-      db.checks,
-      db.flows,
-      db.cashEntries,
-      db.meta,
-      db.active,
-    ],
-    async () => {
-      await Promise.all([
-        db.centers.where("clientId").equals(clientId).delete(),
-        db.accounts.where("clientId").equals(clientId).delete(),
-        db.payables.where("clientId").equals(clientId).delete(),
-        db.manualObligations.where("clientId").equals(clientId).delete(),
-        db.checks.where("clientId").equals(clientId).delete(),
-        db.flows.where("clientId").equals(clientId).delete(),
-        db.cashEntries.where("clientId").equals(clientId).delete(),
-        db.meta.where("clientId").equals(clientId).delete(),
-      ]);
-      await db.clients.delete(clientId);
-      const active = await db.active.get(ACTIVE_KEY);
-      if (active?.clientId !== clientId) {
-        return;
-      }
-      const remaining = sortByName(await db.clients.toArray());
-      await db.active.put({ key: ACTIVE_KEY, clientId: remaining[0]?.id ?? null });
-    },
-  );
+  return runCashFlowWrite(async () => {
+    await db.transaction(
+      "rw",
+      [
+        db.clients,
+        db.centers,
+        db.accounts,
+        db.payables,
+        db.manualObligations,
+        db.checks,
+        db.flows,
+        db.cashEntries,
+        db.meta,
+        db.active,
+      ],
+      async () => {
+        await Promise.all([
+          db.centers.where("clientId").equals(clientId).delete(),
+          db.accounts.where("clientId").equals(clientId).delete(),
+          db.payables.where("clientId").equals(clientId).delete(),
+          db.manualObligations.where("clientId").equals(clientId).delete(),
+          db.checks.where("clientId").equals(clientId).delete(),
+          db.flows.where("clientId").equals(clientId).delete(),
+          db.cashEntries.where("clientId").equals(clientId).delete(),
+          db.meta.where("clientId").equals(clientId).delete(),
+        ]);
+        await db.clients.delete(clientId);
+        const active = await db.active.get(ACTIVE_KEY);
+        if (active?.clientId !== clientId) {
+          return;
+        }
+        const remaining = sortByName(await db.clients.toArray());
+        await db.active.put({ key: ACTIVE_KEY, clientId: remaining[0]?.id ?? null });
+      },
+    );
+  });
 }
 
 export async function setActiveClient(clientId: string | null): Promise<void> {
-  await db.active.put({ key: ACTIVE_KEY, clientId });
+  return runCashFlowWrite(async () => {
+    await db.active.put({ key: ACTIVE_KEY, clientId });
+  });
 }
 
 export async function getActiveClientId(): Promise<string | null> {
@@ -279,13 +428,17 @@ export async function listCenters(clientId: string): Promise<CashFlowCenter[]> {
 }
 
 export async function addCenter(clientId: string, name: string): Promise<CashFlowCenter> {
-  const center: CashFlowCenter = { id: crypto.randomUUID(), clientId, name: name.trim() };
-  await db.centers.add(center);
-  return center;
+  return runCashFlowWrite(async () => {
+    const center: CashFlowCenter = { id: crypto.randomUUID(), clientId, name: name.trim() };
+    await db.centers.add(center);
+    return center;
+  });
 }
 
 export async function renameCenter(centerId: string, name: string): Promise<void> {
-  await db.centers.update(centerId, { name: name.trim() });
+  return runCashFlowWrite(async () => {
+    await db.centers.update(centerId, { name: name.trim() });
+  });
 }
 
 /**
@@ -298,30 +451,36 @@ export async function createCentersForLabels(
   clientId: string,
   labels: readonly string[],
 ): Promise<CashFlowCenter[]> {
-  return db.transaction("rw", db.centers, async () => {
-    const existing = await db.centers.where("clientId").equals(clientId).toArray();
-    const known = new Set(existing.map((center) => normalizeLabel(center.name)));
-    const created: CashFlowCenter[] = [];
-    for (const label of labels) {
-      const name = label.trim();
-      const key = normalizeLabel(name);
-      if (!key || known.has(key)) {
-        continue;
+  return runCashFlowWrite(async () => {
+    return db.transaction("rw", db.centers, async () => {
+      const existing = await db.centers.where("clientId").equals(clientId).toArray();
+      const known = new Set(existing.map((center) => normalizeLabel(center.name)));
+      const created: CashFlowCenter[] = [];
+      for (const label of labels) {
+        const name = label.trim();
+        const key = normalizeLabel(name);
+        if (!key || known.has(key)) {
+          continue;
+        }
+        const center: CashFlowCenter = { id: crypto.randomUUID(), clientId, name };
+        await db.centers.add(center);
+        known.add(key);
+        created.push(center);
       }
-      const center: CashFlowCenter = { id: crypto.randomUUID(), clientId, name };
-      await db.centers.add(center);
-      known.add(key);
-      created.push(center);
-    }
-    return created;
+      return created;
+    });
   });
 }
 
 /** Deletes a center; its accounts fall back to «de la empresa». Documents keep their label. */
 export async function deleteCenter(centerId: string): Promise<void> {
-  await db.transaction("rw", db.centers, db.accounts, async () => {
-    await db.accounts.filter((account) => account.centerId === centerId).modify({ centerId: null });
-    await db.centers.delete(centerId);
+  return runCashFlowWrite(async () => {
+    await db.transaction("rw", db.centers, db.accounts, async () => {
+      await db.accounts
+        .filter((account) => account.centerId === centerId)
+        .modify({ centerId: null });
+      await db.centers.delete(centerId);
+    });
   });
 }
 
@@ -338,66 +497,74 @@ export type BankAccountInput = Pick<BankAccount, "bank" | "number" | "overdraft"
 };
 
 export async function addAccount(clientId: string, input: BankAccountInput): Promise<BankAccount> {
-  const error = overdraftDatesError(input);
-  if (error) throw new Error(error);
-  const label = input.label?.trim();
-  const account: BankAccount = {
-    id: crypto.randomUUID(),
-    clientId,
-    bank: input.bank.trim(),
-    number: input.number.trim(),
-    ...(label ? { label } : {}),
-    overdraft: input.overdraft,
-    overdraftStartsOn: input.overdraftStartsOn ?? null,
-    overdraftEndsOn: input.overdraftEndsOn ?? null,
-    centerId: input.centerId,
-  };
-  await db.accounts.add(account);
-  return account;
+  return runCashFlowWrite(async () => {
+    const error = overdraftDatesError(input);
+    if (error) throw new Error(error);
+    const label = input.label?.trim();
+    const account: BankAccount = {
+      id: crypto.randomUUID(),
+      clientId,
+      bank: input.bank.trim(),
+      number: input.number.trim(),
+      ...(label ? { label } : {}),
+      overdraft: input.overdraft,
+      overdraftStartsOn: input.overdraftStartsOn ?? null,
+      overdraftEndsOn: input.overdraftEndsOn ?? null,
+      centerId: input.centerId,
+    };
+    await db.accounts.add(account);
+    return account;
+  });
 }
 
 export async function updateAccount(
   accountId: string,
   patch: Partial<BankAccountInput>,
 ): Promise<void> {
-  await db.transaction("rw", db.accounts, async () => {
-    const account = await db.accounts.get(accountId);
-    if (!account) return;
-    const error = overdraftDatesError({ ...account, ...patch });
-    if (error) throw new Error(error);
-    await db.accounts.update(accountId, {
-      ...patch,
-      ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
-      ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
-      // An emptied label is removed, so the account goes back to bank + number.
-      ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+  return runCashFlowWrite(async () => {
+    await db.transaction("rw", db.accounts, async () => {
+      const account = await db.accounts.get(accountId);
+      if (!account) return;
+      const error = overdraftDatesError({ ...account, ...patch });
+      if (error) throw new Error(error);
+      await db.accounts.update(accountId, {
+        ...patch,
+        ...(patch.bank !== undefined ? { bank: patch.bank.trim() } : {}),
+        ...(patch.number !== undefined ? { number: patch.number.trim() } : {}),
+        // An emptied label is removed, so the account goes back to bank + number.
+        ...(patch.label !== undefined ? { label: patch.label.trim() || undefined } : {}),
+      });
     });
   });
 }
 
 /** Deletes an account; its checks and marked documents fall back to «sin cuenta», never deleted. */
 export async function deleteAccount(accountId: string): Promise<void> {
-  await db.transaction(
-    "rw",
-    db.accounts,
-    db.checks,
-    db.payables,
-    db.manualObligations,
-    db.flows,
-    async () => {
-      await db.checks.filter((check) => check.accountId === accountId).modify({ accountId: null });
-      await db.payables
-        .filter((payable) => payable.payFromAccountId === accountId)
-        .modify({ payFromAccountId: null });
-      await db.checks
-        .filter((row) => row.flowPayFromAccountId === accountId)
-        .modify({ flowPayFromAccountId: null });
-      await db.manualObligations
-        .filter((row) => row.payFromAccountId === accountId)
-        .modify({ payFromAccountId: null });
-      await db.accounts.delete(accountId);
-    },
-  );
+  return runCashFlowWrite(async () => {
+    await db.transaction(
+      "rw",
+      db.accounts,
+      db.checks,
+      db.payables,
+      db.manualObligations,
+      db.flows,
+      async () => {
+        await db.checks
+          .filter((check) => check.accountId === accountId)
+          .modify({ accountId: null });
+        await db.payables
+          .filter((payable) => payable.payFromAccountId === accountId)
+          .modify({ payFromAccountId: null });
+        await db.checks
+          .filter((row) => row.flowPayFromAccountId === accountId)
+          .modify({ flowPayFromAccountId: null });
+        await db.manualObligations
+          .filter((row) => row.payFromAccountId === accountId)
+          .modify({ payFromAccountId: null });
+        await db.accounts.delete(accountId);
+      },
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -423,27 +590,29 @@ export async function applyCut(
   cartera: ParsedCartera,
   cutDate: string,
 ): Promise<CutSummary> {
-  const incoming: IncomingPayable[] = cartera.payables.map((doc) => ({
-    ...doc,
-    id: payableId(clientId, cartera.source, doc.supplier, doc.docType, doc.docNumber),
-  }));
-  return db.transaction("rw", db.payables, db.meta, async () => {
-    const existing = await db.payables
-      .where("[clientId+source]")
-      .equals([clientId, cartera.source])
-      .toArray();
-    const writes = mergeCut(existing, incoming, clientId, cartera.source, cutDate);
-    await db.payables.bulkPut(writes);
-    await db.meta.put({
-      key: `${clientId}::${cartera.source}`,
-      clientId,
-      source: cartera.source,
-      cutDate,
-      companyName: cartera.companyName,
-      loadedAt: new Date().toISOString(),
+  return runCashFlowWrite(async () => {
+    const incoming: IncomingPayable[] = cartera.payables.map((doc) => ({
+      ...doc,
+      id: payableId(clientId, cartera.source, doc.supplier, doc.docType, doc.docNumber),
+    }));
+    return db.transaction("rw", db.payables, db.meta, async () => {
+      const existing = await db.payables
+        .where("[clientId+source]")
+        .equals([clientId, cartera.source])
+        .toArray();
+      const writes = mergeCut(existing, incoming, clientId, cartera.source, cutDate);
+      await db.payables.bulkPut(writes);
+      await db.meta.put({
+        key: `${clientId}::${cartera.source}`,
+        clientId,
+        source: cartera.source,
+        cutDate,
+        companyName: cartera.companyName,
+        loadedAt: new Date().toISOString(),
+      });
+      const written = incoming.length;
+      return { written, settled: writes.length - written };
     });
-    const written = incoming.length;
-    return { written, settled: writes.length - written };
   });
 }
 
@@ -459,72 +628,74 @@ export async function replaceCartera(
   clientId: string,
   rows: readonly StoredPayableRow[],
 ): Promise<number> {
-  return db.transaction("rw", db.payables, db.accounts, db.manualObligations, async () => {
-    const accounts = await db.accounts.where("clientId").equals(clientId).toArray();
-    const byRef = new Map(
-      accounts.map((account) => [normalizeLabel(accountRef(account)), account.id]),
-    );
-    const today = todayISO();
-    const payables: Payable[] = rows.map((row) => ({
-      id:
-        row.source === "manual"
-          ? crypto.randomUUID()
-          : payableId(clientId, row.source, row.supplier, row.docType, row.docNumber),
-      clientId,
-      source: row.source,
-      supplier: row.supplier,
-      supplierTaxId: row.supplierTaxId,
-      docType: row.docType,
-      docNumber: row.docNumber,
-      description: row.description,
-      issuedOn: row.issuedOn,
-      dueOn: row.dueOn,
-      amount: row.amount,
-      withholdings: row.withholdings,
-      payments: row.payments,
-      balance: row.balance,
-      centerName: row.centerName,
-      ...(row.kind ? { kind: row.kind } : {}),
-      priority: row.priority,
-      cash: row.cash,
-      payOn: row.payOn,
-      payFromAccountId: row.payFromAccount
-        ? (byRef.get(normalizeLabel(row.payFromAccount)) ?? null)
-        : null,
-      observation: row.observation,
-      approved: row.approved,
-      finalReview: row.finalReview,
-      notified: row.notified,
-      status: row.status,
-      settledOn: row.settledOn,
-      cutDate: row.cutDate || today,
-    }));
-    await db.payables.where("clientId").equals(clientId).delete();
-    await db.payables.bulkPut(payables.filter((row) => row.source !== "manual"));
-    const existing = new Map<string, ManualObligation[]>();
-    for (const row of await listManualObligations(clientId)) {
-      const key = legacyObligationKey(row);
-      const group = existing.get(key) ?? [];
-      group.push(row);
-      existing.set(key, group);
-    }
-    const occurrences = new Map<string, number>();
-    for (const row of payables.filter((row) => row.source === "manual")) {
-      // Preserve both repeated rows in a workbook and existing migrated/manual entries.
-      const key = legacyObligationKey(row);
-      const occurrence = occurrences.get(key) ?? 0;
-      occurrences.set(key, occurrence + 1);
-      const id = `legacy-manual::${clientId}::${key}::${occurrence}`;
-      if (!existing.get(key)?.[occurrence] && !(await db.manualObligations.get(id))) {
-        await db.manualObligations.add({
-          ...row,
-          id,
-          source: "manual",
-          priority: row.status === "open" ? (row.priority ?? "urgent") : row.priority,
-        });
+  return runCashFlowWrite(async () => {
+    return db.transaction("rw", db.payables, db.accounts, db.manualObligations, async () => {
+      const accounts = await db.accounts.where("clientId").equals(clientId).toArray();
+      const byRef = new Map(
+        accounts.map((account) => [normalizeLabel(accountRef(account)), account.id]),
+      );
+      const today = todayISO();
+      const payables: Payable[] = rows.map((row) => ({
+        id:
+          row.source === "manual"
+            ? crypto.randomUUID()
+            : payableId(clientId, row.source, row.supplier, row.docType, row.docNumber),
+        clientId,
+        source: row.source,
+        supplier: row.supplier,
+        supplierTaxId: row.supplierTaxId,
+        docType: row.docType,
+        docNumber: row.docNumber,
+        description: row.description,
+        issuedOn: row.issuedOn,
+        dueOn: row.dueOn,
+        amount: row.amount,
+        withholdings: row.withholdings,
+        payments: row.payments,
+        balance: row.balance,
+        centerName: row.centerName,
+        ...(row.kind ? { kind: row.kind } : {}),
+        priority: row.priority,
+        cash: row.cash,
+        payOn: row.payOn,
+        payFromAccountId: row.payFromAccount
+          ? (byRef.get(normalizeLabel(row.payFromAccount)) ?? null)
+          : null,
+        observation: row.observation,
+        approved: row.approved,
+        finalReview: row.finalReview,
+        notified: row.notified,
+        status: row.status,
+        settledOn: row.settledOn,
+        cutDate: row.cutDate || today,
+      }));
+      await db.payables.where("clientId").equals(clientId).delete();
+      await db.payables.bulkPut(payables.filter((row) => row.source !== "manual"));
+      const existing = new Map<string, ManualObligation[]>();
+      for (const row of await listManualObligations(clientId)) {
+        const key = legacyObligationKey(row);
+        const group = existing.get(key) ?? [];
+        group.push(row);
+        existing.set(key, group);
       }
-    }
-    return payables.length;
+      const occurrences = new Map<string, number>();
+      for (const row of payables.filter((row) => row.source === "manual")) {
+        // Preserve both repeated rows in a workbook and existing migrated/manual entries.
+        const key = legacyObligationKey(row);
+        const occurrence = occurrences.get(key) ?? 0;
+        occurrences.set(key, occurrence + 1);
+        const id = `legacy-manual::${clientId}::${key}::${occurrence}`;
+        if (!existing.get(key)?.[occurrence] && !(await db.manualObligations.get(id))) {
+          await db.manualObligations.add({
+            ...row,
+            id,
+            source: "manual",
+            priority: row.status === "open" ? (row.priority ?? "urgent") : row.priority,
+          });
+        }
+      }
+      return payables.length;
+    });
   });
 }
 
@@ -546,38 +717,40 @@ export async function addManualObligation(
   input: ManualObligationInput,
   date = todayISO(),
 ): Promise<ManualObligation> {
-  const today = date;
-  const payable: ManualObligation = {
-    id: crypto.randomUUID(),
-    clientId,
-    source: "manual",
-    supplier: input.supplier.trim(),
-    supplierTaxId: null,
-    docType: "—",
-    docNumber: "",
-    description: input.description.trim(),
-    issuedOn: today,
-    dueOn: input.dueOn,
-    amount: input.amount,
-    withholdings: 0,
-    payments: 0,
-    balance: input.amount,
-    centerName: input.centerName,
-    kind: input.kind,
-    priority: "urgent",
-    cash: false,
-    payOn: null,
-    payFromAccountId: null,
-    observation: "",
-    approved: null,
-    finalReview: false,
-    notified: false,
-    status: "open",
-    settledOn: null,
-    cutDate: today,
-  };
-  await db.manualObligations.add(payable);
-  return payable;
+  return runCashFlowWrite(async () => {
+    const today = date;
+    const payable: ManualObligation = {
+      id: crypto.randomUUID(),
+      clientId,
+      source: "manual",
+      supplier: input.supplier.trim(),
+      supplierTaxId: null,
+      docType: "—",
+      docNumber: "",
+      description: input.description.trim(),
+      issuedOn: today,
+      dueOn: input.dueOn,
+      amount: input.amount,
+      withholdings: 0,
+      payments: 0,
+      balance: input.amount,
+      centerName: input.centerName,
+      kind: input.kind,
+      priority: "urgent",
+      cash: false,
+      payOn: null,
+      payFromAccountId: null,
+      observation: "",
+      approved: null,
+      finalReview: false,
+      notified: false,
+      status: "open",
+      settledOn: null,
+      cutDate: today,
+    };
+    await db.manualObligations.add(payable);
+    return payable;
+  });
 }
 
 /** What the screen may rewrite of a document: the marks and the four working columns. */
@@ -596,30 +769,38 @@ export type PayablePatch = Partial<
 >;
 
 export async function updatePayable(payableId: string, patch: PayablePatch): Promise<void> {
-  await db.payables.update(payableId, patch);
+  return runCashFlowWrite(async () => {
+    await db.payables.update(payableId, patch);
+  });
 }
 
 /** The same patch over several rows — the bulk bar of Cuentas por pagar. */
 export async function updatePayables(ids: readonly string[], patch: PayablePatch): Promise<void> {
-  await db.transaction("rw", db.payables, async () => {
-    for (const id of ids) {
-      await db.payables.update(id, patch);
-    }
+  return runCashFlowWrite(async () => {
+    await db.transaction("rw", db.payables, async () => {
+      for (const id of ids) {
+        await db.payables.update(id, patch);
+      }
+    });
   });
 }
 
 /** «Marcar pagado» / liquidar: archived at `date`, never deleted. The mark is cleared with it. */
 export async function settlePayables(ids: readonly string[], date: string): Promise<void> {
-  await db.transaction("rw", db.payables, async () => {
-    for (const id of ids) {
-      await db.payables.update(id, { status: "settled", settledOn: date, priority: null });
-    }
+  return runCashFlowWrite(async () => {
+    await db.transaction("rw", db.payables, async () => {
+      for (const id of ids) {
+        await db.payables.update(id, { status: "settled", settledOn: date, priority: null });
+      }
+    });
   });
 }
 
 /** Reopens a settled row — the undo of a mistaken «pagado». */
 export async function reopenPayable(payableId: string): Promise<void> {
-  await db.payables.update(payableId, { status: "open", settledOn: null });
+  return runCashFlowWrite(async () => {
+    await db.payables.update(payableId, { status: "open", settledOn: null });
+  });
 }
 
 /** Obligations are read separately so no cartera reader can accidentally include them. */
@@ -634,23 +815,26 @@ export async function updateManualObligation(
   id: string,
   patch: ManualObligationPatch,
 ): Promise<void> {
-  await db.transaction("rw", db.manualObligations, async () => {
-    const row = await db.manualObligations.get(id);
-    if (!row || row.clientId !== clientId)
-      throw new Error("La obligación no pertenece a esta empresa.");
-    if (patch.amount !== undefined && (!Number.isFinite(patch.amount) || patch.amount <= 0)) {
-      throw new Error("Escribe un monto mayor que cero.");
-    }
-    await db.manualObligations.update(id, {
-      ...patch,
-      ...(patch.supplier !== undefined ? { supplier: patch.supplier.trim() } : {}),
-      ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
-      ...(patch.amount !== undefined
-        ? {
-            balance: patch.amount,
-            approved: row.approved === null ? null : approvedFromTyped(row.approved, patch.amount),
-          }
-        : {}),
+  return runCashFlowWrite(async () => {
+    await db.transaction("rw", db.manualObligations, async () => {
+      const row = await db.manualObligations.get(id);
+      if (!row || row.clientId !== clientId)
+        throw new Error("La obligación no pertenece a esta empresa.");
+      if (patch.amount !== undefined && (!Number.isFinite(patch.amount) || patch.amount <= 0)) {
+        throw new Error("Escribe un monto mayor que cero.");
+      }
+      await db.manualObligations.update(id, {
+        ...patch,
+        ...(patch.supplier !== undefined ? { supplier: patch.supplier.trim() } : {}),
+        ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
+        ...(patch.amount !== undefined
+          ? {
+              balance: patch.amount,
+              approved:
+                row.approved === null ? null : approvedFromTyped(row.approved, patch.amount),
+            }
+          : {}),
+      });
     });
   });
 }
@@ -660,23 +844,29 @@ export async function settleManualObligation(
   id: string,
   date: string,
 ): Promise<void> {
-  await db.manualObligations.where({ id, clientId }).modify({
-    status: "settled",
-    settledOn: date,
-    priority: null,
+  return runCashFlowWrite(async () => {
+    await db.manualObligations.where({ id, clientId }).modify({
+      status: "settled",
+      settledOn: date,
+      priority: null,
+    });
   });
 }
 
 export async function reopenManualObligation(clientId: string, id: string): Promise<void> {
-  await db.manualObligations.where({ id, clientId }).modify({
-    status: "open",
-    settledOn: null,
-    priority: "urgent",
+  return runCashFlowWrite(async () => {
+    await db.manualObligations.where({ id, clientId }).modify({
+      status: "open",
+      settledOn: null,
+      priority: "urgent",
+    });
   });
 }
 
 export async function deleteManualObligation(clientId: string, id: string): Promise<void> {
-  await db.manualObligations.where({ id, clientId }).delete();
+  return runCashFlowWrite(async () => {
+    await db.manualObligations.where({ id, clientId }).delete();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -710,61 +900,63 @@ export async function importChecks(
   clientId: string,
   parsed: readonly ParsedCheck[],
 ): Promise<ChecksImportSummary> {
-  const accounts = await listAccounts(clientId);
-  let unassigned = 0;
-  const rows: Check[] = parsed.map((check) => {
-    const account = resolveAccountByBank(check.bank, accounts);
-    if (!account && !check.voided) {
-      unassigned += 1;
-    }
-    return {
-      id: checkId(clientId, check.voucher),
-      clientId,
-      voucher: check.voucher,
-      bank: check.bank,
-      accountId: account?.id ?? null,
-      payee: check.payee,
-      number: check.number,
-      amount: check.amount,
-      issuedOn: check.issuedOn,
-      step: check.step,
-      voided: check.voided,
-      cashedOn: check.cashedOn,
-      expectedCashOn: check.expectedCashOn,
-      place: check.place,
-      note: "",
-    };
+  return runCashFlowWrite(async () => {
+    const accounts = await listAccounts(clientId);
+    let unassigned = 0;
+    const rows: Check[] = parsed.map((check) => {
+      const account = resolveAccountByBank(check.bank, accounts);
+      if (!account && !check.voided) {
+        unassigned += 1;
+      }
+      return {
+        id: checkId(clientId, check.voucher),
+        clientId,
+        voucher: check.voucher,
+        bank: check.bank,
+        accountId: account?.id ?? null,
+        payee: check.payee,
+        number: check.number,
+        amount: check.amount,
+        issuedOn: check.issuedOn,
+        step: check.step,
+        voided: check.voided,
+        cashedOn: check.cashedOn,
+        expectedCashOn: check.expectedCashOn,
+        place: check.place,
+        note: "",
+      };
+    });
+    await db.transaction("rw", db.checks, async () => {
+      // A reload keeps the note typed on screen: it is the one field the book does not carry.
+      const previous = new Map(
+        (await db.checks.where("clientId").equals(clientId).toArray()).map((row) => [row.id, row]),
+      );
+      // Same for what only the comprobante asks — the beneficiary's id and address, and the
+      // documents the check pays: the book carries none of them, so a reload must not erase them.
+      await db.checks.bulkPut(
+        rows.map((row) => {
+          const kept = previous.get(row.id);
+          return {
+            ...row,
+            note: kept?.note ?? "",
+            expectedCashOn: kept?.expectedCashOn ?? row.expectedCashOn ?? null,
+            flowLinkedOn: kept?.flowLinkedOn ?? null,
+            flowPriority: kept?.flowPriority,
+            flowApproved:
+              kept?.flowApproved === undefined
+                ? undefined
+                : approvedFromTyped(kept.flowApproved, row.amount),
+            flowPayOn: kept?.flowPayOn,
+            flowPayFromAccountId: kept?.flowPayFromAccountId,
+            ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
+            ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
+            ...(kept?.payments?.length ? { payments: kept.payments } : {}),
+          };
+        }),
+      );
+    });
+    return { written: rows.length, unassigned };
   });
-  await db.transaction("rw", db.checks, async () => {
-    // A reload keeps the note typed on screen: it is the one field the book does not carry.
-    const previous = new Map(
-      (await db.checks.where("clientId").equals(clientId).toArray()).map((row) => [row.id, row]),
-    );
-    // Same for what only the comprobante asks — the beneficiary's id and address, and the
-    // documents the check pays: the book carries none of them, so a reload must not erase them.
-    await db.checks.bulkPut(
-      rows.map((row) => {
-        const kept = previous.get(row.id);
-        return {
-          ...row,
-          note: kept?.note ?? "",
-          expectedCashOn: kept?.expectedCashOn ?? row.expectedCashOn ?? null,
-          flowLinkedOn: kept?.flowLinkedOn ?? null,
-          flowPriority: kept?.flowPriority,
-          flowApproved:
-            kept?.flowApproved === undefined
-              ? undefined
-              : approvedFromTyped(kept.flowApproved, row.amount),
-          flowPayOn: kept?.flowPayOn,
-          flowPayFromAccountId: kept?.flowPayFromAccountId,
-          ...(kept?.payeeTaxId ? { payeeTaxId: kept.payeeTaxId } : {}),
-          ...(kept?.payeeAddress ? { payeeAddress: kept.payeeAddress } : {}),
-          ...(kept?.payments?.length ? { payments: kept.payments } : {}),
-        };
-      }),
-    );
-  });
-  return { written: rows.length, unassigned };
 }
 
 /** Link existing checks in ONE write, bounded to the empresa. Removing a link keeps the check. */
@@ -773,20 +965,22 @@ export async function setFlowCheckLinks(
   ids: readonly string[],
   date: string | null,
 ): Promise<void> {
-  const picked = new Set(ids);
-  await db.transaction("rw", db.checks, async () => {
-    await db.checks
-      .where("clientId")
-      .equals(clientId)
-      .filter((row) => picked.has(row.id))
-      .modify((row) => {
-        row.flowLinkedOn =
-          date === null
-            ? null
-            : row.flowLinkedOn && row.flowLinkedOn < date
-              ? row.flowLinkedOn
-              : date;
-      });
+  return runCashFlowWrite(async () => {
+    const picked = new Set(ids);
+    await db.transaction("rw", db.checks, async () => {
+      await db.checks
+        .where("clientId")
+        .equals(clientId)
+        .filter((row) => picked.has(row.id))
+        .modify((row) => {
+          row.flowLinkedOn =
+            date === null
+              ? null
+              : row.flowLinkedOn && row.flowLinkedOn < date
+                ? row.flowLinkedOn
+                : date;
+        });
+    });
   });
 }
 
@@ -796,12 +990,14 @@ export async function updateFlowCheck(
   id: string,
   patch: PayablePatch,
 ): Promise<void> {
-  await db.checks.where({ id, clientId }).modify((check) => {
-    if (patch.priority) check.flowPriority = patch.priority;
-    if ("approved" in patch)
-      check.flowApproved = approvedFromTyped(patch.approved ?? null, check.amount);
-    if ("payOn" in patch) check.flowPayOn = patch.payOn;
-    if ("payFromAccountId" in patch) check.flowPayFromAccountId = patch.payFromAccountId;
+  return runCashFlowWrite(async () => {
+    await db.checks.where({ id, clientId }).modify((check) => {
+      if (patch.priority) check.flowPriority = patch.priority;
+      if ("approved" in patch)
+        check.flowApproved = approvedFromTyped(patch.approved ?? null, check.amount);
+      if ("payOn" in patch) check.flowPayOn = patch.payOn;
+      if ("payFromAccountId" in patch) check.flowPayFromAccountId = patch.payFromAccountId;
+    });
   });
 }
 
@@ -811,32 +1007,42 @@ export async function settleFlowCheck(
   id: string,
   date: string | null,
 ): Promise<void> {
-  await db.checks
-    .where({ id, clientId })
-    .modify({ cashedOn: date, step: date ? "cashed" : "delivered" });
+  return runCashFlowWrite(async () => {
+    await db.checks
+      .where({ id, clientId })
+      .modify({ cashedOn: date, step: date ? "cashed" : "delivered" });
+  });
 }
 
 export type CheckInput = Omit<Check, "id" | "clientId">;
 
 export async function addCheck(clientId: string, input: CheckInput): Promise<Check> {
-  const check: Check = { ...input, id: checkId(clientId, input.voucher), clientId };
-  await db.checks.add(check);
-  return check;
+  return runCashFlowWrite(async () => {
+    const check: Check = { ...input, id: checkId(clientId, input.voucher), clientId };
+    await db.checks.add(check);
+    return check;
+  });
 }
 
 export async function updateCheck(id: string, patch: Partial<CheckInput>): Promise<void> {
-  // An emptied id or address is removed, so an absent field keeps meaning «not declared».
-  await db.checks.update(id, {
-    ...patch,
-    ...(patch.payeeTaxId !== undefined ? { payeeTaxId: patch.payeeTaxId.trim() || undefined } : {}),
-    ...(patch.payeeAddress !== undefined
-      ? { payeeAddress: patch.payeeAddress.trim() || undefined }
-      : {}),
+  return runCashFlowWrite(async () => {
+    // An emptied id or address is removed, so an absent field keeps meaning «not declared».
+    await db.checks.update(id, {
+      ...patch,
+      ...(patch.payeeTaxId !== undefined
+        ? { payeeTaxId: patch.payeeTaxId.trim() || undefined }
+        : {}),
+      ...(patch.payeeAddress !== undefined
+        ? { payeeAddress: patch.payeeAddress.trim() || undefined }
+        : {}),
+    });
   });
 }
 
 export async function deleteCheck(id: string): Promise<void> {
-  await db.checks.delete(id);
+  return runCashFlowWrite(async () => {
+    await db.checks.delete(id);
+  });
 }
 
 /**
@@ -849,32 +1055,34 @@ export async function createAccountsForBanks(
   clientId: string,
   banks: readonly string[],
 ): Promise<BankAccount[]> {
-  return db.transaction("rw", db.accounts, db.checks, async () => {
-    const existing = await db.accounts.where("clientId").equals(clientId).toArray();
-    const created: BankAccount[] = [];
-    for (const bank of banks) {
-      const label = bank.trim();
-      let account = resolveAccountByBank(label, [...existing, ...created]);
-      if (!account) {
-        account = {
-          id: crypto.randomUUID(),
-          clientId,
-          bank: label,
-          number: "",
-          overdraft: 0,
-          centerId: null,
-        };
-        await db.accounts.add(account);
-        created.push(account);
+  return runCashFlowWrite(async () => {
+    return db.transaction("rw", db.accounts, db.checks, async () => {
+      const existing = await db.accounts.where("clientId").equals(clientId).toArray();
+      const created: BankAccount[] = [];
+      for (const bank of banks) {
+        const label = bank.trim();
+        let account = resolveAccountByBank(label, [...existing, ...created]);
+        if (!account) {
+          account = {
+            id: crypto.randomUUID(),
+            clientId,
+            bank: label,
+            number: "",
+            overdraft: 0,
+            centerId: null,
+          };
+          await db.accounts.add(account);
+          created.push(account);
+        }
+        const wanted = normalizeLabel(label);
+        await db.checks
+          .where("clientId")
+          .equals(clientId)
+          .filter((check) => check.accountId === null && normalizeLabel(check.bank) === wanted)
+          .modify({ accountId: account.id });
       }
-      const wanted = normalizeLabel(label);
-      await db.checks
-        .where("clientId")
-        .equals(clientId)
-        .filter((check) => check.accountId === null && normalizeLabel(check.bank) === wanted)
-        .modify({ accountId: account.id });
-    }
-    return created;
+      return created;
+    });
   });
 }
 
@@ -885,12 +1093,14 @@ export async function assignBankToAccount(
   bank: string,
   accountId: string,
 ): Promise<number> {
-  const wanted = normalizeLabel(bank);
-  return db.checks
-    .where("clientId")
-    .equals(clientId)
-    .filter((check) => check.accountId === null && normalizeLabel(check.bank) === wanted)
-    .modify({ accountId });
+  return runCashFlowWrite(async () => {
+    const wanted = normalizeLabel(bank);
+    return db.checks
+      .where("clientId")
+      .equals(clientId)
+      .filter((check) => check.accountId === null && normalizeLabel(check.bank) === wanted)
+      .modify({ accountId });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -921,33 +1131,37 @@ export async function saveFlow(
     notes?: Record<string, string | null>;
   },
 ): Promise<PaymentFlow> {
-  return db.transaction("rw", db.flows, async () => {
-    const existing = await getFlow(clientId, date);
-    const next: PaymentFlow = existing
-      ? {
-          ...existing,
-          balances: { ...existing.balances, ...(patch.balances ?? {}) },
-          incomes: patch.incomes ?? existing.incomes,
-          notes: applyNotes(existing.notes, patch.notes),
-        }
-      : {
-          id: crypto.randomUUID(),
-          clientId,
-          date,
-          balances: patch.balances ?? {},
-          incomes: patch.incomes ?? [],
-          notes: applyNotes(undefined, patch.notes),
-        };
-    await db.flows.put(next);
-    return next;
+  return runCashFlowWrite(async () => {
+    return db.transaction("rw", db.flows, async () => {
+      const existing = await getFlow(clientId, date);
+      const next: PaymentFlow = existing
+        ? {
+            ...existing,
+            balances: { ...existing.balances, ...(patch.balances ?? {}) },
+            incomes: patch.incomes ?? existing.incomes,
+            notes: applyNotes(existing.notes, patch.notes),
+          }
+        : {
+            id: crypto.randomUUID(),
+            clientId,
+            date,
+            balances: patch.balances ?? {},
+            incomes: patch.incomes ?? [],
+            notes: applyNotes(undefined, patch.notes),
+          };
+      await db.flows.put(next);
+      return next;
+    });
   });
 }
 
 export async function deleteFlow(clientId: string, date: string): Promise<void> {
-  const existing = await getFlow(clientId, date);
-  if (existing) {
-    await db.flows.delete(existing.id);
-  }
+  return runCashFlowWrite(async () => {
+    const existing = await getFlow(clientId, date);
+    if (existing) {
+      await db.flows.delete(existing.id);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -966,29 +1180,35 @@ export async function addCashEntry(
   section: CashEntry["section"],
   date = todayISO(),
 ): Promise<CashEntry> {
-  const entry: CashEntry = {
-    id: crypto.randomUUID(),
-    clientId,
-    section,
-    date,
-    detail: "",
-    amounts: {},
-    loan: null,
-    observation: "",
-  };
-  await db.cashEntries.add(entry);
-  return entry;
+  return runCashFlowWrite(async () => {
+    const entry: CashEntry = {
+      id: crypto.randomUUID(),
+      clientId,
+      section,
+      date,
+      detail: "",
+      amounts: {},
+      loan: null,
+      observation: "",
+    };
+    await db.cashEntries.add(entry);
+    return entry;
+  });
 }
 
 export async function updateCashEntry(
   id: string,
   patch: Partial<Pick<CashEntry, "date" | "detail" | "amounts" | "loan" | "observation">>,
 ): Promise<void> {
-  await db.cashEntries.update(id, patch);
+  return runCashFlowWrite(async () => {
+    await db.cashEntries.update(id, patch);
+  });
 }
 
 export async function deleteCashEntry(id: string): Promise<void> {
-  await db.cashEntries.delete(id);
+  return runCashFlowWrite(async () => {
+    await db.cashEntries.delete(id);
+  });
 }
 
 /** What loading a `CARGAS CASH` sheet wrote, per section, and what it could not place. */
@@ -1012,48 +1232,50 @@ export async function replaceCashSections(
   clientId: string,
   sheet: ParsedCashSheet,
 ): Promise<CashSheetSummary> {
-  return db.transaction("rw", db.centers, db.cashEntries, async () => {
-    const centers = await db.centers.where("clientId").equals(clientId).toArray();
-    const unknown = new Set<string>();
-    let written = 0;
-    for (const section of sheet.sections) {
-      const roles = new Map(
-        section.columns.map((label) => [label, cashColumnRole(label, centers)] as const),
-      );
-      const entries: CashEntry[] = section.rows.map((row) => {
-        const amounts: Record<string, number> = {};
-        let loan: CashEntry["loan"] = null;
-        for (const [label, amount] of Object.entries(row.amounts)) {
-          const role = roles.get(label) ?? { kind: "unknown" };
-          if (role.kind === "center") {
-            amounts[role.centerId] = amount;
-          } else if (role.kind === "amount") {
-            amounts[""] = amount;
-          } else if (role.kind === "loan") {
-            loan ??= { fromCenterId: role.fromCenterId, toCenterId: role.toCenterId, amount };
-          } else {
-            unknown.add(label);
+  return runCashFlowWrite(async () => {
+    return db.transaction("rw", db.centers, db.cashEntries, async () => {
+      const centers = await db.centers.where("clientId").equals(clientId).toArray();
+      const unknown = new Set<string>();
+      let written = 0;
+      for (const section of sheet.sections) {
+        const roles = new Map(
+          section.columns.map((label) => [label, cashColumnRole(label, centers)] as const),
+        );
+        const entries: CashEntry[] = section.rows.map((row) => {
+          const amounts: Record<string, number> = {};
+          let loan: CashEntry["loan"] = null;
+          for (const [label, amount] of Object.entries(row.amounts)) {
+            const role = roles.get(label) ?? { kind: "unknown" };
+            if (role.kind === "center") {
+              amounts[role.centerId] = amount;
+            } else if (role.kind === "amount") {
+              amounts[""] = amount;
+            } else if (role.kind === "loan") {
+              loan ??= { fromCenterId: role.fromCenterId, toCenterId: role.toCenterId, amount };
+            } else {
+              unknown.add(label);
+            }
           }
-        }
-        return {
-          id: crypto.randomUUID(),
-          clientId,
-          section: section.id,
-          date: row.date ?? todayISO(),
-          detail: row.detail,
-          amounts,
-          loan,
-          observation: row.observation,
-        };
-      });
-      await db.cashEntries.where("[clientId+section]").equals([clientId, section.id]).delete();
-      await db.cashEntries.bulkAdd(entries);
-      written += entries.length;
-    }
-    return {
-      written,
-      sections: sheet.sections.map((section) => section.id),
-      unknownColumns: [...unknown],
-    };
+          return {
+            id: crypto.randomUUID(),
+            clientId,
+            section: section.id,
+            date: row.date ?? todayISO(),
+            detail: row.detail,
+            amounts,
+            loan,
+            observation: row.observation,
+          };
+        });
+        await db.cashEntries.where("[clientId+section]").equals([clientId, section.id]).delete();
+        await db.cashEntries.bulkAdd(entries);
+        written += entries.length;
+      }
+      return {
+        written,
+        sections: sheet.sections.map((section) => section.id),
+        unknownColumns: [...unknown],
+      };
+    });
   });
 }
