@@ -1,185 +1,289 @@
 import { describe, expect, it } from "vitest";
+import type { Cell } from "@/lib/excel/workbook";
 import {
-  findDeclaredTotal,
-  findSalesCompany,
   findSalesHeader,
-  findSalesRange,
-  hasSalesTitle,
-  isPrintRow,
+  missingSalesLabels,
   readSalesRow,
+  salesText,
+  toSalesDate,
   toSalesNumber,
 } from "./grid";
-import { foreignGrid, salesGrid } from "./parse.fixtures";
 
-describe("toSalesNumber", () => {
-  it("lee texto con separador de miles", () => {
-    expect(toSalesNumber("107,231.22")).toBe(107231.22);
-    expect(toSalesNumber("1,200,500.75")).toBe(1200500.75);
-  });
+/** The report's own header, in its own order. */
+const HEADER: Cell[] = [
+  "COD. EMPRESA",
+  "FECHA",
+  "HORA",
+  "OI",
+  "PACIENTE",
+  "SEGURO",
+  "REFERIDOS",
+  "COD. ARTICULO",
+  "NOMBRE DEL ARTICULO",
+  "TIPO DE SERVICIO.",
+  "CANTIDAD",
+  "PRECIO UNITARIO",
+  "% DESCUENTO",
+  "codrefer",
+  "NETO",
+  "VENDEDOR",
+  "# FACTURA 1",
+  "# FACTURA 2",
+];
 
-  it("pasa un número finito tal cual", () => {
-    expect(toSalesNumber(42.5)).toBe(42.5);
-  });
-
-  it("los paréntesis del contador son el signo negativo", () => {
-    expect(toSalesNumber("(1,200.50)")).toBe(-1200.5);
-  });
-
-  it("aguanta el símbolo y los espacios", () => {
-    expect(toSalesNumber(" $1,200.50 ")).toBe(1200.5);
-  });
-
-  it("null cuando la celda no es un número: es lo que separa un dato de un rótulo", () => {
-    expect(toSalesNumber("NOMBRE")).toBeNull();
-    expect(toSalesNumber(null)).toBeNull();
-    expect(toSalesNumber("")).toBeNull();
-  });
-
-  it("null y NO cero para un texto ilegible: un NaN redondeado a 0 dejaría el mes entero en cero", () => {
-    expect(toSalesNumber("—")).toBeNull();
-  });
-});
-
-describe("hasSalesTitle", () => {
-  it("encuentra el título dondequiera que el reporte lo escriba", () => {
-    expect(hasSalesTitle(salesGrid())).toBe(true);
-  });
-
-  it("un balance no lo lleva", () => {
-    expect(hasSalesTitle(foreignGrid())).toBe(false);
-  });
-});
+const LINE: Cell[] = [
+  "01",
+  "2024-01-31 00:00:00.000",
+  0.33,
+  "OI0134627",
+  "QUINAPANTA ROSERO LUIS ALEJANDRO",
+  "MEDICOS",
+  "Personal",
+  "EQP176",
+  "ELECTROBISTURI MONOPOLAR / BIPOLAR  ",
+  "EQUIPOS",
+  1,
+  "2.0000",
+  "0.0000",
+  7,
+  "2.0000",
+  "",
+  "A00001250",
+  "S/F",
+];
 
 describe("findSalesHeader", () => {
-  it("localiza la fila por llevar los CUATRO rótulos a la vez", () => {
-    expect(findSalesHeader(salesGrid())?.row).toBe(6);
-  });
-
-  it("una cabecera de solo CODIGO+NOMBRE no basta: es la de MicroPlus", () => {
-    expect(findSalesHeader(foreignGrid())).toBeNull();
-  });
-
-  it("sus columnas NO son las de los datos: los rótulos van centrados sobre celdas combinadas", () => {
-    // `CANTIDAD` is labelled in column 19 and the quantities live in 18; `VENTA TOTAL` in 25 and the
-    // amounts in 24. It is because of this that the header identifies the format but locates nothing.
-    const header = findSalesHeader(salesGrid());
-    expect(header).toMatchObject({ quantityCol: 19, amountCol: 25 });
-    expect(readSalesRow(salesGrid()[7])).toMatchObject({ amountCol: 24 });
-  });
-});
-
-describe("findSalesRange", () => {
-  it("lee Desde/Hasta escritos en celdas separadas del rótulo", () => {
-    expect(findSalesRange(salesGrid())).toEqual({
-      fromDay: 1,
-      fromMonth: 3,
-      fromYear: 2026,
-      toDay: 30,
-      toMonth: 3,
-      toYear: 2026,
+  it("encuentra la cabecera del reporte y sus siete columnas obligatorias", () => {
+    const header = findSalesHeader([HEADER, LINE]);
+    expect(header).not.toBeNull();
+    expect(header).toMatchObject({
+      row: 0,
+      dateCol: 1,
+      insurerCol: 5,
+      codeCol: 7,
+      nameCol: 8,
+      typeCol: 9,
+      amountCol: 14,
+      vendorCol: 15,
+      companyCol: 0,
     });
   });
 
-  it("lee también la fecha pegada al rótulo en la misma celda", () => {
-    const grid = salesGrid();
-    grid[4] = [null, "Desde: 01/04/2026", null, "Hasta: 30/04/2026"];
-    expect(findSalesRange(grid)).toMatchObject({ fromDay: 1, toDay: 30 });
+  it("la encuentra aunque NO esté en la primera fila — es lo que permite que vuelva a entrar el Excel que el módulo exporta, que lleva membrete encima", () => {
+    const grid = [["LiderPlus"], ["Ventas por servicio"], [], HEADER, LINE];
+    expect(findSalesHeader(grid)?.row).toBe(3);
   });
 
-  it("los dos rótulos pueden estar en filas distintas", () => {
-    const grid = salesGrid();
-    grid[4] = [null, "Desde:", "01/04/2026"];
-    grid.splice(5, 0, [null, "Hasta:", "30/04/2026"]);
-    expect(findSalesRange(grid)).toMatchObject({ fromMonth: 3, toDay: 30 });
+  it("la encuentra con las columnas en otro orden", () => {
+    const shuffled: Cell[] = [
+      "NETO",
+      "VENDEDOR",
+      "FECHA",
+      "NOMBRE DEL ARTICULO",
+      "COD. ARTICULO",
+      "TIPO DE SERVICIO.",
+      "SEGURO",
+    ];
+    expect(findSalesHeader([shuffled])).toMatchObject({
+      amountCol: 0,
+      vendorCol: 1,
+      dateCol: 2,
+      nameCol: 3,
+      codeCol: 4,
+      typeCol: 5,
+      insurerCol: 6,
+    });
   });
 
-  it("null si falta cualquiera de los dos", () => {
-    const grid = salesGrid();
-    grid[4] = [null, "Desde:", "01/04/2026"];
-    expect(findSalesRange(grid)).toBeNull();
+  it("acepta «TIPO DE SERVICIO» con y sin el punto que escribe el sistema", () => {
+    const withoutDot = HEADER.map((cell) =>
+      cell === "TIPO DE SERVICIO." ? "TIPO DE SERVICIO" : cell,
+    );
+    expect(findSalesHeader([withoutDot])).not.toBeNull();
+  });
+
+  it("ignora acentos, mayúsculas y espacios dobles de las etiquetas", () => {
+    const messy = HEADER.map((cell) =>
+      cell === "NOMBRE DEL ARTICULO" ? "  nombre  del   artículo " : cell,
+    );
+    expect(findSalesHeader([messy])).not.toBeNull();
+  });
+
+  it("las once columnas que el módulo no lee son OPCIONALES: sin ellas la cabecera vale igual", () => {
+    const minimal: Cell[] = [
+      "FECHA",
+      "SEGURO",
+      "TIPO DE SERVICIO.",
+      "COD. ARTICULO",
+      "NOMBRE DEL ARTICULO",
+      "NETO",
+      "VENDEDOR",
+    ];
+    const header = findSalesHeader([minimal]);
+    expect(header).not.toBeNull();
+    // Sin `COD. EMPRESA` simplemente no hay código de empresa que adoptar.
+    expect(header?.companyCol).toBe(-1);
+  });
+
+  it("null cuando falta una obligatoria", () => {
+    const withoutNeto = HEADER.filter((cell) => cell !== "NETO");
+    expect(findSalesHeader([withoutNeto])).toBeNull();
+  });
+
+  it("null sobre el reporte del formato viejo", () => {
+    const old: Cell[][] = [
+      ["VENTA DE SERVICIOS POR FACTURA"],
+      ["Desde:", "01/04/2026", "Hasta:", "30/04/2026"],
+      ["CODIGO", "NOMBRE", "CANTIDAD", "VENTA TOTAL"],
+    ];
+    expect(findSalesHeader(old)).toBeNull();
+  });
+});
+
+describe("missingSalesLabels", () => {
+  it("nombra solo las que faltaron, no las dieciocho", () => {
+    const withoutNeto = HEADER.filter((cell) => cell !== "NETO");
+    expect(missingSalesLabels([withoutNeto])).toEqual(["NETO"]);
+  });
+
+  it("sobre un libro ajeno nombra las siete", () => {
+    expect(missingSalesLabels([["Hoja en blanco"], [1, 2, 3]])).toHaveLength(7);
+  });
+});
+
+describe("salesText", () => {
+  it("recorta el espacio final — 130.693 nombres del archivo real lo traen", () => {
+    expect(salesText("ELECTROBISTURI MONOPOLAR / BIPOLAR  ")).toBe(
+      "ELECTROBISTURI MONOPOLAR / BIPOLAR",
+    );
+    expect(salesText("BMI DEL ECUADOR ")).toBe(salesText("BMI DEL ECUADOR"));
+  });
+
+  it("colapsa los espacios internos que el sistema concatena", () => {
+    expect(salesText("AGUJA VACUTAINER   AGUJA TOMA MULTIPLE")).toBe(
+      "AGUJA VACUTAINER AGUJA TOMA MULTIPLE",
+    );
+  });
+
+  it("NO toca el truncamiento del vendedor: es lo que el contador verifica contra su archivo", () => {
+    expect(salesText("CASTELLANOS LOPEZ RAUL FABRICI")).toBe("CASTELLANOS LOPEZ RAUL FABRICI");
+  });
+});
+
+describe("toSalesNumber", () => {
+  it("lee el separador de miles sin devolver NaN", () => {
+    expect(toSalesNumber("107,231.22")).toBeCloseTo(107231.22, 2);
+  });
+
+  it("los paréntesis del contador son el signo negativo", () => {
+    expect(toSalesNumber("(45.00)")).toBe(-45);
+  });
+
+  it("RECHAZA la convención invertida en vez de leerla mil veces más pequeña o más grande", () => {
+    // «17.338,85» con un `Number` tras quitar comas daría 17,33885; «12,5» daría 125.
+    expect(toSalesNumber("17.338,85")).toBeNull();
+    expect(toSalesNumber("12,5")).toBeNull();
+    expect(toSalesNumber("1234,56")).toBeNull();
+  });
+
+  it("lee el texto con cuatro decimales que escribe el sistema, y el signo", () => {
+    expect(toSalesNumber("2.0000")).toBe(2);
+    expect(toSalesNumber("-45.5000")).toBe(-45.5);
+    expect(toSalesNumber("$1,234.56")).toBeCloseTo(1234.56, 2);
+  });
+
+  it("lee un importe menor que uno escrito SIN el cero inicial — 82.762 filas del archivo real", () => {
+    expect(toSalesNumber(".4000")).toBe(0.4);
+    expect(toSalesNumber("-.7500")).toBe(-0.75);
+  });
+
+  it("null cuando la celda no es un número", () => {
+    expect(toSalesNumber("PARTICULAR")).toBeNull();
+    expect(toSalesNumber(null)).toBeNull();
+  });
+
+  it("cero es cero y no null — 29,5 % de las filas del archivo real están en $0", () => {
+    expect(toSalesNumber("0.0000")).toBe(0);
+  });
+});
+
+describe("toSalesDate", () => {
+  it("lee el texto que escribe el sistema contable", () => {
+    expect(toSalesDate("2026-03-15 00:00:00.000")).toEqual({ year: 2026, monthIndex: 2, day: 15 });
+  });
+
+  it("lee también una fecha sin hora, que es lo que deja una celda de fecha real", () => {
+    expect(toSalesDate("2026-03-01")).toEqual({ year: 2026, monthIndex: 2, day: 1 });
+  });
+
+  it("lee la forma dd/mm/aaaa", () => {
+    expect(toSalesDate("15/03/2026")).toEqual({ year: 2026, monthIndex: 2, day: 15 });
+  });
+
+  it("null cuando no hay fecha legible", () => {
+    expect(toSalesDate("")).toBeNull();
+    expect(toSalesDate("sin fecha")).toBeNull();
+    expect(toSalesDate(null)).toBeNull();
   });
 });
 
 describe("readSalesRow", () => {
-  const grid = salesGrid();
+  const header = findSalesHeader([HEADER])!;
 
-  it("lee las cinco celdas de una línea por posición RELATIVA al código", () => {
-    expect(readSalesRow(grid[7])).toEqual({
-      serviceCode: "\\01",
-      serviceName: "HONORARIOS",
-      payer: "ASEGURADORA UNO S.A.",
-      quantity: 1,
-      amount: 1200.5,
-      amountCol: 24,
+  it("lee la línea completa y descarta todo lo que no se guarda", () => {
+    expect(readSalesRow(LINE, header)).toEqual({
+      year: 2024,
+      monthIndex: 0,
+      day: 31,
+      seguro: "MEDICOS",
+      tipo: "EQUIPOS",
+      articleCode: "EQP176",
+      articleName: "ELECTROBISTURI MONOPOLAR / BIPOLAR",
+      vendor: "",
+      amount: 2,
+      companyCode: "01",
     });
   });
 
-  it("null para el preámbulo, la cabecera y las filas de cierre", () => {
-    expect(readSalesRow(grid[0])).toBeNull();
-    expect(readSalesRow(grid[6])).toBeNull();
-    expect(readSalesRow(grid[12])).toBeNull();
-    expect(readSalesRow(grid[13])).toBeNull();
+  it("null en una fila que no es una línea — incluida una cabecera repetida, que trae texto en NOMBRE DEL ARTICULO pero ni importe ni fecha", () => {
+    expect(readSalesRow([], header)).toBeNull();
+    expect(readSalesRow(HEADER, header)).toBeNull();
   });
 
-  it("null cuando faltan celdas: una fila incompleta no es media línea", () => {
-    expect(readSalesRow([null, "\\01", "HONORARIOS", "UN PAGADOR"])).toBeNull();
+  it("una línea SIN fecha legible no es null: se marca para contarla y declararla", () => {
+    const undated = [...LINE];
+    undated[1] = "";
+    expect(readSalesRow(undated, header)).toEqual({ undated: true });
   });
 
-  it("lee la línea sin pagador: la celda vacía es UNA CELDA MENOS, no una cadena vacía", () => {
-    expect(readSalesRow([null, "\\01", "HONORARIOS", 3, 450.75])).toEqual({
-      serviceCode: "\\01",
-      serviceName: "HONORARIOS",
-      payer: "",
-      quantity: 3,
-      amount: 450.75,
-      amountCol: 4,
-    });
+  it("un NETO escrito pero ilegible NO se lee como cero: se marca para declararlo", () => {
+    const bad = [...LINE];
+    bad[14] = "12,5";
+    expect(readSalesRow(bad, header)).toEqual({ unreadable: true });
   });
 
-  it("una celda suelta a la derecha no le devuelve el pagador a quien no lo trae", () => {
-    // Five filled cells, but the third is a NUMBER: what tells the two shapes apart is the cell and
-    // not how many the row has.
-    const row = readSalesRow([null, "\\02", "LABORATORIO", 2, 80, "x"]);
-    expect(row?.payer).toBe("");
-    expect(row?.quantity).toBe(2);
-    expect(row?.amount).toBe(80);
+  it("una línea con fecha pero sin importe vale cero, y una sin ninguno de los dos no es línea", () => {
+    const noAmount = [...LINE];
+    noAmount[14] = null;
+    expect(readSalesRow(noAmount, header)).toMatchObject({ amount: 0, day: 31 });
+    const neither = [...LINE];
+    neither[1] = "";
+    neither[14] = null;
+    expect(readSalesRow(neither, header)).toBeNull();
   });
 
-  it("null cuando las dos últimas no son números, para que un rótulo no pase por línea", () => {
-    expect(
-      readSalesRow([null, "\\01", "HONORARIOS", "UN PAGADOR", "CANTIDAD", "VENTA"]),
-    ).toBeNull();
-  });
-
-  it("un pie de página se reconoce por su rótulo", () => {
-    expect(isPrintRow(grid[0])).toBe(true);
-    expect(isPrintRow(grid[7])).toBe(false);
-  });
-});
-
-describe("findDeclaredTotal", () => {
-  it("lee el cierre en la columna del IMPORTE, que es lo único que lo identifica", () => {
-    // That row carries no label; the one above says `TOTAL ITEMS` and counts LINES, not dollars.
-    expect(findDeclaredTotal(salesGrid(), 12, 24)).toBe(1900);
-  });
-
-  it("null cuando el reporte no escribe ninguna fila de cierre", () => {
-    expect(findDeclaredTotal(salesGrid().slice(0, 12), 12, 24)).toBeNull();
-  });
-});
-
-describe("findSalesCompany", () => {
-  it("devuelve la razón social y se salta el título del reporte", () => {
-    const grid = salesGrid();
-    expect(findSalesCompany(grid, 4)).toBe("CLINICA DE PRUEBA S.A.");
-  });
-
-  it("no devuelve un rótulo de impresión ni una fecha", () => {
-    const grid = salesGrid();
-    grid[0] = [null, null, null, null, null, null, "Pagina:", 1];
-    grid[1] = [null, "Venta de Servicios por FACTURA", null, null];
-    grid[2] = [null, "Fecha:", "05/05/2026", null];
-    grid[3] = [null, "CLINICA DE PRUEBA S.A.", null, null];
-    expect(findSalesCompany(grid, 4)).toBe("CLINICA DE PRUEBA S.A.");
+  it("sin columna de empresa, el código queda vacío en vez de romper la lectura", () => {
+    const minimal: Cell[] = [
+      "FECHA",
+      "SEGURO",
+      "TIPO DE SERVICIO.",
+      "COD. ARTICULO",
+      "NOMBRE DEL ARTICULO",
+      "NETO",
+      "VENDEDOR",
+    ];
+    const slim = findSalesHeader([minimal])!;
+    const row: Cell[] = ["2026-03-01", "PARTICULAR", "MEDICINAS", "001", "PARACETAMOL", "3.5", ""];
+    expect(readSalesRow(row, slim)).toMatchObject({ companyCode: "", amount: 3.5 });
   });
 });

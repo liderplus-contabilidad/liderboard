@@ -1,56 +1,71 @@
 /**
- * What «Ventas por servicio» stores, and nothing else: the INVOICE LINE the report brings and the
- * MONTH containing it. Nothing derived lives here —the breakdown by service, the concentration by
- * payer and the year's evolution are recomputed on every read (`derive.ts`)—, the same rule by which
- * Rol de Pagos persists not a single total: a copy stored separately goes stale on the next upload and
- * the screen would say one thing and the data another.
- *
- * The grain is the line because it is what the file declares and the only thing the firm can check a
- * figure against. What does NOT happen is a view walking them: every reading aggregates before
- * reaching a card.
+ * What «Ventas por servicio» stores: the INVOICE LINE the flat report brings, the MONTH containing
+ * it, and that month's COVERAGE. Nothing else derived lives here — every reading is recomputed
+ * (`derive.ts`). Why the grain is the line, with its measurements: `docs/architecture.md`.
  */
 
 /**
- * A row of the report: which service, who pays for it, how many and for how much.
- *
- * `serviceCode` goes VERBATIM —the report writes `\01`, with its backslash— for the same reason Dingoo
- * keeps the zeros of `5.02.01`: it is what the accountant checks against their own file. `payer`
- * stores the WHOLE name, people's included: anonymity is a PRESENTATION decision (`payer.ts`), and a
- * figure whose owner was not stored stops being traceable.
+ * A row of the report. One field per column the firm declared relevant —`FECHA` resolves into the
+ * month the line is stored under— plus `articleCode`, kept because the truncated NAME cannot
+ * identify an article. Text is stored verbatim except for whitespace, trimmed at the door.
+ * `amount` is the NETO, the only figure the module measures with.
  */
 export interface SalesLine {
-  serviceCode: string;
-  serviceName: string;
-  payer: string;
-  quantity: number;
+  /** `SEGURO`. Never empty in the real report, which is why there is no «unidentified» group. */
+  seguro: string;
+  /** `TIPO DE SERVICIO.` — a name, not a code: the report declares none. */
+  tipo: string;
+  /** `COD. ARTICULO` — the article's IDENTITY. */
+  articleCode: string;
+  /** `NOMBRE DEL ARTICULO` — its LABEL. The code joins it on screen only where two articles
+   *  would otherwise read the same (`derive.ts`, `disambiguate`). */
+  articleName: string;
+  /** `VENDEDOR`, or empty where the report declares none. */
+  vendor: string;
+  /** `NETO`. */
   amount: number;
 }
 
 /**
- * A month read from the Excel, which does not belong to anybody yet — the mirror of `ParsedDataset` in
- * PyG. Who its owner is is decided by the client that is open, and `db.ts` STAMPS it at the door,
- * never the file.
+ * What a month's file declares ABOUT the month, kept apart from its lines so «which years and
+ * months exist» is answered without deserialising them. The only derived thing persisted; it is
+ * written in the same transaction as the lines it summarises.
  */
-export interface ParsedSalesMonth {
+export interface SalesMonthCoverage {
   year: number;
   /** 0–11, as in the whole app. */
   monthIndex: number;
-  /** The razón social the file DECLARES — never the name the user gave the client. */
-  companyName: string;
-  lines: SalesLine[];
-  /**
-   * The total of the report's own closing row, or `null` if it does not write one. It is stored so it
-   * is possible to say WHAT it was squared against: without it, a difference can only be asserted at
-   * upload time and is lost on reloading the screen.
-   */
-  declaredTotal: number | null;
-  /** What the reading had to warn about — the imbalance against `declaredTotal`, above all. */
-  warnings: string[];
+  lineCount: number;
+  /** First and last day the file's lines of this month cover (1–31) — what lets the modal say a
+   *  reload brings only part of the month. */
+  firstDay: number;
+  lastDay: number;
+  /** `COD. EMPRESA` — one value per file, and the module's whole identity (`identity.ts`). */
+  companyCode: string;
 }
 
-/** What is stored: the month read plus its owner. `id` is `<clientId>:<year>-<month>`, so reloading a
- *  month REPLACES it by construction instead of leaving two rows of the same period. */
-export interface SalesMonth extends ParsedSalesMonth {
+/**
+ * A month read from the Excel, not yet anybody's: `db.ts` stamps the open client at the door.
+ * Reading warnings belong to the FILE (`SalesFileReading`), never to a month.
+ */
+export interface ParsedSalesMonth extends SalesMonthCoverage {
+  lines: SalesLine[];
+}
+
+/** What is stored: the month's LINES plus its owner. `id` is `<clientId>:<year>-<month>`, so
+ *  reloading a month REPLACES it by construction instead of leaving two rows of the same period. */
+export interface SalesMonth {
+  id: string;
+  clientId: string;
+  year: number;
+  /** 0–11. */
+  monthIndex: number;
+  lines: SalesLine[];
+}
+
+/** The coverage row, in its own table so it can be read without the lines. Same `id` as its month,
+ *  so the two are written and deleted together. */
+export interface SalesCoverage extends SalesMonthCoverage {
   id: string;
   clientId: string;
 }
@@ -58,16 +73,4 @@ export interface SalesMonth extends ParsedSalesMonth {
 /** A month's key within a client. */
 export function salesMonthId(clientId: string, year: number, monthIndex: number): string {
   return `${clientId}:${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-}
-
-/**
- * A year's COVERAGE: which months arrived. It is a list of indices and not twelve slots because what
- * the app has to be able to say is «this month NEVER arrived», which is different from «it arrived and
- * came in at zero» — the same distinction `loadedMonthsByYear` in PyG and `monthHasData` in
- * Ocupaciones rest on.
- */
-export interface SalesCoverage {
-  year: number;
-  /** Indices 0–11, ascending, without repeats. */
-  months: number[];
 }

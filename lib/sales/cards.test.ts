@@ -1,1097 +1,391 @@
 import { describe, expect, it } from "vitest";
 import {
-  CHART_NEUTRAL,
-  CHART_PALETTE,
-  CHART_SLICE_SEQUENCE,
-  CHART_STAGE,
-  CHART_STAGE_LIGHT,
-  CHART_STAGE_MATERIAL,
-  CHART_STAGE_PALETTE,
-  stageColor,
-  stageSliceColor,
-} from "@/lib/charts/palette";
-import {
-  is3DOption,
-  type Chart3DOption,
-  type ChartCardSpec,
-  type ChartOption,
-  type ChartParam,
-} from "@/lib/charts/types";
-import {
-  buildSalesCards as buildCards,
-  PAYER_SLICES,
+  buildSalesCards,
+  buildTypeDetailCard,
+  INSURER_SLICES,
+  RANKING_SLICES,
+  RANKING_TABLE_PRINT_LIMIT,
   type SalesCardsInput,
-  type SalesCardsOptions,
 } from "./cards";
-import { monthlySeries, monthlyServiceSeries, readSales, type MonthPoint } from "./derive";
-import { UNIDENTIFIED_PAYER } from "./payer";
-import type { SalesLine, SalesMonth } from "./types";
+import { readSales, type MonthPoint, type SalesReading, type TypeMonthSeries } from "./derive";
+import { is3DOption, type ChartOption } from "@/lib/charts/types";
+import type { SalesLine } from "./types";
 
-/**
- * The cards, with the evolution narrowed to its FLAT shape — which is the one `buildCards` returns
- * by omission (see `SCREEN_EVOLUTION_VIEW`) and the one every assertion below reads.
- *
- * It is a narrowing and not a stub: the throw is what would fire if that default ever flipped, so a
- * change of shape shows up as one failing helper instead of as twenty assertions quietly reading a
- * `grid3D` they were never written for. «Skyline» has its own block, and it calls `buildCards`.
- */
-function buildSalesCards(input: SalesCardsInput, options?: SalesCardsOptions) {
-  const cards = buildCards(input, options);
-  const option = cards.evolution.option;
-  if (option !== null && is3DOption(option)) {
-    throw new Error("Se esperaba la forma plana de la evolución, y vino el skyline.");
-  }
-  return { ...cards, evolution: { ...cards.evolution, option } };
-}
-
-function line(overrides: Partial<SalesLine>): SalesLine {
+function line(overrides: Partial<SalesLine> = {}): SalesLine {
   return {
-    serviceCode: "\\01",
-    serviceName: "HONORARIOS",
-    payer: "SALUDSA",
-    quantity: 1,
-    amount: 100,
+    seguro: "PARTICULAR",
+    tipo: "MEDICINAS",
+    articleCode: "000156",
+    articleName: "CLARITROMICINA",
+    vendor: "",
+    amount: 10,
     ...overrides,
   };
 }
 
-function input(lines: SalesLine[], monthly?: MonthPoint[]): SalesCardsInput {
-  const reading = readSales(lines);
+const LINES: SalesLine[] = [
+  line({
+    seguro: "PARTICULAR",
+    tipo: "HONORARIOS",
+    articleCode: "H1",
+    articleName: "CONSULTA",
+    amount: 500,
+    vendor: "ANA",
+  }),
+  line({
+    seguro: "HUMANA",
+    tipo: "HONORARIOS",
+    articleCode: "H2",
+    articleName: "VISITA",
+    amount: 300,
+  }),
+  line({
+    seguro: "PARTICULAR",
+    tipo: "MEDICINAS",
+    articleCode: "M1",
+    articleName: "PARACETAMOL",
+    amount: 150,
+    vendor: "BETO",
+  }),
+  line({
+    seguro: "CONFIAMED",
+    tipo: "INSUMOS",
+    articleCode: "I1",
+    articleName: "GASA",
+    amount: 50,
+  }),
+];
+
+function months(amounts: (number | null)[]): MonthPoint[] {
+  return amounts.map((amount, monthIndex) => ({ monthIndex, amount }));
+}
+
+function typeSeries(id: string, label: string, amounts: (number | null)[]): TypeMonthSeries {
+  return { id, label, points: months(amounts) };
+}
+
+function input(overrides: Partial<SalesCardsInput> = {}): SalesCardsInput {
+  const reading = readSales(LINES);
   return {
     reading,
     byYear: [{ year: 2026, reading }],
-    period: "Abril 2026",
-    monthlyByYear: [{ year: 2026, points: monthly ?? emptyYear() }],
+    period: "2026",
+    monthlyByYear: [{ year: 2026, points: months([1000, null, 0, ...Array(9).fill(null)]) }],
+    ...overrides,
   };
 }
 
-/** The COMPARATIVE shape: two years, each with its lines and its twelve months. */
-function comparing(
-  byYear: { year: number; lines: SalesLine[]; months?: SalesMonth[] }[],
-): SalesCardsInput {
-  return {
-    reading: readSales(byYear.flatMap((entry) => entry.lines)),
-    byYear: byYear.map((entry) => ({ year: entry.year, reading: readSales(entry.lines) })),
-    period: byYear.map((entry) => entry.year).join(", "),
-    monthlyByYear: byYear.map((entry) => ({
-      year: entry.year,
-      points: monthlySeries(entry.months ?? [], entry.year),
-    })),
-  };
+/** A flat option, narrowed — `is3DOption` is the discriminator the app uses everywhere. */
+function flat(option: unknown): ChartOption {
+  if (option === null || is3DOption(option as never)) {
+    throw new Error("se esperaba una opción plana");
+  }
+  return option as ChartOption;
 }
 
-function emptyYear(): MonthPoint[] {
-  return Array.from({ length: 12 }, (_unused, monthIndex) => ({ monthIndex, amount: null }));
-}
-
-function month(monthIndex: number, lines: SalesLine[], year = 2026): SalesMonth {
-  return {
-    id: `c1:${year}-${monthIndex}`,
-    clientId: "c1",
-    year,
-    monthIndex,
-    companyName: "HOSPITAL",
-    lines,
-    declaredTotal: null,
-    warnings: [],
-  };
-}
-
-describe("composición por servicio", () => {
-  const lines = [
-    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 60 }),
-    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 40 }),
-  ];
-
-  it("el reparto suma el total y los porcentajes suman 100", () => {
-    const { services } = buildSalesCards(input(lines));
-    const shares = services.table.rows
-      .filter((row) => !row.emphasis)
-      .map((row) => Number(String(row.values[1]).replace(" %", "")));
-    expect(shares.reduce((sum, share) => sum + share, 0)).toBeCloseTo(100, 5);
-    expect(services.table.rows.at(-1)?.values[0]).toBe("$100.00");
+describe("composición por tipo de servicio", () => {
+  it("ordena los tipos de mayor a menor y cierra con su TOTAL", () => {
+    const { types } = buildSalesCards(input());
+    const labels = types.table.rows.map((row) => row.label);
+    expect(labels).toEqual(["HONORARIOS", "MEDICINAS", "INSUMOS", "TOTAL"]);
   });
 
-  it("el denominador se nombra con su cifra", () => {
-    const { services } = buildSalesCards(input(lines));
-    expect(services.note).toContain("$100.00");
+  it("los porcentajes son sobre la venta del periodo, y la nota escribe el denominador", () => {
+    const { types } = buildSalesCards(input());
+    const honorarios = types.table.rows[0];
+    // 800 de 1000.
+    expect(honorarios.values[1]).toContain("80");
+    expect(types.note).toContain("$1,000.00");
   });
 
-  it("un servicio sin ventas no se dibuja y la tarjeta lo cuenta", () => {
-    const { services } = buildSalesCards(
-      input([...lines, line({ serviceCode: "\\03", serviceName: "IMAGENES", amount: 0 })]),
-    );
-    expect(services.option?.series[0].data).toHaveLength(2);
-    expect(services.note).toContain("1 servicio");
+  it("un tipo que no movió nada no se dibuja, y la nota lo dice", () => {
+    const reading: SalesReading = readSales([...LINES, line({ tipo: "IMAGENES", amount: 0 })]);
+    const { types } = buildSalesCards(input({ reading, byYear: [{ year: 2026, reading }] }));
+    const drawn = flat(types.option).yAxis?.data ?? [];
+    expect(drawn).not.toContain("IMAGENES");
+    expect(types.note).toContain("no se movió");
   });
 
-  it("sin ninguna línea no dibuja: la tarjeta dice por qué en vez de un plot vacío", () => {
-    expect(buildSalesCards(input([])).services.option).toBeNull();
-  });
-});
-
-describe("el cuerpo SÓLIDO de las dos tarjetas planas", () => {
-  const lines = [
-    line({ serviceCode: "\\01", serviceName: "HONORARIOS", payer: "SALUDSA", amount: 60 }),
-    line({ serviceCode: "\\02", serviceName: "MEDICINAS", payer: "PREPAGADA", amount: 40 }),
-  ];
-
-  const solidOf = (card: ChartCardSpec<ChartOption | Chart3DOption>) => {
-    if (card.option === null || !is3DOption(card.option)) {
-      throw new Error("se esperaba el cuerpo sólido");
-    }
-    return card.option;
-  };
-
-  it("por omisión NO se levantan: el plano es lo que trae los nombres enteros y las cifras", () => {
-    const { services, payers } = buildCards(input(lines));
-    expect(services.option !== null && is3DOption(services.option)).toBe(false);
-    expect(payers.option !== null && is3DOption(payers.option)).toBe(false);
-  });
-
-  it("levantada, la composición dibuja los MISMOS servicios en el mismo orden", () => {
-    const plano = buildCards(input(lines));
-    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
-    const ejeY = plano.services.option?.yAxis;
-
-    expect(solido.xAxis3D.data).toEqual((Array.isArray(ejeY) ? ejeY[0] : ejeY)?.data);
-    // Y la tabla gemela es la misma: es un cuerpo del mismo dato, no una segunda lectura.
-    expect(buildCards(input(lines), { servicesView: "solido" }).services.table).toEqual(
-      plano.services.table,
-    );
-  });
-
-  it("con UN año no hay fondo: una fila sin nombre y ninguna leyenda", () => {
-    const solido = solidOf(buildCards(input(lines), { servicesView: "solido" }).services);
-    // Es tema visual y no una variable más: la profundidad aquí es el grosor de la barra.
-    expect(solido.yAxis3D.data).toEqual([""]);
-    expect(solido.legend?.show).toBe(false);
-    expect(solido.series).toHaveLength(1);
-  });
-
-  it("comparando años, cada año es una FILA — lo mismo que nombraba la leyenda plana", () => {
-    const dos = comparing([
-      { year: 2025, lines },
-      { year: 2026, lines },
-    ]);
-    const solido = solidOf(buildCards(dos, { servicesView: "solido" }).services);
-
-    expect(solido.series.map((serie) => serie.name)).toEqual(["2025", "2026"]);
-    expect(solido.yAxis3D.data).toEqual(["2026", "2025"]);
-    expect(solido.legend?.show).toBe(true);
-  });
-
-  it("los pagadores se levantan igual y con su misma escala, en el paso del escenario", () => {
-    const solido = solidOf(buildCards(input(lines), { payersView: "solido" }).payers);
-    const fills = solido.series[0].data.map((datum) => datum.itemStyle?.color);
-
-    expect(solido.xAxis3D.data).toEqual(["SALUDSA", "PREPAGADA"]);
-    expect(fills).toEqual([0, 1].map((slot) => stageSliceColor(CHART_SLICE_SEQUENCE[slot])));
-  });
-});
-
-describe("concentración por pagador", () => {
-  const many = Array.from({ length: 14 }, (_unused, index) =>
-    line({ payer: `ASEGURADORA${index}`, amount: 100 - index }),
-  );
-
-  it("dibuja los mayores y cuenta el resto con su suma", () => {
-    const { payers } = buildSalesCards(input(many));
-    expect(payers.option?.series[0].data).toHaveLength(PAYER_SLICES);
-    expect(payers.note).toContain("4 restantes");
-  });
-
-  it("la tabla NO corta: están los catorce más el total", () => {
-    const { payers } = buildSalesCards(input(many));
-    expect(payers.table.rows).toHaveLength(15);
-  });
-
-  it("la concentración se dice en una cifra", () => {
-    const { payers } = buildSalesCards(input(many));
-    expect(payers.note).toMatch(/Estos 10 son el \d+\.\d %/);
-  });
-
-  it("las barras son tonos saturados y NINGUNO es el de un servicio", () => {
-    // On this screen a service's hue is its IDENTITY —the composition and the evolution's stack paint
-    // «HONORARIOS» the same blue, and a legend names it—, so a payer out of that same blue would read
-    // as paired with it. The ranking opens with the warm composition hues instead, which are disjoint
-    // from the identity slots, and its dot in the table twin says the same.
-    const { payers } = buildSalesCards(input(many));
-    const fills = (payers.option?.series[0].data ?? []).map(
-      (datum) => (datum as { itemStyle?: { color?: string } }).itemStyle?.color,
-    );
-
-    expect(fills).toEqual([...CHART_SLICE_SEQUENCE.slice(0, PAYER_SLICES)]);
-    for (const fill of fills) {
-      expect(CHART_PALETTE).not.toContain(fill);
-      expect(fill).not.toBe(CHART_NEUTRAL);
-    }
-    expect(payers.table.rows[0].color).toBe(fills[0]);
-  });
-
-  it("un pagador llega con su nombre al gráfico y a la tabla", () => {
-    const { payers } = buildSalesCards(
-      input([line({ payer: "SANDOVAL MORALES JUAN CARLOS", amount: 10 })]),
-    );
-    const axis = payers.option?.yAxis?.data ?? [];
-    expect(axis).toEqual(["SANDOVAL MORALES JUAN CARLOS"]);
-    expect(JSON.stringify(payers.table.rows)).toContain("SANDOVAL MORALES JUAN CARLOS");
-  });
-
-  it("las líneas sin pagador son UNA fila rotulada, no una por línea", () => {
-    const { payers } = buildSalesCards(
-      input([
-        line({ payer: "", amount: 10 }),
-        line({ payer: "", amount: 20 }),
-        line({ payer: "SALUDSA", amount: 5 }),
-      ]),
-    );
-
-    expect(payers.option?.yAxis?.data).toEqual([UNIDENTIFIED_PAYER, "SALUDSA"]);
-  });
-});
-
-describe("evolución mensual", () => {
-  it("son doce columnas, cargadas o no", () => {
-    const monthly = monthlySeries([month(3, [line({ amount: 10 })])], 2026);
-    const { evolution } = buildSalesCards(input([line({ amount: 10 })], monthly));
-    expect(evolution.table.columns).toHaveLength(12);
-  });
-
-  it("un mes ausente lleva RAYA y un mes cargado en cero lleva su cifra", () => {
-    const monthly = monthlySeries([month(3, [line({ amount: 10 })]), month(4, [])], 2026);
-    const { evolution } = buildSalesCards(input([line({ amount: 10 })], monthly));
-    const values = evolution.table.rows[0].values;
-    expect(values[0]).toBe("–");
-    expect(values[3]).toBe("$10.00");
-    expect(values[4]).toBe("$0.00");
-  });
-
-  it("la marca de ausencia se dibuja SILENCIOSA: su alto no es un dato", () => {
-    const monthly = monthlySeries([month(3, [line({ amount: 10 })])], 2026);
-    const { evolution } = buildSalesCards(input([line({ amount: 10 })], monthly));
-    const absence = evolution.option?.series.find((series) => series.id === "sin-cargar");
-    expect(absence?.silent).toBe(true);
-    expect(absence?.data.filter((value) => value !== null)).toHaveLength(11);
-  });
-
-  it("la tarjeta dice cuántos meses faltan y los nombra", () => {
-    const monthly = monthlySeries([month(3, [line({ amount: 10 })])], 2026);
-    const { evolution } = buildSalesCards(input([line({ amount: 10 })], monthly));
-    expect(evolution.note).toContain("11 meses sin cargar");
-    expect(evolution.note).toContain("Ene");
-  });
-
-  it("con el año completo no hay aviso de meses que faltan", () => {
-    const monthly = monthlySeries(
-      Array.from({ length: 12 }, (_unused, index) => month(index, [line({ amount: 1 })])),
-      2026,
-    );
-    const { evolution } = buildSalesCards(input([line({ amount: 1 })], monthly));
-    expect(evolution.note).toContain("los doce meses del eje");
-    // Its bar and its line: the evolution is a combo now that the line exists.
-    expect(evolution.option?.series.map((entry) => entry.type)).toEqual(["bar", "line"]);
-  });
-});
-
-describe("la forma COMPARATIVA (varios años)", () => {
-  const spec = comparing([
-    {
-      year: 2025,
-      lines: [
-        line({ serviceCode: "\\01", serviceName: "HONORARIOS", payer: "SALUDSA", amount: 100 }),
-        line({ serviceCode: "\\02", serviceName: "MEDICINAS", payer: "CONFIAMED", amount: 40 }),
-      ],
-      months: [month(3, [line({ amount: 140 })], 2025)],
-    },
-    {
-      year: 2026,
-      lines: [
-        line({ serviceCode: "\\01", serviceName: "HONORARIOS", payer: "SALUDSA", amount: 200 }),
-      ],
-      months: [month(3, [line({ amount: 200 })])],
-    },
-  ]);
-
-  it("cada AÑO es una serie, en las tres tarjetas", () => {
-    const cards = buildSalesCards(spec);
-    for (const card of [cards.services, cards.payers, cards.evolution]) {
-      const years = card.option?.series.filter((s) => s.id.startsWith("year-")) ?? [];
-      // The evolution brings two per year —bar and line— and both share a name, so what is compared
-      // is the set of named years.
-      expect([...new Set(years.map((s) => s.name))]).toEqual(["2025", "2026"]);
-    }
-  });
-
-  it("un servicio que un año no tocó vale null, y NO cero", () => {
-    // Zero would claim that year sold no medicines; null says there is nothing to claim.
-    const services = buildSalesCards(spec).services;
-    const y2026 = services.option?.series.find((s) => s.id === "year-2026");
-    // The rows are ordered by the aggregate: HONORARIOS (300) and then MEDICINAS (40).
-    expect(y2026?.data).toEqual([200, null]);
-  });
-
-  it("la tabla comparativa lleva una columna por año, más el total y su porcentaje", () => {
-    const table = buildSalesCards(spec).services.table;
-    expect(table.columns).toEqual(["2025", "2026", "Total", "% del periodo"]);
-    expect(table.rows[0].values).toEqual(["$100.00", "$200.00", "$300.00", "88.2 %"]);
-    expect(table.rows[1].values[0]).toBe("$40.00");
-    // The year that did not touch that service carries a DASH.
-    expect(table.rows[1].values[1]).toBe("–");
-  });
-
-  it("la fila de TOTAL de la tabla comparativa cuadra por año", () => {
-    const total = buildSalesCards(spec).services.table.rows.at(-1);
-    expect(total?.values).toEqual(["$140.00", "$200.00", "$340.00", "100.0 %"]);
-  });
-
-  it("los mayores pagadores se eligen por el AGREGADO, no por un año", () => {
-    // If the cast changed with the marks, the card could not be compared with itself.
-    const payers = buildSalesCards(spec).payers;
-    expect(payers.option?.yAxis?.data).toEqual(["SALUDSA", "CONFIAMED"]);
-    expect(payers.note).toContain("no por un año");
-  });
-
-  it("con varios años el color de un pagador lo lleva el AÑO, no su clase", () => {
-    // Tinting by class would paint the three years of one same payer in the same hue, which is
-    // precisely what the comparison needs to tell apart.
-    const series = buildSalesCards(spec).payers.option?.series ?? [];
-    expect(series).toHaveLength(2);
-    expect(series[0].itemStyle?.color).not.toBe(series[1].itemStyle?.color);
-    // And the bars no longer carry a colour per datum.
-    expect(series[0].data.every((datum) => typeof datum !== "object" || datum === null)).toBe(true);
-  });
-
-  it("la evolución compara sobre los MISMOS doce meses, una fila por año", () => {
-    const evolution = buildSalesCards(spec).evolution;
-    expect(evolution.table.columns).toHaveLength(12);
-    expect(evolution.table.rows.map((row) => row.label)).toEqual(["2025", "2026"]);
-    expect(evolution.table.rows[0].values[3]).toBe("$140.00");
-    expect(evolution.table.rows[0].values[0]).toBe("–");
-  });
-
-  it("comparando NO se dibujan marcas de ausencia: la barra que falta ya se ve", () => {
-    // A row of grey caps under each group would add up to three false marks per column to a chart
-    // that already carries three real ones.
-    const evolution = buildSalesCards(spec).evolution;
-    expect(evolution.option?.series.some((s) => s.id === "sin-cargar")).toBe(false);
-    // With ONE single year they are drawn.
-    const single = buildSalesCards(
-      input([line({ amount: 10 })], monthlySeries([month(3, [line({ amount: 10 })])], 2026)),
-    );
-    expect(single.evolution.option?.series.some((s) => s.id === "sin-cargar")).toBe(true);
-  });
-
-  it("los huecos se dicen POR AÑO, nunca uno por mes", () => {
-    const note = buildSalesCards(spec).evolution.note ?? "";
-    expect(note).toContain("2025: 11 meses");
-    expect(note).toContain("2026: 11 meses");
-  });
-
-  it("con varios años la leyenda se dibuja; con uno solo sobra", () => {
-    expect(buildSalesCards(spec).evolution.option?.legend?.show).toBe(true);
-    const single = buildSalesCards(
-      input([line({ amount: 1 })], monthlySeries([month(3, [line({ amount: 1 })])], 2026)),
-    );
-    expect(single.evolution.option?.legend?.show).toBe(false);
-  });
-
-  it("el subtítulo nombra el periodo que resolvió la barra", () => {
-    expect(buildSalesCards(spec).evolution.subtitle).toBe("Venta total · 2025, 2026");
-  });
-});
-
-describe("el eje de la evolución obedece la marca de Mes", () => {
-  /** Three complete years, and then the axis narrowed to two months. */
-  function threeYears(months: number[] | null) {
-    const all = [0, 1, 2, 3];
-    const axis = months ?? all;
-    return {
-      reading: readSales([line({ amount: 1 })]),
-      byYear: [2025, 2026].map((year) => ({ year, reading: readSales([line({ amount: 1 })]) })),
-      period: months ? "Ene–Feb · 2025, 2026" : "2025, 2026",
-      monthlyByYear: [2025, 2026].map((year) => ({
-        year,
-        points: axis.map((monthIndex) => ({ monthIndex, amount: 100 + monthIndex })),
-      })),
-    };
-  }
-
-  it("con «Mes» acotado el eje dibuja SOLO lo marcado", () => {
-    // The subtitle said «Ene–Feb» over twelve columns: the card contradicted itself.
-    const evolution = buildSalesCards(threeYears([0, 1])).evolution;
-    expect(evolution.table.columns).toEqual(["Ene", "Feb"]);
-    expect(evolution.option?.xAxis).toMatchObject({ data: ["Ene", "Feb"] });
-    expect(evolution.option?.series[0].data).toHaveLength(2);
-  });
-
-  it("sin marcas el eje es el del ejercicio, para que un mes ausente se siga viendo", () => {
-    expect(buildSalesCards(threeYears(null)).evolution.table.columns).toEqual([
-      "Ene",
-      "Feb",
-      "Mar",
-      "Abr",
-    ]);
-  });
-});
-
-describe("«Ocultar meses en 0» quita del eje las columnas sin facturación", () => {
-  function year(amounts: Record<number, number>, y = 2026) {
-    return {
-      year: y,
-      points: Array.from({ length: 12 }, (_unused, monthIndex) => ({
-        monthIndex,
-        amount: monthIndex in amounts ? amounts[monthIndex] : null,
-      })),
-    };
-  }
-  function spec(years: ReturnType<typeof year>[]): SalesCardsInput {
-    const reading = readSales([line({ amount: 1 })]);
-    return {
-      reading,
-      byYear: years.map((entry) => ({ year: entry.year, reading })),
-      period: years.map((entry) => entry.year).join(", "),
-      monthlyByYear: years,
-    };
-  }
-
-  it("se van juntos el mes que nunca llegó y el que llegó en cero", () => {
-    const input = spec([year({ 0: 500, 1: 0, 3: 300 })]);
-
-    expect(buildSalesCards(input).evolution.table.columns).toHaveLength(12);
-    expect(buildSalesCards(input, { hideEmptyMonths: true }).evolution.table.columns).toEqual([
-      "Ene",
-      "Abr",
-    ]);
-  });
-
-  it("una columna sobrevive si CUALQUIER año marcado la mueve", () => {
-    const cards = buildSalesCards(spec([year({ 0: 500 }), year({ 1: 400 }, 2025)]), {
-      hideEmptyMonths: true,
-    });
-
-    expect(cards.evolution.table.columns).toEqual(["Ene", "Feb"]);
-    expect(cards.evolution.table.rows.map((row) => row.values)).toEqual([
-      ["$500.00", "–"],
-      ["–", "$400.00"],
-    ]);
-  });
-
-  it("`emptyMonths` se cuenta sobre el eje SIN podar, así el botón no se esfuma al pulsarlo", () => {
-    const input = spec([year({ 0: 500, 3: 300 })]);
-
-    expect(buildSalesCards(input).emptyMonths).toBe(10);
-    expect(buildSalesCards(input, { hideEmptyMonths: true }).emptyMonths).toBe(10);
-  });
-
-  it("la nota DICE lo que quitó: un eje encogido en silencio se lee como un año de dos meses", () => {
-    const note = buildSalesCards(spec([year({ 0: 500, 3: 300 })]), { hideEmptyMonths: true })
-      .evolution.note;
-
-    expect(note).toContain("Se ocultaron 10 meses sin facturación");
-  });
-
-  it("el informe NO hereda la poda: construye con la misma entrada y sin estas opciones", () => {
-    // A printed toggle is a button nobody can press, PyG's report's rule.
-    const input = spec([year({ 0: 500, 3: 300 })]);
-
-    expect(buildSalesCards(input).evolution.table.columns).toHaveLength(12);
-  });
-});
-
-describe("barras CON línea en la evolución", () => {
-  function spec(years: number[], monthCount: number) {
-    const points = Array.from({ length: monthCount }, (_unused, monthIndex) => ({
-      monthIndex,
-      amount: 100 + monthIndex,
-    }));
-    return {
-      reading: readSales([line({ amount: 1 })]),
-      byYear: years.map((year) => ({ year, reading: readSales([line({ amount: 1 })]) })),
-      period: years.join(", "),
-      monthlyByYear: years.map((year) => ({ year, points })),
-    };
-  }
-
-  function seriesOf(years: number[], monthCount: number) {
-    return buildSalesCards(spec(years, monthCount)).evolution.option?.series ?? [];
-  }
-
-  it("cada año trae SU barra y SU línea, del mismo color", () => {
-    const series = seriesOf([2025, 2026], 12);
-    expect(series.map((entry) => entry.type)).toEqual(["bar", "line", "bar", "line"]);
-    expect(series[0].itemStyle?.color).toBe(series[1].itemStyle?.color);
-    expect(series[0].itemStyle?.color).not.toBe(series[2].itemStyle?.color);
-  });
-
-  it("la evolución está sobre el ESCENARIO con varios años y también con uno", () => {
-    const several = buildSalesCards(spec([2025, 2026], 12)).evolution.option;
-    const one = buildSalesCards(spec([2026], 12)).evolution.option;
-    // Trazos finos sobre un plano blanco se distinguían solo por el tono: el navy les da borde. Y
-    // no va y viene con las marcas: un suelo que cambiaba con el número de años se leía como otra
-    // tarjeta.
-    for (const option of [several, one]) {
-      expect(option?.backgroundColor).toBe(CHART_STAGE.sky);
-      expect(option?.tooltip?.backgroundColor).toBe(CHART_STAGE.panel);
-      // Sobre el escenario el año viste su ranura de la escala del escenario, la regla del skyline.
-      const line = option?.series.find((entry) => entry.type === "line");
-      expect(CHART_STAGE_PALETTE).toContain(line?.itemStyle?.color);
-      expect(CHART_PALETTE).not.toContain(line?.itemStyle?.color);
-    }
-    expect(several?.legend?.textStyle?.color).toBe(CHART_STAGE.inkMuted);
-  });
-
-  it("las dos series de un año comparten NOMBRE, así que la leyenda saca un ítem por año", () => {
-    // And switching it off takes its bar and its line at once.
-    const series = seriesOf([2025, 2026], 12);
-    expect(series.map((entry) => entry.name)).toEqual(["2025", "2025", "2026", "2026"]);
-    expect(new Set(series.map((entry) => entry.id)).size).toBe(4);
-  });
-
-  it("la línea va POR ENCIMA de las barras y sin suavizar", () => {
-    // A curve invents values between two months nobody measured.
-    const line2025 = seriesOf([2025, 2026], 12)[1];
-    expect(line2025.z).toBe(3);
-    expect(line2025.smooth).toBe(false);
-  });
-
-  it("con un solo año también lleva línea: es la misma lectura", () => {
-    expect(seriesOf([2026], 12).map((entry) => entry.type)).toEqual(["bar", "line"]);
-  });
-
-  it("con una sola columna NO hay línea: sería un punto suelto", () => {
-    expect(seriesOf([2024, 2025, 2026], 1).every((entry) => entry.type === "bar")).toBe(true);
-  });
-
-  it("la banda del eje se reserva siempre, porque siempre hay barras", () => {
-    expect(buildSalesCards(spec([2025, 2026], 12)).evolution.option?.xAxis).toMatchObject({
-      boundaryGap: true,
-    });
-  });
-});
-
-describe("cada columna de la evolución escribe su total, tumbado", () => {
-  function overMonths(years: number[], monthCount: number): SalesCardsInput {
-    const points = Array.from({ length: monthCount }, (_unused, monthIndex) => ({
-      monthIndex,
-      amount: 100 + monthIndex,
-    }));
-    return {
-      reading: readSales([line({ amount: 1 })]),
-      byYear: years.map((year) => ({ year, reading: readSales([line({ amount: 1 })]) })),
-      period: years.join(", "),
-      monthlyByYear: years.map((year) => ({ year, points })),
-    };
-  }
-
-  function seriesOf(input: SalesCardsInput) {
-    return buildSalesCards(input).evolution.option?.series ?? [];
-  }
-
-  function wrote(series: { label?: { show: boolean; formatter?: (p: ChartParam) => string } }) {
-    const label = series.label;
-    return label?.show ? (label.formatter?.({ value: 160, name: "Ene", dataIndex: 0 }) ?? "") : "";
-  }
-
-  it("no calla el total porque el eje traiga doce meses", () => {
-    const [bar] = seriesOf(overMonths([2026], 12));
-
-    expect(wrote(bar)).toBe("$160.00");
-  });
-
-  it("en el apilado lo escribe la LÍNEA del total, nunca las bandas", () => {
-    const months = [
-      month(0, [
-        line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
-        line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-      ]),
-    ];
-    const lines = months[0].lines;
-    const reading = readSales(lines);
-    const series = seriesOf({
-      reading,
-      byYear: [{ year: 2026, reading }],
-      period: "Enero 2026",
-      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
-      serviceMonthly: monthlyServiceSeries(months, 2026),
-    });
-
-    expect(wrote(series.find((entry) => entry.type === "line") ?? {})).toBe("$160.00");
-    // Cinco cifras subiendo por una columna es como una columna deja de leerse como UN importe.
-    expect(
-      series.filter((entry) => entry.type === "bar").every((entry) => !entry.label?.show),
-    ).toBe(true);
-  });
-
-  it("comparando años, cada uno escribe en SU fila", () => {
-    const bars = seriesOf(overMonths([2025, 2026], 12)).filter((entry) => entry.type === "bar");
-
-    expect(bars).toHaveLength(2);
-    expect(bars[1].label?.distance).toBeGreaterThan(bars[0].label?.distance ?? 0);
-    expect(bars.every((entry) => entry.label?.show)).toBe(true);
-  });
-
-  it("cede el cuerpo según se aprieta el eje, y nunca la cifra", () => {
-    const dense = seriesOf(overMonths([2026], 12))[0];
-    const roomy = seriesOf(overMonths([2026], 4))[0];
-
-    expect(dense.label?.fontSize).toBeLessThan(roomy.label?.fontSize ?? 0);
-    expect(wrote(dense)).not.toBe("");
-  });
-
-  it("le abre sitio a la fila de arriba, que `outerBoundsContain` no reserva", () => {
-    const one = buildSalesCards(overMonths([2026], 12)).evolution.option?.grid?.top;
-    const three = buildSalesCards(overMonths([2024, 2025, 2026], 12)).evolution.option?.grid?.top;
-
-    expect(Number(three)).toBeGreaterThan(Number(one));
-  });
-});
-
-describe("la guía del ⓘ", () => {
-  const lines = [line({ amount: 60 }), line({ serviceCode: "\\02", amount: 40 })];
-
-  it("las tres tarjetas la traen, con su para qué y sus controles, en las dos formas", () => {
-    const formas = [
-      buildSalesCards(input(lines)),
-      buildSalesCards(
-        comparing([
-          { year: 2025, lines },
-          { year: 2026, lines },
-        ]),
-      ),
-    ];
-
-    for (const cards of formas) {
-      for (const card of [cards.services, cards.payers, cards.evolution]) {
-        expect(card.guide?.purpose, card.title).toBeTruthy();
-        expect(card.guide?.actions.length ?? 0, card.title).toBeGreaterThan(0);
-        for (const action of card.guide?.actions ?? []) {
-          expect(action.control, card.title).toBeTruthy();
-          expect(action.effect, card.title).toBeTruthy();
-        }
-      }
-    }
-  });
-
-  it("cada guía describe SU tarjeta y no la de al lado", () => {
-    const { services, payers, evolution } = buildSalesCards(input(lines));
-    const purposes = [services, payers, evolution].map((card) => card.guide?.purpose);
-    expect(new Set(purposes).size).toBe(3);
-  });
-
-  it("solo nombra controles que existen en esta pantalla", () => {
-    const cards = buildSalesCards(input(lines));
-    const controls = [cards.services, cards.payers, cards.evolution].flatMap((card) =>
-      (card.guide?.actions ?? []).map((action) => action.control),
-    );
-    expect(new Set(controls)).toEqual(
-      new Set(["Año", "Mes", "Servicio", "Ver como", "Ver como tabla"]),
-    );
-  });
-});
-
-/** The color of a bar whose datum carries its own `itemStyle` — how the two one-year cards paint. */
-function datumColor(series: { data: unknown[] } | undefined, index: number): string | undefined {
-  const datum = series?.data[index] as { itemStyle?: { color?: string } } | undefined;
-  return datum?.itemStyle?.color;
-}
-
-describe("la evolución se desglosa por servicio", () => {
-  const LINES = [
-    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 160 }),
-    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-  ];
-  const MONTHS = [
-    month(0, [
-      line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
-      line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-    ]),
-    month(1, [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 60 })]),
-  ];
-
-  function stacked(lines = LINES, months = MONTHS): SalesCardsInput {
-    const reading = readSales(lines);
-    return {
-      reading,
-      byYear: [{ year: 2026, reading }],
-      period: "Ene–Feb 2026",
-      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
-      serviceMonthly: monthlyServiceSeries(months, 2026),
-    };
-  }
-
-  it("cada servicio es un segmento del MISMO apilado", () => {
-    const series = buildSalesCards(stacked()).evolution.option?.series ?? [];
-    const bars = series.filter((entry) => entry.type === "bar" && entry.id !== "sin-cargar");
-    expect(bars.map((entry) => entry.name)).toEqual(["HONORARIOS", "MEDICINAS"]);
-    expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
-  });
-
-  it("un servicio lleva el color de la composición, traducido al escenario por ranura", () => {
-    const cards = buildSalesCards(stacked());
-    const segment = cards.evolution.option?.series.find((entry) => entry.name === "HONORARIOS");
-    // La evolución está sobre el escenario y la composición sobre el blanco: la IDENTIDAD (la
-    // ranura) es la misma, el tono es el de cada suelo — la misma regla del skyline.
-    expect(segment?.itemStyle?.color).toBe(
-      stageColor(datumColor(cards.services.option?.series[0], 0) ?? ""),
-    );
-  });
-
-  it("la línea del total es de TINTA, no un paso de la paleta de servicios", () => {
-    const option = buildSalesCards(stacked()).evolution.option;
-    const series = option?.series ?? [];
-    const total = series.find((entry) => entry.type === "line");
-    // La pila también está sobre el escenario, así que la tinta es la del escenario.
-    expect(option?.backgroundColor).toBe(CHART_STAGE.sky);
-    expect(total?.itemStyle?.color).toBe(CHART_STAGE.ink);
-    const colors = series
-      .filter((entry) => entry.type === "bar")
-      .map((entry) => entry.itemStyle?.color);
-    expect(total?.itemStyle?.color).not.toBeUndefined();
-    expect(colors).not.toContain(total?.itemStyle?.color);
-    expect(total?.z).toBe(3);
-  });
-
-  it("la leyenda nombra los servicios, no la línea", () => {
-    const option = buildSalesCards(stacked()).evolution.option;
-    expect(option?.legend?.show).toBe(true);
-    expect(option?.legend?.data).toEqual(["HONORARIOS", "MEDICINAS"]);
-  });
-
-  it("la tabla gemela es una fila por servicio y cierra con el TOTAL", () => {
-    const { table } = buildSalesCards(stacked()).evolution;
-    expect(table.rows.map((row) => row.label)).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
-    expect(table.rows.at(-1)?.emphasis).toBe(true);
-    // Enero: 100 + 60 = 160, y febrero solo honorarios.
-    expect(table.rows[0].values[0]).toBe("$100.00");
-    expect(table.rows[1].values[1]).toBe("$0.00");
-    expect(table.rows[2].values[0]).toBe("$160.00");
-  });
-
-  it("un mes que nunca llegó no da segmento a NINGÚN servicio", () => {
-    const bars = (buildSalesCards(stacked()).evolution.option?.series ?? []).filter(
-      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
-    );
-    expect(bars.every((entry) => entry.data[5] === null)).toBe(true);
-  });
-
-  it("pasadas las ranuras de identidad, la cola se pliega en «Otros» y la nota lo dice", () => {
-    const lines = Array.from({ length: 11 }, (_unused, index) =>
-      line({
-        serviceCode: `\\${index}`,
-        serviceName: `SERVICIO ${index}`,
-        amount: 100 - index,
+  it("con VARIOS años marcados pone un año por serie, sin que ningún control lo elija", () => {
+    const reading = readSales(LINES);
+    const { types } = buildSalesCards(
+      input({
+        byYear: [
+          { year: 2025, reading },
+          { year: 2026, reading },
+        ],
       }),
     );
-    const { evolution } = buildSalesCards(stacked(lines, [month(0, lines)]));
-    const bars = (evolution.option?.series ?? []).filter(
-      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
-    );
-    expect(bars).toHaveLength(9);
-    expect(bars.at(-1)?.name).toBe("Otros");
-    expect(evolution.note).toContain("3 servicios");
-    // La tabla NO pliega: es donde un servicio agrupado conserva su cifra.
-    expect(evolution.table.rows).toHaveLength(12);
-  });
-
-  it("con UN solo servicio la nota no habla de un desglose que no se ve", () => {
-    const only = [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 })];
-    const { evolution } = buildSalesCards(stacked(only, [month(0, only)]));
-    expect(evolution.note).not.toContain("desglose");
-  });
-
-  it("comparando años NO se apila: el color ahí es la identidad del año", () => {
-    const spec = comparing([
-      { year: 2025, lines: LINES, months: [month(0, LINES, 2025)] },
-      { year: 2026, lines: LINES, months: [month(0, LINES)] },
-    ]);
-    const series = buildSalesCards({ ...spec, serviceMonthly: monthlyServiceSeries(MONTHS, 2026) })
-      .evolution.option?.series;
-    expect(series?.every((entry) => entry.stack === undefined)).toBe(true);
+    const series = flat(types.option).series ?? [];
+    expect(series.map((s) => s.name)).toEqual(["2025", "2026"]);
+    expect(types.table.columns.slice(0, 2)).toEqual(["2025", "2026"]);
   });
 });
 
-describe("con un solo mes la evolución se abre en barras por servicio", () => {
-  const LINES = [
-    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
-    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-  ];
-
-  /** El eje acotado a UN mes, que es lo que deja marcar «Ene» en la barra de filtros. */
-  function january(lines = LINES): SalesCardsInput {
-    const reading = readSales(lines);
-    const months = [month(0, lines)];
-    const onlyJanuary = (points: readonly MonthPoint[]) =>
-      points.filter((point) => point.monthIndex === 0);
-    return {
-      reading,
-      byYear: [{ year: 2026, reading }],
-      period: "Enero 2026",
-      monthlyByYear: [{ year: 2026, points: onlyJanuary(monthlySeries(months, 2026)) }],
-      serviceMonthly: monthlyServiceSeries(months, 2026).map((entry) => ({
-        ...entry,
-        points: onlyJanuary(entry.points),
-      })),
-    };
-  }
-
-  it("el eje son los SERVICIOS y cada uno trae su barra, sin apilar", () => {
-    const option = buildSalesCards(january()).evolution.option;
-    expect(option?.xAxis?.data).toEqual(["HONORARIOS", "MEDICINAS"]);
-    expect(option?.series).toHaveLength(1);
-    expect(option?.series[0].type).toBe("bar");
-    expect(option?.series[0].stack).toBeUndefined();
-    expect(option?.series[0].data.map((datum) => (datum as { value: unknown }).value)).toEqual([
-      100, 60,
-    ]);
+describe("los NIVELES de la composición: el tipo, y dentro, sus artículos", () => {
+  it("el nivel uno dice qué tipo es cada barra, en el orden de sus filas", () => {
+    const cards = buildSalesCards(input());
+    expect(cards.typeOrder).toEqual(["HONORARIOS", "MEDICINAS", "INSUMOS"]);
+    expect(flat(cards.types.option).yAxis?.data).toEqual(cards.typeOrder);
   });
 
-  it("un servicio conserva la ranura que lleva en la composición, en la escala del escenario", () => {
-    const cards = buildSalesCards(january());
-    expect(datumColor(cards.evolution.option?.series[0], 0)).toBe(
-      stageColor(datumColor(cards.services.option?.series[0], 0) ?? ""),
-    );
+  it("cada barra del nivel uno escribe su importe Y su parte del periodo", () => {
+    const { types } = buildSalesCards(input());
+    const label = flat(types.option).series?.[0].label;
+    const text = label?.formatter?.({ name: "", value: 800, dataIndex: 0 });
+    // Dos decimales, coma de miles y punto decimal: el formato del resto de la app.
+    expect(text).toBe("$800.00 · 80.0 %");
   });
 
-  it("sin línea de total y sin leyenda: una y otra repetirían lo que ya está en el eje", () => {
-    const option = buildSalesCards(january()).evolution.option;
-    expect(option?.series.some((entry) => entry.type === "line")).toBe(false);
-    expect(option?.legend?.show).toBe(false);
+  it("el nivel dos lista los artículos del tipo pulsado, de mayor a menor", () => {
+    const detail = buildTypeDetailCard(input(), "HONORARIOS");
+    expect(detail?.title).toBe("Artículos de HONORARIOS");
+    expect(detail?.table.rows.map((row) => row.label)).toEqual(["CONSULTA", "VISITA", "TOTAL"]);
   });
 
-  it("la tabla gemela no cambia: una columna, una fila por servicio y el TOTAL", () => {
-    const { table } = buildSalesCards(january()).evolution;
-    expect(table.columns).toEqual(["Ene"]);
-    expect(table.rows.map((row) => row.label)).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
-    expect(table.rows.at(-1)?.values).toEqual(["$160.00"]);
+  it("en el nivel dos los porcentajes son contra la venta DEL TIPO, y el total es el del tipo", () => {
+    const detail = buildTypeDetailCard(input(), "HONORARIOS")!;
+    expect(detail.table.columns[1]).toBe("% del tipo");
+    // CONSULTA: 500 de los 800 de HONORARIOS.
+    expect(detail.table.rows[0].values[1]).toContain("62.5");
+    expect(detail.table.rows.at(-1)?.values[0]).toBe("$800.00");
+    expect(detail.note).toContain("la venta de HONORARIOS");
   });
 
-  it("la nota dice que cada barra es un servicio, no un mes", () => {
-    expect(buildSalesCards(january()).evolution.note).toContain("cada barra es un servicio");
+  it("cada barra del nivel dos escribe su importe y su parte del tipo", () => {
+    const detail = buildTypeDetailCard(input(), "HONORARIOS")!;
+    const label = flat(detail.option).series?.[0].label;
+    const text = label?.formatter?.({ name: "", value: 500, dataIndex: 0 });
+    expect(text).toContain("$500");
+    expect(text).toContain("62.5");
   });
 
-  it("con UN solo servicio la barra se conserva sola, en el eje del mes", () => {
-    // No hay nada que repartir: el eje sigue siendo el mes y la columna, ese servicio.
-    const only = [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 })];
-    const option = buildSalesCards(january(only)).evolution.option;
-    expect(option?.xAxis?.data).toEqual(["Ene"]);
-  });
-
-  it("no se ofrece skyline con una sola columna: no hay meses que seguir", () => {
-    const cards = buildCards(january(), { evolutionView: "skyline" });
-    expect(cards.skylineAvailable).toBe(false);
-    expect(cards.evolution.option !== null && is3DOption(cards.evolution.option)).toBe(false);
-  });
-
-  it("con dos meses vuelve a ser la pila de siempre", () => {
-    const lines = LINES;
-    const reading = readSales(lines);
-    const months = [month(0, lines), month(1, lines)];
-    const cards = buildSalesCards({
-      reading,
-      byYear: [{ year: 2026, reading }],
-      period: "Ene–Feb 2026",
-      monthlyByYear: [{ year: 2026, points: monthlySeries(months, 2026) }],
-      serviceMonthly: monthlyServiceSeries(months, 2026),
-    });
-    const bars = (cards.evolution.option?.series ?? []).filter(
-      (entry) => entry.type === "bar" && entry.id !== "sin-cargar",
-    );
-    expect(bars).toHaveLength(2);
-    expect(new Set(bars.map((entry) => entry.stack)).size).toBe(1);
-  });
-});
-
-describe("el color de una barra de pagador", () => {
-  const many = Array.from({ length: 10 }, (_unused, index) =>
-    line({ payer: `PAGADOR${index}`, amount: 100 - index }),
-  );
-
-  it("las diez barras llevan tonos DISTINTOS: diez iguales son una mancha", () => {
-    const { payers } = buildSalesCards(input(many));
-    const colors = Array.from({ length: PAYER_SLICES }, (_unused, index) =>
-      datumColor(payers.option?.series[0], index),
-    );
-    expect(new Set(colors).size).toBe(PAYER_SLICES);
-  });
-
-  it("no choca con el color del primer servicio, que está justo encima", () => {
-    const cards = buildSalesCards(input(many));
-    expect(datumColor(cards.payers.option?.series[0], 0)).not.toBe(
-      datumColor(cards.services.option?.series[0], 0),
-    );
-  });
-
-  it("la fila de la tabla lleva el tono de SU barra", () => {
-    const { payers } = buildSalesCards(input(many));
-    expect(payers.table.rows[3].color).toBe(datumColor(payers.option?.series[0], 3));
-  });
-});
-
-describe("el tramo marcado se nombra en el subtítulo", () => {
-  it("con un servicio marcado, las tres tarjetas lo dicen", () => {
-    const cards = buildSalesCards({ ...input([line({ amount: 10 })]), scope: "MEDICINAS" });
-    for (const card of [cards.services, cards.payers, cards.evolution]) {
-      expect(card.subtitle).toContain("MEDICINAS");
-      expect(card.subtitle).toContain("Abril 2026");
-    }
-  });
-
-  it("sin marca de servicio el subtítulo es el de siempre", () => {
-    const cards = buildSalesCards(input([line({ amount: 10 })]));
-    expect(cards.evolution.subtitle).toBe("Venta total · Abril 2026");
-  });
-});
-
-describe("el skyline le da al servicio su propio eje", () => {
-  const LINES = [
-    line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 160 }),
-    line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-  ];
-  // Enero trae los dos servicios; FEBRERO llegó y no trajo MEDICINAS —un cero de verdad—, y de marzo
-  // en adelante no llegó ningún archivo. Es el fixture que separa el cero del hueco.
-  const MONTHS = [
-    month(0, [
-      line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 100 }),
-      line({ serviceCode: "\\02", serviceName: "MEDICINAS", amount: 60 }),
-    ]),
-    month(1, [line({ serviceCode: "\\01", serviceName: "HONORARIOS", amount: 60 })]),
-  ];
-
-  function opened(): SalesCardsInput {
+  it("comparando años el nivel dos pone un año por serie, con el total del tipo por año", () => {
     const reading = readSales(LINES);
-    return {
-      reading,
-      byYear: [{ year: 2026, reading }],
-      period: "2026",
-      monthlyByYear: [{ year: 2026, points: monthlySeries(MONTHS, 2026) }],
-      serviceMonthly: monthlyServiceSeries(MONTHS, 2026),
-    };
-  }
-
-  /** The evolution in its 3D shape, narrowed. It is asked for explicitly: the default is flat. */
-  function skyline(input = opened()): Chart3DOption {
-    const option = buildCards(input, { evolutionView: "skyline" }).evolution.option;
-    if (option === null || !is3DOption(option)) {
-      throw new Error("Se esperaba el skyline y vino la forma plana.");
-    }
-    return option;
-  }
-
-  it("cada servicio es una serie propia, en su fila del fondo", () => {
-    const option = skyline();
-    expect(option.series.map((entry) => entry.name)).toEqual(["HONORARIOS", "MEDICINAS"]);
-    expect(option.series.every((entry) => entry.type === "bar3D")).toBe(true);
-    // Una serie está ENTERA en una fila: su profundidad no cambia de un mes a otro.
-    for (const entry of option.series) {
-      expect(new Set(entry.data.map((datum) => datum.value[1])).size).toBe(1);
-    }
+    const detail = buildTypeDetailCard(
+      input({
+        byYear: [
+          { year: 2025, reading },
+          { year: 2026, reading },
+        ],
+      }),
+      "HONORARIOS",
+    )!;
+    expect(flat(detail.option).series?.map((entry) => entry.name)).toEqual(["2025", "2026"]);
+    expect(detail.table.rows.at(-1)?.values.slice(0, 2)).toEqual(["$800.00", "$800.00"]);
   });
 
-  it("la cifra de la barra bajo el cursor sale como dinero, no como el dato en crudo", () => {
-    // `echarts-gl` escribe el dato TAL CUAL sobre la barra a la que se apunta si no se le dice otra
-    // cosa: era el único importe de la app que llegaba a pantalla como «39684.6195…».
-    const [serie] = skyline().series;
-    const label = serie.emphasis?.label;
+  it("un tipo que ya no está en lo marcado no tiene nivel dos: la pantalla vuelve al uno", () => {
+    expect(buildTypeDetailCard(input(), "TIPO QUE NO EXISTE")).toBeNull();
+  });
+});
 
-    expect(label?.show).toBe(true);
-    expect(label?.formatter?.({ name: "HONORARIOS", value: [0, 1, 39_684.6195] })).toBe(
-      "$39,684.62",
+describe("los tres rankings comparten constructor", () => {
+  it("concentración por seguro: sin fila de «sin identificación», porque el seguro nunca viene vacío", () => {
+    const { insurers } = buildSalesCards(input());
+    const labels = insurers.table.rows.map((row) => row.label);
+    expect(labels).not.toContain("Sin identificación");
+    expect(labels).toEqual(["PARTICULAR", "HUMANA", "CONFIAMED", "TOTAL"]);
+  });
+
+  it("la nota dice en UNA cifra qué parte del periodo son los dibujados", () => {
+    const { insurers } = buildSalesCards(input());
+    expect(insurers.note).toContain("son el");
+    expect(insurers.note).toContain("de la venta del periodo");
+  });
+
+  it("cuarenta y dos códigos con el mismo nombre dan cuarenta y dos filas distinguibles", () => {
+    const truncated = "Visita en la oficina de un nuevo paciente que requiere de tr";
+    const lines = Array.from({ length: 42 }, (_unused, index) =>
+      line({ articleCode: `99204-${index}`, articleName: truncated, amount: 100 - index }),
     );
+    const reading = readSales(lines);
+    const { articles } = buildSalesCards(input({ reading, byYear: [{ year: 2026, reading }] }));
+    const drawn = (flat(articles.option).yAxis?.data ?? []) as string[];
+    expect(drawn).toHaveLength(RANKING_SLICES);
+    expect(new Set(drawn).size).toBe(RANKING_SLICES);
   });
 
-  it("la serie MAYOR va al fondo, que es lo que evita que tape a las demás", () => {
-    // Con la mayor delante —el orden del desglose— HONORARIOS esconde entero lo que hay detrás.
-    const option = skyline();
-    const [honorarios, medicinas] = option.series;
-    expect(honorarios.data[0].value[1]).toBe(1);
-    expect(medicinas.data[0].value[1]).toBe(0);
-    // Y el eje se lee en el orden en que están dibujadas las filas, no en el del desglose.
-    expect(option.yAxis3D.data).toEqual(["MEDICINAS", "HONORARIOS"]);
-  });
-
-  it("los ejes son mes · servicio · monto, y ninguno se llama «X»", () => {
-    const option = skyline();
-    expect(option.xAxis3D.data?.slice(0, 2)).toEqual(["Ene", "Feb"]);
-    expect(option.zAxis3D.type).toBe("value");
-    // `echarts-gl` rotula «X»/«Y»/«Z» si no se le dice otra cosa.
-    expect([option.xAxis3D.name, option.yAxis3D.name, option.zAxis3D.name]).toEqual(["", "", ""]);
-  });
-
-  it("un mes que nunca llegó no deja dato; uno cargado sin venta deja su cero", () => {
-    // Es lo que la pila no puede dibujar: apilados, el cero y el hueco son la misma nada.
-    const medicinas = skyline().series[1];
-    expect(medicinas.data.map((datum) => datum.value)).toEqual([
-      [0, 0, 60],
-      [1, 0, 0],
-    ]);
-    // Y ese cero tiene ALTO MÍNIMO, porque una baldosa invisible no se distingue de un hueco.
-    expect(medicinas.minHeight).toBeGreaterThan(0);
-  });
-
-  it("la barra no llena su casilla: el hueco es lo que separa una fila de la siguiente", () => {
-    const option = skyline();
-    const [width, depth] = option.series[0].barSize as [number, number];
-    expect(width).toBeLessThan((option.grid3D.boxWidth ?? 0) / 12);
-    expect(depth).toBeLessThan((option.grid3D.boxDepth ?? 0) / 2);
-  });
-
-  it("un servicio guarda su RANURA en la escala del escenario", () => {
-    const cards = buildCards(opened(), { evolutionView: "skyline" });
-    const composition = datumColor(cards.services.option?.series[0], 0);
-    // El escenario tiene escala propia —el azul de la composición es turquesa aquí—, y lo que se
-    // conserva es la POSICIÓN: `stageColor` traduce por ranura, así que el servicio es el mismo
-    // color en todas las tarjetas 3D y su sitio en el desglose no se mueve.
-    expect(skyline().series[0].itemStyle?.color).toBe(stageColor(composition ?? ""));
-    expect(CHART_PALETTE.indexOf(composition as (typeof CHART_PALETTE)[number])).toBe(
-      CHART_STAGE_PALETTE.indexOf(
-        skyline().series[0].itemStyle?.color as (typeof CHART_STAGE_PALETTE)[number],
-      ),
+  it("en pantalla la tabla NO corta; en el reporte dobla la cola en una fila que sigue sumando", () => {
+    const lines = Array.from({ length: 40 }, (_unused, index) =>
+      line({ articleCode: `A${index}`, articleName: `ART ${index}`, amount: 100 - index }),
     );
-  });
+    const reading = readSales(lines);
+    const screen = buildSalesCards(input({ reading, byYear: [{ year: 2026, reading }] }));
+    // 40 artículos + TOTAL.
+    expect(screen.articles.table.rows).toHaveLength(41);
 
-  it("las barras llevan LA MISMA luz que todo el escenario: el contorno es lo que dibuja", () => {
-    const option = skyline();
-    // Planas —`shading: "color"`— cada cara de cada barra devolvía el mismo píxel y las filas se
-    // leían como una sola superficie continua; un `bar3D` es una malla única y no tiene borde al
-    // que recurrir. `lambert` separaba las caras y se quedaba ahí: dos caras que se encuentran son
-    // un escalón de tono, no un canto. Lo que dibuja el canto es el término especular, y por eso el
-    // escenario sombrea `realistic`. El aparejo y el material son UNOS para las tres tarjetas 3D.
-    expect(option.series.every((entry) => entry.shading === "realistic")).toBe(true);
-    expect(option.series.every((entry) => entry.realisticMaterial === CHART_STAGE_MATERIAL)).toBe(
-      true,
+    const paper = buildSalesCards(
+      input({
+        reading,
+        byYear: [{ year: 2026, reading }],
+        rankingTableLimit: RANKING_TABLE_PRINT_LIMIT,
+      }),
     );
-    // Y el bisel es la SUPERFICIE del canto: el brillo tiene que caer sobre algo.
-    expect(option.series.every((entry) => (entry.bevelSize ?? 0) > 0.15)).toBe(true);
-    expect(option.grid3D.light).toEqual(CHART_STAGE_LIGHT);
-    // Sin sombra proyectada: caería sobre la barra vecina y oscurecería una cifra ya medida.
-    expect(option.grid3D.light?.main?.shadow).toBe(false);
+    // 30 listados + «Otros artículos» + TOTAL.
+    expect(paper.articles.table.rows).toHaveLength(32);
+    expect(paper.articles.table.rows[30].label).toBe("Otros artículos");
+    expect(paper.articles.note).toContain("agrupa");
   });
 
-  it("la cámara arranca quieta y no se puede sacar de cuadro", () => {
-    const view = skyline().grid3D.viewControl;
-    expect(view?.animation).toBe(false);
-    expect(view?.panSensitivity).toBe(0);
-  });
-
-  it("la tabla gemela es la MISMA en las dos formas: son un dato, no dos", () => {
-    expect(buildCards(opened(), { evolutionView: "skyline" }).evolution.table).toEqual(
-      buildCards(opened(), { evolutionView: "stacked" }).evolution.table,
+  it("solo las filas DIBUJADAS llevan punto de color", () => {
+    const lines = Array.from({ length: 20 }, (_unused, index) =>
+      line({ seguro: `SEG${index}`, amount: 100 - index }),
     );
+    const reading = readSales(lines);
+    const { insurers } = buildSalesCards(input({ reading, byYear: [{ year: 2026, reading }] }));
+    const coloured = insurers.table.rows.filter((row) => row.color !== undefined);
+    expect(coloured).toHaveLength(INSURER_SLICES);
+  });
+});
+
+describe("la tarjeta de vendedores declara lo que no puede medir", () => {
+  it("dice el importe y el porcentaje del NETO que no trae vendedor", () => {
+    const { vendors } = buildSalesCards(input());
+    // Sin vendedor: H2 (300) e I1 (50) = 350 de 1.000.
+    expect(vendors?.note).toContain("$350.00");
+    expect(vendors?.note).toContain("35.0 %");
+    expect(vendors?.note).toContain("no trae vendedor");
   });
 
-  it("comparando años no hay skyline que ofrecer, y pedirlo no lo trae", () => {
-    const years = comparing([
-      { year: 2025, lines: LINES, months: MONTHS },
-      { year: 2026, lines: LINES, months: MONTHS },
-    ]);
-    const cards = buildCards(years, { evolutionView: "skyline" });
+  it("las líneas sin vendedor NO se dibujan como una barra del ranking", () => {
+    const { vendors } = buildSalesCards(input());
+    const drawn = (flat(vendors?.option).yAxis?.data ?? []) as string[];
+    expect(drawn).toEqual(["ANA", "BETO"]);
+    expect(drawn).not.toContain("");
+  });
+
+  it("NO se dibuja en absoluto cuando lo marcado no trae ningún vendedor", () => {
+    const reading = readSales([line({ vendor: "" })]);
+    const cards = buildSalesCards(input({ reading, byYear: [{ year: 2026, reading }] }));
+    expect(cards.vendors).toBeNull();
+  });
+});
+
+describe("evolución", () => {
+  it("un mes que nunca llegó lleva RAYA en la tabla, y uno cargado en cero su importe", () => {
+    const { evolution } = buildSalesCards(input());
+    const row = evolution.table.rows[0];
+    expect(row.values[0]).toContain("1,000");
+    expect(row.values[1]).toBe("–");
+    expect(row.values[2]).toBe("$0.00");
+  });
+
+  it("cuenta los meses vacíos sobre el eje SIN podar, para que el interruptor no desaparezca al pulsarlo", () => {
+    const cards = buildSalesCards(input(), { hideEmptyMonths: true });
+    expect(cards.emptyMonths).toBe(11);
+  });
+
+  it("abre el mes por TIPO DE SERVICIO cuando hay un año marcado", () => {
+    const cards = buildSalesCards(
+      input({
+        typeMonthly: [
+          typeSeries("HONORARIOS", "HONORARIOS", [800, null, 0]),
+          typeSeries("MEDICINAS", "MEDICINAS", [200, null, 0]),
+        ],
+      }),
+    );
+    const labels = cards.evolution.table.rows.map((row) => row.label);
+    expect(labels).toEqual(["HONORARIOS", "MEDICINAS", "TOTAL"]);
+    expect(cards.evolution.note).toContain("tipo de servicio");
+  });
+
+  it("el skyline se ofrece solo si hay desglose Y meses que seguir", () => {
+    const withBreakdown = buildSalesCards(
+      input({
+        typeMonthly: [
+          typeSeries("HONORARIOS", "HONORARIOS", [800, 700, 0]),
+          typeSeries("MEDICINAS", "MEDICINAS", [200, 100, 0]),
+        ],
+      }),
+    );
+    expect(withBreakdown.skylineAvailable).toBe(true);
+    expect(buildSalesCards(input()).skylineAvailable).toBe(false);
+  });
+
+  it("por OMISIÓN la evolución es plana: el reporte impreso no puede llevar un lienzo 3D", () => {
+    const cards = buildSalesCards(
+      input({
+        typeMonthly: [
+          typeSeries("HONORARIOS", "HONORARIOS", [800, 700, 0]),
+          typeSeries("MEDICINAS", "MEDICINAS", [200, 100, 0]),
+        ],
+      }),
+    );
+    expect(is3DOption(cards.evolution.option as never)).toBe(false);
+  });
+
+  it("pedido el skyline, la opción SÍ es tridimensional", () => {
+    const cards = buildSalesCards(
+      input({
+        typeMonthly: [
+          typeSeries("HONORARIOS", "HONORARIOS", [800, 700, 0]),
+          typeSeries("MEDICINAS", "MEDICINAS", [200, 100, 0]),
+        ],
+      }),
+      { evolutionView: "skyline" },
+    );
+    expect(is3DOption(cards.evolution.option as never)).toBe(true);
+  });
+
+  it("el subtítulo dice EN RELACIÓN A QUÉ se lee la evolución", () => {
+    const plain = buildSalesCards(input());
+    expect(plain.evolution.title).toBe("Evolución mensual de la venta");
+    expect(plain.evolution.subtitle).toContain("Venta neta de cada mes");
+
+    const broken = buildSalesCards(
+      input({
+        typeMonthly: [
+          typeSeries("HONORARIOS", "HONORARIOS", [800, 700, 0]),
+          typeSeries("MEDICINAS", "MEDICINAS", [200, 100, 0]),
+        ],
+      }),
+    );
+    expect(broken.evolution.subtitle).toContain("desglosada por tipo de servicio");
+
+    const reading = readSales(LINES);
+    const compared = buildSalesCards(
+      input({
+        byYear: [
+          { year: 2025, reading },
+          { year: 2026, reading },
+        ],
+        monthlyByYear: [
+          { year: 2025, points: months([100, 200]) },
+          { year: 2026, points: months([150, 250]) },
+        ],
+      }),
+    );
+    expect(compared.evolution.subtitle).toContain("un año contra otro");
+  });
+
+  it("con varios años vuelve a una serie por año y no apila", () => {
+    const reading = readSales(LINES);
+    const cards = buildSalesCards(
+      input({
+        byYear: [
+          { year: 2025, reading },
+          { year: 2026, reading },
+        ],
+        monthlyByYear: [
+          { year: 2025, points: months([100, 200, 300]) },
+          { year: 2026, points: months([150, 250, 350]) },
+        ],
+        typeMonthly: [typeSeries("HONORARIOS", "HONORARIOS", [800, 700, 0])],
+      }),
+    );
+    expect(cards.evolution.table.rows.map((row) => row.label)).toEqual(["2025", "2026"]);
     expect(cards.skylineAvailable).toBe(false);
-    expect(cards.evolution.option !== null && is3DOption(cards.evolution.option)).toBe(false);
   });
+});
 
-  it("por omisión la forma es la PLANA, que es la que el papel puede llevar", () => {
-    const option = buildCards(opened()).evolution.option;
-    expect(option !== null && is3DOption(option)).toBe(false);
+describe("el periodo se nombra en un solo sitio", () => {
+  it("los subtítulos de las cinco tarjetas leen esa misma composición", () => {
+    const cards = buildSalesCards(input({ scope: "HUMANA", period: "Abril 2026" }));
+    for (const card of [cards.insurers, cards.evolution, cards.articles]) {
+      expect(card.subtitle).toContain("HUMANA · Abril 2026");
+    }
+    // La composición nombra la acotación en lugar del recuento de tipos.
+    expect(cards.types.subtitle).toContain("HUMANA");
   });
 });

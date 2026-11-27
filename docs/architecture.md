@@ -2161,6 +2161,132 @@ en la cabecera de «Flujo de bancos» —un control que lee UNA tarjeta vive en 
 dibuja sin nada marcado; en el papel y en el Excel de flujo la matriz se imprime SIEMPRE que haya
 algo marcado, porque en el papel no hay controles.
 
+### Ventas por servicio — el reemplazo del formato (reporte plano)
+
+El sistema contable dejó de emitir «Venta de Servicios por FACTURA» y pasó a un reporte PLANO: una
+fila por línea de artículo de factura, 18 columnas, sin preámbulo, sin periodo declarado, sin razón
+social y sin fila de total. El archivo real con el que se construyó esto son **558.272 filas de
+cuatro años** (3-oct-2022 → 31-oct-2026), **$7.701.194,27** de NETO, una empresa (`01`), 33 seguros,
+14 tipos de servicio, 4.490 códigos de artículo y 307 vendedores. Todas las cifras de aquí abajo se
+midieron sobre él; están escritas para que nadie las vuelva a derivar.
+
+**Por qué el grano guardado sigue siendo la LÍNEA como objeto.** Se construyeron las tres
+representaciones candidatas sobre el archivo real y se agregó NETO por tipo de servicio filtrado a
+un seguro sobre las 558.272 líneas. Las tres dan el mismo total ($3.509.903,86):
+
+| Representación                                       | Heap       | Agregar todo |
+| ---------------------------------------------------- | ---------- | ------------ |
+| **Línea como objeto** (strings internados)           | **119 MB** | **14 ms**    |
+| Columnar (diccionarios + arrays tipados por mes)     | 42 MB      | 9 ms         |
+| Cubo pre-agregado (127.846 celdas, 4,4× menos filas) | 74 MB      | 27 ms        |
+
+La línea suelta aguanta, así que el modelo no cambió. El columnar ahorra memoria y 5 ms a cambio de
+que `derive.ts` y todas sus pruebas trabajen con índices en vez de nombres: no lo vale con 14 ms de
+base. El cubo es **peor que los dos** —las claves de texto cuestan más memoria que los objetos y hay
+que partirlas para agregar— y encima renuncia a un detalle irrecuperable sin recargar medio millón
+de líneas. Fue el resultado que convirtió un rediseño en un reemplazo de lector.
+
+**Por qué hay un Worker, y por qué el aviso de tamaño va ANTES de leer.** `XLSX.read` en modo denso
+sobre ese archivo cuesta **21,8 s y 2,55 GB de RSS** (1,53 GB de heap). En el hilo principal son
+veintidós segundos de pantalla que no responde. El aviso se da por `file.size` antes de leer porque
+darlo después costaría los 22 s y los 2,5 GB para entonces sugerir que habría convenido partirlo:
+un consejo que solo sirve para la próxima vez. Se descartaron dos alternativas: un lector en
+streaming propio (`fflate` + escaneo del XML, ~100 MB de pico) por ser una dependencia nueva y un
+lector a mano para un coste que se paga una vez, y aceptar `.csv`, que disuelve el problema pero es
+un segundo formato de entrada que nadie pidió. Las dos quedan como salida si el Worker no alcanza en
+las máquinas de la firma.
+
+**Por qué la descarga es el único Excel de la app escrito con SheetJS.** Escribiendo las mismas
+558.272 filas × 6 columnas: **SheetJS 9,2 s y 1,86 GB** para un archivo de 47,9 MB; **exceljs 14,7 s
+y 4,6 GB** para uno de 13,4 MB. Los 4,6 GB están por encima de lo que aguanta una pestaña, así que
+la copia de seguridad reventaría justo en el cliente para el que existe el módulo. El precio
+declarado es perder el membrete con el logo, porque `writeLetterhead` es de exceljs.
+
+**Por qué se perdió el cuadre en dólares.** El reporte viejo escribía su total y el cuadre era
+contra dinero. El nuevo no escribe ninguno, así que `declaredTotal` murió con él y lo reemplaza la
+única cifra que el archivo declara sobre sí mismo: la dimensión de su hoja (`A1:R558273`). El cuadre
+nuevo dice si se perdió una FILA, no si cuadran los importes, y eso se declara en vez de insinuar
+una comprobación que no se hizo. Sobre el archivo real la lectura sale sin una sola diferencia.
+
+**Por qué el artículo se identifica por CÓDIGO aunque el usuario pidiera el NOMBRE.** El sistema de
+origen trunca el nombre a ~59 caracteres, y eso rompe el nombre como identidad en las dos
+direcciones: **889 códigos traen más de una escritura del mismo nombre** (`OXIGENO (O2)` /
+`OXIGENO - (O2)`), que son el **12,21 % del neto** y se partirían en dos filas del ranking; y **340
+nombres los comparten varios códigos**, el **22,51 % del neto**, con un caso —`Visita en la oficina
+de un nuevo paciente que requiere de tr`— compartido por **42 códigos**, una especialidad cada uno.
+Agrupar por nombre fundiría cuarenta y dos consultas en una fila, que es peor que partir una: es
+afirmar una cifra que no existe. Por eso la identidad es el código.
+
+**Por qué la etiqueta es solo el nombre, y el código aparece a veces.** La primera versión dibujaba
+«código · nombre» en todas las filas, y el usuario pidió quitar el código: en el 93 % de las filas
+no aporta nada. Quitarlo del todo dejaba cuarenta y dos filas idénticas en el tipo que más factura.
+La regla que quedó es que el código se añade únicamente a los artículos cuyo nombre coincide con el
+de otro **del mismo conjunto que se está leyendo** — que un nombre sea ambiguo es un hecho del
+conjunto, no del artículo, así que acotado a una sola de esas consultas vuelve a ir sin código.
+
+**Por qué la jerarquía tipo → artículo son NIVELES dentro de la tarjeta.** El cliente pregunta por
+tipo de servicio y de ahí baja al artículo, y lo quiere en la gráfica con las cifras a la vista. Lo
+primero que se construyó fue una barra apilada —cada tipo partido en sus cinco artículos mayores,
+tras un control «Desglose»— con el argumento de que un clic sería una segunda superficie de
+selección. El cliente no la leía: los artículos no llevaban ni nombre ni cifra visibles. Se retiró
+y quedó lo que pedía: pulsar la barra de un tipo cambia la tarjeta por el ranking de SUS artículos,
+con importe y porcentaje del tipo en cada barra, y «Todos los tipos» para volver. El argumento
+contra el clic era más estrecho de lo que parecía: lo que sería una segunda superficie de selección
+es un clic que ACOTE la pantalla; este solo cambia de nivel una tarjeta, no toca las demás y no
+deja chip, que es exactamente lo que `Chart.onSelect` ya documentaba. En el papel el segundo nivel
+no se imprime por tipo —serían catorce secciones— porque el ranking de artículos ya lo responde.
+
+**Por qué no se guarda la CANTIDAD.** Suma 28.765.928 sobre 558.272 líneas, y la distribución
+explica por qué esa suma no significa nada: el **71,7 % de las filas traen exactamente 1**, 2.184
+traen menos de 1 (fracciones de dosis) y **una sola fila trae 22.557.474** de guantes — tres cuartas
+partes del total del archivo. Mezcla unidades entre artículos y arrastra errores de digitación del
+origen. No hay lectura que la pueda usar sin mentir, así que no se guarda y todo se mide sobre el
+NETO.
+
+**Por qué el `PACIENTE` se descarta en la puerta.** Es nombre y apellido contra las medicinas,
+exámenes y procedimientos que compró. Ningún filtro pedido lo necesita, y guardar medio millón de
+esas filas en IndexedDB es un riesgo que no compra nada.
+
+**Por qué `coverage` existe y es la única excepción a «nada derivado se persiste».** La regla de la
+casa está para que una copia no se vuelva rancia en el siguiente ajuste; aquí no hay ajustes —una
+línea no se edita nunca, solo se reemplaza con su mes entero— y la cobertura se escribe en la MISMA
+transacción que las líneas que resume. Lo que compra: «qué años y qué meses tiene este cliente», que
+es la marca «Año», el estado vacío y la lista de lo que una carga reemplaza, sin deserializar 119 MB
+de IndexedDB en cada cambio de cliente. Se descartó guardar también los universos de las otras
+marcas (`seguros[]`, `tipos[]`, `articles[]`…): engorda el registro con 4.490 artículos por mes, y
+**no alcanza igual**, porque el orden es por importe y la marca anidada necesita saber bajo qué
+tipos aparece cada artículo — es reconstruir el cubo ya descartado.
+
+**Por qué el reconocimiento es por etiqueta en CUALQUIER fila.** La primera versión de la spec
+exigía «18 columnas en la fila 1», y eso hacía imposible que el Excel que el propio módulo exporta
+volviera a entrar: lleva membrete encima y solo las columnas que guarda. Siete etiquetas
+obligatorias y once opcionales, localizadas por etiqueta, es lo que hace que la puerta sea una sola
+para el reporte del sistema y para la copia de seguridad.
+
+**Por qué los avisos son del ARCHIVO y no del mes.** Una carga escribe hasta 44 meses. Un aviso
+guardado por mes repetiría la misma frase cuarenta y cuatro veces en cada recarga de la pantalla, y
+además rompería la ida y vuelta: la hoja exportada siempre cuadra consigo misma, así que un mes con
+aviso guardado no podría volver igual nunca.
+
+**Por qué dos archivos del lote que tocan el mismo mes BLOQUEAN.** Con el periodo decidido por
+línea, el solape deja de ser raro: partir la historia «por año» es seguro, «ene–mar» + «mar–abr» no.
+Las otras dos salidas son peores — fusionar contradice «cada mes se reemplaza completo», y «gana el
+último» pierde un archivo sin decirlo.
+
+**Por qué las partes UTC de una celda de fecha.** Medido con SheetJS 0.20.3 en una máquina UTC−5:
+escribir `new Date(2026, 2, 1)` guarda el serial `46082`, y leerlo con `cellDates` devuelve un
+`Date` de `2026-03-01T00:00:00.000Z` cuyas partes LOCALES dicen «28 de febrero, 19:00». En un módulo
+cuya periodización entera es «el mes de la fecha de cada línea», leer las locales archiva en el MES
+ANTERIOR, en silencio, toda línea del día 1 a medianoche.
+
+**Por qué cada tarjeta lleva la paleta que lleva.** Cuatro de las cinco colorean POR POSICIÓN y la
+app solo tiene dos secuencias lo bastante largas, así que dos pares comparten escala por fuerza. El
+emparejamiento se eligió para evitar la colisión que sí engañaría —tipo ↔ artículo, el único par de
+ejes realmente relacionado, porque un artículo PERTENECE a un tipo—: esos dos caen en secuencias
+cuyas cabezas son disjuntas. Lo que queda compartiendo es tipo ↔ seguro y artículo ↔ vendedor, donde
+los dos ejes son todo lo ajenos que pueden ser. Es la trampa que la propia docstring de
+`CHART_RANKING_SEQUENCE` ya describía.
+
 ## Design system
 
 Tokens are defined **once** in `app/globals.css`'s `@theme` block and consumed as Tailwind

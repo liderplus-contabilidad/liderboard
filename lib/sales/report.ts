@@ -16,7 +16,7 @@ import { formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/workspaces";
 import {
   buildSalesCards,
-  PAYER_TABLE_PRINT_LIMIT,
+  RANKING_TABLE_PRINT_LIMIT,
   scopedPeriod,
   type SalesCardsInput,
 } from "./cards";
@@ -24,9 +24,9 @@ import {
 export interface SalesReportHeader {
   /** The label the user gave the client — never the razón social of any file. */
   clientName: string;
-  /** The razón social the files DECLARE, when there is one: it is what identifies which company this
-   *  billing belongs to, and on paper the selector that would say it is not there. */
-  companyName?: string;
+  /** The `COD. EMPRESA` the files DECLARE, when there is one: it is what identifies which company
+   *  this billing belongs to, and on paper the selector that would say it is not there. */
+  companyCode?: string;
   /** The LEFT-hand one, the client's — `letterheadLogos`' same layout. */
   logo?: EntityLogo;
   /** The RIGHT-hand one, of the cost center the client may have declared. */
@@ -49,37 +49,39 @@ export interface SalesReport {
 
 export interface BuildSalesReportInput extends SalesCardsInput {
   clientName: string;
-  companyName?: string;
+  companyCode?: string;
   logo?: EntityLogo;
   rightLogo?: EntityLogo;
   generatedAt: Date;
 }
 
 /**
- * The THREE readings, in the order they are read on screen. None is omitted for being empty: a report
- * that lost the evolution would not say the year is half-loaded, it would say there is no evolution —
- * and the card already knows how to explain itself when it has nothing to draw.
+ * The five readings, in the order of the screen. None is omitted for being empty —the card
+ * explains itself— except «Venta por vendedor», which is not built when nothing declares one. The
+ * composition's second level is not printed per type: the article ranking already answers it.
  */
 export function buildSalesReport(input: BuildSalesReportInput): SalesReport {
   // The ONLY place the paper parts ways with the screen, and it is decided by the report and not by
-  // the card: the payer tail is folded into one row with its sum. See `PAYER_TABLE_PRINT_LIMIT`.
-  const cards = buildSalesCards({ ...input, payerTableLimit: PAYER_TABLE_PRINT_LIMIT });
+  // the card: a ranking's tail is folded into one row with its sum. See `RANKING_TABLE_PRINT_LIMIT`.
+  const cards = buildSalesCards({ ...input, rankingTableLimit: RANKING_TABLE_PRINT_LIMIT });
   return {
     header: {
       clientName: input.clientName,
-      ...(input.companyName ? { companyName: input.companyName } : {}),
+      ...(input.companyCode ? { companyCode: input.companyCode } : {}),
       ...(input.logo ? { logo: input.logo } : {}),
       ...(input.rightLogo ? { rightLogo: input.rightLogo } : {}),
-      // With services marked the paper HAS to say so: the bar that says it on screen is not here.
+      // With marks set the paper HAS to say so: the bar that says it on screen is not here.
       periodLabel: scopedPeriod(input),
       generatedAt: formatTimestampEs(input.generatedAt),
     },
     sections: [
-      // The three go through the SAME check, and it is not ceremony: every one of them can now come
-      // out as a solid, and paper carries none of them. The call above asks for no shape, so this
+      // All of them go through the SAME check, and it is not ceremony: every one can come out as a
+      // solid or as a 3D box, and paper carries neither. The call above asks for no shape, so this
       // never throws today — writing it down rather than casting is what keeps it that way.
-      { id: "services", card: flatOnly(cards.services) },
-      { id: "payers", card: flatOnly(cards.payers) },
+      { id: "types", card: flatOnly(cards.types) },
+      { id: "insurers", card: flatOnly(cards.insurers) },
+      { id: "articles", card: flatOnly(cards.articles) },
+      ...(cards.vendors ? [{ id: "vendors", card: flatOnly(cards.vendors) }] : []),
       { id: "evolution", card: flatOnly(cards.evolution) },
     ],
   };

@@ -31,7 +31,7 @@ export function SalesReportHeader({ header }: { header: SalesReportHeaderSpec })
 
       <dl className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[12.5px]">
         <Field label="Periodo" value={header.periodLabel} />
-        {header.companyName && <Field label="Empresa" value={header.companyName} />}
+        {header.companyCode && <Field label="Empresa" value={header.companyCode} />}
         <Field label="Generado el" value={header.generatedAt} />
       </dl>
 

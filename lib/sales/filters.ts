@@ -1,30 +1,19 @@
 /**
- * The marks of the «Ventas por servicio» bar: **Año** and **Mes**, and nothing else. There is no
- * «Cuenta contable» and no «Centro de costo» because neither means anything about an invoice, which is
- * exactly why this is not a fourth tab of PyG.
+ * The marks of the bar —Año · Mes · Seguro · Tipo de servicio → Artículo · Vendedor— and the
+ * universes they are chosen from.
  *
- * **Both are MULTIPLE-mark, and the year is because the year-on-year comparison is the most useful
- * question of a sales report**: «April 2026 against April 2025». It was born single-choice with the
- * argument that two years would have no axis to be drawn on, and that was false — the axis is the
- * twelve months and each YEAR is a series, which is the figure Ocupaciones and PyG already use.
- *
- * The MONTH is independent of the year: a mark of «Abr» narrows the axis of ALL the marked years
- * instead of picking one's April, which is what makes the comparison mean something. It is the same
- * rule by which a `PeriodSlot` of PyG is not a `PeriodRef`.
- *
- * **`years` is never left empty**, and there it deliberately departs from the house rule: «no mark is
- * all of them» would turn the entry screen into the sum of three exercises, and a card that opens
- * saying «Venta total $3.1M» of three years at once reads badly before anyone touches a filter. With
- * no marks it resolves to the MOST RECENT year, which is the last thing the firm loaded.
+ * House rule for all but the year: no mark = ALL, kept in universe order, pruned on READ
+ * (`sanitizeFilters`), an orphan mark counts as none. «Año» is the declared exception: never
+ * empty, it resolves to the most recent year. The month is independent of the year. «Artículo» is
+ * nested in «Tipo» as a LIST only — the two marks still cross with AND.
  */
 import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
 import { monthMarkLabel, yearMarkLabel } from "@/lib/period";
+import { byArticle, byInsurer, byType, byVendor, loadedMonths, loadedYears } from "./derive";
+import type { SalesGroup } from "./derive";
+import type { SalesCoverage, SalesLine } from "./types";
 
-/**
- * The two rótulos of the bar's marks. They were BORN here and now live in `lib/period.ts`,
- * because «Reportería de ingresos» and «Análisis costo personal» read the same figure. They stay
- * re-exported so every caller and every test of this module keeps its import.
- */
+/** Re-exported from `lib/period.ts` so this module's callers keep their import. */
 export { monthMarkLabel, yearMarkLabel };
 
 export interface SalesFilters {
@@ -32,61 +21,111 @@ export interface SalesFilters {
   years: number[];
   /** Indices 0–11, in order. Empty = every LOADED month of the marked years. */
   months: number[];
-  /**
-   * Marked service CODES, verbatim (`\\01`) and in the universe's order. Empty is ALL of them — the
-   * house rule the year is the only exception to.
-   *
-   * It narrows the WHOLE screen and not one card, which is why it is a mark of the bar and not a
-   * control in a header: the question it answers is «Farmacia: cuánto, quién la paga y cómo
-   * evoluciona», and that has to be heard by the tiles and the three readings at once.
-   */
-  services: string[];
+  /** Marked insurers, in the universe's order. Empty is ALL of them. */
+  seguros: string[];
+  /** Marked service types, in the universe's order. Empty is ALL of them. */
+  tipos: string[];
+  /** Marked article CODES, in the universe's order. Empty is ALL of them. */
+  articles: string[];
+  /** Marked salespeople, in the universe's order. Empty is ALL of them. */
+  vendors: string[];
 }
 
-/** A service of the universe: its code is the identity, its name is what the dropdown shows. */
-export interface SalesServiceRef {
-  code: string;
-  name: string;
-}
+/** One choosable value: `id` is what a mark stores, `label` what the dropdown shows. */
+export type SalesChoice = Pick<SalesGroup, "id" | "label">;
 
 /** What the client has, and what the marked years allow choosing. */
 export interface SalesUniverse {
-  /** Every loaded year, ascending. */
+  /** Every loaded year, ascending — from the COVERAGE, without reading a line. */
   years: number[];
-  /** The months loaded IN THE MARKED YEARS — the union, not the intersection: a month only one of the
-   *  years has is still a month that can be looked at, and the comparison will say the other one is
-   *  missing it. */
+  /** The months loaded in the marked years — their union. */
   months: number[];
-  /**
-   * The services of the MARKED YEARS, largest to smallest, and deliberately not those of the span
-   * «Mes» narrows to: marking a month a service did not sell must not erase it from the list you
-   * unmark it from. It is the same rule by which PyG reads its years off the universe and not off the
-   * narrowed sum.
-   */
-  services: SalesServiceRef[];
+  seguros: SalesChoice[];
+  tipos: SalesChoice[];
+  /** The articles of the MARKED TYPES, or of all of them with no type marked. */
+  articles: SalesChoice[];
+  vendors: SalesChoice[];
 }
 
 export function emptyFilters(): SalesFilters {
-  return { years: [], months: [], services: [] };
+  return { years: [], months: [], seguros: [], tipos: [], articles: [], vendors: [] };
+}
+
+export function emptyUniverse(): SalesUniverse {
+  return { years: [], months: [], seguros: [], tipos: [], articles: [], vendors: [] };
+}
+
+/** Which years the reading covers. Resolved FIRST —it decides which lines are read— and the one
+ *  place «no mark means the most recent year» lives. */
+export function resolveYears(filters: SalesFilters, coverage: readonly SalesCoverage[]): number[] {
+  const universe = loadedYears(coverage);
+  const marked = universe.filter((year) => filters.years.includes(year));
+  return marked.length > 0 ? marked : universe.slice(-1);
+}
+
+function toChoices(groups: readonly SalesGroup[]): SalesChoice[] {
+  return groups.map((group) => ({ id: group.id, label: group.label }));
 }
 
 /**
- * Pruned against what the client has NOW, on READ and never in an effect: switching client cannot
- * leave a render marking a year this client does not have.
+ * The universe: years and months from the COVERAGE, the other four axes from the LINES of the
+ * resolved years, ordered by amount. Never persisted, and read off the marked YEARS rather than
+ * the span «Mes» narrows to, so marking a month cannot erase a value from its own list.
  */
+export function buildSalesUniverse(
+  coverage: readonly SalesCoverage[],
+  lines: readonly SalesLine[],
+  years: readonly number[],
+  markedTipos: readonly string[],
+): SalesUniverse {
+  const tipos = toChoices(byType(lines));
+  // Orphan type marks are dropped first, so they cannot empty the article list.
+  const liveTipos = new Set(tipos.map((tipo) => tipo.id).filter((id) => markedTipos.includes(id)));
+  const forArticles =
+    liveTipos.size === 0 ? lines : lines.filter((line) => liveTipos.has(line.tipo));
+  return {
+    years: loadedYears(coverage),
+    months: loadedMonths(coverage, years),
+    seguros: toChoices(byInsurer(lines)),
+    tipos,
+    articles: toChoices(byArticle(forArticles)),
+    vendors: toChoices(byVendor(lines)),
+  };
+}
+
+/** Keeps the marked ids that still exist, in the universe's order. */
+function prune(marked: readonly string[], universe: readonly SalesChoice[]): string[] {
+  return universe.map((choice) => choice.id).filter((id) => marked.includes(id));
+}
+
+/** Pruned against what the client has NOW, on read and never in an effect. */
 export function sanitizeFilters(filters: SalesFilters, universe: SalesUniverse): SalesFilters {
   const years = universe.years.filter((year) => filters.years.includes(year));
   const resolved = years.length > 0 ? years : universe.years.slice(-1);
-  const available = new Set(universe.months);
   return {
     years: resolved,
-    months: universe.months.filter(
-      (month) => available.has(month) && filters.months.includes(month),
-    ),
-    services: universe.services
-      .map((service) => service.code)
-      .filter((code) => filters.services.includes(code)),
+    months: universe.months.filter((month) => filters.months.includes(month)),
+    seguros: prune(filters.seguros, universe.seguros),
+    tipos: prune(filters.tipos, universe.tipos),
+    // An article whose type is no longer marked left the universe, so it prunes itself here.
+    articles: prune(filters.articles, universe.articles),
+    vendors: prune(filters.vendors, universe.vendors),
   };
+}
+
+/** The lines the marks let through, crossed with AND — the one translation of marks into data. */
+export function narrowLines(lines: readonly SalesLine[], filters: SalesFilters): SalesLine[] {
+  const seguros = new Set(filters.seguros);
+  const tipos = new Set(filters.tipos);
+  const articles = new Set(filters.articles);
+  const vendors = new Set(filters.vendors);
+  return lines.filter(
+    (line) =>
+      (seguros.size === 0 || seguros.has(line.seguro)) &&
+      (tipos.size === 0 || tipos.has(line.tipo)) &&
+      (articles.size === 0 || articles.has(line.articleCode)) &&
+      (vendors.size === 0 || vendors.has(line.vendor)),
+  );
 }
 
 export function withYearToggled(
@@ -100,14 +139,11 @@ export function withYearToggled(
   } else {
     marked.add(year);
   }
-  // The months SURVIVE a change of year, the opposite of when the year was single-choice: a mark of
-  // «Abr» no longer means «April 2026» but «April», so removing a year does not invalidate it. What
-  // does prune it is `sanitizeFilters`, if that month stops existing in what is marked.
+  // The months survive a change of year: «Abr» means April, not April 2026.
   return { ...filters, years: universe.filter((entry) => marked.has(entry)) };
 }
 
-/** Marks ALL the years. It is not «emptying the list»: here an empty list means «the most recent»,
- *  so the shortcut has to populate it for real. */
+/** Marks ALL the years — an empty list would mean «the most recent». */
 export function withAllYears(filters: SalesFilters, universe: readonly number[]): SalesFilters {
   return { ...filters, years: [...universe] };
 }
@@ -130,63 +166,82 @@ export function withMonthsCleared(filters: SalesFilters): SalesFilters {
   return { ...filters, months: [] };
 }
 
-export function withServiceToggled(
+/** The four id-based axes, which share one toggle. */
+export type SalesAxis = "seguros" | "tipos" | "articles" | "vendors";
+
+export function withChoiceToggled(
   filters: SalesFilters,
-  code: string,
-  universe: readonly string[],
+  axis: SalesAxis,
+  id: string,
+  universe: readonly SalesChoice[],
 ): SalesFilters {
-  const marked = new Set(filters.services);
-  if (marked.has(code)) {
-    marked.delete(code);
+  const marked = new Set(filters[axis]);
+  if (marked.has(id)) {
+    marked.delete(id);
   } else {
-    marked.add(code);
+    marked.add(id);
   }
-  return { ...filters, services: universe.filter((entry) => marked.has(entry)) };
+  return {
+    ...filters,
+    [axis]: universe.map((choice) => choice.id).filter((entry) => marked.has(entry)),
+  };
 }
 
-export function withServicesCleared(filters: SalesFilters): SalesFilters {
-  return { ...filters, services: [] };
+export function withAxisCleared(filters: SalesFilters, axis: SalesAxis): SalesFilters {
+  return { ...filters, [axis]: [] };
 }
 
 /**
- * What the marked services are CALLED — the one wording of the narrowing, which the subtitles and the
- * notes of the three cards read so none of them names a different slice from the one beside it.
+ * What the marked slice is called, read by every card so none names a different one: a single
+ * mark by its name, several as «n de m», axes joined in the bar's order.
+ */
+export function describeScope(filters: SalesFilters, universe: SalesUniverse): string | null {
+  const parts: string[] = [];
+  const axes: { axis: SalesAxis; noun: string }[] = [
+    { axis: "seguros", noun: "seguros" },
+    { axis: "tipos", noun: "tipos" },
+    { axis: "articles", noun: "artículos" },
+    { axis: "vendors", noun: "vendedores" },
+  ];
+  for (const { axis, noun } of axes) {
+    const marked = universe[axis].filter((choice) => filters[axis].includes(choice.id));
+    if (marked.length === 0) {
+      continue;
+    }
+    parts.push(
+      marked.length === 1
+        ? marked[0].label
+        : `${marked.length} de ${universe[axis].length} ${noun}`,
+    );
+  }
+  return parts.length === 0 ? null : parts.join(" · ");
+}
+
+/**
+ * Which type the composition card is opened INTO, and who decided it.
  *
- * With one it is its NAME, which is what the reader recognises against their own report; with several
- * it says how many of how many, because four service names do not fit in a subtitle. An orphan mark
- * —one this client does not have— is worth none: emptying the wording would be worse than not
- * narrowing, the same defence `sanitizeFilters` mounts.
+ * «Exactly one marked» is the house figure: with ONE type marked in the bar the card shows that
+ * type's articles — a single bar would say nothing — and it is `pinned`: the way out is the bar,
+ * not the card. Otherwise it is whatever bar the reader pressed, or level one.
  */
-export function describeServiceScope(
+export function resolveOpenType(
+  pressed: string | null,
   filters: SalesFilters,
-  universe: SalesUniverse,
-): string | null {
-  const marked = universe.services.filter((service) => filters.services.includes(service.code));
-  if (marked.length === 0) {
-    return null;
+): { id: string; pinned: boolean } | null {
+  if (filters.tipos.length === 1) {
+    return { id: filters.tipos[0], pinned: true };
   }
-  return marked.length === 1
-    ? marked[0].name
-    : `${marked.length} de ${universe.services.length} servicios`;
+  return pressed === null ? null : { id: pressed, pinned: false };
 }
 
-/**
- * The months the reading sums: the marked ones, or ALL the loaded ones of the marked years. It is the
- * only translation of the marks into the period, so the cards, the tiles and the report cannot end up
- * summing different spans.
- */
+/** The months the reading sums: the marked ones, or all the loaded ones. */
 export function selectedMonths(filters: SalesFilters, universe: SalesUniverse): number[] {
   return filters.months.length > 0 ? filters.months : universe.months;
 }
 
 /**
- * The period in plain Spanish — what the tiles, each card's subtitle and the report's header say, so
- * nothing on the screen names a different span from the one beside it.
- *
- * A set of months with gaps is ENUMERATED («Ene, Mar, Abr») instead of asserting a range: «Ene–Abr»
- * would say February is summed, `periodRangeLabel`'s same rule in PyG. With SEVERAL years the months
- * are written once and the years behind them («Abr · 2025, 2026»), because repeating «abril» for each
- * year is precisely what makes a comparison label illegible.
+ * The period in plain Spanish. Months with gaps are ENUMERATED («Ene, Mar, Abr»): a range would
+ * claim February is summed. With several years the months are written once.
  */
 export function periodLabel(months: readonly number[], years: readonly number[]): string {
   if (years.length === 0) {
@@ -198,8 +253,6 @@ export function periodLabel(months: readonly number[], years: readonly number[])
   }
   const single = years.length === 1;
   if (months.length === 1) {
-    // With a single year the month goes in full («Abril 2026»); with several, abbreviated, because
-    // the label already carries the list of years.
     return single
       ? `${MONTHS_FULL_ES[months[0]]} ${yearsLabel}`
       : `${MONTHS_SHORT_ES[months[0]]} · ${yearsLabel}`;
@@ -212,20 +265,18 @@ export function periodLabel(months: readonly number[], years: readonly number[])
   return single ? `${monthsLabel} ${yearsLabel}` : `${monthsLabel} · ${yearsLabel}`;
 }
 
-/**
- * How many marks are set — what decides whether the chip strip is drawn. It counts the MONTHS and the
- * SERVICES, never the years: `years` is never empty, so a year chip could not always be removed, and
- * its dropdown already shows the whole selection in its label.
- */
-/**
- * The period with the marked slice IN FRONT — the one composition of the two, read by the tiles, by
- * the three cards' subtitles and by the report's header. Two of them would let the screen and the
- * paper name the same reading differently.
- */
+/** The period with the marked slice in front — the one composition of the two. */
 export function scopedPeriodLabel(scope: string | null, period: string): string {
   return scope ? `${scope} · ${period}` : period;
 }
 
+/** How many marks are set, years excluded: the year is never empty and is not chipped. */
 export function activeMarkCount(filters: SalesFilters): number {
-  return filters.months.length + filters.services.length;
+  return (
+    filters.months.length +
+    filters.seguros.length +
+    filters.tipos.length +
+    filters.articles.length +
+    filters.vendors.length
+  );
 }

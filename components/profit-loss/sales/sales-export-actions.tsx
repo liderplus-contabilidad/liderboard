@@ -4,21 +4,14 @@ import { FileSpreadsheet, FileText } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { ExportActions, type ExportOption } from "@/components/ui/export-actions";
-import { usePygData } from "../pyg-data-provider";
 import { deriveSalesIdentity } from "@/lib/sales/identity";
 import { useSalesData } from "./sales-data-provider";
 import { SalesUploadModal } from "./sales-upload-modal";
 
 /**
- * The `ExportActions` wrapper for sales: a module only wires what «Cargar» opens, what «Exportar»
- * offers and what the `ⓘ` says, never its own button markup.
- *
- * **The Excel is a COPY of what is stored** —every month of the open client, one sheet each, in the
- * report's own shape (`lib/sales/export.ts`)— and it exists so the data can leave the browser and
- * come back through the ordinary upload unchanged. It is NOT a file for the accounting system, which
- * never receives one: what the firm hands over is the «Informe PDF», the other entry of the same
- * menu. The preview loads dynamically: it mounts one chart per section and cannot weigh on the load
- * of a screen that most of the time is only looked at.
+ * The `ExportActions` wrapper for sales. The Excel is a COPY of what is stored —every month of
+ * the client, read from the base and not from the screen's marked years, and built in the Worker—
+ * so it can come back through the ordinary upload. The preview loads dynamically.
  */
 const SalesReportPreview = dynamic(
   () => import("./report/sales-report-preview").then((mod) => mod.SalesReportPreview),
@@ -32,49 +25,56 @@ export function SalesExportActions({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { activeClient } = usePygData();
-  const { clientId, months } = useSalesData();
-  const logo = activeClient?.logo;
+  const { clientId, coverage } = useSalesData();
   const [reportOpen, setReportOpen] = useState(false);
-  const ready = clientId !== null && months.length > 0;
+  const ready = clientId !== null && coverage.length > 0;
 
   const exports = useMemo<ExportOption[]>(
     () => [
       {
         id: "data",
         title: "Excel con tus datos",
-        description: "Todos los meses cargados, una hoja por mes; se vuelve a subir tal cual",
+        description: "Todos los meses cargados en una hoja; se vuelve a subir tal cual",
         icon: FileSpreadsheet,
         iconClassName: "text-brand",
-        disabled: months.length === 0,
+        disabled: !ready,
         disabledReason:
           clientId === null
             ? "Abre un cliente en Pérdidas y Ganancias"
             : "Carga un mes de ventas primero.",
         run: async () => {
-          if (months.length === 0) {
+          if (clientId === null || coverage.length === 0) {
             return;
           }
-          const [exportMod, { downloadBlob }] = await Promise.all([
-            import("@/lib/sales/export"),
-            import("@/lib/download"),
-          ]);
-          const blob = await exportMod.workbookToBlob(exportMod.buildSalesWorkbook(months, logo));
-          // Named after the razón social the FILES declare, never the user's label: the file is a
-          // copy of the data and its name says which company's it is.
+          const [{ monthsForClientYears }, { buildSalesBlob }, exportMod, { downloadBlob }] =
+            await Promise.all([
+              import("@/lib/sales/db"),
+              import("@/lib/sales/upload/client"),
+              import("@/lib/sales/export"),
+              import("@/lib/download"),
+            ]);
+          // Every year, not the marked ones: this is the backup.
+          const years = [...new Set(coverage.map((row) => row.year))].sort((a, b) => a - b);
+          const stored = await monthsForClientYears(clientId, years);
+          // The coverage carries the day and the company code the sheet writes.
+          const byId = new Map(coverage.map((row) => [row.id, row]));
+          const months = stored.map((month) => ({
+            ...month,
+            firstDay: byId.get(month.id)?.firstDay ?? 1,
+            companyCode: byId.get(month.id)?.companyCode ?? "",
+          }));
+          const blob = await buildSalesBlob(months);
+          // Named after the company code the files declare, never the user's label.
           downloadBlob(
             blob,
-            exportMod.salesExportFilename(
-              deriveSalesIdentity(months)?.companyName ?? "",
-              months.map((month) => month.year),
-            ),
+            exportMod.salesExportFilename(deriveSalesIdentity(coverage)?.companyCode ?? "", years),
           );
         },
       },
       {
         id: "pdf",
         title: "Informe PDF",
-        description: "Vista previa para imprimir: las tres lecturas con las marcas de la barra",
+        description: "Vista previa para imprimir: las lecturas con las marcas de la barra",
         icon: FileText,
         iconClassName: "text-muted",
         disabled: !ready,
@@ -84,7 +84,7 @@ export function SalesExportActions({
         run: () => setReportOpen(true),
       },
     ],
-    [months, clientId, logo, ready],
+    [coverage, clientId, ready],
   );
 
   return (

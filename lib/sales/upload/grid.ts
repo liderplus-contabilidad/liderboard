@@ -1,334 +1,232 @@
 /**
- * WHERE each thing is in the «Venta de Servicios por FACTURA» report, and how a cell is read.
+ * WHERE each thing is in the flat sales report, and how a cell is read.
  *
- * Everything is located by the LABEL the report itself writes —the title, `Desde:` / `Hasta:`, and the
- * header `CODIGO` · `NOMBRE` · `CANTIDAD` · `VENTA TOTAL`— and never by a fixed row or column: it is
- * the same family of report `microplus-grid.ts` and `dingoo-grid.ts` already read, and it spreads its
- * preamble across loose cells, so a coordinate would start reading the wrong cell the day the
- * template's margins change — and it would do it silently.
- *
- * Split from the strategy for the same reason as in PyG: the delicate half —locating labels and
- * deciding which row is a datum— is tested over bare grids, with no workbook in the way.
+ * The report is a table: a header row, then one row per invoice LINE. Everything is located by
+ * LABEL, on whatever row carries the header — which is also what lets the module's own download,
+ * whose header sits under a letterhead, come back in. Seven labels are required (the six the firm
+ * reads plus `COD. ARTICULO`); every other column is optional and ignored.
  */
 import { compactLabel, type Cell } from "@/lib/excel/workbook";
+import { parseCurrency } from "@/lib/format";
 
-/** The title that identifies the report. It is compared already compacted (no accents, no double
- *  spaces), so it does not matter how the template writes it. */
-export const REPORT_TITLE = "venta de servicios por factura";
+/** The labels, compared already compacted (no accents, no double spaces, case-insensitive). */
+const DATE_LABEL = "fecha";
+const INSURER_LABEL = "seguro";
+/** The accounting system writes a trailing full stop; both spellings are accepted. */
+const TYPE_LABELS = ["tipo de servicio.", "tipo de servicio"];
+const CODE_LABEL = "cod. articulo";
+const NAME_LABEL = "nombre del articulo";
+const AMOUNT_LABEL = "neto";
+const VENDOR_LABEL = "vendedor";
+/** Optional: the module's identity (`identity.ts`). */
+const COMPANY_LABEL = "cod. empresa";
 
-const CODE_LABEL = "codigo";
-const NAME_LABEL = "nombre";
-const QUANTITY_LABEL = "cantidad";
-const AMOUNT_LABEL = "venta total";
-const FROM_LABEL = "desde:";
-const TO_LABEL = "hasta:";
+/** The required labels, as they are named back to the user when one is missing. */
+export const REQUIRED_LABELS = [
+  "FECHA",
+  "SEGURO",
+  "TIPO DE SERVICIO",
+  "COD. ARTICULO",
+  "NOMBRE DEL ARTICULO",
+  "NETO",
+  "VENDEDOR",
+] as const;
 
-/** The FOOTER's labels, which describe the print job and not the report. */
-const PRINT_LABELS = new Set(["pagina:", "página:", "fecha:", "hora:", "usuario:"]);
-
-const DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
-
-/**
- * A SERVICE's code exactly as the report writes it: a backslash and two digits (`\01`). It is kept
- * verbatim in the datum —it is what the accountant checks—, but to recognise it it is also accepted
- * without the backslash, because SheetJS may return the cell already cleaned depending on how it is
- * formatted.
- */
-const SERVICE_CODE = /^\\?\d{2}$/;
+/** The system's own text (`2026-03-15 00:00:00.000`), and what `readDenseRows` turns a date
+ *  cell into. */
+const DATE = /^(\d{4})-(\d{2})-(\d{2})/;
+/** `dd/mm/aaaa`, for a hand-made file. */
+const DATE_DMY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/;
 
 export function salesLabel(cell: Cell): string {
   return compactLabel(cell);
 }
 
-function text(cell: Cell): string {
-  return typeof cell === "string" ? cell.trim() : typeof cell === "number" ? String(cell) : "";
+/**
+ * A cell as text, trimmed and with inner whitespace collapsed — HERE, once: the real file brings
+ * trailing spaces on its names, and `'BMI DEL ECUADOR '` left alone is a second insurer.
+ */
+export function salesText(cell: Cell): string {
+  if (cell === null || cell === undefined) {
+    return "";
+  }
+  return String(cell).replace(/\s+/g, " ").trim();
 }
 
 /**
- * The amounts arrive as TEXT with a thousands separator (`"107,231.22"`). Converting them with a bare
- * `Number` would give `NaN`, and a `NaN` rounded to `0` would leave the whole report at zero with not
- * a single visible error — which is exactly why this lives here with its own tests.
- *
- * `null` when the cell is not a number: it is what separates a data row from a label row.
+ * The amounts arrive as TEXT (`"2.0000"`, `"1,234.56"`); a bare `Number` would give `NaN`.
+ * `null` when the cell is not a number.
  */
 export function toSalesNumber(cell: Cell): number | null {
   if (typeof cell === "number") {
     return Number.isFinite(cell) ? cell : null;
   }
-  const raw = text(cell).replace(/\$/g, "").replace(/\s/g, "");
+  const raw = salesText(cell).replace(/\s/g, "");
   if (raw === "") {
     return null;
   }
-  // The accountant's parentheses are the negative sign.
+  // Parentheses are the accountant's negative sign.
   const negative = /^\(.*\)$/.test(raw);
-  const parsed = Number(raw.replace(/[()]/g, "").replace(/,/g, ""));
-  if (!Number.isFinite(parsed)) {
+  // `parseCurrency` and not a bare `Number` over stripped commas: it is the app's one reading of
+  // an amount, and it REJECTS the inverted convention («17.338,85», «12,5») instead of misreading
+  // it by a factor of a thousand.
+  // The system writes amounts under one without their leading zero («.4000»): 82.762 of the real
+  // file's rows. The zero is restored before the strict reading, which demands a digit there.
+  const parsed = parseCurrency(raw.replace(/[()]/g, "").replace(/^(-?\$?)\./, "$10."));
+  if (parsed === null) {
     return null;
   }
   return negative ? -parsed : parsed;
 }
 
-/** Is this the sales-by-service report? The title is searched for by its label, in any cell of the
- *  preamble — never in the file's name, which is renamed without consequence. */
-export function hasSalesTitle(grid: readonly Cell[][]): boolean {
-  return grid.some((row) => row.some((cell) => salesLabel(cell).includes(REPORT_TITLE)));
+/** A line's date, or `null` when the cell carries none that can be read. */
+export function toSalesDate(cell: Cell): { year: number; monthIndex: number; day: number } | null {
+  const raw = salesText(cell);
+  const iso = DATE.exec(raw);
+  if (iso) {
+    return { year: Number(iso[1]), monthIndex: Number(iso[2]) - 1, day: Number(iso[3]) };
+  }
+  const dmy = DATE_DMY.exec(raw);
+  if (dmy) {
+    return { year: Number(dmy[3]), monthIndex: Number(dmy[2]) - 1, day: Number(dmy[1]) };
+  }
+  return null;
 }
 
 export interface SalesHeader {
   row: number;
+  dateCol: number;
+  insurerCol: number;
+  typeCol: number;
   codeCol: number;
   nameCol: number;
-  quantityCol: number;
   amountCol: number;
+  vendorCol: number;
+  /** `-1` when the file does not ship it. */
+  companyCol: number;
 }
 
-/**
- * The header row is the one carrying all FOUR labels at once. All four are required and not just two
- * because a `CODIGO`+`NOMBRE` header is also written by MicroPlus' balances, and with two this parser
- * would have claimed their files — the same error MicroPlus once made with Dingoo's.
- *
- * **Its columns identify the FORMAT, they do not locate the data**, and that distinction cost the
- * first reading of this report. The labels go CENTRED over merged cells, so they fall in different
- * columns from those of their own values: in the real file `CANTIDAD` is in column 19 and the
- * quantities in 18, `VENTA TOTAL` in 25 and the amounts in 24. Reading the data by the label's column
- * returns an empty cell in EVERY row, which is exactly how the failure looked: the file was
- * recognised, the period was read, and the report «brought no line at all». What locates a line is
- * `readSalesRow`, by RELATIVE position.
- */
+/** The required labels the closest candidate row was missing. */
+export function missingSalesLabels(grid: readonly Cell[][]): string[] {
+  let best: string[] | null = null;
+  for (const row of grid) {
+    const found = locate(row);
+    const missing = REQUIRED_LABELS.filter((_label, index) => found.required[index] === -1);
+    if (missing.length === 0) {
+      return [];
+    }
+    // The row that got closest is the one worth naming the gap of.
+    if (best === null || missing.length < best.length) {
+      best = missing;
+    }
+  }
+  return best ?? [...REQUIRED_LABELS];
+}
+
+interface Located {
+  /** Column of each entry of `REQUIRED_LABELS`, in that order; `-1` when absent. */
+  required: number[];
+  companyCol: number;
+}
+
+function locate(row: readonly Cell[]): Located {
+  const required = [-1, -1, -1, -1, -1, -1, -1];
+  let companyCol = -1;
+  for (let col = 0; col < row.length; col++) {
+    const label = salesLabel(row[col]);
+    if (label === DATE_LABEL && required[0] === -1) {
+      required[0] = col;
+    } else if (label === INSURER_LABEL && required[1] === -1) {
+      required[1] = col;
+    } else if (TYPE_LABELS.includes(label) && required[2] === -1) {
+      required[2] = col;
+    } else if (label === CODE_LABEL && required[3] === -1) {
+      required[3] = col;
+    } else if (label === NAME_LABEL && required[4] === -1) {
+      required[4] = col;
+    } else if (label === AMOUNT_LABEL && required[5] === -1) {
+      required[5] = col;
+    } else if (label === VENDOR_LABEL && required[6] === -1) {
+      required[6] = col;
+    } else if (label === COMPANY_LABEL && companyCol === -1) {
+      companyCol = col;
+    }
+  }
+  return { required, companyCol };
+}
+
+/** The header: the first row carrying all seven required labels, on whatever row it sits. */
 export function findSalesHeader(grid: readonly Cell[][]): SalesHeader | null {
   for (let row = 0; row < grid.length; row++) {
-    const cells = grid[row] ?? [];
-    const found = { code: -1, name: -1, quantity: -1, amount: -1 };
-    for (let col = 0; col < cells.length; col++) {
-      const label = salesLabel(cells[col]);
-      if (label === CODE_LABEL && found.code === -1) {
-        found.code = col;
-      } else if (label === NAME_LABEL && found.name === -1) {
-        found.name = col;
-      } else if (label === QUANTITY_LABEL && found.quantity === -1) {
-        found.quantity = col;
-      } else if (label === AMOUNT_LABEL && found.amount === -1) {
-        found.amount = col;
-      }
-    }
-    if (found.code !== -1 && found.name !== -1 && found.quantity !== -1 && found.amount !== -1) {
-      return {
-        row,
-        codeCol: found.code,
-        nameCol: found.name,
-        quantityCol: found.quantity,
-        amountCol: found.amount,
-      };
-    }
-  }
-  return null;
-}
-
-/** Is this row a printed footer (`Pagina:`, `Fecha:`)? */
-export function isPrintRow(row: readonly Cell[]): boolean {
-  return row.some((cell) => PRINT_LABELS.has(salesLabel(cell)));
-}
-
-/** The indices of a row's NON-empty cells, left to right. */
-function filledColumns(row: readonly Cell[]): number[] {
-  const columns: number[] = [];
-  for (let col = 0; col < row.length; col++) {
-    if (row[col] !== null && row[col] !== "") {
-      columns.push(col);
-    }
-  }
-  return columns;
-}
-
-export interface SalesRow {
-  /** Verbatim, with its backslash (`\\01`) — it is what the accountant checks. */
-  serviceCode: string;
-  serviceName: string;
-  /** Verbatim too, and EMPTY when the report declares none — see `payerLabel`. */
-  payer: string;
-  quantity: number;
-  amount: number;
-  /** Where the amount was. It is needed by the CLOSING row, which has no code to hang off. */
-  amountCol: number;
-}
-
-/**
- * An invoice LINE, read by RELATIVE position: the service's code, and behind it the four non-empty
- * cells that follow it —service name, payer, quantity and amount—.
- *
- * Every row of the report is a COMPLETE line; there is no grouping by service and no subtotals, and
- * the code is repeated on each one. They are read by relative position and not by a fixed column
- * because the values live in columns no label names (see `findSalesHeader`), and because it is the
- * rule `microplus-grid.ts` already applies in this same family of reports: the value is the next cell
- * with something in it, not cell number N.
- *
- * `null` when the row is not a line — the preamble, the header, the close. The service, the quantity
- * and the amount are all required and the last two must be numbers, so a row of labels cannot slip in
- * as a line. The PAYER is the one cell allowed to be missing: the report leaves it empty when it does
- * not know who is being billed, and that line is still a sale of the month.
- */
-export function readSalesRow(row: readonly Cell[]): SalesRow | null {
-  const columns = filledColumns(row);
-  const at = columns.findIndex((col) => SERVICE_CODE.test(text(row[col])));
-  const rest = at === -1 ? [] : columns.slice(at);
-  // FOUR cells are the minimum —code, service, quantity and amount—, because the PAYER may be
-  // missing: reading by relative position, an empty cell is not an empty string but one cell fewer
-  // in the row, and demanding five dropped that line whole. Its dollars then left the report and
-  // only the balance against the declared total said anything, naming a difference with no cause in
-  // sight.
-  if (rest.length < 4) {
-    return null;
-  }
-  const [codeCol, nameCol] = rest;
-  // What tells the two cases apart is that quantity and amount are NUMBERS and a payer is not: with
-  // a payer, the third cell is its name; without one, it is already the quantity. Judging it by the
-  // cell and not by how many the row has is what keeps a trailing stray cell from putting the payer
-  // back where there is none.
-  const named = rest.length >= 5 && toSalesNumber(row[rest[2]]) === null;
-  const [quantityCol, amountCol] = named ? rest.slice(3, 5) : rest.slice(2, 4);
-  const serviceName = text(row[nameCol]);
-  const payer = named ? text(row[rest[2]]) : "";
-  const quantity = toSalesNumber(row[quantityCol]);
-  const amount = toSalesNumber(row[amountCol]);
-  if (serviceName === "" || quantity === null || amount === null) {
-    return null;
-  }
-  return { serviceCode: text(row[codeCol]), serviceName, payer, quantity, amount, amountCol };
-}
-
-/**
- * The total the report declares at the close, read in the SAME column the lines write their amount in.
- *
- * That row carries no label at all —it is the quantity and the amount, bare, aligned under their
- * columns—, so there is no word to look for it by; what identifies it is where it writes its figure.
- * Looking for it by a `TOTAL` label would have found instead the `TOTAL ITEMS` row, which counts LINES
- * and not dollars, and the balance would have compared the month's amount against a count.
- *
- * `null` if it does not write one: then there is nothing to square against, and that is better than
- * squaring against a figure that means something else.
- */
-export function findDeclaredTotal(
-  grid: readonly Cell[][],
-  fromRow: number,
-  amountCol: number,
-): number | null {
-  let total: number | null = null;
-  for (let row = fromRow; row < grid.length; row++) {
-    const value = toSalesNumber(grid[row]?.[amountCol] ?? null);
-    if (value !== null) {
-      total = value;
-    }
-  }
-  return total;
-}
-
-export interface SalesRange {
-  fromDay: number;
-  /** 0–11. */
-  fromMonth: number;
-  fromYear: number;
-  toDay: number;
-  toMonth: number;
-  toYear: number;
-}
-
-function parseDate(cell: Cell): { day: number; month: number; year: number } | null {
-  const match = DATE.exec(text(cell));
-  return match
-    ? { day: Number(match[1]), month: Number(match[2]) - 1, year: Number(match[3]) }
-    : null;
-}
-
-/** The index of the first non-empty cell strictly after `from`, or `-1`. */
-function nextFilledCol(row: readonly Cell[], from: number): number {
-  for (let col = from + 1; col < row.length; col++) {
-    if (row[col] !== null && row[col] !== "") {
-      return col;
-    }
-  }
-  return -1;
-}
-
-/**
- * The period, read from `Desde:` / `Hasta:` — label and date in SEPARATE cells, as in MicroPlus, and
- * not in the running `Desde el … hasta el …` line of the single statement. Both labels may be on the
- * same row or on different rows, so each one is looked for on its own.
- *
- * `null` if either of the two is missing: with no declared period there is NO upload, because deducing
- * it from somewhere else —the file's name, the printing date— is how a month ends up landing on
- * another.
- */
-export function findSalesRange(grid: readonly Cell[][]): SalesRange | null {
-  const from = findLabelledDate(grid, FROM_LABEL);
-  const to = findLabelledDate(grid, TO_LABEL);
-  if (!from || !to) {
-    return null;
-  }
-  return {
-    fromDay: from.day,
-    fromMonth: from.month,
-    fromYear: from.year,
-    toDay: to.day,
-    toMonth: to.month,
-    toYear: to.year,
-  };
-}
-
-function findLabelledDate(
-  grid: readonly Cell[][],
-  label: string,
-): { day: number; month: number; year: number } | null {
-  for (const row of grid) {
-    // `startsWith` and not `===`: the report writes the date in its own cell («Desde:» ·
-    // «01/04/2026») some times and stuck to the label («Desde: 01/04/2026») others, and with strict
-    // equality the second form did not find the label and the file was rejected for not declaring a
-    // period.
-    const col = row.findIndex((cell) => salesLabel(cell).startsWith(label));
-    if (col === -1) {
+    const { required, companyCol } = locate(grid[row] ?? []);
+    if (required.some((col) => col === -1)) {
       continue;
     }
-    // The date may come stuck to the label in the same cell («Desde: 01/04/2026») or in the next cell
-    // with something in it — both forms have been seen in this family of reports.
-    const inline = DATE.exec(text(row[col]).replace(/^[^:]*:\s*/, ""));
-    if (inline) {
-      return { day: Number(inline[1]), month: Number(inline[2]) - 1, year: Number(inline[3]) };
-    }
-    const valueCol = nextFilledCol(row, col);
-    const parsed = valueCol === -1 ? null : parseDate(row[valueCol]);
-    if (parsed) {
-      return parsed;
-    }
+    const [dateCol, insurerCol, typeCol, codeCol, nameCol, amountCol, vendorCol] = required;
+    return {
+      row,
+      dateCol,
+      insurerCol,
+      typeCol,
+      codeCol,
+      nameCol,
+      amountCol,
+      vendorCol,
+      companyCol,
+    };
   }
   return null;
 }
 
+/** A line, plus the date it is filed by. */
+export interface SalesRow {
+  year: number;
+  monthIndex: number;
+  day: number;
+  seguro: string;
+  tipo: string;
+  articleCode: string;
+  articleName: string;
+  vendor: string;
+  amount: number;
+  companyCode: string;
+}
+
 /**
- * The razón social: the first TEXT line of the preamble that is neither the report's own title nor a
- * printing label. It is the same rule `dingoo-grid.ts` applies by skipping `REPORTE` and `ESTADO DE
- * RESULTADOS` — without it, «the first non-empty line» returns the report's name instead of the
- * company's.
+ * What a row says.
+ *
+ *   - `null` — not a line: neither a numeric amount nor a readable date (blank row, stray label).
+ *   - `{ undated: true }` — a line whose date cannot be read; the caller counts and declares it.
+ *   - `{ unreadable: true }` — a line whose NETO is written but cannot be read as an amount. It is
+ *     counted and declared too: reading it as zero would lose its dollars in silence.
+ *
+ * A line with no amount reads as zero and is kept: lines at $0 are real.
  */
-export function findSalesCompany(grid: readonly Cell[][], headerRow: number): string {
-  for (let row = 0; row < headerRow; row++) {
-    // The row is NOT skipped whole even if it carries a footer: the report writes the razón social on
-    // the left and the pagination twenty columns to its right, on the SAME row. What is filtered is
-    // each cell.
-    for (const cell of grid[row] ?? []) {
-      // TEXT only: a razón social never arrives as a number, and a loose number of the preamble (the
-      // page, a running number) does.
-      if (typeof cell !== "string") {
-        continue;
-      }
-      const raw = cell.trim();
-      if (raw === "" || !/\p{L}/u.test(raw) || DATE.test(raw)) {
-        continue;
-      }
-      const label = salesLabel(cell);
-      if (label.includes(REPORT_TITLE) || PRINT_LABELS.has(label) || label.endsWith(":")) {
-        continue;
-      }
-      return raw;
-    }
+export function readSalesRow(
+  row: readonly Cell[],
+  header: SalesHeader,
+): SalesRow | { undated: true } | { unreadable: true } | null {
+  const amount = toSalesNumber(row[header.amountCol]);
+  const date = toSalesDate(row[header.dateCol]);
+  if (amount === null && date === null) {
+    return null;
   }
-  return "";
+  if (!date) {
+    return { undated: true };
+  }
+  if (amount === null && salesText(row[header.amountCol]) !== "") {
+    return { unreadable: true };
+  }
+  return {
+    year: date.year,
+    monthIndex: date.monthIndex,
+    day: date.day,
+    seguro: salesText(row[header.insurerCol]),
+    tipo: salesText(row[header.typeCol]),
+    articleCode: salesText(row[header.codeCol]),
+    articleName: salesText(row[header.nameCol]),
+    vendor: salesText(row[header.vendorCol]),
+    amount: amount ?? 0,
+    companyCode: header.companyCol === -1 ? "" : salesText(row[header.companyCol]),
+  };
 }

@@ -1,133 +1,95 @@
 /**
- * The «Ventas por servicio» download: the client's months, one sheet each, in the SAME shape
- * `upload/parse.ts` reads. It is a copy of what is stored and nothing else — the invoice lines and
- * what the month keeps about itself (the razón social, the total the original report declared) —
- * so a file downloaded here re-enters through the ordinary upload and leaves the base as it was.
- * `export.test.ts` proves it by `toEqual`, not by sampling fields.
+ * The «Ventas por servicio» download: every month of the client in ONE flat sheet, in the shape
+ * `upload/parse.ts` reads, so it re-enters through the ordinary upload and leaves the base as it
+ * was (`export.test.ts`). Nothing derived goes in.
  *
- * Three things follow from «what is stored, verbatim»:
- *
- *   - The razón social is written WITHOUT a fallback. Writing «LiderPlus» where the month kept
- *     nothing would change the month's identity on the way back.
- *   - A `declaredTotal` of `null` writes NO closing row. Writing the sum would invent a total the
- *     original report never declared, and the month would come back squaring against itself.
- *   - Nothing derived goes in: the breakdown by service and the concentration by payer are
- *     recomputed on every read, and the PDF report is already their paper.
- *
- * The grid is located by LABEL on the way in, so the way out need not reproduce the report's
- * columns nor its centred-over-merged-cells misalignment: the labels have to be there, and each
- * line has to carry code · service · payer · quantity · amount in that order.
- *
- * exceljs is imported statically here; UI code must reach this through a dynamic `import()`.
+ * Written with SheetJS, the only output of the app that is: exceljs needs 4,6 GB for the real
+ * file's rows. The price is the letterhead (`writeLetterhead` is exceljs'). UI code reaches this
+ * through the Worker.
  */
-import ExcelJS from "exceljs";
-import { MONTHS_FULL_ES, monthBounds } from "@/lib/date";
-import { writeLetterhead } from "@/lib/excel-logo";
-import type { EntityLogo } from "@/lib/logos";
+import * as XLSX from "xlsx";
 import type { SalesMonth } from "./types";
 
-/** The report's title, as the parser's `REPORT_TITLE` compacts it. */
-const TITLE = "VENTA DE SERVICIOS POR FACTURA";
-
-const CODE_COL = 1;
-const SERVICE_COL = 2;
-const PAYER_COL = 3;
-const QUANTITY_COL = 4;
-const AMOUNT_COL = 5;
-const COLUMNS = 5;
-
-const AMOUNT_FMT = "#,##0.00;-#,##0.00";
+/** The seven labels the parser requires, written as the accounting system writes them. */
+export const EXPORT_HEADER = [
+  "FECHA",
+  "SEGURO",
+  "TIPO DE SERVICIO.",
+  "COD. ARTICULO",
+  "NOMBRE DEL ARTICULO",
+  "VENDEDOR",
+  "NETO",
+] as const;
 
 /**
- * One workbook, one sheet per month, chronological whatever order the months arrive in. The logo
- * heads every sheet the way it heads PyG's raw month: it is an image, not a cell, so the reading
- * never meets it.
+ * A line's date, written as TEXT in the system's own shape: a date cell would make the round trip
+ * depend on how a spreadsheet serial is decoded. The day is the coverage's `firstDay` — the module
+ * stores no day per line.
  */
-export function buildSalesWorkbook(
-  months: readonly SalesMonth[],
-  logo?: EntityLogo,
-): ExcelJS.Workbook {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "LiderPlus";
+function dateCell(year: number, monthIndex: number, day: number): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${year}-${pad(monthIndex + 1)}-${pad(day)} 00:00:00.000`;
+}
+
+export interface SalesExportMonth extends SalesMonth {
+  firstDay: number;
+  companyCode: string;
+}
+
+/** One workbook, one sheet, chronological. `COD. EMPRESA` is written too: it is the module's
+ *  identity, and a backup must not lose which company it belongs to. */
+export function buildSalesWorkbook(months: readonly SalesExportMonth[]): XLSX.WorkBook {
   const sorted = [...months].sort((a, b) => a.year - b.year || a.monthIndex - b.monthIndex);
+  const rows: (string | number)[][] = [["COD. EMPRESA", ...EXPORT_HEADER]];
   for (const month of sorted) {
-    writeMonthSheet(wb, month, logo);
+    const date = dateCell(month.year, month.monthIndex, month.firstDay);
+    for (const line of month.lines) {
+      rows.push([
+        month.companyCode,
+        date,
+        line.seguro,
+        line.tipo,
+        line.articleCode,
+        line.articleName,
+        line.vendor,
+        line.amount,
+      ]);
+    }
   }
-  return wb;
-}
-
-function writeMonthSheet(wb: ExcelJS.Workbook, month: SalesMonth, logo?: EntityLogo): void {
-  const ws = wb.addWorksheet(`${MONTHS_FULL_ES[month.monthIndex]} ${month.year}`);
-
-  // The widths, before the letterhead: the logo's anchor comes from them.
-  ws.getColumn(CODE_COL).width = 10;
-  ws.getColumn(SERVICE_COL).width = 30;
-  ws.getColumn(PAYER_COL).width = 44;
-  ws.getColumn(QUANTITY_COL).width = 12;
-  ws.getColumn(AMOUNT_COL).width = 16;
-
-  // The razón social is the first TEXT line of the preamble — `findSalesCompany`'s rule — and the
-  // title comes after it for that reason: written first, it would be skipped as the title and the
-  // company would still be found, but the order is what the real report prints.
-  writeLetterhead(wb, ws, {
-    leftLogo: logo,
-    columns: COLUMNS,
-    lines: [
-      ...(month.companyName ? [{ text: month.companyName, font: { bold: true, size: 14 } }] : []),
-      { text: TITLE, font: { bold: true } },
-    ],
-  });
-
-  // Label and date in SEPARATE cells: the form `findLabelledDate` reads first.
-  const bounds = monthBounds(month.year, month.monthIndex);
-  ws.addRow(["Desde:", bounds.start, "Hasta:", bounds.end]);
-  ws.addRow([]);
-
-  const header = ws.addRow(["CODIGO", "NOMBRE", "", "CANTIDAD", "VENTA TOTAL"]);
-  header.font = { bold: true };
-  ws.views = [{ state: "frozen", ySplit: header.number }];
-
-  for (const line of month.lines) {
-    // The code as TEXT, so `\01` keeps its backslash and its zero; an empty payer is an empty cell,
-    // which is the four-cell line the parser already reads.
-    const row = ws.addRow([
-      line.serviceCode,
-      line.serviceName,
-      line.payer || null,
-      line.quantity,
-      line.amount,
-    ]);
-    row.getCell(AMOUNT_COL).numFmt = AMOUNT_FMT;
-  }
-
-  if (month.declaredTotal !== null) {
-    // The report's own close: the count of LINES with its label, then the total with NO label under
-    // the amount column — `findDeclaredTotal` reads it there, and only there.
-    ws.addRow(["TOTAL ITEMS", month.lines.length]);
-    const total = ws.addRow(["", "", "", sumQuantity(month), month.declaredTotal]);
-    total.font = { bold: true };
-    total.getCell(AMOUNT_COL).numFmt = AMOUNT_FMT;
-  }
-}
-
-function sumQuantity(month: SalesMonth): number {
-  return month.lines.reduce((sum, line) => sum + line.quantity, 0);
+  const sheet = XLSX.utils.aoa_to_sheet(rows);
+  sheet["!cols"] = [
+    { wch: 12 },
+    { wch: 24 },
+    { wch: 26 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 60 },
+    { wch: 32 },
+    { wch: 14 },
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "Ventas");
+  return workbook;
 }
 
 /** Serializes a workbook to a Blob for `downloadBlob`. */
-export async function workbookToBlob(wb: ExcelJS.Workbook): Promise<Blob> {
-  const buffer = await wb.xlsx.writeBuffer();
+export function workbookToBlob(workbook: XLSX.WorkBook): Blob {
+  const buffer = XLSX.write(workbook, {
+    type: "array",
+    bookType: "xlsx",
+    compression: true,
+  }) as ArrayBuffer;
   return new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 }
 
 /** `VENTAS_<EMPRESA>_<AÑOS>.xlsx`, so a folder of backups reads on its own. */
-export function salesExportFilename(companyName: string, years: readonly number[]): string {
+export function salesExportFilename(companyCode: string, years: readonly number[]): string {
   const sorted = [...new Set(years)].sort((a, b) => a - b);
   const span =
     sorted.length > 1 ? `${sorted[0]}-${sorted[sorted.length - 1]}` : String(sorted[0] ?? "");
-  const company = companyName
+  const company = companyCode
     .replace(/[\\/:*?"<>|]/g, "")
     .replace(/\s+/g, " ")
     .trim()

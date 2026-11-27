@@ -1,39 +1,25 @@
 /**
- * From the invoice lines to the three aggregations the screen reads: by SERVICE, by PAYER and by
- * MONTH.
+ * From the invoice lines to what the screen reads: the breakdowns by INSURER, SERVICE TYPE,
+ * ARTICLE and SALESPERSON, the month axis, and the types opened into their articles.
  *
- * **No view walks loose lines.** A month brings ~2,800 and a year ~33,000, so everything that is
- * drawn goes through here first; a card that filtered the raw list would be a second definition of
- * «how much this service sold», capable of drifting from this one with no figure giving it away.
- *
- * Pure and tested, like the rest of `lib/`: these are the rules that can be wrong —what is summed,
- * what is ordered and what is a gap as against a zero—, and none of them needs a browser.
+ * No view walks loose lines: every reading aggregates here first, so there is one definition of
+ * each figure. Everything is measured on the NETO.
  */
-import { payerLabel } from "./payer";
-import type { SalesLine, SalesMonth } from "./types";
+import type { SalesCoverage, SalesLine, SalesMonth } from "./types";
 
-/** A period's close: the four figures that head the screen. */
+/** A period's close: the figures that head the screen. */
 export interface SalesTotals {
   amount: number;
-  /** How many invoice LINES, not how many invoices: the report does not bring the invoice number. */
+  /** Invoice LINES, not invoices: the invoice number is not stored. */
   lineCount: number;
-  payerCount: number;
+  insurerCount: number;
   /** Sales ÷ lines. `null` with no line at all, never `0`: dividing by zero does not give zero. */
-  averageTicket: number | null;
+  averageLine: number | null;
 }
 
-export interface ServiceTotal {
-  /** The report's verbatim code (`\01`) — the series' stable identity. */
-  code: string;
-  name: string;
-  amount: number;
-  quantity: number;
-}
-
-export interface PayerTotal {
-  /** The raw name, normalized only in whitespace: the key it was grouped by. Empty when none. */
+/** One row of a breakdown. `id` is the identity it was grouped by, `label` what is drawn. */
+export interface SalesGroup {
   id: string;
-  /** What is WRITTEN — the file's own name, or the group for the ones it leaves blank. */
   label: string;
   amount: number;
   lineCount: number;
@@ -45,191 +31,257 @@ export interface MonthPoint {
   amount: number | null;
 }
 
-/** A period's sales, already aggregated by its three axes. */
+/** A service type with its own complete article ranking, largest first. */
+export interface TypeBreakdown extends SalesGroup {
+  articles: SalesGroup[];
+}
+
+/** A period's sales, already aggregated by its four axes. */
 export interface SalesReading {
   totals: SalesTotals;
-  services: ServiceTotal[];
-  payers: PayerTotal[];
+  insurers: SalesGroup[];
+  types: SalesGroup[];
+  /** The same types, in the same order, each with its articles inside. */
+  typeArticles: TypeBreakdown[];
+  articles: SalesGroup[];
+  vendors: SalesGroup[];
+  /** How much of this period's NETO carries no salesperson at all. See `unattributed`. */
+  unattributed: UnattributedVendor;
 }
 
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }
 
-/** Inner whitespace collapsed and the ends trimmed: it is the only thing touched of a name that
- *  afterwards has to be checkable against the file. */
-function payerKey(name: string): string {
-  return name.replace(/\s+/g, " ").trim();
-}
-
-export function salesTotals(lines: readonly SalesLine[]): SalesTotals {
-  const amount = sum(lines.map((line) => line.amount));
-  const payers = new Set(lines.map((line) => payerKey(line.payer)));
-  return {
-    amount,
-    lineCount: lines.length,
-    payerCount: payers.size,
-    averageTicket: lines.length === 0 ? null : amount / lines.length,
-  };
-}
-
 /**
- * By service, largest to smallest. The name is set by the FIRST line that declares that code: the
- * report repeats it on every row, and if two rows disagreed what leads is the code, which is what the
- * accounting system indexes.
+ * An article's label: its NAME. The code stays the identity —the source system truncates names, so
+ * several codes share one— and joins the label only where two names collide (`disambiguate`).
  */
-export function byService(lines: readonly SalesLine[]): ServiceTotal[] {
-  const totals = new Map<string, ServiceTotal>();
-  for (const line of lines) {
-    const existing = totals.get(line.serviceCode);
-    if (existing) {
-      existing.amount += line.amount;
-      existing.quantity += line.quantity;
-      continue;
-    }
-    totals.set(line.serviceCode, {
-      code: line.serviceCode,
-      name: line.serviceName,
-      amount: line.amount,
-      quantity: line.quantity,
-    });
+export function articleLabel(code: string, name: string): string {
+  return name === "" ? code : name;
+}
+
+function withCode(label: string, code: string): string {
+  return code === "" ? label : `${label} · ${code}`;
+}
+
+/** Appends the code to the groups whose label another group of the SAME set also carries. */
+function disambiguate(groups: SalesGroup[]): SalesGroup[] {
+  const seen = new Map<string, number>();
+  for (const group of groups) {
+    seen.set(group.label, (seen.get(group.label) ?? 0) + 1);
   }
-  return [...totals.values()].sort(byAmountDesc);
+  if ([...seen.values()].every((count) => count === 1)) {
+    return groups;
+  }
+  return groups.map((group) =>
+    (seen.get(group.label) ?? 0) > 1 ? { ...group, label: withCode(group.label, group.id) } : group,
+  );
 }
 
-/**
- * By payer, largest to smallest, each one under the name the report gives it.
- *
- * The lines the report leaves with NO payer group themselves: `payerKey` reduces every one of them to
- * the same empty key, so they arrive as a single row that `payerLabel` names. There is no branch for
- * it here on purpose — a special case would be a second place able to decide what counts as «no
- * payer», and it would drift from the first.
- */
-export function byPayer(lines: readonly SalesLine[]): PayerTotal[] {
-  const totals = new Map<string, PayerTotal>();
+/** Groups the lines by one key, largest first. The first line declaring a key sets its label. */
+function groupBy(
+  lines: readonly SalesLine[],
+  key: (line: SalesLine) => string,
+  label: (line: SalesLine) => string,
+): SalesGroup[] {
+  const totals = new Map<string, SalesGroup>();
   for (const line of lines) {
-    const id = payerKey(line.payer);
+    const id = key(line);
     const existing = totals.get(id);
     if (existing) {
       existing.amount += line.amount;
       existing.lineCount += 1;
       continue;
     }
-    totals.set(id, { id, label: payerLabel(id), amount: line.amount, lineCount: 1 });
+    totals.set(id, { id, label: label(line), amount: line.amount, lineCount: 1 });
   }
   return [...totals.values()].sort(byAmountDesc);
 }
 
-function byAmountDesc(a: { amount: number }, b: { amount: number }): number {
-  return b.amount - a.amount;
+function byAmountDesc(a: SalesGroup, b: SalesGroup): number {
+  return b.amount - a.amount || a.label.localeCompare(b.label, "es");
 }
 
-export function readSales(lines: readonly SalesLine[]): SalesReading {
-  return { totals: salesTotals(lines), services: byService(lines), payers: byPayer(lines) };
+export function salesTotals(lines: readonly SalesLine[]): SalesTotals {
+  const amount = sum(lines.map((line) => line.amount));
+  const insurers = new Set(lines.map((line) => line.seguro));
+  return {
+    amount,
+    lineCount: lines.length,
+    insurerCount: insurers.size,
+    averageLine: lines.length === 0 ? null : amount / lines.length,
+  };
+}
+
+/** By insurer. `SEGURO` is never empty, so there is no «unidentified» group. */
+export function byInsurer(lines: readonly SalesLine[]): SalesGroup[] {
+  return groupBy(
+    lines,
+    (line) => line.seguro,
+    (line) => line.seguro,
+  );
+}
+
+/** By service type — a name; the report declares no code. */
+export function byType(lines: readonly SalesLine[]): SalesGroup[] {
+  return groupBy(
+    lines,
+    (line) => line.tipo,
+    (line) => line.tipo,
+  );
+}
+
+/** By article: identity is the CODE. See `articleLabel`. */
+export function byArticle(lines: readonly SalesLine[]): SalesGroup[] {
+  return disambiguate(
+    groupBy(
+      lines,
+      (line) => line.articleCode,
+      (line) => articleLabel(line.articleCode, line.articleName),
+    ),
+  );
 }
 
 /**
- * The TWELVE months of the year, always — an axis of the exercise and not of what arrived.
- *
- * A month that was never loaded is worth `null` and NOT `0`, which is the distinction the whole module
- * rests on: a zero claims nothing was sold, and only a file that arrived can say that. A loaded month
- * whose lines add up to zero is a zero, and it is drawn as such.
- *
- * `codes` NARROWS to those services, and an empty list is «all of them» and not «none» — the meaning a
- * mark with nothing marked has everywhere in the app. Narrowing does not touch the coverage rule: a
- * loaded month where the marked service did not sell is a real `0`, and only an absent month is `null`.
+ * Each type with its articles inside, in `byType`'s order. An article under two types appears
+ * under each with its own part, and names are disambiguated per type.
  */
-export function monthlySeries(
-  months: readonly SalesMonth[],
-  year: number,
-  codes: readonly string[] = [],
-): MonthPoint[] {
-  const loaded = new Map<number, number>();
-  for (const month of months) {
-    if (month.year === year) {
-      loaded.set(month.monthIndex, sum(narrow(month.lines, codes).map((line) => line.amount)));
+export function articlesByType(lines: readonly SalesLine[]): TypeBreakdown[] {
+  const buckets = new Map<string, SalesLine[]>();
+  for (const line of lines) {
+    const bucket = buckets.get(line.tipo);
+    if (bucket) {
+      bucket.push(line);
+    } else {
+      buckets.set(line.tipo, [line]);
     }
   }
-  return Array.from({ length: 12 }, (_unused, monthIndex) => ({
-    monthIndex,
-    amount: loaded.has(monthIndex) ? (loaded.get(monthIndex) as number) : null,
+  return byType(lines).map((type) => ({
+    ...type,
+    articles: byArticle(buckets.get(type.id) ?? []),
   }));
 }
 
-/** A service's twelve months — what one segment of the stacked evolution draws. */
-export interface ServiceMonthSeries {
-  code: string;
-  name: string;
-  points: MonthPoint[];
+/** By salesperson, EXCLUDING the lines that declare none — those are reported by
+ *  `unattributed` instead of being drawn as the ranking's largest bar. */
+export function byVendor(lines: readonly SalesLine[]): SalesGroup[] {
+  return groupBy(
+    lines.filter((line) => line.vendor !== ""),
+    (line) => line.vendor,
+    (line) => line.vendor,
+  );
 }
 
 /**
- * The same axis, opened up BY SERVICE: what each month is made of.
- *
- * The order is the year's, largest to smallest, and it comes out of `byService` rather than from a
- * second sort of its own — the breakdown card orders by the same rule, and two orders that can drift
- * would paint one service two colours on the same screen.
- *
- * The coverage rule survives the opening up, and that is the only thing here that can be wrong: an
- * absent month is `null` in EVERY service —nobody said anything about that month—, while a loaded
- * month a service did not touch is a `0`, because the file did arrive and it did not bring it. A
- * service the year does not declare produces no series at all, instead of twelve empty columns.
+ * How much of a period carries NO salesperson — on the real file, over half of the net. One
+ * definition, read by the card's note and the report. `share` is `null` when nothing was sold.
  */
-export function monthlyServiceSeries(
+export interface UnattributedVendor {
+  amount: number;
+  lineCount: number;
+  share: number | null;
+}
+
+export function unattributed(lines: readonly SalesLine[]): UnattributedVendor {
+  const without = lines.filter((line) => line.vendor === "");
+  const amount = sum(without.map((line) => line.amount));
+  return {
+    amount,
+    lineCount: without.length,
+    share: shareOf(amount, sum(lines.map((line) => line.amount))),
+  };
+}
+
+export function readSales(lines: readonly SalesLine[]): SalesReading {
+  return {
+    totals: salesTotals(lines),
+    insurers: byInsurer(lines),
+    types: byType(lines),
+    typeArticles: articlesByType(lines),
+    articles: byArticle(lines),
+    vendors: byVendor(lines),
+    unattributed: unattributed(lines),
+  };
+}
+
+/**
+ * The twelve months of the year. A month never loaded is `null`, a loaded month with no sales is
+ * `0`; which is which comes from the COVERAGE, so a month filtered down to nothing stays a zero.
+ */
+export function monthlySeries(
   months: readonly SalesMonth[],
+  coverage: readonly SalesCoverage[],
   year: number,
-  codes: readonly string[] = [],
-): ServiceMonthSeries[] {
+): MonthPoint[] {
+  const loaded = new Set(coverage.filter((row) => row.year === year).map((row) => row.monthIndex));
+  const amounts = new Map<number, number>();
+  for (const month of months) {
+    if (month.year !== year) {
+      continue;
+    }
+    amounts.set(
+      month.monthIndex,
+      (amounts.get(month.monthIndex) ?? 0) + sum(month.lines.map((line) => line.amount)),
+    );
+  }
+  return Array.from({ length: 12 }, (_unused, monthIndex) => ({
+    monthIndex,
+    amount: loaded.has(monthIndex) ? (amounts.get(monthIndex) ?? 0) : null,
+  }));
+}
+
+/** A service type's twelve months — what one segment of the stacked evolution draws. */
+export interface TypeMonthSeries {
+  id: string;
+  label: string;
+  points: MonthPoint[];
+}
+
+/** The same axis opened by service type, in `byType`'s order and under the same coverage rule. */
+export function monthlyTypeSeries(
+  months: readonly SalesMonth[],
+  coverage: readonly SalesCoverage[],
+  year: number,
+): TypeMonthSeries[] {
+  const covered = new Set(coverage.filter((row) => row.year === year).map((row) => row.monthIndex));
   const ofYear = months.filter((month) => month.year === year);
-  const covered = new Set(ofYear.map((month) => month.monthIndex));
   const amounts = new Map<string, Map<number, number>>();
   for (const month of ofYear) {
-    for (const line of narrow(month.lines, codes)) {
-      const perMonth = amounts.get(line.serviceCode) ?? new Map<number, number>();
+    for (const line of month.lines) {
+      const perMonth = amounts.get(line.tipo) ?? new Map<number, number>();
       perMonth.set(month.monthIndex, (perMonth.get(month.monthIndex) ?? 0) + line.amount);
-      amounts.set(line.serviceCode, perMonth);
+      amounts.set(line.tipo, perMonth);
     }
   }
-  return byService(ofYear.flatMap((month) => narrow(month.lines, codes))).map((service) => ({
-    code: service.code,
-    name: service.name,
+  return byType(ofYear.flatMap((month) => month.lines)).map((type) => ({
+    id: type.id,
+    label: type.label,
     points: Array.from({ length: 12 }, (_unused, monthIndex) => ({
       monthIndex,
-      amount: covered.has(monthIndex) ? (amounts.get(service.code)?.get(monthIndex) ?? 0) : null,
+      amount: covered.has(monthIndex) ? (amounts.get(type.id)?.get(monthIndex) ?? 0) : null,
     })),
   }));
 }
 
-/** The lines of the marked services. No marks is ALL of them, never none. */
-function narrow(lines: readonly SalesLine[], codes: readonly string[]): SalesLine[] {
-  if (codes.length === 0) {
-    return [...lines];
-  }
-  const wanted = new Set(codes);
-  return lines.filter((line) => wanted.has(line.serviceCode));
+/** The years the client has loaded, ascending — read from the COVERAGE, without touching a line. */
+export function loadedYears(coverage: readonly SalesCoverage[]): number[] {
+  return [...new Set(coverage.map((row) => row.year))].sort((a, b) => a - b);
 }
 
-/** The years the client has loaded, ascending. */
-export function loadedYears(months: readonly SalesMonth[]): number[] {
-  return [...new Set(months.map((month) => month.year))].sort((a, b) => a - b);
+/** The loaded months of the given years — their UNION. */
+export function loadedMonths(
+  coverage: readonly SalesCoverage[],
+  years: readonly number[],
+): number[] {
+  const wanted = new Set(years);
+  return [
+    ...new Set(coverage.filter((row) => wanted.has(row.year)).map((row) => row.monthIndex)),
+  ].sort((a, b) => a - b);
 }
 
-/** A year's loaded months, ascending — the declared coverage. */
-export function loadedMonths(months: readonly SalesMonth[], year: number): number[] {
-  return months
-    .filter((month) => month.year === year)
-    .map((month) => month.monthIndex)
-    .sort((a, b) => a - b);
-}
-
-/**
- * «What part of the total this is», and the module's ONLY definition: the breakdown by service, the
- * concentration by payer and the notes that square them share it, so a bar and its row cannot say
- * different percentages.
- *
- * A total at `0` gives `null` and NEVER `0 %`: selling nothing does not mean a service is 0 % of what
- * was sold, it means the question has no answer.
- */
+/** «What part of the total this is» — the module's one definition. A total of `0` gives `null`,
+ *  never `0 %`. */
 export function shareOf(amount: number, total: number): number | null {
   return total === 0 ? null : (amount / total) * 100;
 }

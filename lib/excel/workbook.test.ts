@@ -1,6 +1,15 @@
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
-import { compactLabel, normalizeLabel, readGrid, readWorkbook, toNumber } from "./workbook";
+import {
+  compactLabel,
+  declaredRowCount,
+  normalizeLabel,
+  readDenseRows,
+  readGrid,
+  readWorkbook,
+  readWorkbookDense,
+  toNumber,
+} from "./workbook";
 
 function buffer(aoa: (string | number | null)[][]): ArrayBuffer {
   const sheet = XLSX.utils.aoa_to_sheet(aoa);
@@ -83,5 +92,77 @@ describe("compactLabel", () => {
   it("colapsa espacios internos, incluidos saltos de línea", () => {
     expect(compactLabel("CODIGO \nSECTORIAL")).toBe("codigo sectorial");
     expect(compactLabel("NOMBRE  DE LA  CUENTA")).toBe("nombre de la cuenta");
+  });
+});
+
+describe("readWorkbookDense / readDenseRows", () => {
+  it("recorre las filas una a una, sin construir la grilla entera", () => {
+    const workbook = readWorkbookDense(
+      buffer([
+        ["CODIGO", "NETO"],
+        ["A", 1.5],
+        ["B", null],
+      ]),
+    );
+    const rows = [...(readDenseRows(workbook!, "Hoja1") ?? [])];
+    expect(rows[0]).toEqual(["CODIGO", "NETO"]);
+    expect(rows[1]).toEqual(["A", 1.5]);
+    // Una celda vacía es `null`, no una cadena vacía: es lo que separa «no vino» de «vino vacío».
+    expect(rows[2][1] ?? null).toBeNull();
+  });
+
+  it("null cuando la hoja no existe", () => {
+    const workbook = readWorkbookDense(buffer([["a"]]));
+    expect(readDenseRows(workbook!, "No existe")).toBeNull();
+  });
+
+  it("entrega una celda de FECHA como texto, en la forma que escribe el sistema contable", () => {
+    const sheet = XLSX.utils.aoa_to_sheet([["FECHA"], [new Date(2026, 2, 15, 9, 30, 0)]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, "Hoja1");
+    const data = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const rows = [...(readDenseRows(readWorkbookDense(data)!, "Hoja1") ?? [])];
+    // La fecha NO vuelve como número de serie ni como Date: vuelve como el texto que el parser lee.
+    expect(rows[1][0]).toBe("2026-03-15 09:30:00.000");
+  });
+
+  it("funciona también sobre un workbook leído sin modo denso", () => {
+    const workbook = readWorkbook(
+      buffer([
+        ["a", 1],
+        ["b", 2],
+      ]),
+    );
+    const rows = [...(readDenseRows(workbook!, "Hoja1") ?? [])];
+    expect(rows).toEqual([
+      ["a", 1],
+      ["b", 2],
+    ]);
+  });
+});
+
+describe("declaredRowCount", () => {
+  it("lee cuántas filas declara la hoja en su propio rango", () => {
+    const workbook = readWorkbookDense(buffer([["a"], ["b"], ["c"]]));
+    expect(declaredRowCount(workbook!, "Hoja1")).toBe(3);
+  });
+
+  it("null cuando la hoja no declara rango", () => {
+    const workbook = readWorkbookDense(buffer([["a"]]));
+    delete workbook!.Sheets["Hoja1"]["!ref"];
+    expect(declaredRowCount(workbook!, "Hoja1")).toBeNull();
+  });
+});
+
+describe("una fecha no se desplaza de mes al leerla", () => {
+  it("el primero del mes a medianoche sigue siendo el primero del mes", () => {
+    // La trampa real: con las partes LOCALES de la fecha, en UTC−5 esto volvía como el 28 de
+    // febrero a las 19:00 y la línea quedaba archivada en el mes anterior.
+    const sheet = XLSX.utils.aoa_to_sheet([["FECHA"], [new Date(2026, 2, 1, 0, 0, 0)]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, "Hoja1");
+    const data = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const rows = [...(readDenseRows(readWorkbookDense(data)!, "Hoja1") ?? [])];
+    expect(String(rows[1][0]).slice(0, 10)).toBe("2026-03-01");
   });
 });

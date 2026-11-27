@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Building2,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -18,7 +19,8 @@ import { useCollapsedCards } from "@/components/ui/use-collapsed-cards";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { SOLID_VIEW_OPTIONS } from "@/lib/charts/solid-bars";
-import type { EvolutionView, SolidView } from "@/lib/sales/cards";
+import { resolveOpenType } from "@/lib/sales/filters";
+import { buildTypeDetailCard, type EvolutionView, type SolidView } from "@/lib/sales/cards";
 import { PygEmptyState } from "../pyg-empty-state";
 import { SalesDataProvider, useSalesData } from "./sales-data-provider";
 import { SalesExportActions } from "./sales-export-actions";
@@ -31,11 +33,12 @@ const EVOLUTION_VIEWS: { value: EvolutionView; label: string }[] = [
 ];
 
 /**
- * «Ventas por servicio»: what the clinic billed, broken down by service, by payer and by month.
+ * «Ventas por servicio»: what the clinic billed, broken down by service type, by insurer, by month,
+ * by article and by salesperson.
  *
- * Everything it shows is DERIVED and nothing is stored: the only thing persisted are the invoice
- * lines each Excel brought, and the three readings are recomputed on every render — the same rule by
- * which Rol de Pagos persists not a single total.
+ * Everything it shows is DERIVED and nothing is stored: what is persisted are the invoice lines
+ * each Excel brought, plus the coverage of each month — and the five readings are recomputed on
+ * every render, the same rule by which Rol de Pagos persists not a single total.
  */
 export function SalesView() {
   return (
@@ -50,25 +53,43 @@ function SalesContent() {
     clientId,
     isConsolidated,
     ready,
-    months,
+    coverage,
     reading,
     cards,
+    cardsInput,
+    filters,
     scopedPeriodName,
     universe,
     hideEmptyMonths,
     toggleEmptyMonths,
     evolutionView,
     setEvolutionView,
-    servicesView,
-    setServicesView,
-    payersView,
-    setPayersView,
+    typesView,
+    setTypesView,
+    insurersView,
+    setInsurersView,
   } = useSalesData();
   const [uploadOpen, setUploadOpen] = useState(false);
+  /** The type the composition card is opened into, or `null` on level one. A wish, resolved on
+   *  read: when the type leaves what is marked, the card is back on level one. */
+  const [drilledType, setDrilledType] = useState<string | null>(null);
+  // One type marked in the bar opens the card into it too — see `resolveOpenType`.
+  const openType = useMemo(() => resolveOpenType(drilledType, filters), [drilledType, filters]);
+  const typeDetail = useMemo(
+    () => (openType === null ? null : buildTypeDetailCard(cardsInput, openType.id)),
+    [cardsInput, openType],
+  );
 
   const cardIds = useMemo(
-    () => [cards.services.id, cards.payers.id, cards.evolution.id],
-    [cards.services.id, cards.payers.id, cards.evolution.id],
+    () =>
+      [
+        cards.types.id,
+        cards.insurers.id,
+        cards.evolution.id,
+        cards.articles.id,
+        cards.vendors?.id,
+      ].filter((id): id is string => id !== undefined),
+    [cards.types.id, cards.insurers.id, cards.evolution.id, cards.articles.id, cards.vendors?.id],
   );
   const { isCollapsed, toggle, allCollapsed, toggleAll } = useCollapsedCards(cardIds);
 
@@ -97,7 +118,7 @@ function SalesContent() {
     return <PygEmptyState />;
   }
 
-  const empty = months.length === 0;
+  const empty = coverage.length === 0;
 
   // The evolution's header controls, and BOTH are conditional on there being something for them to
   // do: «Ver como» exists only where there is a breakdown to shape AND months to follow —comparing
@@ -127,6 +148,35 @@ function SalesContent() {
         />
       </span>
     ) : null;
+
+  // The composition's header: on level one the hint and the body switch, on level two the way back.
+  const typesFlat = typesView === "plano";
+  const typesCard = typeDetail ?? cards.types;
+  const typesControls = typeDetail ? (
+    openType?.pinned ? (
+      // Pinned by the bar: the way back is unmarking the type there, not a button here.
+      <span className="text-[11.5px] text-faint">
+        Tipo marcado en el filtro · quítalo para ver todos los tipos
+      </span>
+    ) : (
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => setDrilledType(null)}
+        icon={<ArrowLeft size={14} />}
+        className="font-medium"
+      >
+        Todos los tipos
+      </Button>
+    )
+  ) : cards.types.option !== null ? (
+    <div className="flex items-center gap-3">
+      {typesFlat && (
+        <span className="text-[11.5px] text-faint">Pulsa una barra para ver sus artículos</span>
+      )}
+      {bodyControl(typesView, setTypesView, true)}
+    </div>
+  ) : null;
 
   const evolutionControls =
     cards.skylineAvailable || cards.emptyMonths > 0 ? (
@@ -177,8 +227,9 @@ function SalesContent() {
         {empty ? (
           <div className="rounded-[13px] border border-border bg-surface">
             <EmptyState icon={<FileSpreadsheet size={22} />} className="py-16">
-              Este cliente no tiene ningún mes de ventas cargado. Sube el Excel «Venta de Servicios
-              por FACTURA» del mes con «Cargar Excel».
+              Este cliente no tiene ninguna venta cargada. Sube el reporte de ventas del sistema con
+              «Cargar Excel»: puede traer un mes, dos o la historia entera, y cada línea cae en el
+              mes de su fecha.
             </EmptyState>
           </div>
         ) : (
@@ -197,18 +248,18 @@ function SalesContent() {
                 mono
               />
               <StatTile
-                label="Ticket promedio"
+                label="Promedio por línea"
                 value={
-                  reading.totals.averageTicket === null
+                  reading.totals.averageLine === null
                     ? null
-                    : formatCurrency(reading.totals.averageTicket, { cents: true })
+                    : formatCurrency(reading.totals.averageLine, { cents: true })
                 }
-                hint="Por línea de factura"
+                hint="Venta ÷ líneas facturadas"
                 mono
               />
               <StatTile
-                label="Pagadores"
-                value={formatNumber(reading.totals.payerCount)}
+                label="Seguros"
+                value={formatNumber(reading.totals.insurerCount)}
                 hint="Aseguradoras y particulares"
                 mono
               />
@@ -227,24 +278,45 @@ function SalesContent() {
             </div>
 
             <div className="flex flex-col gap-4">
+              {/* One slot, two LEVELS. The collapse is keyed by level one's id, and the press is wired only
+                  on the flat body. */}
               <ChartCard
-                {...cards.services}
-                collapsed={isCollapsed(cards.services.id)}
-                onToggleCollapsed={() => toggle(cards.services.id)}
+                {...typesCard}
+                collapsed={isCollapsed(cards.types.id)}
+                onToggleCollapsed={() => toggle(cards.types.id)}
+                expandable
+                {...(typesControls ? { headerSlot: typesControls } : {})}
+                {...(!typeDetail && typesFlat
+                  ? {
+                      onSelect: (index: number) => setDrilledType(cards.typeOrder[index] ?? null),
+                    }
+                  : {})}
+              />
+              <ChartCard
+                {...cards.insurers}
+                collapsed={isCollapsed(cards.insurers.id)}
+                onToggleCollapsed={() => toggle(cards.insurers.id)}
                 expandable
                 headerSlot={bodyControl(
-                  servicesView,
-                  setServicesView,
-                  cards.services.option !== null,
+                  insurersView,
+                  setInsurersView,
+                  cards.insurers.option !== null,
                 )}
               />
               <ChartCard
-                {...cards.payers}
-                collapsed={isCollapsed(cards.payers.id)}
-                onToggleCollapsed={() => toggle(cards.payers.id)}
+                {...cards.articles}
+                collapsed={isCollapsed(cards.articles.id)}
+                onToggleCollapsed={() => toggle(cards.articles.id)}
                 expandable
-                headerSlot={bodyControl(payersView, setPayersView, cards.payers.option !== null)}
               />
+              {cards.vendors && (
+                <ChartCard
+                  {...cards.vendors}
+                  collapsed={isCollapsed(cards.vendors.id)}
+                  onToggleCollapsed={() => toggle(cards.vendors!.id)}
+                  expandable
+                />
+              )}
               <ChartCard
                 {...cards.evolution}
                 collapsed={isCollapsed(cards.evolution.id)}

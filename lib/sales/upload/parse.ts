@@ -1,209 +1,243 @@
 /**
- * From a «Venta de Servicios por FACTURA» `.xlsx` to a month ready to store.
+ * From a flat sales report `.xlsx` to the months ready to store.
  *
- * Three rules govern this file, and all three are tested:
+ *   1. The format is recognised by its LABELS; a file lacking one is rejected naming it.
+ *   2. The period is decided by each LINE (its `FECHA`): a file may cover any range.
+ *   3. The reading is squared against the sheet's own declared row count — the report writes no
+ *      total, so it is rows that are squared, not dollars.
+ *   4. The warnings belong to the FILE, never to the months it wrote.
  *
- *   1. **The format is recognised by its SHAPE**, never by the file's name — the title and the
- *      four-label header. Another workbook is rejected NAMING what was expected, instead of trying
- *      to read it and returning an empty month.
- *   2. **The period is declared by the file** (`Desde:` / `Hasta:`) and has to be exactly one
- *      calendar month. The rule is `toCalendarMonth`'s, the SAME one the single statement and
- *      MicroPlus apply: there is no per-format exception, and that is why it is imported instead of
- *      rewritten.
- *   3. **The sum of the lines is SQUARED against the file's own total**, and a difference is stated
- *      by naming it. It is the only evidence that the reading did not leave rows behind, and without
- *      it a misclassified row is lost in silence among 2,774.
- *
- * It returns a result and does not throw: each file of a batch needs to be able to explain itself
- * without bringing the others down.
- *
- * A workbook is read SHEET BY SHEET, each one a month: the accounting system's report carries one
- * and the app's own download (`../export.ts`) carries one per month loaded. There is no sheet the
- * reading skips — one that is not a month rejects the file naming the sheet, because silently
- * dropping it is exactly how a month of a backup would go missing with nothing saying so.
+ * It returns a result and does not throw, and it never materialises the grid: rows are walked one
+ * at a time.
  */
-import { readGrid, readWorkbook, type Cell } from "@/lib/excel/workbook";
+import {
+  declaredRowCount,
+  readDenseRows,
+  readWorkbookDense,
+  type Cell,
+} from "@/lib/excel/workbook";
 import { MONTHS_FULL_ES } from "@/lib/date";
-import { toCalendarMonth, type DateRange } from "@/lib/profit-loss/upload/date-range";
 import type { ParsedSalesMonth, SalesLine } from "../types";
 import {
-  findDeclaredTotal,
-  findSalesCompany,
   findSalesHeader,
-  findSalesRange,
-  hasSalesTitle,
+  missingSalesLabels,
   readSalesRow,
+  REQUIRED_LABELS,
   type SalesHeader,
 } from "./grid";
 
-/** One sheet's reading. */
+/** What one FILE brought: its months, and what the reading had to warn about. */
+export interface SalesFileReading {
+  months: ParsedSalesMonth[];
+  /** Shown by the modal, never stored. */
+  warnings: string[];
+}
+
 export type SalesParseResult =
-  | { ok: true; month: ParsedSalesMonth }
+  | { ok: true; reading: SalesFileReading }
   | { ok: false; message: string };
 
-/** A whole workbook's reading: every sheet, in the workbook's order. */
-export type SalesWorkbookResult =
-  | { ok: true; months: ParsedSalesMonth[] }
-  | { ok: false; message: string };
+function wrongFormat(missing: readonly string[]): string {
+  const named = missing.length === REQUIRED_LABELS.length ? REQUIRED_LABELS : missing;
+  return (
+    `No parece el reporte de ventas: no se encontró su cabecera. Faltan las columnas ` +
+    `${named.join(" · ")}. Sube el reporte plano del sistema, que trae una fila por línea de ` +
+    `factura.`
+  );
+}
 
-/** One cent: below that, the difference against the file's total is floating-point noise and not an
- *  imbalance. */
-const CENT = 0.005;
-
-const WRONG_FORMAT =
-  "No parece el reporte «Venta de Servicios por FACTURA»: falta su título o su cabecera " +
-  "CODIGO · NOMBRE · CANTIDAD · VENTA TOTAL. Sube el reporte de ventas por servicio del mes.";
-
-export function parseSalesWorkbook(data: ArrayBuffer): SalesWorkbookResult {
-  const workbook = readWorkbook(data);
+export function parseSalesWorkbook(data: ArrayBuffer): SalesParseResult {
+  const workbook = readWorkbookDense(data);
   if (!workbook) {
     return { ok: false, message: "El archivo no es un Excel que se pueda leer." };
   }
-  if (workbook.SheetNames.length === 0) {
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) {
     return { ok: false, message: "El archivo no tiene ninguna hoja legible." };
   }
-
-  const months: ParsedSalesMonth[] = [];
-  // Which sheet declared each period, so a repeat can name BOTH: within one file there is no «the
-  // last one wins» — two sheets of the same month would silently halve a backup.
-  const sheetByPeriod = new Map<string, string>();
-  // The sheet is named only when there is more than one: with a single sheet the message is the
-  // file's, as it was before the reading learnt to walk them all.
-  const several = workbook.SheetNames.length > 1;
-  for (const sheetName of workbook.SheetNames) {
-    const grid = readGrid(workbook, sheetName);
-    if (!grid) {
-      return { ok: false, message: `La hoja «${sheetName}» no se puede leer.` };
-    }
-    const result = parseSalesGrid(grid);
-    if (!result.ok) {
-      return {
-        ok: false,
-        message: several ? `Hoja «${sheetName}»: ${result.message}` : result.message,
-      };
-    }
-    const period = `${MONTHS_FULL_ES[result.month.monthIndex].toLowerCase()} ${result.month.year}`;
-    const previous = sheetByPeriod.get(period);
-    if (previous !== undefined) {
-      return {
-        ok: false,
-        message:
-          `Las hojas «${previous}» y «${sheetName}» declaran el mismo periodo (${period}). ` +
-          "Cada hoja tiene que ser un mes distinto.",
-      };
-    }
-    sheetByPeriod.set(period, sheetName);
-    months.push(result.month);
+  const rows = readDenseRows(workbook, sheetName);
+  if (!rows) {
+    return { ok: false, message: `La hoja «${sheetName}» no se puede leer.` };
   }
-  return { ok: true, months };
+  return parseSalesRows(rows, declaredRowCount(workbook, sheetName));
 }
 
-export function parseSalesGrid(grid: readonly Cell[][]): SalesParseResult {
-  // BOTH signs are required: only a sales report carries the title, and the four-label header is what
-  // stops it claiming a balance that also writes `CODIGO` and `NOMBRE`.
-  const header = findSalesHeader(grid);
-  if (!hasSalesTitle(grid) || !header) {
-    return { ok: false, message: WRONG_FORMAT };
+/**
+ * The walk. `declaredRows` is what the sheet says about its own size, header included; `null`
+ * when it says nothing.
+ */
+export function parseSalesRows(
+  rows: Iterable<Cell[]>,
+  declaredRows: number | null,
+): SalesParseResult {
+  // The header is looked for while walking; everything before it is preamble.
+  let header: SalesHeader | null = null;
+  let headerRow = -1;
+  const preamble: Cell[][] = [];
+
+  const months = new Map<string, ParsedSalesMonth>();
+  let read = 0;
+  let undated = 0;
+  let unreadable = 0;
+  let rowIndex = -1;
+
+  for (const row of rows) {
+    rowIndex++;
+    if (!header) {
+      const found = findSalesHeader([row]);
+      if (found) {
+        header = { ...found, row: rowIndex };
+        headerRow = rowIndex;
+        continue;
+      }
+      // Kept (bounded) only so the rejection can name what was missing.
+      if (preamble.length < 50) {
+        preamble.push(row);
+      }
+      continue;
+    }
+    const parsed = readSalesRow(row, header);
+    if (parsed === null) {
+      continue;
+    }
+    if ("undated" in parsed) {
+      undated++;
+      continue;
+    }
+    if ("unreadable" in parsed) {
+      unreadable++;
+      continue;
+    }
+    read++;
+    const key = `${parsed.year}-${parsed.monthIndex}`;
+    const line: SalesLine = {
+      seguro: parsed.seguro,
+      tipo: parsed.tipo,
+      articleCode: parsed.articleCode,
+      articleName: parsed.articleName,
+      vendor: parsed.vendor,
+      amount: parsed.amount,
+    };
+    const month = months.get(key);
+    if (month) {
+      month.lines.push(line);
+      month.lineCount++;
+      month.firstDay = Math.min(month.firstDay, parsed.day);
+      month.lastDay = Math.max(month.lastDay, parsed.day);
+      if (month.companyCode === "" && parsed.companyCode !== "") {
+        month.companyCode = parsed.companyCode;
+      }
+      continue;
+    }
+    months.set(key, {
+      year: parsed.year,
+      monthIndex: parsed.monthIndex,
+      lineCount: 1,
+      firstDay: parsed.day,
+      lastDay: parsed.day,
+      companyCode: parsed.companyCode,
+      lines: [line],
+    });
   }
 
-  const range = findSalesRange(grid);
-  if (!range) {
+  if (!header) {
+    return { ok: false, message: wrongFormat(missingSalesLabels(preamble)) };
+  }
+  if (months.size === 0) {
     return {
       ok: false,
       message:
-        "El archivo no declara su periodo (`Desde:` y `Hasta:`). La carga es mensual y el mes se " +
-        "lee del propio reporte, nunca del nombre del archivo.",
-    };
-  }
-  const period = toCalendarMonth(range as DateRange);
-  if (!period.ok) {
-    return { ok: false, message: period.message };
-  }
-
-  const { lines, declaredTotal } = readRows(grid, header);
-  if (lines.length === 0) {
-    return {
-      ok: false,
-      message:
-        "El reporte no trae ninguna línea de factura. Comprueba que el mes exportado tiene " +
-        "movimiento antes de subirlo.",
+        undated > 0
+          ? `El reporte trae ${undated} ${undated === 1 ? "línea" : "líneas"} pero ninguna con ` +
+            "una fecha que se pueda leer, así que no hay mes al que pertenezcan."
+          : "El reporte no trae ninguna línea de factura. Comprueba que lo exportado tiene " +
+            "movimiento antes de subirlo.",
     };
   }
 
+  const ordered = [...months.values()].sort(
+    (a, b) => a.year - b.year || a.monthIndex - b.monthIndex,
+  );
   return {
     ok: true,
-    month: {
-      year: period.year,
-      monthIndex: period.month,
-      companyName: findSalesCompany(grid, header.row),
-      lines,
-      declaredTotal,
-      warnings: cuadre(lines, declaredTotal),
+    reading: {
+      months: ordered,
+      warnings: fileWarnings(read, undated, unreadable, declaredRows, headerRow),
     },
   };
 }
 
 /**
- * The walk over the grid, and the only part that decides WHAT is a datum.
- *
- * Every row of the report is a COMPLETE invoice line —service, payer, quantity and amount—, and the
- * service's code is repeated in all of them: there is no grouping and there are no subtotals. What
- * separates a line from the rest is carrying that code and the four cells that follow it, which is
- * what `readSalesRow` checks; the preamble, the header and the two closing rows drop out on their own
- * for not meeting it, with no need to recognise each one by its label.
- *
- * The report's total is looked for AFTERWARDS, in the column where the lines wrote their amount: that
- * row carries no label, so the column is the only thing that identifies it.
+ * The file's warnings. The declared count includes the header and its preamble, so they are
+ * subtracted; undated rows were read, so they count towards the balance and are named apart.
  */
-function readRows(
-  grid: readonly Cell[][],
-  header: SalesHeader,
-): {
-  lines: SalesLine[];
-  declaredTotal: number | null;
-} {
-  const lines: SalesLine[] = [];
-  let amountCol = -1;
-  let lastDataRow = header.row;
-
-  for (let index = header.row + 1; index < grid.length; index++) {
-    const parsed = readSalesRow(grid[index] ?? []);
-    if (!parsed) {
-      continue;
-    }
-    amountCol = parsed.amountCol;
-    lastDataRow = index;
-    lines.push({
-      serviceCode: parsed.serviceCode,
-      serviceName: parsed.serviceName,
-      payer: parsed.payer,
-      quantity: parsed.quantity,
-      amount: parsed.amount,
-    });
+function fileWarnings(
+  read: number,
+  undated: number,
+  unreadable: number,
+  declaredRows: number | null,
+  headerRow: number,
+): string[] {
+  const warnings: string[] = [];
+  if (unreadable > 0) {
+    warnings.push(
+      `${unreadable} ${unreadable === 1 ? "fila trae" : "filas traen"} un NETO que no se puede ` +
+        `leer como importe (se espera 1,234.56) y no ${unreadable === 1 ? "entró" : "entraron"}. ` +
+        "Revisa el separador decimal del archivo.",
+    );
   }
+  if (undated > 0) {
+    warnings.push(
+      `${undated} ${undated === 1 ? "fila no tiene" : "filas no tienen"} una fecha que se pueda ` +
+        `leer, así que ${undated === 1 ? "no entró" : "no entraron"} en ningún mes.`,
+    );
+  }
+  if (declaredRows !== null) {
+    const expected = declaredRows - headerRow - 1;
+    const difference = expected - (read + undated + unreadable);
+    if (difference !== 0) {
+      warnings.push(
+        `La hoja declara ${expected} ${expected === 1 ? "fila" : "filas"} de datos y se ` +
+          `leyeron ${read + undated + unreadable}: ${Math.abs(difference)} de diferencia.`,
+      );
+    }
+  }
+  return warnings;
+}
 
-  return {
-    lines,
-    declaredTotal: amountCol === -1 ? null : findDeclaredTotal(grid, lastDataRow + 1, amountCol),
-  };
+/** A month named as the modal and the messages say it. */
+export function salesMonthLabel(month: { year: number; monthIndex: number }): string {
+  return `${MONTHS_FULL_ES[month.monthIndex].toLowerCase()} ${month.year}`;
 }
 
 /**
- * The balance against the file's total row. A notice and NOT a rejection: the month is loaded all the
- * same, because a difference may belong to the report and not to the reading, and being left with no
- * data does not help find out. What cannot happen is the difference not being stated.
+ * The months two files of a batch SHARE. The batch is blocked on these: merging contradicts
+ * «each month is replaced whole», and last-one-wins loses a file in silence.
  */
-function cuadre(lines: readonly SalesLine[], declaredTotal: number | null): string[] {
-  if (declaredTotal === null) {
-    return [];
+export function sharedMonths(
+  files: readonly { fileName: string; months: readonly ParsedSalesMonth[] }[],
+): { months: string[]; fileNames: string[] }[] {
+  const owners = new Map<string, { label: string; fileNames: string[] }>();
+  for (const file of files) {
+    for (const month of file.months) {
+      const key = `${month.year}-${month.monthIndex}`;
+      const entry = owners.get(key) ?? { label: salesMonthLabel(month), fileNames: [] };
+      if (!entry.fileNames.includes(file.fileName)) {
+        entry.fileNames.push(file.fileName);
+      }
+      owners.set(key, entry);
+    }
   }
-  const sum = lines.reduce((total, line) => total + line.amount, 0);
-  const difference = sum - declaredTotal;
-  if (Math.abs(difference) < CENT) {
-    return [];
+  // Grouped by the PAIR of files, so two files sharing three months are one message and not three.
+  const byPair = new Map<string, { months: string[]; fileNames: string[] }>();
+  for (const entry of owners.values()) {
+    if (entry.fileNames.length < 2) {
+      continue;
+    }
+    const key = entry.fileNames.join(" · ");
+    const group = byPair.get(key) ?? { months: [], fileNames: entry.fileNames };
+    group.months.push(entry.label);
+    byPair.set(key, group);
   }
-  return [
-    `La suma de las ${lines.length} líneas leídas (${sum.toFixed(2)}) no coincide con el total ` +
-      `que declara el archivo (${declaredTotal.toFixed(2)}): la diferencia es ${difference.toFixed(2)}.`,
-  ];
+  return [...byPair.values()];
 }

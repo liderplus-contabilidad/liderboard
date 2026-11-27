@@ -13,13 +13,17 @@ import {
   incomingSalesIdentity,
   sameSalesIdentity,
 } from "@/lib/sales/identity";
+import { LARGE_FILE_BYTES, readSalesFile } from "@/lib/sales/upload/client";
+import { salesMonthLabel, sharedMonths } from "@/lib/sales/upload/parse";
 import type { ParsedSalesMonth } from "@/lib/sales/types";
 import { useSalesData } from "./sales-data-provider";
 
 interface StagedFile {
   fileName: string;
-  /** One for the accounting system's report; one per sheet for the app's own download. */
+  /** Every month the file's lines fell into — one, or forty-four for the whole history. */
   months?: ParsedSalesMonth[];
+  /** The FILE's warnings — shown, never stored. */
+  warnings?: string[];
   badge: string;
   error?: string;
 }
@@ -27,7 +31,7 @@ interface StagedFile {
 /** What a file brought, in one line: the period —one month, or the first and the last— and the
  *  count of lines. */
 function stagedBadge(months: readonly ParsedSalesMonth[]): string {
-  const lines = formatNumber(months.reduce((total, month) => total + month.lines.length, 0));
+  const lines = formatNumber(months.reduce((total, month) => total + month.lineCount, 0));
   if (months.length === 1) {
     const [month] = months;
     return `${MONTHS_FULL_ES[month.monthIndex]} ${month.year} · ${lines} líneas`;
@@ -39,6 +43,17 @@ function stagedBadge(months: readonly ParsedSalesMonth[]): string {
     `${MONTHS_SHORT_ES[first.monthIndex]} ${first.year} – ${MONTHS_SHORT_ES[last.monthIndex]} ` +
     `${last.year} · ${months.length} meses · ${lines} líneas`
   );
+}
+
+/** Months arriving with only part of their calendar covered: the one case where «replace the
+ *  month whole» throws data away, so it is said before writing. A notice, not a block. */
+function partialMonths(months: readonly ParsedSalesMonth[]): string[] {
+  return months
+    .filter((month) => month.firstDay > 1)
+    .map(
+      (month) =>
+        `${salesMonthLabel(month)}: el archivo solo trae del ${month.firstDay} al ${month.lastDay}`,
+    );
 }
 
 /**
@@ -53,11 +68,14 @@ function stagedBadge(months: readonly ParsedSalesMonth[]): string {
  * that the company they declare does not contradict the one the client already has.
  */
 export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { clientName, months, importMonths } = useSalesData();
+  const { clientName, coverage, importMonths } = useSalesData();
   const [files, setFiles] = useState<StagedFile[]>([]);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [clash, setClash] = useState<string | null>(null);
+  /** Files awaiting confirmation before being READ, because reading is the expensive part. */
+  const [oversized, setOversized] = useState<File[] | null>(null);
   const [summary, setSummary] = useState<{
     months: string[];
     lines: number;
@@ -70,62 +88,97 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     if (!open) {
       setFiles([]);
       setBusy(false);
+      setReading(false);
       setClash(null);
+      setOversized(null);
       setSummary(null);
     }
   }, [open]);
 
-  const addFiles = useCallback(async (list: FileList | null) => {
-    // Materialized BEFORE the first `await`: the caller clears `input.value` right afterwards, and
-    // that empties the live `FileList`.
-    const picked = list ? Array.from(list) : [];
-    if (picked.length === 0) {
-      return;
-    }
-    // Dynamic import: SheetJS does not go into the initial bundle.
-    const { parseSalesWorkbook } = await import("@/lib/sales/upload/parse");
-    const staged = await Promise.all(
-      picked.map(async (file): Promise<StagedFile> => {
+  /** Reads the picked files in the Worker, ONE AT A TIME: two large reads at once kill the tab. */
+  const readFiles = useCallback(async (picked: readonly File[]) => {
+    setReading(true);
+    try {
+      for (const file of picked) {
+        let staged: StagedFile;
         try {
-          const result = parseSalesWorkbook(await file.arrayBuffer());
-          return result.ok
-            ? { fileName: file.name, months: result.months, badge: stagedBadge(result.months) }
-            : { fileName: file.name, badge: "No válido", error: result.message };
-        } catch {
-          return {
+          const result = await readSalesFile(file);
+          staged = {
+            fileName: file.name,
+            months: result.months,
+            warnings: result.warnings,
+            badge: stagedBadge(result.months),
+          };
+        } catch (error) {
+          staged = {
             fileName: file.name,
             badge: "No válido",
-            error: "No se pudo leer el archivo (¿es un Excel válido?).",
+            error:
+              error instanceof Error
+                ? error.message
+                : "No se pudo leer el archivo (¿es un Excel válido?).",
           };
         }
-      }),
-    );
-    setFiles((previous) => [...previous, ...staged]);
+        setFiles((previous) => [...previous, staged]);
+      }
+    } finally {
+      setReading(false);
+    }
   }, []);
 
-  const valid = useMemo(() => files.flatMap((file) => file.months ?? []), [files]);
-
-  /** Two months of the same period —from two files, or one file and a sheet of another— would
-   *  overwrite each other in silence, and the user would not know which one was left. */
-  const duplicate = useMemo(() => {
-    const seen = new Set<string>();
-    for (const month of valid) {
-      const key = `${month.year}-${month.monthIndex}`;
-      if (seen.has(key)) {
-        return `El mismo periodo (${MONTHS_FULL_ES[month.monthIndex]} ${month.year}) llega dos veces. Quita uno de los archivos: la carga escribiría dos veces el mismo mes.`;
+  /** What a drop does. The size is checked BEFORE reading: advising afterwards is too late. */
+  const addFiles = useCallback(
+    (list: FileList | null) => {
+      // Materialized BEFORE any await: the caller clears `input.value` right afterwards, and that
+      // empties the live `FileList`.
+      const picked = list ? Array.from(list) : [];
+      if (picked.length === 0) {
+        return;
       }
-      seen.add(key);
+      const big = picked.filter((file) => file.size > LARGE_FILE_BYTES);
+      if (big.length > 0) {
+        setOversized(picked);
+        return;
+      }
+      void readFiles(picked);
+    },
+    [readFiles],
+  );
+
+  const valid = useMemo(() => files.flatMap((file) => file.months ?? []), [files]);
+  const fileWarnings = useMemo(() => files.flatMap((file) => file.warnings ?? []), [files]);
+
+  /** Two files of the batch with lines of the same month block it: one would overwrite the other. */
+  const duplicate = useMemo(() => {
+    const clashes = sharedMonths(
+      files.flatMap((file) =>
+        file.months ? [{ fileName: file.fileName, months: file.months }] : [],
+      ),
+    );
+    if (clashes.length === 0) {
+      return null;
     }
-    return null;
-  }, [valid]);
+    const first = clashes[0];
+    return (
+      `«${first.fileNames.join("» y «")}» traen líneas de ${first.months.join(", ")}. ` +
+      "Quita uno de los archivos o súbelos por separado: cada mes se reemplaza completo, así que " +
+      "uno pisaría al otro."
+    );
+  }, [files]);
 
   /** Which months this upload REPLACES, so it can be said before instead of after. */
   const replaced = useMemo(() => {
-    const held = new Set(months.map((month) => `${month.year}-${month.monthIndex}`));
+    const held = new Set(coverage.map((row) => `${row.year}-${row.monthIndex}`));
     return valid
       .filter((month) => held.has(`${month.year}-${month.monthIndex}`))
       .map((month) => `${MONTHS_FULL_ES[month.monthIndex]} ${month.year}`);
-  }, [valid, months]);
+  }, [valid, coverage]);
+
+  /** Months arriving with only part of their calendar covered — see `partialMonths`. */
+  const partial = useMemo(() => {
+    const held = new Set(coverage.map((row) => `${row.year}-${row.monthIndex}`));
+    return partialMonths(valid.filter((month) => held.has(`${month.year}-${month.monthIndex}`)));
+  }, [valid, coverage]);
 
   const write = useCallback(async () => {
     setBusy(true);
@@ -133,15 +186,15 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
       await importMonths(valid);
       setSummary({
         months: valid.map((month) => `${MONTHS_FULL_ES[month.monthIndex]} ${month.year}`),
-        lines: valid.reduce((total, month) => total + month.lines.length, 0),
-        warnings: valid.flatMap((month) => month.warnings),
+        lines: valid.reduce((total, month) => total + month.lineCount, 0),
+        warnings: fileWarnings,
       });
       setFiles([]);
     } finally {
       setBusy(false);
       setClash(null);
     }
-  }, [importMonths, valid]);
+  }, [importMonths, valid, fileWarnings]);
 
   const commit = useCallback(async () => {
     if (busy || valid.length === 0 || duplicate) {
@@ -149,14 +202,14 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     }
     // The identity is compared BEFORE writing. A client with no sales has none, so the first upload
     // adopts it and this path is not walked.
-    const current = deriveSalesIdentity(months);
+    const current = deriveSalesIdentity(coverage);
     const incoming = incomingSalesIdentity(valid);
     if (current && incoming && !sameSalesIdentity(current, incoming)) {
       setClash(describeSalesIdentityClash(current, incoming, clientName ?? "este cliente"));
       return;
     }
     await write();
-  }, [busy, valid, duplicate, months, clientName, write]);
+  }, [busy, valid, duplicate, coverage, clientName, write]);
 
   if (!open) {
     return null;
@@ -190,8 +243,9 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                 </p>
                 {summary.warnings.length > 0 && (
                   <NoticeBanner details={summary.warnings}>
-                    La lectura de {summary.warnings.length === 1 ? "un mes" : "varios meses"} no
-                    cuadra con el total que declara su archivo.
+                    {summary.warnings.length === 1
+                      ? "La lectura dejó una observación."
+                      : `La lectura dejó ${summary.warnings.length} observaciones.`}
                   </NoticeBanner>
                 )}
               </div>
@@ -221,12 +275,12 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                   <span className="text-[13px] font-medium text-ink">
                     Arrastra los archivos o haz clic para seleccionar
                   </span>
-                  {/* The file's name plays NO part: the month is declared by the report itself, so
-                      renaming it cannot change where it lands. */}
+                  {/* The file's name plays NO part, and neither does its range: each LINE is
+                      filed under the month of its own date. */}
                   <span className="text-[11.5px] text-faint">
-                    El reporte «Venta de Servicios por FACTURA», un archivo por mes (.xls / .xlsx),
-                    o el «Excel con tus datos» descargado de aquí, con una hoja por mes. El periodo
-                    se lee del propio reporte, no del nombre del archivo.
+                    El reporte de ventas del sistema (.xls / .xlsx), de cualquier rango de fechas, o
+                    el «Excel con tus datos» descargado de aquí. Cada línea cae en el mes de su
+                    FECHA, así que no importa cómo se llame el archivo ni qué periodo abarque.
                   </span>
                 </button>
                 <input
@@ -240,6 +294,13 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                     event.target.value = "";
                   }}
                 />
+
+                {reading && (
+                  <p className="mt-4 flex items-center gap-2 text-[12.5px] text-muted">
+                    <Loader2 size={14} className="animate-spin" />
+                    Leyendo el archivo. Puedes seguir usando la pantalla.
+                  </p>
+                )}
 
                 {files.length > 0 && (
                   <ul className="mt-4 flex flex-col gap-1.5">
@@ -282,10 +343,17 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
 
                 {duplicate && <NoticeBanner className="mt-3">{duplicate}</NoticeBanner>}
                 {!duplicate && replaced.length > 0 && (
-                  <NoticeBanner className="mt-3">
+                  <NoticeBanner className="mt-3" details={partial}>
                     {replaced.length === 1
                       ? `${replaced[0]} ya estaba cargado y se reemplaza por completo.`
                       : `Estos meses ya estaban cargados y se reemplazan por completo: ${replaced.join(", ")}.`}
+                  </NoticeBanner>
+                )}
+                {!duplicate && fileWarnings.length > 0 && (
+                  <NoticeBanner className="mt-3" details={fileWarnings}>
+                    {fileWarnings.length === 1
+                      ? "La lectura dejó una observación."
+                      : `La lectura dejó ${fileWarnings.length} observaciones.`}
                   </NoticeBanner>
                 )}
               </div>
@@ -312,7 +380,7 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                 </button>
                 <button
                   type="button"
-                  disabled={valid.length === 0 || busy || Boolean(duplicate)}
+                  disabled={valid.length === 0 || busy || reading || Boolean(duplicate)}
                   onClick={() => void commit()}
                   className="inline-flex h-[34px] items-center gap-2 rounded-[8px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -325,6 +393,24 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
           </footer>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={oversized !== null}
+        title="El archivo es grande"
+        description={
+          "Leerlo puede tardar cerca de medio minuto y pedirle al navegador más de dos gigas de " +
+          "memoria. Si la pestaña se te queda sin responder, cancela y vuelve a exportarlo " +
+          "partido por año: se pueden subir los cuatro de una vez. Los cortes de uno o dos meses " +
+          "no tienen este problema."
+        }
+        confirmLabel="Leerlo igualmente"
+        onConfirm={() => {
+          const picked = oversized ?? [];
+          setOversized(null);
+          void readFiles(picked);
+        }}
+        onCancel={() => setOversized(null)}
+      />
 
       <ConfirmDialog
         open={clash !== null}

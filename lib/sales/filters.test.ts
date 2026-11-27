@@ -1,247 +1,269 @@
 import { describe, expect, it } from "vitest";
 import {
   activeMarkCount,
-  describeServiceScope,
+  buildSalesUniverse,
+  describeScope,
   emptyFilters,
-  monthMarkLabel,
+  narrowLines,
   periodLabel,
+  resolveOpenType,
+  resolveYears,
   sanitizeFilters,
   scopedPeriodLabel,
-  selectedMonths,
   withAllYears,
+  withChoiceToggled,
   withMonthToggled,
-  withMonthsCleared,
-  withServiceToggled,
-  withServicesCleared,
   withYearToggled,
-  yearMarkLabel,
-  type SalesUniverse,
+  type SalesFilters,
 } from "./filters";
+import type { SalesCoverage, SalesLine } from "./types";
 
-const UNIVERSE: SalesUniverse = {
-  years: [2024, 2025, 2026],
-  months: [0, 1, 3],
-  services: [
-    { code: "\\01", name: "HONORARIOS" },
-    { code: "\\02", name: "MEDICINAS" },
-    { code: "\\03", name: "INSUMOS" },
-  ],
-};
+function line(overrides: Partial<SalesLine> = {}): SalesLine {
+  return {
+    seguro: "PARTICULAR",
+    tipo: "MEDICINAS",
+    articleCode: "000156",
+    articleName: "CLARITROMICINA",
+    vendor: "",
+    amount: 10,
+    ...overrides,
+  };
+}
 
-describe("sanitizeFilters", () => {
-  it("sin marcas abre en el año MÁS RECIENTE, no en todos", () => {
-    // The house rule is «no mark is all of them», and here it is broken on purpose: entering while
-    // summing three exercises reads badly before touching a filter.
-    expect(sanitizeFilters(emptyFilters(), UNIVERSE).years).toEqual([2026]);
+function cover(year: number, monthIndex: number): SalesCoverage {
+  return {
+    id: `c:${year}-${monthIndex}`,
+    clientId: "c",
+    year,
+    monthIndex,
+    lineCount: 1,
+    firstDay: 1,
+    lastDay: 28,
+    companyCode: "01",
+  };
+}
+
+const COVERAGE = [cover(2025, 10), cover(2026, 0), cover(2026, 2), cover(2026, 3)];
+
+const LINES = [
+  line({ seguro: "PARTICULAR", tipo: "MEDICINAS", articleCode: "A", amount: 100, vendor: "V1" }),
+  line({ seguro: "HUMANA", tipo: "IMAGENES", articleCode: "B", amount: 60 }),
+  line({ seguro: "PARTICULAR", tipo: "IMAGENES", articleCode: "C", amount: 40, vendor: "V2" }),
+];
+
+function filters(overrides: Partial<SalesFilters> = {}): SalesFilters {
+  return { ...emptyFilters(), ...overrides };
+}
+
+describe("resolveYears", () => {
+  it("sin marca resuelve al año MÁS RECIENTE, nunca a todos", () => {
+    expect(resolveYears(emptyFilters(), COVERAGE)).toEqual([2026]);
   });
 
-  it("un año que este cliente no tiene se poda", () => {
-    expect(
-      sanitizeFilters({ years: [2019, 2025], months: [], services: [] }, UNIVERSE).years,
-    ).toEqual([2025]);
+  it("con marcas devuelve las que existen, en orden ascendente", () => {
+    expect(resolveYears(filters({ years: [2026, 2025] }), COVERAGE)).toEqual([2025, 2026]);
   });
 
-  it("podados TODOS, vuelve al más reciente en vez de quedarse vacío", () => {
-    expect(sanitizeFilters({ years: [2019], months: [], services: [] }, UNIVERSE).years).toEqual([
-      2026,
-    ]);
+  it("una marca de un año que el cliente no tiene no sobrevive, y la lista vuelve al más reciente", () => {
+    expect(resolveYears(filters({ years: [2019] }), COVERAGE)).toEqual([2026]);
+  });
+});
+
+describe("buildSalesUniverse", () => {
+  it("los años y los meses salen de la COBERTURA, los demás ejes de las líneas", () => {
+    const universe = buildSalesUniverse(COVERAGE, LINES, [2026], []);
+    expect(universe.years).toEqual([2025, 2026]);
+    expect(universe.months).toEqual([0, 2, 3]);
+    expect(universe.seguros.map((s) => s.id)).toEqual(["PARTICULAR", "HUMANA"]);
+    // MEDICINAS 100 e IMAGENES 60+40=100 empatan, y el desempate es alfabético.
+    expect(universe.tipos.map((t) => t.id)).toEqual(["IMAGENES", "MEDICINAS"]);
+    expect(universe.vendors.map((v) => v.id)).toEqual(["V1", "V2"]);
   });
 
-  it("sin años cargados no hay nada que marcar", () => {
-    expect(sanitizeFilters(emptyFilters(), { years: [], months: [], services: [] }).years).toEqual(
+  it("ordena por IMPORTE de mayor a menor, igual que las tarjetas", () => {
+    const universe = buildSalesUniverse(COVERAGE, LINES, [2026], []);
+    // PARTICULAR 100+40=140 por delante de HUMANA 60.
+    expect(universe.seguros.map((s) => s.id)).toEqual(["PARTICULAR", "HUMANA"]);
+  });
+
+  it("un empate de importe se desempata por nombre, para que el orden no dependa del azar", () => {
+    const universe = buildSalesUniverse(
+      COVERAGE,
+      [line({ seguro: "ZETA", amount: 10 }), line({ seguro: "ALFA", amount: 10 })],
+      [2026],
       [],
     );
+    expect(universe.seguros.map((s) => s.id)).toEqual(["ALFA", "ZETA"]);
   });
 
-  it("los años salen en orden del universo, no en el de las marcas", () => {
-    expect(
-      sanitizeFilters({ years: [2026, 2024], months: [], services: [] }, UNIVERSE).years,
-    ).toEqual([2024, 2026]);
+  it("«Artículo» lista solo los artículos de los tipos marcados", () => {
+    const universe = buildSalesUniverse(COVERAGE, LINES, [2026], ["IMAGENES"]);
+    expect(universe.articles.map((a) => a.id)).toEqual(["B", "C"]);
   });
 
-  it("poda los meses que los años marcados no tienen", () => {
-    expect(
-      sanitizeFilters({ years: [2026], months: [0, 5], services: [] }, UNIVERSE).months,
-    ).toEqual([0]);
-  });
-});
-
-describe("marcas de año", () => {
-  it("marcar añade en orden del universo", () => {
-    expect(
-      withYearToggled({ years: [2026], months: [], services: [] }, 2024, UNIVERSE.years).years,
-    ).toEqual([2024, 2026]);
+  it("una marca de tipo HUÉRFANA no deja la lista de artículos vacía: vale como ninguna", () => {
+    const universe = buildSalesUniverse(COVERAGE, LINES, [2026], ["TIPO QUE NO EXISTE"]);
+    expect(universe.articles).toHaveLength(3);
   });
 
-  it("volver a marcarlo lo quita", () => {
-    expect(
-      withYearToggled({ years: [2026], months: [], services: [] }, 2026, UNIVERSE.years).years,
-    ).toEqual([]);
-  });
-
-  it("los MESES sobreviven al cambio de año: «Abr» ya no es «el abril de 2026»", () => {
-    const filters = withYearToggled(
-      { years: [2026], months: [3], services: [] },
-      2025,
-      UNIVERSE.years,
+  it("la etiqueta del artículo es su NOMBRE; la identidad sigue siendo el código", () => {
+    const universe = buildSalesUniverse(
+      COVERAGE,
+      [line({ articleCode: "99204CARD", articleName: "Visita en la oficina" })],
+      [2026],
+      [],
     );
-    expect(filters.months).toEqual([3]);
+    expect(universe.articles[0]).toEqual({ id: "99204CARD", label: "Visita en la oficina" });
   });
 
-  it("«Todos los años» PUEBLA la lista, porque vacío aquí significa «el más reciente»", () => {
-    expect(withAllYears({ years: [2026], months: [], services: [] }, UNIVERSE.years).years).toEqual(
-      [2024, 2025, 2026],
+  it("en el desplegable, dos artículos del mismo nombre se distinguen por su código", () => {
+    const universe = buildSalesUniverse(
+      COVERAGE,
+      [
+        line({ articleCode: "99204CARD", articleName: "Visita en la oficina", amount: 30 }),
+        line({ articleCode: "99204PED", articleName: "Visita en la oficina", amount: 20 }),
+      ],
+      [2026],
+      [],
     );
-  });
-});
-
-describe("marcas de mes", () => {
-  it("marcar un mes lo añade en orden del universo", () => {
-    expect(
-      withMonthToggled({ years: [2026], months: [3], services: [] }, 0, UNIVERSE.months).months,
-    ).toEqual([0, 3]);
-  });
-
-  it("«todos los meses» vacía la lista, que es como esta app escribe «sin filtro»", () => {
-    expect(withMonthsCleared({ years: [2026], months: [0, 3], services: [] }).months).toEqual([]);
-  });
-
-  it("solo los meses cuentan como marcas: el año nunca está vacío y no lleva chip", () => {
-    expect(activeMarkCount({ years: [2024, 2026], months: [], services: [] })).toBe(0);
-    expect(activeMarkCount({ years: [2026], months: [3], services: [] })).toBe(1);
-  });
-});
-
-describe("selectedMonths", () => {
-  it("sin marcas suma TODOS los meses cargados de los años marcados", () => {
-    expect(selectedMonths({ years: [2026], months: [], services: [] }, UNIVERSE)).toEqual([
-      0, 1, 3,
+    expect(universe.articles.map((a) => a.label)).toEqual([
+      "Visita en la oficina · 99204CARD",
+      "Visita en la oficina · 99204PED",
     ]);
   });
+});
 
-  it("con marcas suma exactamente esas", () => {
-    expect(selectedMonths({ years: [2026], months: [3], services: [] }, UNIVERSE)).toEqual([3]);
+describe("sanitizeFilters", () => {
+  const universe = buildSalesUniverse(COVERAGE, LINES, [2026], []);
+
+  it("poda las marcas huérfanas", () => {
+    const clean = sanitizeFilters(
+      filters({ seguros: ["PARTICULAR", "DE OTRO CLIENTE"], months: [0, 7] }),
+      universe,
+    );
+    expect(clean.seguros).toEqual(["PARTICULAR"]);
+    expect(clean.months).toEqual([0]);
+  });
+
+  it("guarda en orden del UNIVERSO y no en el del clic", () => {
+    const clean = sanitizeFilters(filters({ seguros: ["HUMANA", "PARTICULAR"] }), universe);
+    expect(clean.seguros).toEqual(["PARTICULAR", "HUMANA"]);
+  });
+
+  it("un artículo cuyo tipo dejó de estar marcado se poda solo, sin que ningún efecto lo note", () => {
+    const narrowed = buildSalesUniverse(COVERAGE, LINES, [2026], ["IMAGENES"]);
+    const clean = sanitizeFilters(filters({ tipos: ["IMAGENES"], articles: ["A", "B"] }), narrowed);
+    // «A» es de MEDICINAS: ya no está en el universo de artículos, así que desaparece.
+    expect(clean.articles).toEqual(["B"]);
+  });
+
+  it("el año nunca queda vacío", () => {
+    expect(sanitizeFilters(filters({ years: [1999] }), universe).years).toEqual([2026]);
   });
 });
 
-describe("los rótulos de la barra", () => {
-  it("todos los años marcados NO se enumeran", () => {
-    expect(yearMarkLabel(UNIVERSE.years, UNIVERSE.years)).toBe("Todos los años");
+describe("narrowLines", () => {
+  it("cruza los ejes con Y", () => {
+    const narrowed = narrowLines(LINES, filters({ seguros: ["PARTICULAR"], tipos: ["IMAGENES"] }));
+    expect(narrowed.map((l) => l.articleCode)).toEqual(["C"]);
   });
 
-  it("un subconjunto ES la selección y se escribe", () => {
-    expect(yearMarkLabel([2025, 2026], UNIVERSE.years)).toBe("2025, 2026");
-    expect(yearMarkLabel([2026], UNIVERSE.years)).toBe("2026");
+  it("acota por artículo usando el CÓDIGO", () => {
+    expect(narrowLines(LINES, filters({ articles: ["B"] }))).toHaveLength(1);
+  });
+});
+
+describe("los interruptores de las marcas", () => {
+  const universe = buildSalesUniverse(COVERAGE, LINES, [2026], []);
+
+  it("«Todos los años» POBLA la lista, no la vacía", () => {
+    expect(withAllYears(emptyFilters(), universe.years).years).toEqual([2025, 2026]);
   });
 
-  it("la lista vacía NO es «todos» aquí: sin marcas se resuelve al año más reciente", () => {
-    expect(yearMarkLabel([], UNIVERSE.years)).toBe("—");
+  it("los meses sobreviven a un cambio de año: «Abr» ya no significa «abril de 2026»", () => {
+    const withMonth = withMonthToggled(emptyFilters(), 3, universe.months);
+    expect(withYearToggled(withMonth, 2025, universe.years).months).toEqual([3]);
   });
 
-  it("todos los meses cargados marcados se condensan; un subconjunto se enumera", () => {
-    expect(monthMarkLabel(UNIVERSE.months, UNIVERSE.months)).toBe("Todos los meses");
-    expect(monthMarkLabel([], UNIVERSE.months)).toBe("Todos los meses");
-    expect(monthMarkLabel([0, 3], UNIVERSE.months)).toBe("Ene, Abr");
+  it("un eje de ids se marca en orden del universo", () => {
+    const marked = withChoiceToggled(
+      withChoiceToggled(emptyFilters(), "seguros", "HUMANA", universe.seguros),
+      "seguros",
+      "PARTICULAR",
+      universe.seguros,
+    );
+    expect(marked.seguros).toEqual(["PARTICULAR", "HUMANA"]);
+  });
+});
+
+describe("describeScope", () => {
+  const universe = buildSalesUniverse(COVERAGE, LINES, [2026], []);
+
+  it("con una marca es su NOMBRE", () => {
+    expect(describeScope(filters({ seguros: ["HUMANA"] }), universe)).toBe("HUMANA");
+  });
+
+  it("con varias dice cuántas de cuántas", () => {
+    expect(describeScope(filters({ seguros: ["HUMANA", "PARTICULAR"] }), universe)).toBe(
+      "2 de 2 seguros",
+    );
+  });
+
+  it("varios ejes a la vez se encadenan en el orden de la barra", () => {
+    expect(describeScope(filters({ seguros: ["HUMANA"], tipos: ["IMAGENES"] }), universe)).toBe(
+      "HUMANA · IMAGENES",
+    );
+  });
+
+  it("una marca huérfana no nombra nada", () => {
+    expect(describeScope(filters({ seguros: ["NO EXISTE"] }), universe)).toBeNull();
   });
 });
 
 describe("periodLabel", () => {
-  it("un año sin meses es el año a secas", () => {
-    expect(periodLabel([], [2026])).toBe("2026");
-  });
-
-  it("un mes con un año va entero", () => {
-    expect(periodLabel([3], [2026])).toBe("Abril 2026");
-  });
-
-  it("un tramo continuo va como rango", () => {
+  it("meses contiguos como rango", () => {
     expect(periodLabel([0, 1, 2], [2026])).toBe("Ene–Mar 2026");
   });
 
-  it("un conjunto con huecos se ENUMERA: «Ene–Abr» afirmaría que febrero está sumado", () => {
+  it("meses con hueco se ENUMERAN: un rango afirmaría que febrero está sumado", () => {
     expect(periodLabel([0, 2, 3], [2026])).toBe("Ene, Mar, Abr 2026");
   });
 
-  it("varios años sin meses son la lista de años", () => {
-    expect(periodLabel([], [2025, 2026])).toBe("2025, 2026");
-  });
-
-  it("con varios años el mes se escribe UNA vez y los años detrás", () => {
-    // Repeating «abril» for each year is what makes a comparison label illegible.
+  it("con varios años los meses se escriben una vez y los años detrás", () => {
     expect(periodLabel([3], [2025, 2026])).toBe("Abr · 2025, 2026");
-    expect(periodLabel([0, 1, 2], [2024, 2025, 2026])).toBe("Ene–Mar · 2024, 2025, 2026");
-  });
-
-  it("sin años no hay periodo que nombrar", () => {
-    expect(periodLabel([3], [])).toBe("Sin datos");
   });
 });
 
-describe("marca de servicio", () => {
-  it("marcar y desmarcar, en orden del universo y no del clic", () => {
-    const marked = withServiceToggled(
-      { years: [2026], months: [], services: ["\\03"] },
-      "\\01",
-      UNIVERSE.services.map((service) => service.code),
-    );
-    expect(marked.services).toEqual(["\\01", "\\03"]);
-    expect(
-      withServiceToggled(
-        marked,
-        "\\01",
-        UNIVERSE.services.map((service) => service.code),
-      ).services,
-    ).toEqual(["\\03"]);
+describe("resolveOpenType", () => {
+  it("con UN tipo marcado en la barra, la composición se abre en él, fijada", () => {
+    expect(resolveOpenType(null, filters({ tipos: ["MEDICINAS"] }))).toEqual({
+      id: "MEDICINAS",
+      pinned: true,
+    });
   });
 
-  it("ninguna marca es TODOS, la regla de la casa", () => {
-    expect(emptyFilters().services).toEqual([]);
-    expect(withServicesCleared({ years: [2026], months: [], services: ["\\01"] }).services).toEqual(
-      [],
-    );
+  it("el tipo marcado manda sobre la barra que se hubiera pulsado antes", () => {
+    expect(resolveOpenType("IMAGENES", filters({ tipos: ["MEDICINAS"] }))?.id).toBe("MEDICINAS");
   });
 
-  it("un servicio que este cliente no tiene se poda en lectura", () => {
-    expect(
-      sanitizeFilters({ years: [2026], months: [], services: ["\\09", "\\02"] }, UNIVERSE).services,
-    ).toEqual(["\\02"]);
-  });
-
-  it("cuenta como marca activa, junto a los meses", () => {
-    expect(activeMarkCount({ years: [2026], months: [3], services: ["\\01"] })).toBe(2);
+  it("con varios tipos marcados o ninguno, vale la barra pulsada, sin fijar", () => {
+    expect(resolveOpenType("IMAGENES", filters({ tipos: ["MEDICINAS", "IMAGENES"] }))).toEqual({
+      id: "IMAGENES",
+      pinned: false,
+    });
+    expect(resolveOpenType(null, emptyFilters())).toBeNull();
   });
 });
 
-describe("describeServiceScope", () => {
-  it("sin marcas no hay tramo que nombrar", () => {
-    expect(describeServiceScope(emptyFilters(), UNIVERSE)).toBeNull();
-  });
-
-  it("con uno marcado dice su NOMBRE, que es lo que el usuario reconoce", () => {
-    expect(describeServiceScope({ years: [2026], months: [], services: ["\\02"] }, UNIVERSE)).toBe(
-      "MEDICINAS",
-    );
-  });
-
-  it("con varios dice cuántos de cuántos, porque los nombres no caben", () => {
-    expect(
-      describeServiceScope({ years: [2026], months: [], services: ["\\01", "\\02"] }, UNIVERSE),
-    ).toBe("2 de 3 servicios");
-  });
-
-  it("una marca huérfana vale como ninguna", () => {
-    expect(
-      describeServiceScope({ years: [2026], months: [], services: ["\\09"] }, UNIVERSE),
-    ).toBeNull();
-  });
-});
-
-describe("scopedPeriodLabel", () => {
-  it("sin servicios marcados es el periodo tal cual", () => {
+describe("scopedPeriodLabel y activeMarkCount", () => {
+  it("compone la acotación delante del periodo, una sola vez", () => {
+    expect(scopedPeriodLabel("HUMANA", "Abril 2026")).toBe("HUMANA · Abril 2026");
     expect(scopedPeriodLabel(null, "Abril 2026")).toBe("Abril 2026");
   });
 
-  it("con marca, el tramo va DELANTE del periodo", () => {
-    expect(scopedPeriodLabel("MEDICINAS", "Abril 2026")).toBe("MEDICINAS · Abril 2026");
+  it("cuenta las marcas de todos los ejes MENOS el año, que nunca está vacío", () => {
+    expect(
+      activeMarkCount(filters({ years: [2025, 2026], months: [1], seguros: ["A"], tipos: ["B"] })),
+    ).toBe(3);
   });
 });

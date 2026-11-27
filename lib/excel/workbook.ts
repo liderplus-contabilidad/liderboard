@@ -36,6 +36,116 @@ export function readGrid(workbook: XLSX.WorkBook, sheetName: string | undefined)
   }
 }
 
+/** A workbook read in SheetJS' DENSE mode, for sheets too large to copy. `cellDates` is on so
+ *  `readDenseRows` can hand a date cell over as text. */
+export function readWorkbookDense(data: ArrayBuffer): XLSX.WorkBook | null {
+  try {
+    return XLSX.read(data, { dense: true, cellDates: true });
+  } catch {
+    return null;
+  }
+}
+
+/** The rows the sheet DECLARES in its own range (`A1:R558273` → 558273), header included; `null`
+ *  when it declares none. */
+export function declaredRowCount(
+  workbook: XLSX.WorkBook,
+  sheetName: string | undefined,
+): number | null {
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  const ref = sheet?.["!ref"];
+  if (!ref) {
+    return null;
+  }
+  try {
+    return XLSX.utils.decode_range(ref).e.r + 1;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The sheet's rows, one at a time, without the second copy `readGrid` builds. A date cell is
+ * handed over as TEXT (`YYYY-MM-DD HH:MM:SS.mmm`). `null` when `sheetName` names no sheet.
+ */
+export function readDenseRows(
+  workbook: XLSX.WorkBook,
+  sheetName: string | undefined,
+): Iterable<Cell[]> | null {
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  if (!sheet) {
+    return null;
+  }
+  const dense = (sheet as { "!data"?: XLSX.CellObject[][] })["!data"];
+  const ref = sheet["!ref"];
+  let range: XLSX.Range | null = null;
+  if (!dense) {
+    if (!ref) {
+      return [];
+    }
+    try {
+      range = XLSX.utils.decode_range(ref);
+    } catch {
+      return [];
+    }
+  }
+  const rows = dense;
+  const bounds = range;
+  return {
+    *[Symbol.iterator](): Iterator<Cell[]> {
+      if (rows) {
+        for (const row of rows) {
+          yield (row ?? []).map(denseCell);
+        }
+        return;
+      }
+      if (!bounds) {
+        return;
+      }
+      for (let r = bounds.s.r; r <= bounds.e.r; r++) {
+        const row: Cell[] = [];
+        for (let c = bounds.s.c; c <= bounds.e.c; c++) {
+          row.push(
+            denseCell(sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined),
+          );
+        }
+        yield row;
+      }
+    },
+  };
+}
+
+function denseCell(cell: XLSX.CellObject | undefined | null): Cell {
+  const value = cell?.v;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return formatDateCell(value);
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "boolean") {
+    return String(value);
+  }
+  return String(value);
+}
+
+/**
+ * A date cell as text, built from its UTC parts: SheetJS turns a serial into a `Date` whose UTC
+ * parts carry the file's wall clock. The local parts are off by the machine's offset, which would
+ * move a date at midnight on the 1st into the previous month.
+ */
+function formatDateCell(value: Date): string {
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+  return (
+    `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())} ` +
+    `${pad(value.getUTCHours())}:${pad(value.getUTCMinutes())}:${pad(value.getUTCSeconds())}.` +
+    `${pad(value.getUTCMilliseconds(), 3)}`
+  );
+}
+
 export function toNumber(cell: Cell): number {
   if (typeof cell === "number" && Number.isFinite(cell)) {
     return cell;

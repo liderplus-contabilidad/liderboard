@@ -31,7 +31,7 @@ const WIDE = 6;
  */
 export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   const { activeClient } = usePygData();
-  const { clientName, months, periodName, cardsInput } = useSalesData();
+  const { clientName, coverage, periodName, cardsInput } = useSalesData();
   // Stamped ONCE, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 
@@ -39,14 +39,14 @@ export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   // here: sales are not broken down by center —the report does not declare one—, so the band is left
   // with a single logo instead of inventing a second one that would mean nothing.
   const logo = activeClient?.logo;
-  const identity = useMemo(() => deriveSalesIdentity(months), [months]);
+  const identity = useMemo(() => deriveSalesIdentity(coverage), [coverage]);
 
   const report = useMemo(
     () =>
       buildSalesReport({
         ...cardsInput,
         clientName: clientName ?? "Cliente",
-        ...(identity ? { companyName: identity.companyName } : {}),
+        ...(identity ? { companyCode: identity.companyCode } : {}),
         ...(logo ? { logo } : {}),
         generatedAt,
       }),

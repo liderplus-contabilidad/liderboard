@@ -208,24 +208,70 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
   module because it has no data of its own and needs that client selector.
 
 **Ventas por servicio** · `/profit-loss/sales` (submodule of PyG) · `lib/sales/` · its own Dexie base
-`liderboard-sales`, partitioned by PyG's `clientId`.
+`liderboard-sales` v2 (`months` + `coverage`), partitioned by PyG's `clientId`.
 
 - **What is invoiced is NOT what is booked**, so these sales enter NO PyG reading — Datos, Gráficos
   and Análisis draw exactly the same with sales loaded or not, and the silence is declared on screen
   and in the report header.
-- One upload = one CALENDAR MONTH, declared by the file (`Desde:`/`Hasta:` through `toCalendarMonth`,
-  the same rule as estado único); a reloaded month is replaced whole. The header identifies the
-  FORMAT; `readSalesRow` locates a line by RELATIVE position, because the labels sit centered over
-  merged cells and fall in different columns than their values.
-- Three readings described as DATA (`cards.ts`: `option` + `table`), which is what lets the report
-  read the same construction as the screen. **Each card has two shapes and the number of marked years
-  chooses it**, never a control. `payer.ts` is the one place that decides whether a payer is named.
-- The bar is Año · Mes · Servicio; `scopedPeriodLabel` (`filters.ts`) is the ONE composition of the
-  label the tiles, the three subtitles and the report header read.
+- The input is the system's FLAT report: one row per invoice LINE, 18 columns, **recognised by its
+  LABELS on whatever row carries them** (seven required, eleven optional) — which is what lets the
+  module's own download, whose header sits under a letterhead, come back in through the same door.
+- **The period is decided by each LINE, not by the file** (its `FECHA`, read as text or as a date
+  cell): an upload may cover any range, and **every month it touches is replaced WHOLE**. Two files
+  of a batch with lines of the same month BLOCK it (`sharedMonths`) rather than overwrite each
+  other. There is no `toCalendarMonth` here any more.
+- **A line stores six fields** — `seguro · tipo · articleCode · articleName · vendor · amount` (the
+  NETO). `PACIENTE` is dropped at the door (it is a named patient against what they bought), and so
+  are the invoice numbers, the hour, `OI`, `REFERIDOS` and **`CANTIDAD`**, which mixes units: one row
+  of the real file carries 22,5 M of its 28,8 M. **Everything is measured on the NETO.**
+- **The NETO arrives as TEXT** (`"2.0000"`, and `".4000"` with no leading zero on 82.762 rows of the
+  real file) and is read by `toSalesNumber` through `parseCurrency`: the inverted convention
+  («17.338,85», «12,5») is REJECTED, and a row whose NETO cannot be read is counted and declared
+  in the file's warnings, never read as zero. On screen every amount shows two decimals.
+- **`coverage` is one tiny row per month** (year · month · lines · day range · `COD. EMPRESA`), so
+  «which years and months exist» — and the «Año» mark — is answered without deserialising a line.
+  It is the only derived thing persisted, on `loadedMonthsByYear`'s precedent. The universes of the
+  other marks are NOT stored: they come off the lines of the MARKED YEARS, ordered by amount.
+- **An article's identity is its CODE; its label is its NAME, and the code shows only where two
+  names collide** (`disambiguate`, `derive.ts`): the system truncates the name, so 340 names are
+  shared by several codes (22,5 % of the net, one of them by FORTY-TWO) and 889 codes carry two
+  spellings of their own. Grouping by name would fuse forty-two consultations; labelling every row
+  with its code is noise on the 93 % that do not need it.
+- **The composition is read in LEVELS**: its bars are the service types, and pressing one swaps the
+  card —same slot— for that type's article ranking (`buildTypeDetailCard`, shares measured against
+  the TYPE; `cards.typeOrder` maps bar → type), with «Todos los tipos» as the way back. ONE type marked in the bar opens the card into it as well,
+  pinned (`resolveOpenType`): «exactly one marked», the house figure. It is one
+  card's control: it narrows nothing else and leaves no chip — narrowing the screen is MARKING the
+  type. A stacked «Tipo → Artículo» bar was tried first and withdrawn: the client could not read
+  it. Every flat bar writes its amount AND its share (`barFigure`); the report does not print
+  level two per type.
+- Identity is `COD. EMPRESA`, derived off the coverage. The cuadre is **lines read vs. the rows the
+  sheet DECLARES** (`declaredRowCount`) — the file writes no total — and its warnings belong to the
+  FILE, never to a month: one upload writes up to 44 of them.
+- **Reading and writing run in a WORKER** (`upload/worker.ts`, `upload/client.ts`). Measured on the
+  real 558.272-line file: reading 21,8 s / 2,55 GB, writing 9,2 s / 1,86 GB. The modal warns BEFORE
+  reading, by `file.size`. The download is the app's **only** Excel written with SheetJS — exceljs
+  needs 4,6 GB for these rows and kills the tab — and its declared price is losing the letterhead.
+- FIVE readings described as DATA (`cards.ts`: `option` + `table`), which is what lets the report
+  read the same construction as the screen: composition by TIPO, concentration by SEGURO, evolution,
+  and the ARTICLE and VENDEDOR rankings — the last three through ONE `buildRankingCard`. **Each card
+  has two shapes and the number of marked years chooses it**, never a control. `payer.ts` is gone:
+  `SEGURO` is never empty, so there is no «unidentified» case left to decide.
+- **The evolution is the LAST card**, on screen and on paper («Evolución mensual de la venta»), and
+  its subtitle says what each month is read against (`evolutionBasis`).
+- **«Venta por vendedor» declares what it cannot measure**: 53,4 % of the net carries no salesperson,
+  so the note states it and the card is not drawn at all when nothing marked declares one.
+- The bar is Año · Mes · Seguro · Tipo de servicio → **Artículo** (nested: its list follows the marked
+  types, and it has a search box for 4.490 of them) · Vendedor; `scopedPeriodLabel` (`filters.ts`) is
+  the ONE composition of the label the tiles, the five subtitles and the report header read.
+- **Which palette each card wears is a decision, documented in `cards.ts`**: four of them colour BY
+  POSITION and the app has only two sequences long enough, so tipo/seguro share `CHART_SLICE_SEQUENCE`
+  and artículo/vendedor share `CHART_RANKING_SEQUENCE` — the pairing chosen so the one genuinely
+  related pair (tipo ↔ artículo) never shares a hue.
 - Two cards carry a **body switch** («Ver como»: `plano` / `solido`, `lib/charts/solid-bars.ts`) and
   the evolution a **shape switch** («2D» / «3D», `EvolutionView`) — the second is two
   READINGS and not two bodies, so it renders nothing where there is no breakdown to shape. With ONE
-  month marked the stack spreads into one bar per SERVICE.
+  month marked the stack spreads into one bar per TIPO DE SERVICIO.
 
 **Reportería de ingresos** · `/profit-loss/revenue-report` (submodule of PyG) · `lib/revenue/` · its
 own Dexie base `liderboard-revenue` v1, partitioned by PyG's `clientId`.

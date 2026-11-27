@@ -1,96 +1,162 @@
 import { describe, expect, it } from "vitest";
-import { buildSalesWorkbook, salesExportFilename } from "./export";
-import type { ParsedSalesMonth, SalesMonth } from "./types";
-import { parseSalesGrid, parseSalesWorkbook } from "./upload/parse";
-import { salesGrid } from "./upload/parse.fixtures";
+import * as XLSX from "xlsx";
+import { buildSalesWorkbook, salesExportFilename, type SalesExportMonth } from "./export";
+import { parseSalesWorkbook } from "./upload/parse";
+import type { SalesLine } from "./types";
 
-/** The fixture's month, exactly as the parser hands it over — the real report's shape. */
-function fixtureMonth(): ParsedSalesMonth {
-  const result = parseSalesGrid(salesGrid());
-  if (!result.ok) {
-    throw new Error(result.message);
-  }
-  return result.month;
-}
-
-function stored(month: ParsedSalesMonth, clientId = "c1"): SalesMonth {
-  return { ...month, id: `${clientId}:${month.year}-${month.monthIndex + 1}`, clientId };
-}
-
-/** A month that exercises what the fixture does not: no payer, no declared total, a NEGATIVE amount
- *  and cents that do not round. */
-function bareMonth(): ParsedSalesMonth {
+function line(overrides: Partial<SalesLine> = {}): SalesLine {
   return {
-    year: 2025,
-    monthIndex: 11,
-    companyName: "CLINICA DE PRUEBA S.A.",
-    lines: [
-      { serviceCode: "\\01", serviceName: "HONORARIOS", payer: "", quantity: 2, amount: 333.33 },
-      {
-        serviceCode: "\\04",
-        serviceName: "IMAGENES",
-        payer: "PEREZ ANA",
-        quantity: 1,
-        amount: -12.5,
-      },
-    ],
-    declaredTotal: null,
-    warnings: [],
+    seguro: "PARTICULAR",
+    tipo: "MEDICINAS",
+    articleCode: "000156",
+    articleName: "CLARITROMICINA SOLIDO ORAL 250MG",
+    vendor: "",
+    amount: 35.5,
+    ...overrides,
   };
 }
 
-async function roundTrip(months: SalesMonth[]): Promise<ParsedSalesMonth[]> {
-  const buffer = await buildSalesWorkbook(months).xlsx.writeBuffer();
-  const result = parseSalesWorkbook(buffer as ArrayBuffer);
-  if (!result.ok) {
-    throw new Error(`el libro descargado no se pudo volver a leer: ${result.message}`);
-  }
-  return result.months;
+function month(
+  year: number,
+  monthIndex: number,
+  lines: SalesLine[],
+  firstDay = 1,
+): SalesExportMonth {
+  return {
+    id: `c:${year}-${monthIndex}`,
+    clientId: "c",
+    year,
+    monthIndex,
+    lines,
+    firstDay,
+    companyCode: "01",
+  };
 }
 
-describe("ida y vuelta", () => {
-  it("lo escrito vuelve EXACTAMENTE igual, avisos y total declarado incluidos", async () => {
-    const months = [fixtureMonth(), bareMonth()];
-    expect(await roundTrip(months.map((month) => stored(month)))).toEqual(
-      // Sorted chronologically on the way out, whatever order they were handed over in.
-      [bareMonth(), fixtureMonth()],
-    );
+const MONTHS: SalesExportMonth[] = [
+  month(
+    2026,
+    2,
+    [
+      line({
+        seguro: "HUMANA",
+        tipo: "HONORARIOS MEDICOS",
+        articleCode: "99204CARD",
+        articleName: "Visita en la oficina",
+        vendor: "CASTELLANOS LOPEZ RAUL FABRICI",
+        amount: 120,
+      }),
+      line({ amount: 0 }),
+    ],
+    2,
+  ),
+  month(
+    2025,
+    10,
+    [
+      line({
+        seguro: "CONFIAMED",
+        tipo: "EXAMENES DE LABORATORIO",
+        articleCode: "360193",
+        articleName: "SODIO",
+        amount: 12,
+      }),
+    ],
+    10,
+  ),
+];
+
+/** The workbook as an `ArrayBuffer`, which is what the upload receives. */
+function roundTrip(months: readonly SalesExportMonth[]): ArrayBuffer {
+  return XLSX.write(buildSalesWorkbook(months), { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+}
+
+describe("buildSalesWorkbook", () => {
+  it("escribe UNA sola hoja, no una por mes: el periodo ya lo decide cada línea", () => {
+    expect(buildSalesWorkbook(MONTHS).SheetNames).toEqual(["Ventas"]);
   });
 
-  it("un aviso de cuadre sobrevive el viaje: el total declarado se escribe, no la suma", async () => {
-    const month = { ...fixtureMonth(), declaredTotal: 2000 };
-    month.warnings = ["La suma no coincide"];
-    const [back] = await roundTrip([stored(month)]);
-    expect(back.declaredTotal).toBe(2000);
-    expect(back.warnings).toHaveLength(1);
+  it("la cabecera es la que el lector exige, con el código de empresa delante", () => {
+    const sheet = buildSalesWorkbook(MONTHS).Sheets["Ventas"];
+    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+    expect(rows[0]).toEqual([
+      "COD. EMPRESA",
+      "FECHA",
+      "SEGURO",
+      "TIPO DE SERVICIO.",
+      "COD. ARTICULO",
+      "NOMBRE DEL ARTICULO",
+      "VENDEDOR",
+      "NETO",
+    ]);
   });
 
-  it("una razón social vacía vuelve vacía, sin sustituto", async () => {
-    const [back] = await roundTrip([stored({ ...bareMonth(), companyName: "" })]);
-    expect(back.companyName).toBe("");
+  it("la FECHA se escribe como TEXTO, nunca como celda de fecha", () => {
+    const sheet = buildSalesWorkbook(MONTHS).Sheets["Ventas"];
+    // La primera línea de datos es la de 2025-11 (el libro ordena cronológicamente).
+    const cell = sheet["B2"] as XLSX.CellObject;
+    expect(cell.t).toBe("s");
+    expect(cell.v).toBe("2025-11-10 00:00:00.000");
   });
 
-  it("cada hoja se llama por su mes", () => {
-    const wb = buildSalesWorkbook([stored(fixtureMonth()), stored(bareMonth())]);
-    expect(wb.worksheets.map((ws) => ws.name)).toEqual(["Diciembre 2025", "Abril 2026"]);
+  it("ordena los meses cronológicamente llegue como llegue", () => {
+    const sheet = buildSalesWorkbook(MONTHS).Sheets["Ventas"];
+    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+    expect(String(rows[1][1]).slice(0, 7)).toBe("2025-11");
+    expect(String(rows[2][1]).slice(0, 7)).toBe("2026-03");
   });
 
-  it("sin total declarado no hay fila de total; con él, el cierre del reporte", () => {
-    const cells = (month: ParsedSalesMonth) =>
-      buildSalesWorkbook([stored(month)])
-        .worksheets[0].getSheetValues()
-        .flat()
-        .filter((cell) => cell !== undefined);
-    expect(cells(bareMonth())).not.toContain("TOTAL ITEMS");
-    expect(cells(fixtureMonth())).toContain("TOTAL ITEMS");
+  it("no escribe nada derivado: ni totales, ni porcentajes, ni recuentos", () => {
+    const sheet = buildSalesWorkbook(MONTHS).Sheets["Ventas"];
+    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 });
+    // Cabecera + tres líneas, y ni una fila más.
+    expect(rows).toHaveLength(4);
+    expect(JSON.stringify(rows)).not.toContain("TOTAL");
   });
 });
 
-describe("el nombre del archivo", () => {
-  it("lleva la empresa y el tramo de años", () => {
-    expect(salesExportFilename("Clínica de Prueba S.A.", [2026, 2025])).toBe(
-      "VENTAS_Clínica_de_Prueba_S.A._2025-2026.xlsx",
-    );
-    expect(salesExportFilename("", [2026])).toBe("VENTAS_2026.xlsx");
+describe("la ida y la vuelta", () => {
+  it("lo que sale vuelve a entrar y deja los mismos meses, con sus mismas líneas", () => {
+    const result = parseSalesWorkbook(roundTrip(MONTHS));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const back = result.reading.months;
+    expect(back).toHaveLength(2);
+    expect(back[0]).toMatchObject({ year: 2025, monthIndex: 10, lineCount: 1, companyCode: "01" });
+    expect(back[1]).toMatchObject({ year: 2026, monthIndex: 2, lineCount: 2, companyCode: "01" });
+    // Las líneas, campo por campo.
+    expect(back[1].lines).toEqual(MONTHS[0].lines);
+    expect(back[0].lines).toEqual(MONTHS[1].lines);
+  });
+
+  it("vuelve sin ningún aviso: una hoja exportada cuadra siempre consigo misma", () => {
+    const result = parseSalesWorkbook(roundTrip(MONTHS));
+    expect(result.ok && result.reading.warnings).toEqual([]);
+  });
+
+  it("el primer día de la cobertura sobrevive al viaje", () => {
+    const result = parseSalesWorkbook(roundTrip(MONTHS));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.reading.months[1].firstDay).toBe(2);
+  });
+
+  it("una línea en $0 y un vendedor vacío vuelven como salieron", () => {
+    const result = parseSalesWorkbook(roundTrip(MONTHS));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const cero = result.reading.months[1].lines.find((entry) => entry.amount === 0);
+    expect(cero).toBeDefined();
+    expect(cero?.vendor).toBe("");
+  });
+});
+
+describe("salesExportFilename", () => {
+  it("nombra la empresa y el tramo de años", () => {
+    expect(salesExportFilename("01", [2025, 2026])).toBe("VENTAS_01_2025-2026.xlsx");
+  });
+
+  it("quita lo que un sistema de archivos no admite", () => {
+    expect(salesExportFilename('A/B:C*?"<>|', [2026])).toBe("VENTAS_ABC_2026.xlsx");
   });
 });

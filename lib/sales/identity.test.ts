@@ -1,94 +1,83 @@
 import { describe, expect, it } from "vitest";
 import {
-  describeSalesIdentityClash,
   deriveSalesIdentity,
+  describeSalesIdentityClash,
   incomingSalesIdentity,
   sameSalesIdentity,
 } from "./identity";
-import type { ParsedSalesMonth, SalesMonth } from "./types";
+import type { ParsedSalesMonth, SalesCoverage } from "./types";
 
-function stored(companyName: string): SalesMonth {
+function coverage(companyCode: string, year = 2026, monthIndex = 0): SalesCoverage {
   return {
-    id: "c1:2026-04",
-    clientId: "c1",
-    year: 2026,
-    monthIndex: 3,
-    companyName,
-    lines: [],
-    declaredTotal: null,
-    warnings: [],
+    id: `c:${year}-${monthIndex}`,
+    clientId: "c",
+    year,
+    monthIndex,
+    lineCount: 1,
+    firstDay: 1,
+    lastDay: 31,
+    companyCode,
   };
 }
 
-function parsed(companyName: string): ParsedSalesMonth {
-  return { year: 2026, monthIndex: 3, companyName, lines: [], declaredTotal: null, warnings: [] };
+function parsed(companyCode: string): ParsedSalesMonth {
+  return {
+    year: 2026,
+    monthIndex: 0,
+    lineCount: 1,
+    firstDay: 1,
+    lastDay: 31,
+    companyCode,
+    lines: [],
+  };
 }
 
 describe("deriveSalesIdentity", () => {
-  it("un cliente SIN ventas no tiene identidad: la primera carga la adopta y no puede chocar", () => {
+  it("a client with nothing loaded has NO identity, which is what lets a first upload adopt it", () => {
     expect(deriveSalesIdentity([])).toBeNull();
   });
 
-  it("la identidad es la razón social que declaran sus archivos", () => {
-    expect(deriveSalesIdentity([stored("HOSPITAL DURAN S.A.")])).toEqual({
-      companyName: "HOSPITAL DURAN S.A.",
-    });
+  it("reads the code off the coverage, never off the lines", () => {
+    expect(deriveSalesIdentity([coverage("01")])).toEqual({ companyCode: "01" });
   });
 
-  it("un archivo sin empresa declarada no da identidad", () => {
-    expect(deriveSalesIdentity([stored("   ")])).toBeNull();
-  });
-});
-
-describe("sameSalesIdentity", () => {
-  it("mayúsculas, acentos y espacios sobrantes no separan dos cargas de la misma empresa", () => {
-    expect(
-      sameSalesIdentity({ companyName: "Clínica  Durán" }, { companyName: "CLINICA DURAN" }),
-    ).toBe(true);
-  });
-
-  it("la puntuación SEPARA en vez de desaparecer: dos empresas parecidas no se funden", () => {
-    expect(sameSalesIdentity({ companyName: "DURAN S.A." }, { companyName: "DURANSA" })).toBe(
-      false,
-    );
-  });
-
-  it("dos empresas distintas no son la misma", () => {
-    expect(
-      sameSalesIdentity({ companyName: "HOSPITAL DURAN" }, { companyName: "CLINICA AMBATO" }),
-    ).toBe(false);
+  it("skips coverage rows that declare no code at all", () => {
+    expect(deriveSalesIdentity([coverage("  "), coverage("07")])).toEqual({ companyCode: "07" });
   });
 });
 
 describe("incomingSalesIdentity", () => {
-  it("toma la del primer archivo que declara empresa", () => {
-    expect(incomingSalesIdentity([parsed(""), parsed("HOSPITAL DURAN")])).toEqual({
-      companyName: "HOSPITAL DURAN",
-    });
+  it("is the first code the batch declares", () => {
+    expect(incomingSalesIdentity([parsed(""), parsed("03")])).toEqual({ companyCode: "03" });
+  });
+});
+
+describe("sameSalesIdentity", () => {
+  it("leading zeros and whitespace do not make two companies", () => {
+    expect(sameSalesIdentity({ companyCode: "01" }, { companyCode: " 1 " })).toBe(true);
+  });
+
+  it("two different codes are two companies — this is the whole point of the guard", () => {
+    expect(sameSalesIdentity({ companyCode: "01" }, { companyCode: "07" })).toBe(false);
+  });
+
+  it("a non-numeric code is compared whole, only trimmed and upper-cased", () => {
+    expect(sameSalesIdentity({ companyCode: "hc" }, { companyCode: " HC" })).toBe(true);
+    expect(sameSalesIdentity({ companyCode: "HA" }, { companyCode: "HC" })).toBe(false);
   });
 });
 
 describe("describeSalesIdentityClash", () => {
-  it("no dobla el punto cuando la razón social ya acaba en uno", () => {
-    // Half the country's razón sociales end in `S.A.`, and an `S.A..` reads as a typo of the app over
-    // the client's name.
+  it("names BOTH codes and the client, and does not order anyone around", () => {
     const message = describeSalesIdentityClash(
-      { companyName: "HOSPITAL DURAN" },
-      { companyName: "CENTRO MEDICO SAN RAFAEL S.A." },
+      { companyCode: "01" },
+      { companyCode: "07" },
       "Clínica Durán",
     );
-    expect(message).toContain("SAN RAFAEL S.A. Si es la misma");
-    expect(message).not.toContain("..");
-  });
-
-  it("nombra las DOS empresas y el cliente, y dice qué hacer en cada caso", () => {
-    const message = describeSalesIdentityClash(
-      { companyName: "HOSPITAL DURAN" },
-      { companyName: "CLINICA AMBATO" },
-      "Clínica Durán",
-    );
-    expect(message).toContain("HOSPITAL DURAN");
-    expect(message).toContain("CLINICA AMBATO");
     expect(message).toContain("Clínica Durán");
+    expect(message).toContain("01");
+    expect(message).toContain("07");
+    // It is a notice, not a block: continuing has to be one of the two exits it offers.
+    expect(message).toContain("continúa");
   });
 });
