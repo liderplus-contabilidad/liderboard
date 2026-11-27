@@ -103,20 +103,24 @@ export function SalesExportActions({
           children: (
             <div className="flex flex-col gap-2">
               <p>
-                El reporte <strong>«Venta de Servicios por FACTURA»</strong> del sistema contable,
-                en <code>.xls</code> o <code>.xlsx</code>. Un archivo por mes; se pueden soltar
-                varios a la vez.
+                El <strong>reporte de ventas</strong> del sistema contable, en <code>.xls</code> o{" "}
+                <code>.xlsx</code>: una fila por línea de factura, con las columnas FECHA, SEGURO,
+                TIPO DE SERVICIO, COD. ARTICULO, NOMBRE DEL ARTICULO, NETO y VENDEDOR. Las demás
+                columnas se ignoran.
               </p>
               <p>
-                El periodo se lee del propio reporte (<code>Desde:</code> / <code>Hasta:</code>) y
-                tiene que ser <strong>un mes calendario completo</strong>. El nombre del archivo no
-                participa, así que renombrarlo no cambia dónde aterriza el mes.
+                Puede traer <strong>cualquier rango de fechas</strong> —un mes, dos o varios años—:
+                cada línea cae en el mes de su FECHA. El nombre del archivo no participa. Se pueden
+                soltar varios a la vez, siempre que no compartan ningún mes.
               </p>
               <p>
                 También acepta el <strong>«Excel con tus datos»</strong> que se descarga aquí: una
-                hoja por mes, y al subirlo la base queda exactamente como estaba.
+                sola hoja con todos los meses, y al subirlo la base queda como estaba.
               </p>
-              <p>Volver a cargar un mes reemplaza por completo el que hubiera.</p>
+              <p>
+                Cada mes que el archivo trae reemplaza por completo al que hubiera; los demás meses
+                no se tocan.
+              </p>
             </div>
           ),
         }}

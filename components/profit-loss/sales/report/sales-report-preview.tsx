@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ReportLayer, ReportSheet } from "@/components/ui/report-layer";
 import { deriveSalesIdentity } from "@/lib/sales/identity";
+import { resolveOpenType } from "@/lib/sales/filters";
 import { buildSalesReport } from "@/lib/sales/report";
 import { usePygData } from "../../pyg-data-provider";
 import { useSalesData } from "../sales-data-provider";
@@ -31,7 +32,7 @@ const WIDE = 6;
  */
 export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   const { activeClient } = usePygData();
-  const { clientName, coverage, periodName, cardsInput } = useSalesData();
+  const { clientName, coverage, periodName, cardsInput, filters } = useSalesData();
   // Stamped ONCE, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 
@@ -41,6 +42,10 @@ export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   const logo = activeClient?.logo;
   const identity = useMemo(() => deriveSalesIdentity(coverage), [coverage]);
 
+  // Only a type PINNED by the bar reaches the paper; a pressed bar is a local switch.
+  const open = resolveOpenType(null, filters);
+  const openTypeId = open?.pinned ? open.id : undefined;
+
   const report = useMemo(
     () =>
       buildSalesReport({
@@ -48,9 +53,10 @@ export function SalesReportPreview({ onClose }: { onClose: () => void }) {
         clientName: clientName ?? "Cliente",
         ...(identity ? { companyCode: identity.companyCode } : {}),
         ...(logo ? { logo } : {}),
+        ...(openTypeId ? { openTypeId } : {}),
         generatedAt,
       }),
-    [cardsInput, clientName, identity, logo, generatedAt],
+    [cardsInput, clientName, identity, logo, openTypeId, generatedAt],
   );
 
   // Which section goes on which sheet is decided by the NUMBER OF COLUMNS of its own table, not by a

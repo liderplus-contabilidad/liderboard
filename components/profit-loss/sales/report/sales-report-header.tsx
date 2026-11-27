@@ -31,8 +31,22 @@ export function SalesReportHeader({ header }: { header: SalesReportHeaderSpec })
 
       <dl className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-[12.5px]">
         <Field label="Periodo" value={header.periodLabel} />
+        <Field label="Filtros" value={header.filtersLabel ?? "Ninguno: toda la venta"} />
         {header.companyCode && <Field label="Empresa" value={header.companyCode} />}
         <Field label="Generado el" value={header.generatedAt} />
+      </dl>
+
+      <dl className="grid grid-cols-4 gap-3">
+        {header.summary.map((figure) => (
+          <div key={figure.label} className="rounded-[9px] border border-border px-3 py-2.5">
+            <dt className="text-[10.5px] font-semibold uppercase tracking-[0.5px] text-faint">
+              {figure.label}
+            </dt>
+            <dd className="mt-1 font-mono text-[15px] font-semibold tabular-nums text-ink">
+              {figure.value}
+            </dd>
+          </div>
+        ))}
       </dl>
 
       {/* The same declaration as the screen, and here it weighs more: a PDF travels without the app

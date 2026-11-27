@@ -16,10 +16,11 @@ import { formatTimestampEs } from "@/lib/date";
 import type { EntityLogo } from "@/lib/workspaces";
 import {
   buildSalesCards,
+  buildTypeDetailCard,
   RANKING_TABLE_PRINT_LIMIT,
-  scopedPeriod,
   type SalesCardsInput,
 } from "./cards";
+import { formatCurrency, formatNumber } from "@/lib/format";
 
 export interface SalesReportHeader {
   /** The label the user gave the client — never the razón social of any file. */
@@ -33,6 +34,11 @@ export interface SalesReportHeader {
   rightLogo?: EntityLogo;
   /** «Abril 2026», «Ene–Abr 2026», «Ene, Mar, Abr 2026». */
   periodLabel: string;
+  /** What the bar narrowed to — «HUMANA · 2 de 14 tipos» — or `null` with no marks. On paper the
+   *  bar is not there, so this is the only place the reader learns the figures are a slice. */
+  filtersLabel: string | null;
+  /** The screen's four tiles: the figures a reader looks for first. */
+  summary: { label: string; value: string }[];
   generatedAt: string;
 }
 
@@ -48,6 +54,8 @@ export interface SalesReport {
 }
 
 export interface BuildSalesReportInput extends SalesCardsInput {
+  /** The type the bar pins the composition to (exactly one marked), if any. */
+  openTypeId?: string;
   clientName: string;
   companyCode?: string;
   logo?: EntityLogo;
@@ -61,24 +69,42 @@ export interface BuildSalesReportInput extends SalesCardsInput {
  * composition's second level is not printed per type: the article ranking already answers it.
  */
 export function buildSalesReport(input: BuildSalesReportInput): SalesReport {
+  const rankingInput = { ...input, rankingTableLimit: RANKING_TABLE_PRINT_LIMIT };
+  // ONE type marked in the bar: the composition would be a single bar, so —as on screen— its place
+  // is taken by that type's articles. A bar merely PRESSED on screen is a local switch and is not
+  // printed.
+  const detail = input.openTypeId ? buildTypeDetailCard(rankingInput, input.openTypeId) : null;
+  const { totals } = input.reading;
   // The ONLY place the paper parts ways with the screen, and it is decided by the report and not by
   // the card: a ranking's tail is folded into one row with its sum. See `RANKING_TABLE_PRINT_LIMIT`.
-  const cards = buildSalesCards({ ...input, rankingTableLimit: RANKING_TABLE_PRINT_LIMIT });
+  const cards = buildSalesCards(rankingInput);
   return {
     header: {
       clientName: input.clientName,
       ...(input.companyCode ? { companyCode: input.companyCode } : {}),
       ...(input.logo ? { logo: input.logo } : {}),
       ...(input.rightLogo ? { rightLogo: input.rightLogo } : {}),
-      // With marks set the paper HAS to say so: the bar that says it on screen is not here.
-      periodLabel: scopedPeriod(input),
+      periodLabel: input.period,
+      filtersLabel: input.scope ?? null,
+      summary: [
+        { label: "Venta total (neto)", value: formatCurrency(totals.amount, { cents: true }) },
+        { label: "Líneas facturadas", value: formatNumber(totals.lineCount) },
+        {
+          label: "Promedio por línea",
+          value:
+            totals.averageLine === null ? "–" : formatCurrency(totals.averageLine, { cents: true }),
+        },
+        { label: "Seguros", value: formatNumber(totals.insurerCount) },
+      ],
       generatedAt: formatTimestampEs(input.generatedAt),
     },
     sections: [
       // All of them go through the SAME check, and it is not ceremony: every one can come out as a
       // solid or as a 3D box, and paper carries neither. The call above asks for no shape, so this
       // never throws today — writing it down rather than casting is what keeps it that way.
-      { id: "types", card: flatOnly(cards.types) },
+      detail
+        ? { id: "type-detail", card: flatOnly(detail) }
+        : { id: "types", card: flatOnly(cards.types) },
       { id: "insurers", card: flatOnly(cards.insurers) },
       { id: "articles", card: flatOnly(cards.articles) },
       ...(cards.vendors ? [{ id: "vendors", card: flatOnly(cards.vendors) }] : []),

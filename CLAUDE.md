@@ -257,6 +257,9 @@ Dexie `liderboard-pyg` v7 partitioned by `clientId` (`clients`, `datasets`, `edi
   and the ARTICLE and VENDEDOR rankings — the last three through ONE `buildRankingCard`. **Each card
   has two shapes and the number of marked years chooses it**, never a control. `payer.ts` is gone:
   `SEGURO` is never empty, so there is no «unidentified» case left to decide.
+- **The printed report's header carries what the bar and the tiles say on screen**: the period, the
+  filters apart from it, and the four summary figures. With ONE type marked it prints that type's
+  articles in the composition's place; a bar merely pressed is a local switch and is not printed.
 - **The evolution is the LAST card**, on screen and on paper («Evolución mensual de la venta»), and
   its subtitle says what each month is read against (`evolutionBasis`).
 - **«Venta por vendedor» declares what it cannot measure**: 53,4 % of the net carries no salesperson,

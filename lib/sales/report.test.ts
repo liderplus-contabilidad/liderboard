@@ -198,10 +198,34 @@ describe("la cola de un ranking en el papel", () => {
   });
 });
 
-describe("el informe nombra el tramo marcado", () => {
-  it("la cabecera dice qué se está mirando", () => {
-    // On paper the bar is not there: if the header does not say it, nothing does.
+describe("lo que la cabecera del informe dice", () => {
+  it("nombra los filtros APARTE del periodo: en el papel la barra no está", () => {
     const report = buildSalesReport(input({ scope: "MEDICINAS" }));
-    expect(report.header.periodLabel).toBe("MEDICINAS · Abril 2026");
+    expect(report.header.periodLabel).toBe("Abril 2026");
+    expect(report.header.filtersLabel).toBe("MEDICINAS");
+    expect(buildSalesReport(input()).header.filtersLabel).toBeNull();
+  });
+
+  it("trae las cuatro cifras de cabecera de la pantalla, con dos decimales", () => {
+    expect(buildSalesReport(input()).header.summary).toEqual([
+      { label: "Venta total (neto)", value: "$1,000.00" },
+      { label: "Líneas facturadas", value: "2" },
+      { label: "Promedio por línea", value: "$500.00" },
+      { label: "Seguros", value: "2" },
+    ]);
+  });
+});
+
+describe("un solo tipo marcado en la barra", () => {
+  it("el informe imprime los artículos de ese tipo en el lugar de la composición", () => {
+    const report = buildSalesReport(input({ openTypeId: "MEDICINAS" }));
+    expect(report.sections[0].id).toBe("type-detail");
+    expect(report.sections[0].card.title).toBe("Artículos de MEDICINAS");
+    expect(report.sections.some((entry) => entry.id === "types")).toBe(false);
+  });
+
+  it("si ese tipo no está en lo leído, vuelve a la composición", () => {
+    const report = buildSalesReport(input({ openTypeId: "NO EXISTE" }));
+    expect(report.sections[0].id).toBe("types");
   });
 });
