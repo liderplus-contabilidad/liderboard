@@ -3,7 +3,15 @@
 import { useFilterState } from "@/components/dashboard/filter-state";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useDeferredValue,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   buildSalesCards,
   SCREEN_EVOLUTION_VIEW,
@@ -92,6 +100,9 @@ interface SalesDataValue {
    */
   cardsInput: SalesCardsInput;
   cards: SalesCards;
+  /** The marks `cards` were built with: `filters` a beat later. What reads the cards asks this
+   *  one, so a card is never interpreted with a mark it has not been drawn with yet. */
+  shownFilters: SalesFilters;
   hideEmptyMonths: boolean;
   toggleEmptyMonths: () => void;
   /**
@@ -171,19 +182,35 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   // years this client does not have.
   const filters = useMemo(() => sanitizeFilters(rawFilters, universe), [rawFilters, universe]);
 
-  const period = useMemo(() => selectedMonths(filters, universe), [filters, universe]);
-  const periodName = useMemo(() => periodLabel(period, filters.years), [period, filters.years]);
+  // The marks answer at once and the figures follow: the bar reads `filters`, live, and everything
+  // that walks the lines reads ONE deferred snapshot — months, universe and marks together, so a
+  // reading is never the lines of one year narrowed by the marks of another. Without it a click on
+  // a checkbox waited for five cards to be recomputed over every line before painting its tick.
+  const live = useMemo(() => ({ months, universe, filters }), [months, universe, filters]);
+  const shown = useDeferredValue(live);
+
+  const period = useMemo(
+    () => selectedMonths(shown.filters, shown.universe),
+    [shown.filters, shown.universe],
+  );
+  const periodName = useMemo(
+    () => periodLabel(period, shown.filters.years),
+    [period, shown.filters.years],
+  );
   // The one wording of the narrowing, read by every card.
-  const scope = useMemo(() => describeScope(filters, universe), [filters, universe]);
+  const scope = useMemo(
+    () => describeScope(shown.filters, shown.universe),
+    [shown.filters, shown.universe],
+  );
   const scopedPeriodName = useMemo(() => scopedPeriodLabel(scope, periodName), [scope, periodName]);
 
   /** The months of one year that the period lets through, already narrowed by every mark. */
   const narrowedMonths = useMemo<SalesMonth[]>(() => {
     const inPeriod = new Set(period);
-    return months
+    return shown.months
       .filter((month) => inPeriod.has(month.monthIndex))
-      .map((month) => ({ ...month, lines: narrowLines(month.lines, filters) }));
-  }, [months, period, filters]);
+      .map((month) => ({ ...month, lines: narrowLines(month.lines, shown.filters) }));
+  }, [shown.months, period, shown.filters]);
 
   const linesOf = useCallback(
     (year: number) =>
@@ -194,15 +221,15 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
   // A single aggregation for everything the screen says: the tiles, the cards and the report read
   // from here, so they cannot square against different spans.
   const reading = useMemo(
-    () => readSales(filters.years.flatMap((year) => linesOf(year))),
-    [filters.years, linesOf],
+    () => readSales(shown.filters.years.flatMap((year) => linesOf(year))),
+    [shown.filters.years, linesOf],
   );
 
   // And one PER YEAR, which is what the cards compare. They are built here and not in the card so
   // the total sum and the partial ones come out of the same lines.
   const byYear = useMemo<YearReading[]>(
-    () => filters.years.map((year) => ({ year, reading: readSales(linesOf(year)) })),
-    [filters.years, linesOf],
+    () => shown.filters.years.map((year) => ({ year, reading: readSales(linesOf(year)) })),
+    [shown.filters.years, linesOf],
   );
 
   /**
@@ -212,11 +239,11 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
    */
   const monthlyByYear = useMemo<YearMonths[]>(
     () =>
-      filters.years.map((year) => ({
+      shown.filters.years.map((year) => ({
         year,
-        points: onAxis(monthlySeries(narrowedMonths, coverage, year), filters.months),
+        points: onAxis(monthlySeries(narrowedMonths, coverage, year), shown.filters.months),
       })),
-    [filters.years, filters.months, narrowedMonths, coverage],
+    [shown.filters.years, shown.filters.months, narrowedMonths, coverage],
   );
 
   /**
@@ -225,13 +252,13 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
    */
   const typeMonthly = useMemo(
     () =>
-      filters.years.length === 1
-        ? monthlyTypeSeries(narrowedMonths, coverage, filters.years[0]).map((entry) => ({
+      shown.filters.years.length === 1
+        ? monthlyTypeSeries(narrowedMonths, coverage, shown.filters.years[0]).map((entry) => ({
             ...entry,
-            points: onAxis(entry.points, filters.months),
+            points: onAxis(entry.points, shown.filters.months),
           }))
         : [],
-    [filters.years, filters.months, narrowedMonths, coverage],
+    [shown.filters.years, shown.filters.months, narrowedMonths, coverage],
   );
 
   const cardsInput = useMemo<SalesCardsInput>(
@@ -317,6 +344,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       months,
       universe,
       filters,
+      shownFilters: shown.filters,
       period,
       periodName,
       scopedPeriodName,
@@ -349,6 +377,7 @@ export function SalesDataProvider({ children }: { children: ReactNode }) {
       months,
       universe,
       filters,
+      shown.filters,
       period,
       periodName,
       scopedPeriodName,

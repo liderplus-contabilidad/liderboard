@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "fake-indexeddb": "^6.2.5",
@@ -53,6 +53,9 @@
     "*.{json,jsonc,css,scss,less,md,mdx,yml,yaml,graphql,gql,toml,html}": [
       "oxfmt --no-error-on-unmatched-pattern"
     ]
+  },
+  "engines": {
+    "node": ">=26"
   },
   "packageManager": "pnpm@11.15.0"
 }

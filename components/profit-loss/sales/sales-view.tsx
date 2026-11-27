@@ -57,7 +57,7 @@ function SalesContent() {
     reading,
     cards,
     cardsInput,
-    filters,
+    shownFilters: filters,
     scopedPeriodName,
     universe,
     hideEmptyMonths,

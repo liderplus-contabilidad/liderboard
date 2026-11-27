@@ -34,11 +34,13 @@ English; the Spanish name goes in `label`/`title`. A module may declare `childre
 (`DashboardSubmodule`) — pages that hang off it at `/<padre>/<hijo>`, rendered indented under it
 and **cerrados por defecto**, para que la navegación inicial muestre primero los módulos. El sidebar
 guarda los grupos ABIERTOS explícitamente; el chevron junto al padre permite descubrir sus subpáginas.
-La barra colapsada respeta esos mismos grupos: expandir el menú vuelve a mostrar los chevrons.
+En la barra colapsada el icono del padre sigue siendo el ENLACE al módulo y, al pasar el puntero o
+enfocarlo, abre una tarjeta (`HoverCard`) con el módulo y sus subpáginas: un hijo se alcanza sin
+abrir antes el menú. Las primitivas son shadcn/base (`components/ui/shadcn/sidebar.tsx`); el ancho
+NO se anima —lo que entra con movimiento son las etiquetas, en opacidad y transform—.
 El padre de la subpágina ABIERTA se despliega automáticamente, incluso al entrar por URL, para que
 el destino actual siga visible. The nesting is ONE level: this nav is a list, not a tree, and a second level has
-nowhere to render in the 72 px collapsed rail (where a child keeps its icon and `title` and drops
-the indent). The header's `<h1>` names the child ONLY when the second segment matches a declared
+nowhere to render in the 72 px collapsed rail (whose card lists exactly one level). The header's `<h1>` names the child ONLY when the second segment matches a declared
 one (`findSubmoduleBySlug`) — `/payroll/<uuid>` is a período detail, and without that check its
 identifier would land in the `<h1>`. The header once carried a breadcrumb («Módulos › PyG › Ventas»)
 over that title; it was removed because it led nowhere and the sidebar already shows where you are.

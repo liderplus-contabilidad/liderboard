@@ -155,7 +155,6 @@ export function SalesToolbar({ actions }: { actions?: ReactNode }) {
               icon={<Boxes size={15} />}
               width={420}
               search
-              note="La lista sale de los tipos de servicio marcados. Si dos artículos se llaman igual, llevan su código detrás para distinguirlos."
             />
 
             <AxisDropdown
@@ -200,6 +199,18 @@ export function SalesToolbar({ actions }: { actions?: ReactNode }) {
   );
 }
 
+/** How many rows a list paints. 4.490 articles mounted at once is what made the panel slow to
+ *  open, to type in and to mark — the DOM, never the search. */
+const VISIBLE_CHOICES = 20;
+
+/** Accent- and case-insensitive: «hialuronico» has to find «HIALURÓNICO». */
+function foldText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 /** The four id-based marks: one component, differing in universe, wording and search box. */
 function AxisDropdown({
   axis,
@@ -214,7 +225,7 @@ function AxisDropdown({
   label: string;
   plural: string;
   icon: ReactNode;
-  note: string;
+  note?: string;
   width?: number;
   search?: boolean;
 }) {
@@ -223,20 +234,29 @@ function AxisDropdown({
   const choices = universe[axis];
   const markedIds = new Set(filters[axis]);
 
+  // Folded ONCE per universe, not per keystroke: the search walks every choice on each key.
+  const folded = useMemo(() => choices.map((choice) => foldText(choice.label)), [choices]);
+
+  // The search reads the whole universe; the list PAINTS its first `VISIBLE_CHOICES` matches —
+  // the universe is ordered by amount, so with no query those are the best sellers — and then
+  // every marked one past the cut, so a mark can always be seen and taken off. Rows keep the
+  // universe's order: marking one never moves it under the pointer.
   const visible = useMemo<SalesChoice[]>(() => {
-    const needle = query.trim().toLowerCase();
-    if (needle === "") {
-      return choices;
+    const needle = foldText(query.trim());
+    const marks = new Set(filters[axis]);
+    const rows: SalesChoice[] = [];
+    let matches = 0;
+    for (let index = 0; index < choices.length; index++) {
+      if (needle !== "" && !folded[index].includes(needle)) {
+        continue;
+      }
+      if (matches < VISIBLE_CHOICES || marks.has(choices[index].id)) {
+        rows.push(choices[index]);
+      }
+      matches++;
     }
-    // Accent-insensitive: «hialuronico» has to find «HIALURÓNICO».
-    const fold = (text: string) =>
-      text
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase();
-    const folded = fold(needle);
-    return choices.filter((choice) => fold(choice.label).includes(folded));
-  }, [choices, query]);
+    return rows;
+  }, [choices, folded, query, filters, axis]);
 
   // With one value or none there is nothing to choose.
   if (choices.length < 2) {
@@ -285,7 +305,7 @@ function AxisDropdown({
             <p className="px-2 py-3 text-xs text-faint">Ninguno coincide con «{query.trim()}».</p>
           )}
         </div>
-        <DropdownNote>{note}</DropdownNote>
+        {note && <DropdownNote>{note}</DropdownNote>}
       </DropdownPanel>
     </Dropdown>
   );

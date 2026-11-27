@@ -1,12 +1,34 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight, Settings, type LucideIcon } from "lucide-react";
-import Link from "next/link";
+import { ChevronRight, Settings } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
-import { MODULES } from "@/lib/modules";
-import { Button } from "@/components/ui/button";
+import { MODULES, type DashboardModule } from "@/lib/modules";
+import {
+  Collapsible,
+  CollapsiblePanel,
+  CollapsibleTrigger,
+} from "@/components/ui/shadcn/collapsible";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/shadcn/hover-card";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarLabel,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/shadcn/sidebar";
 import { useBackups } from "./backup-provider";
 
 /**
@@ -29,6 +51,23 @@ export function DashboardSidebar() {
       setCollapsed(true);
     }
   }, []);
+  const toggleCollapsed = useCallback(() => setCollapsed((value) => !value), []);
+  // Ctrl/⌘ + B, the shortcut the collapse button's tooltip announces.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() === "b" &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        toggleCollapsed();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleCollapsed]);
   // Only explicitly opened groups are stored: every module starts folded, including new ones.
   const [expandedModules, setExpandedModules] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -43,222 +82,207 @@ export function DashboardSidebar() {
   }, []);
 
   return (
-    <aside
-      className={cn(
-        // The width SNAPS, on purpose: animating it re-lays out the whole page on every frame — with
-        // Datos open that is thirty thousand nodes, twelve times — and each chart on screen relayouts
-        // its SVG along with it. On the office laptops a 200 ms transition cost a full second.
-        "flex flex-col border-r border-border bg-surface",
-        collapsed ? "w-[72px]" : "w-[264px]",
-      )}
-    >
-      <div
-        className={cn(
-          "flex px-5 pb-5 pt-6",
-          collapsed ? "flex-col items-center gap-3 px-0" : "items-center gap-3",
-        )}
-      >
+    <Sidebar collapsed={collapsed} onToggle={toggleCollapsed}>
+      <SidebarHeader>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-brand text-base font-bold tracking-tight text-white">
           L+
         </div>
         {!collapsed && (
-          <div className="leading-tight">
+          <div className="min-w-0 leading-tight motion-safe:animate-sidebar-in">
             <div className="text-base font-bold tracking-tight text-brand">LiderPlus</div>
             <div className="text-[11px] font-medium text-faint">Firma contable</div>
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
-          aria-expanded={!collapsed}
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted transition-colors hover:bg-canvas hover:text-brand",
-            !collapsed && "ml-auto",
-          )}
-        >
-          {collapsed ? (
-            <ChevronRight size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
-          ) : (
-            <ChevronLeft size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
-          )}
-        </button>
-      </div>
+        <SidebarTrigger />
+      </SidebarHeader>
 
-      <nav className={cn("flex flex-col gap-1", collapsed ? "px-3" : "px-4")}>
-        <div
-          className={cn(
-            "px-2 pb-2 pt-3 text-[10.5px] font-semibold tracking-[1px] text-faint",
-            collapsed && "sr-only",
-          )}
-        >
-          MÓDULOS
-        </div>
+      <SidebarContent>
+        <SidebarGroupLabel>Módulos</SidebarGroupLabel>
+        <SidebarMenu>
+          {MODULES.map((module) => (
+            <ModuleEntry
+              key={module.slug}
+              module={module}
+              pathname={pathname}
+              expanded={expandedModules.has(module.slug)}
+              onToggleFold={toggleFold}
+            />
+          ))}
+        </SidebarMenu>
+      </SidebarContent>
 
-        {MODULES.map((module) => {
-          const href = `/${module.slug}`;
-          const children = module.children ?? [];
-          const childHrefs = children.map((child) => `${href}/${child.slug}`);
-          // The parent does NOT light up with its child: they are two different destinations, and
-          // marking both would suggest the open page is the parent's.
-          const active =
-            (pathname === href || pathname.startsWith(`${href}/`)) &&
-            !childHrefs.some((childHref) => pathname === childHref);
-          const insideChild = childHrefs.some(
-            (childHref) => pathname === childHref || pathname.startsWith(`${childHref}/`),
-          );
-          // Keep the current destination visible, even on a direct load of a subpage. The narrow
-          // rail respects the same groups; expanding the menu exposes their disclosure controls.
-          const expanded = insideChild || expandedModules.has(module.slug);
-
-          return (
-            <div key={module.slug} className="contents">
-              <NavItem
-                href={href}
-                label={module.label}
-                icon={module.icon}
-                active={active}
-                collapsed={collapsed}
-                disclosure={
-                  children.length > 0 && !collapsed
-                    ? {
-                        expanded,
-                        // A parent collapsed by force —because its child is the open page— shows the
-                        // chevron expanded and inert, rather than hiding it: the entry does not
-                        // change shape depending on where you are standing.
-                        onToggle: insideChild ? undefined : () => toggleFold(module.slug),
-                        label: module.label,
-                      }
-                    : undefined
-                }
-              />
-              {expanded &&
-                children.map((child, index) => {
-                  const childHref = childHrefs[index];
-                  return (
-                    <NavItem
-                      key={child.slug}
-                      href={childHref}
-                      label={child.label}
-                      icon={child.icon}
-                      active={pathname === childHref || pathname.startsWith(`${childHref}/`)}
-                      collapsed={collapsed}
-                      nested
-                    />
-                  );
-                })}
-            </div>
-          );
-        })}
-      </nav>
-
-      <div className={cn("mt-auto border-t border-border-soft py-3", collapsed ? "px-3" : "px-4")}>
-        <Button
-          variant="ghost"
-          size="toolbar"
-          icon={<Settings size={18} strokeWidth={SIDEBAR_ICON_STROKE} />}
-          aria-label="Respaldos"
-          title={collapsed ? "Respaldos" : undefined}
+      <SidebarFooter>
+        <SidebarMenuButton
+          tooltip="Respaldos"
           onClick={(event) => openBackups(event.currentTarget)}
-          className={cn("w-full", !collapsed && "justify-start")}
-          iconOnly={collapsed}
         >
-          Respaldos
-        </Button>
+          <Settings size={18} strokeWidth={SIDEBAR_ICON_STROKE} />
+          <SidebarLabel>Respaldos</SidebarLabel>
+        </SidebarMenuButton>
         {!collapsed && (
-          <div className="pt-3 text-center text-[10.5px] text-faintest">
+          <div className="px-3 pt-2.5 text-[10.5px] text-faintest motion-safe:animate-sidebar-in">
             © {new Date().getFullYear()} LiderPlus · v0.1
           </div>
         )}
-      </div>
-    </aside>
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }
 
-/**
- * The chevron that collapses a module's children. It is a SIBLING of the link and not inside it,
- * because a button inside an `<a>` is not valid HTML and collapsing cannot navigate.
- */
-interface NavDisclosure {
-  expanded: boolean;
-  /** Absent when the state is forced and the control has nothing to do. */
-  onToggle?: () => void;
-  label: string;
+function isAt(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
- * A navigation entry — module or subitem, which render alike except for the indent.
- *
- * `nested` only applies EXPANDED: at 72 px the indent cannot be told apart and what matters is that
- * the destination stays reachable, so collapsed a child renders like any other entry, with its icon
- * and its `title`.
+ * One module of the registry, in the one of three shapes its case calls for: a plain entry, a
+ * group that folds (expanded sidebar) or a group that opens a card beside the rail (collapsed).
  */
-function NavItem({
-  href,
-  label,
-  icon: Icon,
-  active,
-  collapsed,
-  nested = false,
-  disclosure,
+const ModuleEntry = memo(function ModuleEntry({
+  module,
+  pathname,
+  expanded,
+  onToggleFold,
 }: {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  active: boolean;
-  collapsed: boolean;
-  nested?: boolean;
-  disclosure?: NavDisclosure;
+  module: DashboardModule;
+  pathname: string;
+  expanded: boolean;
+  onToggleFold: (slug: string) => void;
 }) {
+  const { collapsed } = useSidebar();
+  const Icon = module.icon;
+  const href = `/${module.slug}`;
+  const children = module.children ?? [];
+  const insideChild = children.some((child) => isAt(pathname, `${href}/${child.slug}`));
+  // The parent does NOT light up with its child: they are two different destinations, and
+  // marking both would suggest the open page is the parent's. It is NAMED instead (`within`).
+  const active = isAt(pathname, href) && !insideChild;
+  const icon = <Icon size={18} strokeWidth={SIDEBAR_ICON_STROKE} />;
+
+  if (children.length === 0) {
+    return (
+      <SidebarMenuItem>
+        <SidebarMenuButton href={href} active={active} tooltip={module.label}>
+          {icon}
+          <SidebarLabel>{module.label}</SidebarLabel>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  if (collapsed) {
+    return (
+      <SidebarMenuItem>
+        <CollapsedGroup module={module} pathname={pathname} />
+      </SidebarMenuItem>
+    );
+  }
+
+  // Keep the current destination visible, even on a direct load of a subpage.
+  const open = insideChild || expanded;
   return (
-    <div className="relative">
-      <Link
-        href={href}
-        title={collapsed ? label : undefined}
-        aria-current={active ? "page" : undefined}
-        className={cn(
-          "relative flex items-center gap-3 rounded-[9px] px-3 py-2.5 text-sm transition-colors",
-          collapsed && "justify-center px-0",
-          nested && !collapsed && "ml-4 border-l border-border-soft py-2 pl-4",
-          disclosure && "pr-10",
-          active
-            ? "bg-brand-soft font-semibold text-brand"
-            : "font-medium text-muted hover:bg-canvas",
-        )}
-      >
-        {active && !nested && (
-          <span className="absolute inset-y-2 left-0 w-[2px] rounded-full bg-brand" />
-        )}
-        <Icon size={nested ? 16 : 18} strokeWidth={SIDEBAR_ICON_STROKE} className="shrink-0" />
-        <span className={cn("flex-1", collapsed && "sr-only")}>{label}</span>
-      </Link>
-      {disclosure && (
-        <button
-          type="button"
-          onClick={disclosure.onToggle}
-          disabled={!disclosure.onToggle}
-          aria-expanded={disclosure.expanded}
-          aria-label={
-            disclosure.expanded
-              ? `Ocultar subpáginas de ${disclosure.label}`
-              : `Mostrar subpáginas de ${disclosure.label}`
+    <SidebarMenuItem>
+      <Collapsible open={open} onOpenChange={() => onToggleFold(module.slug)}>
+        <SidebarMenuButton href={href} active={active} within={insideChild} hasAction>
+          {icon}
+          <SidebarLabel>{module.label}</SidebarLabel>
+        </SidebarMenuButton>
+        <CollapsibleTrigger
+          // A group opened by force —because its child is the open page— shows the chevron
+          // expanded and inert, rather than hiding it: the entry does not change shape depending
+          // on where you are standing.
+          disabled={insideChild}
+          render={
+            <SidebarMenuAction
+              aria-label={
+                open
+                  ? `Ocultar subpáginas de ${module.label}`
+                  : `Mostrar subpáginas de ${module.label}`
+              }
+              className={active ? "text-brand" : undefined}
+            />
           }
-          className={cn(
-            "absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition-colors",
-            active ? "text-brand" : "text-faint",
-            disclosure.onToggle ? "hover:bg-canvas hover:text-brand" : "cursor-default opacity-60",
-          )}
         >
-          <ChevronDown
+          <ChevronRight
             size={14}
             strokeWidth={SIDEBAR_ICON_STROKE}
-            className={cn(
-              "transition-transform duration-150",
-              !disclosure.expanded && "-rotate-90",
-            )}
+            className={cn("transition-transform duration-200", open && "rotate-90")}
           />
-        </button>
-      )}
-    </div>
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <SidebarMenuSub>
+            {children.map((child) => {
+              const childHref = `${href}/${child.slug}`;
+              return (
+                <SidebarMenuSubItem key={child.slug}>
+                  <SidebarMenuSubButton href={childHref} active={isAt(pathname, childHref)}>
+                    <child.icon size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
+                    <SidebarLabel>{child.label}</SidebarLabel>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              );
+            })}
+          </SidebarMenuSub>
+        </CollapsiblePanel>
+      </Collapsible>
+    </SidebarMenuItem>
+  );
+});
+
+/**
+ * A group on the collapsed rail. The icon is still the LINK to the module —one click, as for any
+ * other entry— and hovering or focusing it opens a card with the module and its pages, so a
+ * subpage is reachable without opening the sidebar first. On the rail the icon lights up for the
+ * module AND for its pages: there the children have no row of their own to carry the mark.
+ */
+function CollapsedGroup({ module, pathname }: { module: DashboardModule; pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const Icon = module.icon;
+  const href = `/${module.slug}`;
+  const children = module.children ?? [];
+  const insideChild = children.some((child) => isAt(pathname, `${href}/${child.slug}`));
+
+  return (
+    <HoverCard open={open} onOpenChange={setOpen}>
+      <HoverCardTrigger
+        delay={120}
+        closeDelay={150}
+        render={<SidebarMenuButton href={href} active={isAt(pathname, href)} onClick={close} />}
+      >
+        <Icon size={18} strokeWidth={SIDEBAR_ICON_STROKE} />
+        <span className="sr-only">{module.label}</span>
+      </HoverCardTrigger>
+      <HoverCardContent side="right" align="start" alignOffset={-6} className="w-[236px]">
+        <SidebarMenuSubButton
+          href={href}
+          active={isAt(pathname, href) && !insideChild}
+          rule={false}
+          onClick={close}
+        >
+          <Icon size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
+          <span className="min-w-0 flex-1 truncate font-semibold">{module.label}</span>
+        </SidebarMenuSubButton>
+        <ul className="mt-1 flex flex-col gap-0.5 border-t border-border-soft pt-1">
+          {children.map((child) => {
+            const childHref = `${href}/${child.slug}`;
+            return (
+              <li key={child.slug}>
+                <SidebarMenuSubButton
+                  href={childHref}
+                  active={isAt(pathname, childHref)}
+                  rule={false}
+                  onClick={close}
+                >
+                  <child.icon size={16} strokeWidth={SIDEBAR_ICON_STROKE} />
+                  <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                </SidebarMenuSubButton>
+              </li>
+            );
+          })}
+        </ul>
+      </HoverCardContent>
+    </HoverCard>
   );
 }

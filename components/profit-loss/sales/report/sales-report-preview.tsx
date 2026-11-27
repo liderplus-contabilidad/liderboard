@@ -32,7 +32,7 @@ const WIDE = 6;
  */
 export function SalesReportPreview({ onClose }: { onClose: () => void }) {
   const { activeClient } = usePygData();
-  const { clientName, coverage, periodName, cardsInput, filters } = useSalesData();
+  const { clientName, coverage, periodName, cardsInput, shownFilters: filters } = useSalesData();
   // Stamped ONCE, on opening the preview, so it does not advance while the reader looks at it.
   const [generatedAt] = useState(() => new Date());
 

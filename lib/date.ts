@@ -93,3 +93,43 @@ export function monthBounds(year: number, monthIndex: number): { start: string; 
   const month = pad2(monthIndex + 1);
   return { start: `01/${month}/${year}`, end: `${pad2(lastDay)}/${month}/${year}` };
 }
+
+/** A calendar month, `monthIndex` 0–11 as in the rest of the app. */
+export interface YearMonth {
+  year: number;
+  monthIndex: number;
+}
+
+/**
+ * A SET of months said as its contiguous runs: «Octubre 2022», «Enero – Febrero 2023»,
+ * «Junio 2023 – Octubre 2026». Forty-four months enumerated one by one are a wall nobody reads, and
+ * a single «first – last» would claim the months in between that are not there — the runs are the
+ * one shape that is both short and true, and they make a gap visible instead of burying it.
+ *
+ * Order and repeats in the input do not matter; December → January continues a run.
+ */
+export function monthRangeLabels(months: readonly YearMonth[]): string[] {
+  const ordinals = [...new Set(months.map((month) => month.year * 12 + month.monthIndex))].sort(
+    (a, b) => a - b,
+  );
+  const name = (ordinal: number) => MONTHS_FULL_ES[ordinal % 12];
+  const year = (ordinal: number) => Math.floor(ordinal / 12);
+  const labels: string[] = [];
+  let start = 0;
+  for (let at = 1; at <= ordinals.length; at += 1) {
+    if (at < ordinals.length && ordinals[at] === ordinals[at - 1] + 1) {
+      continue;
+    }
+    const first = ordinals[start];
+    const last = ordinals[at - 1];
+    if (first === last) {
+      labels.push(`${name(first)} ${year(first)}`);
+    } else if (year(first) === year(last)) {
+      labels.push(`${name(first)} – ${name(last)} ${year(last)}`);
+    } else {
+      labels.push(`${name(first)} ${year(first)} – ${name(last)} ${year(last)}`);
+    }
+    start = at;
+  }
+  return labels;
+}

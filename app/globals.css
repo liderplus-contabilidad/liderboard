@@ -80,6 +80,22 @@
 
   --text-table-header: 11.5px;
 
+  /* The sidebar's labels arriving when it opens. Opacity + transform ONLY: the width itself snaps
+     (see components/ui/shadcn/sidebar.tsx), so this is all the motion there is and it never
+     touches layout. */
+  --animate-sidebar-in: sidebar-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes sidebar-in {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   --font-sans: var(--font-ibm-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }

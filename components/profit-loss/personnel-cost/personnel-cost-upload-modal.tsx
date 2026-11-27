@@ -3,6 +3,7 @@
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { UploadChips } from "@/components/ui/upload-summary";
 import { cn } from "@/lib/cn";
 import { legacyCoverage } from "@/lib/personnel-cost/legacy";
 import type { ParsedPersonnelCostBackup } from "@/lib/personnel-cost/upload";
@@ -153,19 +154,14 @@ export function PersonnelCostUploadModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {summary ? (
-            <div className="flex flex-col gap-3 p-5 text-[13px] text-ink">
-              {summary.legacyYears.length > 0 && (
-                <p>
-                  Se{" "}
-                  {summary.legacyYears.length === 1
-                    ? "cargó el ejercicio"
-                    : "cargaron los ejercicios"}{" "}
-                  {list(summary.legacyYears)}.
-                </p>
-              )}
-              {summary.familyYears.length > 0 && (
-                <p>Se cargó la nómina de familia de {list(summary.familyYears)}.</p>
-              )}
+            <div className="flex flex-col gap-4 p-5">
+              <UploadChips
+                label={
+                  summary.legacyYears.length === 1 ? "Ejercicio cargado" : "Ejercicios cargados"
+                }
+                items={summary.legacyYears}
+              />
+              <UploadChips label="Nómina de familia" items={summary.familyYears} />
               {summary.rejectedYears.length > 0 && (
                 <NoticeBanner>
                   {summary.rejectedYears.length === 1

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDayMonthYear, formatTimestampEs, monthBounds } from "./date";
+import { formatDayMonthYear, formatTimestampEs, monthBounds, monthRangeLabels } from "./date";
 
 describe("formatDayMonthYear", () => {
   it("escribe una fecha ISO como DD/MM/AAAA", () => {
@@ -59,5 +59,57 @@ describe("formatTimestampEs", () => {
 
   it("rellena con cero la hora y el minuto de un solo dígito", () => {
     expect(formatTimestampEs(new Date(2026, 0, 5, 9, 5))).toBe("5 de enero de 2026, 09:05");
+  });
+});
+
+describe("monthRangeLabels", () => {
+  const span = (year: number, from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_unused, at) => ({ year, monthIndex: from + at }));
+
+  it("un mes suelto se nombra solo", () => {
+    expect(monthRangeLabels([{ year: 2022, monthIndex: 9 }])).toEqual(["Octubre 2022"]);
+  });
+
+  it("un tramo dentro del mismo año escribe el año una vez", () => {
+    expect(monthRangeLabels(span(2023, 0, 1))).toEqual(["Enero – Febrero 2023"]);
+  });
+
+  it("diciembre → enero continúa el tramo", () => {
+    expect(monthRangeLabels([...span(2023, 5, 11), ...span(2024, 0, 11)])).toEqual([
+      "Junio 2023 – Diciembre 2024",
+    ]);
+  });
+
+  it("un hueco parte el tramo en vez de quedar dentro de un rango que no lo trae", () => {
+    // The real history file: 44 months with two holes.
+    const months = [
+      { year: 2022, monthIndex: 9 },
+      ...span(2023, 0, 1),
+      ...span(2023, 5, 11),
+      ...span(2024, 0, 11),
+      ...span(2025, 0, 11),
+      ...span(2026, 0, 9),
+    ];
+    expect(months).toHaveLength(44);
+    expect(monthRangeLabels(months)).toEqual([
+      "Octubre 2022",
+      "Enero – Febrero 2023",
+      "Junio 2023 – Octubre 2026",
+    ]);
+  });
+
+  it("no depende del orden ni de los repetidos", () => {
+    expect(
+      monthRangeLabels([
+        { year: 2024, monthIndex: 2 },
+        { year: 2024, monthIndex: 0 },
+        { year: 2024, monthIndex: 1 },
+        { year: 2024, monthIndex: 1 },
+      ]),
+    ).toEqual(["Enero – Marzo 2024"]);
+  });
+
+  it("sin meses no hay tramos", () => {
+    expect(monthRangeLabels([])).toEqual([]);
   });
 });

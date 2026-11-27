@@ -4,9 +4,10 @@ import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { UploadChips, UploadFigures, UploadSummary } from "@/components/ui/upload-summary";
 import { cn } from "@/lib/cn";
-import { MONTHS_FULL_ES, MONTHS_SHORT_ES } from "@/lib/date";
-import { formatNumber } from "@/lib/format";
+import { MONTHS_FULL_ES, MONTHS_SHORT_ES, monthRangeLabels } from "@/lib/date";
+import { formatList, formatNumber } from "@/lib/format";
 import {
   describeSalesIdentityClash,
   deriveSalesIdentity,
@@ -77,7 +78,10 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
   /** Files awaiting confirmation before being READ, because reading is the expensive part. */
   const [oversized, setOversized] = useState<File[] | null>(null);
   const [summary, setSummary] = useState<{
-    months: string[];
+    /** How many months were written. */
+    months: number;
+    /** Those months as contiguous runs — never the forty-four names one by one. */
+    ranges: string[];
     lines: number;
     warnings: string[];
   } | null>(null);
@@ -169,9 +173,8 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
   /** Which months this upload REPLACES, so it can be said before instead of after. */
   const replaced = useMemo(() => {
     const held = new Set(coverage.map((row) => `${row.year}-${row.monthIndex}`));
-    return valid
-      .filter((month) => held.has(`${month.year}-${month.monthIndex}`))
-      .map((month) => `${MONTHS_FULL_ES[month.monthIndex]} ${month.year}`);
+    const months = valid.filter((month) => held.has(`${month.year}-${month.monthIndex}`));
+    return { count: months.length, ranges: monthRangeLabels(months) };
   }, [valid, coverage]);
 
   /** Months arriving with only part of their calendar covered — see `partialMonths`. */
@@ -185,7 +188,8 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
     try {
       await importMonths(valid);
       setSummary({
-        months: valid.map((month) => `${MONTHS_FULL_ES[month.monthIndex]} ${month.year}`),
+        months: valid.length,
+        ranges: monthRangeLabels(valid),
         lines: valid.reduce((total, month) => total + month.lineCount, 0),
         warnings: fileWarnings,
       });
@@ -235,19 +239,36 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {summary ? (
-              <div className="flex flex-col gap-3 p-5">
-                <p className="text-[13px] text-ink">
-                  Se cargaron{" "}
-                  {summary.months.length === 1 ? "1 mes" : `${summary.months.length} meses`} (
-                  {summary.months.join(", ")}) con {formatNumber(summary.lines)} líneas de factura.
-                </p>
-                {summary.warnings.length > 0 && (
-                  <NoticeBanner details={summary.warnings}>
-                    {summary.warnings.length === 1
-                      ? "La lectura dejó una observación."
-                      : `La lectura dejó ${summary.warnings.length} observaciones.`}
-                  </NoticeBanner>
-                )}
+              <div className="p-5">
+                <UploadSummary>
+                  <UploadFigures
+                    figures={[
+                      {
+                        label: summary.months === 1 ? "Mes cargado" : "Meses cargados",
+                        value: summary.months,
+                      },
+                      { label: "Líneas de factura", value: summary.lines },
+                    ]}
+                  />
+                  {/* Several runs means the file skipped months: said, so a hole in the history
+                      is not discovered later on a chart. */}
+                  <UploadChips
+                    label={summary.ranges.length === 1 ? "Periodo" : "Periodos"}
+                    items={summary.ranges}
+                    note={
+                      summary.ranges.length > 1
+                        ? "El archivo no trae líneas de los meses entre un periodo y el siguiente."
+                        : undefined
+                    }
+                  />
+                  {summary.warnings.length > 0 && (
+                    <NoticeBanner details={summary.warnings}>
+                      {summary.warnings.length === 1
+                        ? "La lectura dejó una observación."
+                        : `La lectura dejó ${summary.warnings.length} observaciones.`}
+                    </NoticeBanner>
+                  )}
+                </UploadSummary>
               </div>
             ) : (
               <div className="p-5">
@@ -342,11 +363,11 @@ export function SalesUploadModal({ open, onClose }: { open: boolean; onClose: ()
                 )}
 
                 {duplicate && <NoticeBanner className="mt-3">{duplicate}</NoticeBanner>}
-                {!duplicate && replaced.length > 0 && (
+                {!duplicate && replaced.count > 0 && (
                   <NoticeBanner className="mt-3" details={partial}>
-                    {replaced.length === 1
-                      ? `${replaced[0]} ya estaba cargado y se reemplaza por completo.`
-                      : `Estos meses ya estaban cargados y se reemplazan por completo: ${replaced.join(", ")}.`}
+                    {replaced.count === 1
+                      ? `${replaced.ranges[0]} ya estaba cargado y se reemplaza por completo.`
+                      : `${replaced.count} meses ya estaban cargados y se reemplazan por completo: ${formatList(replaced.ranges)}.`}
                   </NoticeBanner>
                 )}
                 {!duplicate && fileWarnings.length > 0 && (

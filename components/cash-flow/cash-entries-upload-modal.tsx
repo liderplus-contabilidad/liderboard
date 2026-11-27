@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, FileSpreadsheet, Loader2, MapPin, Upload } from "lucide-react";
+import { FileSpreadsheet, Loader2, MapPin, Upload } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Modal } from "@/components/ui/modal";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { UploadChips, UploadFigures } from "@/components/ui/upload-summary";
 import { CASH_SECTION_TITLES } from "@/lib/cash-flow/cash-entries";
 import * as cashDb from "@/lib/cash-flow/db";
 import { money } from "@/lib/cash-flow/derive";
@@ -125,7 +126,12 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
   );
 
   return (
-    <Modal open={open} title="Cargar Cargas cash" width={560} onClose={close}>
+    <Modal
+      open={open}
+      title={done ? "Carga completa" : "Cargar Cargas cash"}
+      width={560}
+      onClose={close}
+    >
       <div className="flex flex-col gap-4 px-5 pb-5">
         <input
           ref={inputRef}
@@ -136,22 +142,32 @@ export function CashEntriesUploadModal({ open, onClose }: { open: boolean; onClo
         />
         {failure && <NoticeBanner>{failure}</NoticeBanner>}
         {done ? (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <span className="flex size-11 items-center justify-center rounded-full bg-positive/10 text-positive">
-              <Check size={22} />
-            </span>
-            <p className="text-[15px] font-bold text-ink">Matriz cargada</p>
-            <p className="max-w-[420px] text-[12.5px] text-muted">
-              {pluralize(done.written, "fila")} escritas en{" "}
-              {done.sections.map((id) => CASH_SECTION_TITLES[id]).join(" y ")}
-              {done.unknownColumns.length > 0 &&
-                ` · columnas sin centro, no escritas: ${done.unknownColumns.join(", ")}`}
-              .
-            </p>
-            <Button size="sm" onClick={close}>
-              Listo
-            </Button>
-          </div>
+          <>
+            <UploadFigures
+              figures={[
+                {
+                  label: done.written === 1 ? "Fila escrita" : "Filas escritas",
+                  value: done.written,
+                },
+              ]}
+            />
+            <UploadChips
+              label={done.sections.length === 1 ? "Sección reemplazada" : "Secciones reemplazadas"}
+              items={done.sections.map((id) => CASH_SECTION_TITLES[id])}
+            />
+            {done.unknownColumns.length > 0 && (
+              <NoticeBanner details={done.unknownColumns}>
+                {done.unknownColumns.length === 1
+                  ? "Una columna no corresponde a ningún centro y no se escribió."
+                  : `${done.unknownColumns.length} columnas no corresponden a ningún centro y no se escribieron.`}
+              </NoticeBanner>
+            )}
+            <div className="flex justify-end">
+              <Button size="sm" onClick={close}>
+                Cerrar
+              </Button>
+            </div>
+          </>
         ) : !staged ? (
           <>
             <button

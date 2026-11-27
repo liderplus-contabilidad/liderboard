@@ -13,8 +13,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ComparisonCard } from "@/components/ui/comparison-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBanner } from "@/components/ui/notice-banner";
+import { UploadChips, UploadFigures } from "@/components/ui/upload-summary";
 import { cn } from "@/lib/cn";
-import { MONTHS_FULL_ES } from "@/lib/date";
+import { MONTHS_FULL_ES, monthRangeLabels } from "@/lib/date";
 import {
   findClientForIdentity,
   normalizeClientName,
@@ -793,25 +794,32 @@ function SummaryPanel({
   summary: UploadSummary;
   onRemoveAdjustment: (conflict: ReloadConflict) => void;
 }) {
-  // Grouped by year: with two years loaded, one flat list of month names could not say which
-  // «marzo» it meant.
-  const byYear = summary.years.map((year) => {
-    const months = (summary.loadedMonthsByYear[year] ?? []).map(
-      (m) => MONTHS_FULL_ES[m] ?? `mes ${m + 1}`,
-    );
-    return `${year}: ${months.join(", ") || "ninguno"}`;
-  });
+  // Said as runs that carry their year: with two years loaded, a flat list of month names could
+  // not say which «marzo» it meant.
+  const months = summary.years.flatMap((year) =>
+    (summary.loadedMonthsByYear[year] ?? []).map((monthIndex) => ({ year, monthIndex })),
+  );
+  const ranges = monthRangeLabels(months);
   return (
-    <div className="flex flex-col gap-3 p-5">
-      <p className="text-[13px] text-ink-soft">
-        Meses cargados — {byYear.join(" · ") || "ninguno"}.{" "}
-        {summary.mode === "centers" && (
-          <>
-            {summary.centersCount} centro{summary.centersCount === 1 ? "" : "s"},{" "}
-          </>
-        )}
-        {summary.accountsCount} cuenta{summary.accountsCount === 1 ? "" : "s"}.
-      </p>
+    <div className="flex flex-col gap-4 p-5">
+      <UploadFigures
+        figures={[
+          { label: months.length === 1 ? "Mes cargado" : "Meses cargados", value: months.length },
+          ...(summary.mode === "centers"
+            ? [
+                {
+                  label: summary.centersCount === 1 ? "Centro de costo" : "Centros de costo",
+                  value: summary.centersCount,
+                },
+              ]
+            : []),
+          {
+            label: summary.accountsCount === 1 ? "Cuenta" : "Cuentas",
+            value: summary.accountsCount,
+          },
+        ]}
+      />
+      <UploadChips label={ranges.length === 1 ? "Periodo" : "Periodos"} items={ranges} />
       {summary.warnings.length > 0 && (
         <NoticeBanner details={summary.warnings}>
           {summary.warnings.length} aviso{summary.warnings.length === 1 ? "" : "s"} de la carga.
